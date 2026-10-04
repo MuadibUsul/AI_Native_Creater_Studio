@@ -167,10 +167,10 @@
 | REQ-24-02 | §24.2 | AuditLog 覆盖：登录/下载/删除/邀请/改 Key/发布/Provider 凭据访问/权限变更；不保存未发布文章全文或完整 Prompt | MUST | V1 | P01-03/P08-02（P01/P08） | 所有运营动作可审计；P08-02 验收 | TODO |
 | REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO |
 | REQ-25-02 | §25 | Prompt 如需保存使用加密字段并做敏感信息控制；普通日志不得打印完整 Prompt | SHOULD | V1 | P03-04/P03-05（P03） | 日志脱敏验收（P08-03） | TODO |
-| REQ-26-01 | §26 | DB 只存 storage_key；Object URL 不得作为永久标识；路径按 workspace/project 逻辑分层 | MUST | V1 | P02-04（P02） | AC-10；P02-04 验收 | TODO |
-| REQ-26-02 | §26.1 | MUST 大文件 Client 直传 Object Storage（upload-intents→signed URL→直传→确认）；禁止 5GB 视频经 Web App Server 中转 | MUST | V1 | P02-04（P02） | P02-04 验收 | TODO |
-| REQ-26-03 | §26.2 | 下载/播放走 CDN + Signed URL；避免 API Server 流式代理大视频 | MUST | V1 | P02-04（P02） | P02-04 验收 | TODO |
-| REQ-26-04 | §26.3 | 上传 Asset 计算 SHA-256；至少支持 Workspace 内去重；不建议默认跨 Workspace 物理去重 | SHOULD | V1 | P02-04（P02） | 重复确认幂等（P02-04） | TODO |
+| REQ-26-01 | §26 | DB 只存 storage_key；Object URL 不得作为永久标识；路径按 workspace/project 逻辑分层 | MUST | V1 | P02-04（P02） | AC-10；P02-04 验收 | assets/asset_versions 只存 storage_key（assets 表注释与测试断言 DTO 无对象 URL）；键布局 workspaces/{ws}/projects/{project|library}/{category}/assets/{id}/v{n}/（P02-04） | VERIFIED |
+| REQ-26-02 | §26.1 | MUST 大文件 Client 直传 Object Storage（upload-intents→signed URL→直传→确认）；禁止 5GB 视频经 Web App Server 中转 | MUST | V1 | P02-04（P02） | P02-04 验收 | 意图→签名直传 URL→确认链路完成（本地驱动为 dev 转发，生产用 S3/R2 预签名；单文件上限 5 GiB；云适配器待真实凭据，§13.5-8）（P02-04） | VERIFIED |
+| REQ-26-03 | §26.2 | 下载/播放走 CDN + Signed URL；避免 API Server 流式代理大视频 | MUST | V1 | P02-04（P02） | P02-04 验收 | 仅 READY 资产签发短 TTL 下载 Signed URL；无任何经 API 的资产流式代理路由（本地驱动端点标注 dev 限定）（P02-04） | VERIFIED |
+| REQ-26-04 | §26.3 | 上传 Asset 计算 SHA-256；至少支持 Workspace 内去重；不建议默认跨 Workspace 物理去重 | SHOULD | V1 | P02-04（P02） | 重复确认幂等（P02-04） | 服务端流式 SHA-256；意图阶段与确认阶段两级 workspace 内去重（复用对象并清理冗余，记录 dedupeOf）；无跨 workspace 去重（P02-04） | VERIFIED |
 | REQ-27-01 | §27 | 默认保留策略：Final/用户素材长期；已付费生成资产持续；Draft Render 30 天；Preview Cache 7 天；Temp Transcode 24～72h；Provider 临时文件尽快清理；Trash 30 天软删 | MUST | V1 | P02-05（P02） | P02-05 验收；AC-20 | TODO |
 | REQ-27-02 | §27 | 删除流程：Soft Delete→Trash→到期 Hard Delete Worker（scene/asset metadata/storage/搜索索引/preview cache）；Audit 只保留"发生过删除"不保留内容 | MUST | V1 | P02-05（P02） | 重跑清理不误删（P02-05）；AC-20 | TODO |
 | REQ-28-01 | §28 | 每次 Final Render MUST 生成 manifest.json（project/version/schema version/script version/组件版本/scene assets/master audio/render settings/provider-model/source refs/时间戳） | MUST | V1 | P07-04（P07） | LED-77-20；Manifest 与实际文件一致（P07-05） | TODO |
@@ -277,7 +277,7 @@
 | REQ-51-03 | §51 Integration | Integration：DB+Queue+Worker、upload intents、render pipeline、webhook 幂等 | MUST | V1 | P00-02 + P02/P03/P07 | pnpm test:integration | TODO |
 | REQ-51-04 | §51 E2E | E2E：创建项目→导入→Narrative→Storyboard→编辑→预览→mock Provider 终渲染→历史恢复 | MUST | V1 | P05/P08（P05—P08） | pnpm test:e2e；计划 AC 系列 | TODO |
 | REQ-51-05 | §51 | Production Provider smoke test 单独运行，不作为普通 CI 必须项 | MUST | V1 | P00-02/P08（P00/P08） | verify 默认零真实费用（计划 §11.1） | TODO |
-| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | 读/写拒绝已覆盖（security 14 项）；Signed URL scope（P02-04）与凭据隔离（P03-04）落地时补充用例——进度：2/4 | TODO |
+| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | 读/写拒绝已覆盖；Signed URL scope/凭据隔离随对应任务补充——进度：3/4 | TODO（进度：跨 workspace 读/写拒绝 + **Signed URL scope**（用途/键/TTL 绑定与篡改拒绝）与**资产侧凭据隔离**（响应/错误信封不含签名材料；客户端无存储配置）已覆盖（assets.security.test.ts，P02-04）；Provider 凭据隔离待 P03-04） |
 
 ## R. AI 输出、可解释性与锁定（§52—§54）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-03，REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-04，REQ-26-01/02/03/04 → VERIFIED，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

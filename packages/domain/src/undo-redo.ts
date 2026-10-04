@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
-import { ApiFailure, ERROR_CODES, type EditOperation, type EditRequest } from '@ancs/contracts';
+import { ApiFailure, ERROR_CODES, assetRoleSchema, type EditOperation, type EditRequest } from '@ancs/contracts';
 import { editEvents, projects, scenes } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { contentToChanges, processEdits, type ProcessEditsResult, type SceneContentSnapshot } from './edits.js';
@@ -40,6 +40,9 @@ interface StoredPatch {
   beforeVersionId?: unknown;
   originalAction?: unknown;
   originalOperation?: unknown;
+  role?: unknown;
+  beforeAssetId?: unknown;
+  afterAssetId?: unknown;
 }
 
 interface SceneMeta {
@@ -50,8 +53,8 @@ interface SceneMeta {
 
 const isCompensationAction = (action: string): boolean => action.startsWith('UNDO_') || action.startsWith('REDO_');
 
-const NEEDS_EXPECTED = new Set(['update_scene', 'delete_scene', 'split_scene', 'set_scene_lock', 'restore_scene']);
-const REQUIRES_UNLOCKED = new Set(['update_scene', 'delete_scene', 'split_scene', 'restore_scene']);
+const NEEDS_EXPECTED = new Set(['update_scene', 'delete_scene', 'split_scene', 'set_scene_lock', 'restore_scene', 'replace_asset']);
+const REQUIRES_UNLOCKED = new Set(['update_scene', 'delete_scene', 'split_scene', 'restore_scene', 'replace_asset']);
 
 function eventPatch(event: EventRow): StoredPatch {
   const patch = event.patch;
@@ -147,6 +150,7 @@ const draftFromContent = (content: SceneContentSnapshot): SceneDraft => ({
       : (structuredClone(content.providerRequirement) as SceneDraft['providerRequirement']),
   sourceBindings: structuredClone(content.sourceBindings) as SceneDraft['sourceBindings'],
   dataBindings: structuredClone(content.dataBindings) as SceneDraft['dataBindings'],
+  assetBindings: structuredClone(content.assetBindings),
 });
 
 /** 内容类事件的逆操作：必要时先解锁（锁定场景只允许显式解锁操作），再恢复内容/锁定状态。 */
@@ -203,6 +207,13 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
       return { op: 'reorder_scenes', orderedSceneIds: (patch.after as { order: string[] }).order };
     case 'RESTORE_PROJECT_VERSION':
       return { op: 'restore_project_version', versionId: patch.versionId as string };
+    case 'REPLACE_ASSET':
+      return {
+        op: 'replace_asset',
+        sceneId: event.sceneId ?? '',
+        role: assetRoleSchema.parse(patch.role),
+        newAssetId: (patch.afterAssetId as string | null | undefined) ?? null,
+      };
     default:
       return undefined;
   }
@@ -263,6 +274,20 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
 
     case 'REORDER_SCENES':
       return [{ op: 'reorder_scenes', orderedSceneIds: (patch.before as { order: string[] }).order }];
+
+    case 'REPLACE_ASSET': {
+      const sceneId = event.sceneId ?? '';
+      const current = requireScene(meta, sceneId);
+      const operations: EditOperation[] = [];
+      if (current.locked) operations.push({ op: 'set_scene_lock', sceneId, locked: false });
+      operations.push({
+        op: 'replace_asset',
+        sceneId,
+        role: assetRoleSchema.parse(patch.role),
+        newAssetId: (patch.beforeAssetId as string | null | undefined) ?? null,
+      });
+      return operations;
+    }
 
     case 'RESTORE_PROJECT_VERSION': {
       const beforeVersionId = (patch.beforeVersionId as string | null | undefined) ?? null;

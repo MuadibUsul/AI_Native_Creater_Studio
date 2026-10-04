@@ -28,6 +28,8 @@ export const ERROR_CODES = {
   /** 状态前置条件不满足（如移除最后一名 OWNER）——P01-03 */
   PRECONDITION_FAILED: 'PRECONDITION_FAILED',
   RATE_LIMITED: 'RATE_LIMITED',
+  /** 内容类型不被接受：资产类型/MIME 白名单不符，或实际内容与声明不符（P02-04 伪造 MIME） */
+  UNSUPPORTED_MEDIA_TYPE: 'UNSUPPORTED_MEDIA_TYPE',
   /** 预算/成本保护熔断（计划 §6.1 / §68） */
   BUDGET_EXCEEDED: 'BUDGET_EXCEEDED',
   /** 所需能力/Provider/Pack 不可用（§42 / §92：未安装能力明确返回不支持） */

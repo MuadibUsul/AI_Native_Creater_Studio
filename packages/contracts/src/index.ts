@@ -173,6 +173,65 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 资产与对象存储契约（P02-04 / §22.5、§26、§27、§51）
+export {
+  ASSET_TYPES,
+  assetTypeSchema,
+  ASSET_ORIGINS,
+  assetOriginSchema,
+  ASSET_STATUSES,
+  assetStatusSchema,
+  ASSET_VERSION_STATUSES,
+  assetVersionStatusSchema,
+  ASSET_ROLES,
+  assetRoleSchema,
+  RETENTION_CLASSES,
+  retentionClassSchema,
+  RETENTION_TTL_SECONDS,
+  ASSET_DEFAULT_RETENTION,
+  LICENSE_TYPES,
+  licenseMetadataSchema,
+  licenseInputSchema,
+  assetVersionSchema,
+  assetSchema,
+  assetDetailSchema,
+  MAX_UPLOAD_BYTES,
+  createUploadIntentRequestSchema,
+  uploadIntentResponseSchema,
+  confirmUploadRequestSchema,
+  downloadUrlResponseSchema,
+  DIRECT_UPLOAD_ASSET_TYPES,
+} from './assets.js';
+export type {
+  AssetType,
+  AssetOrigin,
+  AssetStatus,
+  AssetVersionStatus,
+  AssetRole,
+  RetentionClass,
+  LicenseMetadata,
+  Asset,
+  AssetDetail,
+  AssetVersion,
+  CreateUploadIntentRequest,
+  CreateUploadIntentInput,
+  UploadIntentResponse,
+  ConfirmUploadRequest,
+  DownloadUrlResponse,
+} from './assets.js';
+export {
+  UPLOAD_URL_TTL_SECONDS,
+  DOWNLOAD_URL_TTL_SECONDS,
+  MAX_SIGNED_URL_TTL_SECONDS,
+  signedUrlPurposeSchema,
+  uploadTargetSchema,
+  downloadTargetSchema,
+  objectProbeSchema,
+  storageKeySchema,
+} from './storage.js';
+export type { SignedUrlPurpose, UploadTarget, DownloadTarget, ObjectProbe, ObjectStorageAdapter } from './storage.js';
+export { sniffMimeType, mimeMatches, probeImageDimensions, probeWavDurationMs, ASSET_MIME_ALLOWLIST } from './mime-sniff.js';
+
 // 扩展架构契约（P01-06 / §92）
 export {
   PLUGIN_CAPABILITIES,

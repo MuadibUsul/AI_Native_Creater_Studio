@@ -4,8 +4,14 @@ import {
   channelWithStyleSchema,
   createChannelRequestSchema,
   createCreatorIdentityRequestSchema,
+  assetDetailSchema,
+  assetSchema,
   createProjectRequestSchema,
   createProjectVersionRequestSchema,
+  createUploadIntentRequestSchema,
+  confirmUploadRequestSchema,
+  downloadUrlResponseSchema,
+  uploadIntentResponseSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
   editRequestSchema,
@@ -50,11 +56,17 @@ import {
   type CreatorIdentity,
   type EditRequest,
   type EditResponse,
+  type Asset,
+  type AssetDetail,
+  type ConfirmUploadRequest,
+  type CreateUploadIntentInput,
+  type DownloadUrlResponse,
   type Project,
   type ProjectDetail,
   type ProjectVersion,
   type ProjectVersionDetail,
   type SceneGraph,
+  type UploadIntentResponse,
 } from '@ancs/contracts';
 
 /**
@@ -239,6 +251,41 @@ export interface AncsClient {
     /** 重做最近一次撤销（LIFO；新编辑结束重做分支，§4.8） */
     redo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
   };
+  assets: {
+    /** 上传意图：返回带作用域与 TTL 的直传 Signed URL（命中 workspace 哈希去重时为 deduped） */
+    createUploadIntent(
+      workspaceId: string,
+      input: CreateUploadIntentInput,
+      options?: MutationOptions,
+    ): Promise<UploadIntentResponse>;
+    /** 确认上传（服务端真实探测；重复确认幂等） */
+    confirm(workspaceId: string, assetId: string, input: ConfirmUploadRequest, options?: MutationOptions): Promise<AssetDetail>;
+    list(workspaceId: string, query?: { projectId?: string; assetType?: string }): Promise<Asset[]>;
+    get(workspaceId: string, assetId: string): Promise<AssetDetail>;
+    /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
+    downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
+    /**
+     * 一体化上传：意图（客户端预计算 SHA-256 以支持去重）→ 直传 → 确认。
+     * 命中去重时直接返回既有资产（不重复上传字节）。
+     */
+    upload(
+      workspaceId: string,
+      input: {
+        assetType: CreateUploadIntentInput['assetType'];
+        filename: string;
+        contentType: string;
+        data: Uint8Array;
+        projectId?: string;
+        sceneId?: string;
+        license?: CreateUploadIntentInput['license'];
+        /** 无法服务端解析的媒体元数据（可探测字段以服务端探测为准） */
+        durationMs?: number;
+        width?: number;
+        height?: number;
+      },
+      options?: MutationOptions,
+    ): Promise<AssetDetail>;
+  };
 }
 
 export function createClient(options: ClientOptions): AncsClient {
@@ -337,6 +384,17 @@ export function createClient(options: ClientOptions): AncsClient {
   } as unknown as ZodType<void>;
 
   const listOf = <T>(schema: ZodType<T>) => pageResponseSchema(schema);
+
+  /** 客户端预计算 SHA-256（用于 workspace 内去重与完整性校验；无 WebCrypto 环境返回 null） */
+  const sha256Hex = async (data: Uint8Array): Promise<string | null> => {
+    const subtle = globalThis.crypto?.subtle;
+    if (subtle === undefined) return null;
+    const view = data.byteOffset === 0 && data.byteLength === data.buffer.byteLength ? data.buffer : data.slice().buffer;
+    const digest = await subtle.digest('SHA-256', view as ArrayBuffer);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  };
 
   return {
     health: () => request('GET', '/api/v1/health', healthResponseSchema),
@@ -549,6 +607,72 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/projects/${projectId}/redo`, editResponseSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+
+    assets: {
+      createUploadIntent: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
+          body: input,
+          bodySchema: createUploadIntentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      confirm: (workspaceId, assetId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/confirm`, assetDetailSchema, {
+          body: input,
+          bodySchema: confirmUploadRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.projectId !== undefined) search.set('projectId', query.projectId);
+        if (query?.assetType !== undefined) search.set('assetType', query.assetType);
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/assets${suffix}`, listOf(assetSchema))).items;
+      },
+      get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
+      downloadUrl: (workspaceId, assetId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),
+      upload: async (workspaceId, input, mutation) => {
+        const checksumSha256 = await sha256Hex(input.data);
+        const intent = await request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
+          body: {
+            assetType: input.assetType,
+            filename: input.filename,
+            contentType: input.contentType,
+            sizeBytes: input.data.byteLength,
+            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+            ...(input.sceneId !== undefined ? { sceneId: input.sceneId } : {}),
+            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
+            ...(input.license !== undefined ? { license: input.license } : {}),
+          },
+          bodySchema: createUploadIntentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        });
+        if (intent.deduped) {
+          return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}`, assetDetailSchema);
+        }
+        if (intent.upload === null) {
+          throw new Error('上传意图缺少直传目标（协议不一致）');
+        }
+        const uploadResponse = await doFetch(intent.upload.url, {
+          method: intent.upload.method,
+          headers: intent.upload.headers,
+          body: input.data,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`直传失败：HTTP ${String(uploadResponse.status)}`);
+        }
+        return request('POST', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}/confirm`, assetDetailSchema, {
+          body: {
+            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
+            width: input.width ?? undefined,
+            height: input.height ?? undefined,
+            durationMs: input.durationMs ?? undefined,
+          },
+          bodySchema: confirmUploadRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        });
+      },
     },
   };
 }

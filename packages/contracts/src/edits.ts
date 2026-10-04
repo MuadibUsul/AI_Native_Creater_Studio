@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { assetRoleSchema } from './assets.js';
 import { idempotencyKeySchema } from './common/http.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { revisionSchema } from './common/revision.js';
 import { durationMsSchema, videoMsSchema } from './common/time.js';
 import {
+  assetBindingSchema,
   dataBindingSchema,
   providerRequirementSchema,
   sceneTransitionSchema,
@@ -89,6 +91,8 @@ export const sceneDraftSchema = z.object({
   providerRequirement: providerRequirementSchema.nullable().default(null),
   sourceBindings: z.array(sourceBindingSchema).default([]),
   dataBindings: z.array(dataBindingSchema).default([]),
+  /** Scene 资产绑定（P02-04；撤销"删除 Scene"时一并还原） */
+  assetBindings: z.array(assetBindingSchema).default([]),
 });
 
 export const updateProjectOperationSchema = z.object({
@@ -151,8 +155,10 @@ export const reorderScenesOperationSchema = z.object({
 export const replaceAssetOperationSchema = z.object({
   op: z.literal('replace_asset'),
   sceneId: opaqueIdSchema,
-  role: z.string().min(1),
-  newAssetId: opaqueIdSchema,
+  /** 绑定角色（P02-04 定稿枚举） */
+  role: assetRoleSchema,
+  /** null = 解除该角色的绑定 */
+  newAssetId: opaqueIdSchema.nullable(),
 });
 
 export const updateCaptionOperationSchema = z.object({

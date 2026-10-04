@@ -39,3 +39,13 @@ export {
   loadSceneRows,
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
+export {
+  assertAssetBindable,
+  buildStorageKey,
+  confirmUpload,
+  createAssetDownloadUrl,
+  createUploadIntent,
+  getAsset,
+  listAssets,
+  sanitizeFilename,
+} from './assets.js';

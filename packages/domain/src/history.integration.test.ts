@@ -102,6 +102,7 @@ const draft = (durationMs: number, overrides: Record<string, unknown> = {}) => (
   providerRequirement: null,
   sourceBindings: [],
   dataBindings: [],
+  assetBindings: [],
   ...overrides,
 });
 

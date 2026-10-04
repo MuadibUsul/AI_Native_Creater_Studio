@@ -64,6 +64,13 @@
       "when": 1791094139345,
       "tag": "0008_pink_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791095488770,
+      "tag": "0009_slimy_snowbird",
+      "breakpoints": true
     }
   ]
 }

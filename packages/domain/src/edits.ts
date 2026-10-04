@@ -15,6 +15,7 @@ import {
   type SceneChanges,
 } from '@ancs/contracts';
 import { editEvents, outboxEvents, projectVersions, projects, scenes } from '@ancs/db';
+import { assertAssetBindable } from './assets.js';
 import type { DomainDeps } from './channels.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
@@ -37,7 +38,6 @@ import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from '.
 
 const UNIMPLEMENTED_OPERATIONS: Readonly<Record<string, string>> = {
   update_script: 'P04（Script/ContentBlock 模型）',
-  replace_asset: 'P02-04（资产）',
   update_caption: 'P06-06（字幕）',
   update_audio_track: 'P06-06（混音）',
 };
@@ -66,6 +66,8 @@ export interface SceneContentSnapshot {
   transition: Record<string, unknown>;
   sourceBindings: unknown[];
   dataBindings: unknown[];
+  /** Scene 资产绑定（P02-04）：replace_asset 变更、restore/undo 一并还原 */
+  assetBindings: { assetId: string; role: string }[];
   locked: boolean;
   status: string;
 }
@@ -84,6 +86,7 @@ export const contentOf = (row: SceneRow): SceneContentSnapshot => ({
   transition: structuredClone(row.transition) as Record<string, unknown>,
   sourceBindings: structuredClone(row.sourceBindings) as unknown[],
   dataBindings: structuredClone(row.dataBindings) as unknown[],
+  assetBindings: structuredClone(row.assetBindings) as { assetId: string; role: string }[],
   locked: row.locked,
   status: row.status,
 });
@@ -101,6 +104,7 @@ const contentOfScene = (scene: Scene): SceneContentSnapshot => ({
   transition: structuredClone(scene.transition),
   sourceBindings: structuredClone(scene.sourceBindings),
   dataBindings: structuredClone(scene.dataBindings),
+  assetBindings: structuredClone(scene.assetBindings) as { assetId: string; role: string }[],
   locked: scene.locked,
   status: scene.status,
 });
@@ -118,6 +122,7 @@ const applyContent = (row: SceneRow, content: SceneContentSnapshot): void => {
   row.transition = structuredClone(content.transition);
   row.sourceBindings = structuredClone(content.sourceBindings);
   row.dataBindings = structuredClone(content.dataBindings);
+  row.assetBindings = structuredClone(content.assetBindings);
   row.locked = content.locked;
   row.status = content.status;
 };
@@ -183,7 +188,7 @@ interface EventPatchLike {
 }
 
 /** 内容类操作（重放只认这些；Lock/删除/项目级事件不改变内容 revision）。 */
-const CONTENT_OPERATIONS = new Set(['insert_scene', 'duplicate_scene', 'update_scene', 'split_scene', 'restore_scene']);
+const CONTENT_OPERATIONS = new Set(['insert_scene', 'duplicate_scene', 'update_scene', 'split_scene', 'restore_scene', 'replace_asset']);
 
 /** 按 Scene revision 重放内容事件（restore_scene 的事实重建；单遍扫描并在目标处截获）。
  *  事件的 sceneId 列为准（insert 的 patch 不含 sceneId）；split 的尾部经 patch.tailSceneId 关联。 */
@@ -393,7 +398,7 @@ async function applyEditsInTransaction(
             providerRequirement: draft.providerRequirement,
             sourceBindings: draft.sourceBindings,
             dataBindings: draft.dataBindings,
-            assetBindings: [],
+            assetBindings: structuredClone(draft.assetBindings),
             transition: { in: null, out: null },
             locked: false,
             approved: false,
@@ -670,6 +675,49 @@ async function applyEditsInTransaction(
           break;
         }
 
+        case 'replace_asset': {
+          requireExpectedOnce(operation.sceneId);
+          const row = byId.get(operation.sceneId);
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'scene not found', 404);
+          if (row.locked) {
+            throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'scene is locked；请先显式解锁（set_scene_lock）', 409);
+          }
+          if (operation.newAssetId !== null) {
+            await assertAssetBindable(deps, {
+              workspaceId: input.workspaceId,
+              assetId: operation.newAssetId,
+              projectId: input.projectId,
+            });
+          }
+          const before = contentOf(row);
+          const bindings = structuredClone(row.assetBindings) as { assetId: string; role: string }[];
+          const index = bindings.findIndex((binding) => binding.role === operation.role);
+          const beforeAssetId = index >= 0 ? (bindings[index]?.assetId ?? null) : null;
+          if (operation.newAssetId === null) {
+            if (index >= 0) bindings.splice(index, 1);
+          } else if (index >= 0) {
+            bindings[index] = { assetId: operation.newAssetId, role: operation.role };
+          } else {
+            bindings.push({ assetId: operation.newAssetId, role: operation.role });
+          }
+          row.assetBindings = bindings;
+          row.revision += 1;
+          dirtySceneIds.add(row.id);
+          affectedSceneIds.add(row.id);
+          eventDrafts.push({
+            action: 'REPLACE_ASSET',
+            sceneId: row.id,
+            patch: {
+              ...operation,
+              before,
+              after: contentOf(row),
+              beforeAssetId,
+              afterAssetId: operation.newAssetId,
+            },
+          });
+          break;
+        }
+
         default: {
           throw new ApiFailure(
             ERROR_CODES.CAPABILITY_UNAVAILABLE,
@@ -702,6 +750,7 @@ async function applyEditsInTransaction(
           transition: row.transition,
           sourceBindings: row.sourceBindings,
           dataBindings: row.dataBindings,
+          assetBindings: row.assetBindings,
           locked: row.locked,
           status: row.status,
           revision: row.revision,
@@ -938,6 +987,7 @@ const sceneTargetId = (operation: EditOperation): string | null => {
     case 'split_scene':
     case 'set_scene_lock':
     case 'restore_scene':
+    case 'replace_asset':
       return operation.sceneId;
     default:
       return null;

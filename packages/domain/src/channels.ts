@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   channelStyleDefaultsSchema,
+  type ObjectStorageAdapter,
   ERROR_CODES,
   mergeChannelStyle,
   type ChannelStyleDefaults,
@@ -28,6 +29,10 @@ export interface DomainDeps {
   db: NodePgDatabase;
   /** 自动快照间隔（每 N 个编辑事件，§23.2）；默认 50，测试可调小 */
   autoSnapshotEveryEvents?: number;
+  /** 对象存储适配器（P02-04；接口在 contracts，实现由 API 注入，domain 不依赖 providers/*） */
+  storage?: ObjectStorageAdapter;
+  /** 上传意图/直传 URL 的 TTL 秒数（§26.1）；默认 15 分钟，测试可调小/构造过期 */
+  uploadIntentTtlSeconds?: number;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

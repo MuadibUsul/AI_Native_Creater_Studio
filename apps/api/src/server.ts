@@ -8,6 +8,7 @@ import { registerErrorHandler } from './error-handler.js';
 import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
+import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerChannelRoutes } from './routes/channels.js';
@@ -15,7 +16,9 @@ import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
+import { registerStorageRoutes } from './routes/storage.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
+import type { StorageDeps } from './plugins/storage.js';
 
 export interface BuildServerOptions {
   logger?: boolean;
@@ -29,6 +32,10 @@ export interface BuildServerOptions {
    * 测试可注入带测试 Pack 的注册表。
    */
   extensions?: ExtensionRegistry;
+  /**
+   * 对象存储（P02-04）。未提供时资产路由不注册（无存储能力的进程）；集成测试注入本地驱动。
+   */
+  storage?: StorageDeps;
 }
 
 /**
@@ -65,6 +72,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   });
 
   const authDeps = options.auth;
+  const storageDeps = options.storage;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
     await app.register(
@@ -76,6 +84,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerCreatorIdentityRoutes(instance, authDeps);
         registerSpeechProfileRoutes(instance, authDeps);
         registerProjectRoutes(instance, authDeps);
+        if (storageDeps !== undefined) {
+          registerAssetRoutes(instance, authDeps, storageDeps);
+        }
       },
       { prefix: API_PREFIX },
     );
@@ -87,6 +98,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     async (instance) => {
       registerHealthRoutes(instance);
       registerCapabilityRoutes(instance, { extensions });
+      if (storageDeps !== undefined) {
+        registerStorageRoutes(instance, storageDeps);
+      }
     },
     { prefix: API_PREFIX },
   );
