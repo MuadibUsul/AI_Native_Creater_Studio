@@ -23,6 +23,9 @@ import {
   directorPlanSchema,
   editPlanSchema,
   masterNarrationSchema,
+  mixPlanRequestSchema,
+  mixPlanSchema,
+  subtitleOutputSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
   speechPlanSchema,
@@ -118,6 +121,10 @@ import {
   type EditPlan,
   type DirectorPolicyInput,
   type MasterNarration,
+  type MixPlan,
+  type MixPlanRequest,
+  type SubtitleFormat,
+  type SubtitleOutput,
   type NarrativePlan,
   type SpeechPlan,
   type VisualPlan,
@@ -438,6 +445,15 @@ export interface AncsClient {
     ): Promise<MasterNarration>;
     /** 当前 Master Narration（含 Alignment；无则 null） */
     masterNarration(workspaceId: string, projectId: string, planId: string): Promise<MasterNarration | null>;
+    /** 字幕输出（P06-06）：SRT/VTT（由 Alignment 派生；样式可覆盖） */
+    subtitles(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      options?: { format?: SubtitleFormat; style?: Record<string, unknown> },
+    ): Promise<SubtitleOutput>;
+    /** 混音计划（P06-06）：非旁白轨 + ducking/淡入淡出（纯计算，不调用 TTS） */
+    mixPlan(workspaceId: string, projectId: string, planId: string, request: MixPlanRequest): Promise<MixPlan>;
     /** AI Edit 计划（P05-06）：自然语言 → 结构化 operation（不落库；Apply 走编辑协议） */
     aiEditPlan(
       workspaceId: string,
@@ -1079,6 +1095,18 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       masterNarration: (workspaceId, projectId, planId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/master-narration`, masterNarrationSchema.nullable()),
+      subtitles: (workspaceId, projectId, planId, options) => {
+        const query = new URLSearchParams();
+        if (options?.format !== undefined) query.set('format', options.format);
+        if (options?.style !== undefined) query.set('style', JSON.stringify(options.style));
+        const suffix = query.size > 0 ? `?${query.toString()}` : '';
+        return request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/subtitles${suffix}`, subtitleOutputSchema);
+      },
+      mixPlan: (workspaceId, projectId, planId, body) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/mix-plan`, mixPlanSchema, {
+          body,
+          bodySchema: mixPlanRequestSchema,
+        }),
       aiEditPlan: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/ai-edit/plan`, editPlanSchema, {
           body: input,

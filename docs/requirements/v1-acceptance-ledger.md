@@ -30,7 +30,7 @@
 | LED-77-16 | 外部任务异步执行并显示状态 | REQ-2-05/REQ-29-06 | P03-01/P02-06（P03/P02） | TODO（进度：任务系统（状态机/依赖/租约/Worker）与 job.* 事件已就位（P03-01）；真实外部生成任务的端到端执行随 P03-06/P06/P07） |
 | LED-77-17 | Provider 结果会回收到自己的 Storage | REQ-45-02/REQ-26-01 | P03-06（P03） | VERIFIED（2026-10-04：通用回收链路——下载（大小上限/超时）→ 校验（大小/魔术字节嗅探/校验和）→ 写入自有存储 → 落 Asset；测试含「Provider URL 失效后已完成资产仍可用」（AC-10）与「下载失败不重生成、只重试回收」（AC-09）） |
 | LED-77-18 | 能输出 1080p 完整 MP4 | REQ-4-04 | P07-04（P07） | TODO |
-| LED-77-19 | 能输出字幕（SRT/VTT） | REQ-58-01 | P06-06（P06） | TODO |
+| LED-77-19 | 能输出字幕（SRT/VTT） | REQ-58-01 | P06-06（P06） | VERIFIED（2026-10-04：由 Alignment 派生的 SRT/VTT 导出（时间码规范/样式可覆盖/越界 warning）；证据：docs/verification/P06-06.md） |
 | LED-77-20 | 能生成 Project Manifest | REQ-28-01 | P07-04（P07） | TODO |
 | LED-77-21 | 有 per-generation cost 记录 | REQ-25-01 | P03-05（P03） | TODO（进度：provider_generations 表（含估算/实际成本、延迟、重试、凭证模式）+ 幂等记录原语已就位（P03-05）；真实成本数值待 P06 实测写入） |
 | LED-77-22 | 有 Workspace 数据隔离测试 | REQ-43-01/REQ-51-06 | P01-03（P01） | TODO（进度：跨 workspace 读/写拒绝 + Signed URL scope + 资产侧凭据隔离（P02-04，security 19 项）；Provider 凭据隔离待 P03-04） |
@@ -103,7 +103,7 @@
 | LED-C-VID-02 | Standard Scene library | REQ-11-01/REQ-65-01 | P05-02（P05） | TODO |
 | LED-C-VID-03 | Draft preview | REQ-38-01/REQ-18-01 | P05-04（P05） | TODO |
 | LED-C-VID-04 | Master narration | REQ-13-01 | P06-03（P06） | VERIFIED（2026-10-04：逐段合成→拼接→Master 资产（自有存储/校验和）；真实 TTS 音质与语言覆盖待 P06-02 凭据；证据：docs/verification/P06-03.md） |
-| LED-C-VID-05 | Subtitle timing | REQ-13-02/REQ-58-01 | P06-03/P06-06（P06） | TODO（进度：P06-03 已完成 Alignment（词级时间戳 + cues）与局部重建；SRT/VTT 输出随 P06-06） |
+| LED-C-VID-05 | Subtitle timing | REQ-13-02/REQ-58-01 | P06-03/P06-06（P06） | VERIFIED（2026-10-04：词级时间戳 + cues（P06-03）+ SRT/VTT 导出与断行（P06-06）） |
 | LED-C-VID-06 | Final render | REQ-39-01/REQ-64-05 | P07-04（P07） | TODO |
 | LED-C-VID-07 | Manifest | REQ-28-01 | P07-04（P07） | TODO |
 

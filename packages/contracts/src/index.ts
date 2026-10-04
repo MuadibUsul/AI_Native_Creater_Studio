@@ -273,6 +273,37 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// 混音与字幕契约（P06-06 / §58、§59）
+export {
+  MIX_ERROR_REASONS,
+  mixInputTrackSchema,
+  gainKeyframeSchema,
+  mixTrackPlanSchema,
+  mixPlanSchema,
+  DEFAULT_DUCKING,
+  SUBTITLE_FORMATS,
+  subtitleFormatSchema,
+  CAPTION_POSITIONS,
+  captionStyleSchema,
+  captionRenderOptionsSchema,
+  subtitleOutputSchema,
+  mixPlanRequestSchema,
+} from './mixdown.js';
+export type {
+  MixErrorReason,
+  MixInputTrack,
+  GainKeyframe,
+  MixTrackPlan,
+  MixPlan,
+  SubtitleFormat,
+  CaptionStyle,
+  CaptionRenderOptions,
+  SubtitleOutput,
+  MixPlanRequest,
+} from './mixdown.js';
+export { buildSubtitles, planAudioMix, toSrtTime, toVttTime, visualWidthOf, wrapCaption } from './mix-compute.js';
+export type { CaptionCue, MixPlanInput } from './mix-compute.js';
+
 // Master Narration 与 Alignment 契约（P06-03 / §5.1、§58）
 export {
   ALIGNMENT_METHODS,
