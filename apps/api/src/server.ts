@@ -26,6 +26,7 @@ import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerStorageRoutes } from './routes/storage.js';
+import { registerVisualGrammarRoutes } from './routes/visual-grammar.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import type { StorageDeps } from './plugins/storage.js';
 import type { CredentialDeps } from './plugins/credentials.js';
@@ -124,6 +125,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher);
         registerEvidenceRoutes(instance, authDeps);
         registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
+        registerVisualGrammarRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

@@ -250,6 +250,29 @@ export type {
   ChartBindingCheck,
 } from './evidence.js';
 
+// 视觉语法契约（P04-04 / §10.1、§10.2）
+export {
+  SEMANTIC_TYPES,
+  semanticTypeSchema,
+  RECOGNITION_METHODS,
+  recognitionMethodSchema,
+  visualGrammarRuleSchema,
+  VISUAL_GRAMMAR_VERSION,
+  recognitionEvidenceSchema,
+  visualPlanItemSchema,
+  visualPlanSchema,
+  VISUAL_GRAMMAR_ERROR_REASONS,
+} from './visual-grammar.js';
+export type {
+  SemanticType,
+  RecognitionMethod,
+  VisualGrammarRule,
+  RecognitionEvidence,
+  VisualPlanItem,
+  VisualPlan,
+  VisualGrammarErrorReason,
+} from './visual-grammar.js';
+
 // 生成适配器契约（P03-07；真实与 Mock Provider 共用）
 export {
   PROVIDER_JOB_STATES,

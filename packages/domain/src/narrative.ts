@@ -49,7 +49,7 @@ const toBlockDto = (row: typeof narrationBlocks.$inferSelect): NarrationBlock =>
   status: row.status as NarrationBlock['status'],
 });
 
-async function loadPlan(
+export async function getPlan(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; planId: string },
 ): Promise<NarrativePlan> {
@@ -210,7 +210,7 @@ export async function generateNarrative(
         createdBy: input.createdBy ?? null,
       });
       return narrativeGenerationResultSchema.parse({
-        plan: await loadPlan(deps, { workspaceId: input.workspaceId, projectId: input.projectId, planId }),
+        plan: await getPlan(deps, { workspaceId: input.workspaceId, projectId: input.projectId, planId }),
         meta: {
           llmCalls: attempt,
           repairs: allRepairs,
@@ -312,7 +312,7 @@ export async function getCurrentPlan(
     .limit(1);
   const row = rows[0];
   if (row === undefined) return null;
-  return loadPlan(deps, { ...input, planId: row.id });
+  return getPlan(deps, { ...input, planId: row.id });
 }
 
 export async function listPlans(
@@ -327,7 +327,7 @@ export async function listPlans(
     .limit(20);
   const plans: NarrativePlan[] = [];
   for (const row of rows) {
-    plans.push(await loadPlan(deps, { ...input, planId: row.id }));
+    plans.push(await getPlan(deps, { ...input, planId: row.id }));
   }
   return plans;
 }

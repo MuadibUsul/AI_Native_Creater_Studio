@@ -20,6 +20,7 @@ import {
   narrationBlockSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
+  visualPlanSchema,
   updateNarrationBlockRequestSchema,
   createContentRequestSchema,
   updateSourceRequestSchema,
@@ -108,6 +109,7 @@ import {
   type NarrationBlock,
   type NarrativeGenerationResult,
   type NarrativePlan,
+  type VisualPlan,
   type CreateContentRequest,
   type UpdateSourceRequest,
   type CapabilitySelection,
@@ -406,6 +408,8 @@ export interface AncsClient {
     current(workspaceId: string, projectId: string): Promise<NarrativePlan | null>;
     /** 版本列表（revision 降序） */
     plans(workspaceId: string, projectId: string): Promise<NarrativePlan[]>;
+    /** 视觉计划（§10 语义识别 + 场景映射 + §10.3 降级；纯投影可重复） */
+    visualPlan(workspaceId: string, projectId: string, planId: string): Promise<VisualPlan>;
     /** 修订旁白块（锁定后改文本 → 409） */
     updateBlock(
       workspaceId: string,
@@ -1008,6 +1012,12 @@ export function createClient(options: ClientOptions): AncsClient {
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative`, narrativePlanSchema.nullable()),
       plans: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/plans`, listOf(narrativePlanSchema))).items,
+      visualPlan: (workspaceId, projectId, planId) =>
+        request(
+          'GET',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/visual-plan`,
+          visualPlanSchema,
+        ),
       updateBlock: (workspaceId, projectId, planId, blockId, input, mutation) =>
         request(
           'PATCH',

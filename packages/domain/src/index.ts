@@ -42,9 +42,19 @@ export { redoProject, undoProject } from './undo-redo.js';
 export {
   generateNarrative,
   getCurrentPlan,
+  getPlan,
   listPlans,
   updateNarrationBlock,
 } from './narrative.js';
+export { planVisual } from './visual-plan.js';
+export {
+  datasetShape,
+  missingSemanticTypes,
+  recognizeSemanticType,
+  ruleForSemanticType,
+  VISUAL_GRAMMAR_RULES,
+} from './visual-grammar.js';
+export type { DatasetShape, RecognitionInput } from './visual-grammar.js';
 export {
   buildNarrativePrompts,
   estimateDurationMs,
