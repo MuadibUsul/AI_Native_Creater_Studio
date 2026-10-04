@@ -6,6 +6,7 @@ import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
+import { createAdminDeps } from './plugins/admin.js';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
 import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
@@ -116,6 +117,7 @@ const app = await buildServer({
     },
   },
   storage: storageDeps,
+  admin: createAdminDeps(config.ANCS_PLATFORM_ADMINS),
 });
 
 try {

@@ -84,6 +84,8 @@ export const apiEnvSchema = z.object({
   ANCS_WEBHOOK_SECRETS: z.string().optional(),
   /** 平台托管 Provider 凭据（JSON；仅后端使用） */
   PLATFORM_PROVIDER_KEYS: z.string().optional(),
+  /** 平台管理员 user_id 列表（逗号分隔；P08-02；与普通用户角色严格分离 REQ-67-02） */
+  ANCS_PLATFORM_ADMINS: z.string().optional(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

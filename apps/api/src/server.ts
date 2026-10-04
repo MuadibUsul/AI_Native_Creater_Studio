@@ -28,6 +28,8 @@ import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerApprovalRoutes } from './routes/approval.js';
+import { registerAdminRoutes } from './routes/admin.js';
+import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
@@ -58,6 +60,8 @@ export interface BuildServerOptions {
    * 对象存储（P02-04）。未提供时资产路由不注册（无存储能力的进程）；集成测试注入本地驱动。
    */
   storage?: StorageDeps;
+  /** 平台管理员（P08-02；缺省=空名单——admin 面不可用，反枚举 404） */
+  admin?: AdminDeps;
   /**
    * 凭据保险库（P03-04）。未提供时连接/路由端点不注册（无凭据能力的进程，fail-closed）。
    */
@@ -155,6 +159,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           registerAssetRoutes(instance, authDeps, storageDeps);
           registerApprovalRoutes(instance, authDeps, storageDeps);
         }
+        registerAdminGuard(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
+        registerAdminRoutes(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
       },
       { prefix: API_PREFIX },
     );

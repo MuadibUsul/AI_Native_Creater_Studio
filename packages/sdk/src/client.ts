@@ -36,6 +36,8 @@ import {
   qaReportSchema,
   renderApprovalSchema,
   exportPackageSchema,
+  opsOverviewSchema,
+  opsAuditEntrySchema,
   editPlanSchema,
   masterNarrationSchema,
   mixPlanRequestSchema,
@@ -140,6 +142,8 @@ import {
   type QaReport,
   type RenderApproval,
   type ExportPackage,
+  type OpsOverview,
+  type OpsAuditEntry,
   type RenderStatus,
   type EditPlan,
   type DirectorPolicyInput,
@@ -639,6 +643,17 @@ export interface AncsClient {
     cancel(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
     /** 人工重试（FAILED_* / CANCELLED → QUEUED） */
     retry(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
+  };
+  /**
+   * 最小运营（P08-02 / §67）：仅**平台管理员**可用（部署配置 ANCS_PLATFORM_ADMINS；
+   * 非管理员调用 → 404 反枚举——与普通用户角色严格分离）。
+   */
+  admin: {
+    overview(): Promise<OpsOverview>;
+    jobs(query?: { status?: Job['status']; workspaceId?: string; limit?: number }): Promise<Job[]>;
+    /** 人工重试（复用任务服务：预算/幂等/版本规则不变） */
+    retryJob(jobId: string, input?: { reason?: string }, options?: MutationOptions): Promise<Job>;
+    audit(query?: { limit?: number }): Promise<OpsAuditEntry[]>;
   };
   notifications: {
     list(options?: { workspaceId?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]>;
@@ -1461,6 +1476,26 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
     },
 
+    admin: {
+      overview: () => request('GET', '/api/v1/admin/overview', opsOverviewSchema),
+      jobs: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.status !== undefined) search.set('status', query.status);
+        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/jobs${suffix}`, z.object({ items: z.array(jobSchemaForGeneration) }))).items;
+      },
+      retryJob: (jobId, input, mutation) =>
+        request('POST', `/api/v1/admin/jobs/${jobId}/retry`, jobSchemaForGeneration, {
+          body: input ?? {},
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      audit: async (query) => {
+        const suffix = query?.limit === undefined ? '' : `?limit=${String(query.limit)}`;
+        return (await request('GET', `/api/v1/admin/audit${suffix}`, z.object({ items: z.array(opsAuditEntrySchema) }))).items;
+      },
+    },
     notifications: {
       list: async (options) => {
         const search = new URLSearchParams();

@@ -314,6 +314,16 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 最小运营契约（P08-02 / §67）
+export {
+  opsOverviewSchema,
+  opsAuditKindSchema,
+  opsAuditEntrySchema,
+  opsAdminActionSchema,
+  parsePlatformAdmins,
+} from './ops.js';
+export type { OpsOverview, OpsAuditKind, OpsAuditEntry, OpsAdminAction } from './ops.js';
+
 // 部署环境配置契约（P08-01 / §50）
 export {
   validateEnv,

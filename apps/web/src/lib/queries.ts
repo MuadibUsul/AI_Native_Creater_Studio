@@ -100,3 +100,24 @@ export function useRenderApproval(workspaceId: string, renderId: string | null) 
     queryFn: () => client.renders.approval(workspaceId, renderId as string),
   });
 }
+
+/** 运营总览（P08-02；仅平台管理员——非管理员 404 由页面呈现为无权限） */
+export function useAdminOverview() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'overview'], queryFn: () => client.admin.overview(), retry: false, refetchInterval: 10000 });
+}
+
+export function useAdminJobs(status?: 'FAILED_RETRYABLE' | 'FAILED_FINAL' | 'RUNNING' | 'QUEUED') {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: ['admin', 'jobs', status ?? 'all'],
+    queryFn: () => client.admin.jobs({ ...(status === undefined ? {} : { status }), limit: 50 }),
+    retry: false,
+    refetchInterval: 10000,
+  });
+}
+
+export function useAdminAudit() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'audit'], queryFn: () => client.admin.audit({ limit: 50 }), retry: false, refetchInterval: 15000 });
+}
