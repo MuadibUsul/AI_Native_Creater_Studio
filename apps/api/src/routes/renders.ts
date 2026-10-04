@@ -7,12 +7,13 @@ import {
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
+  qaReportSchema,
   renderRecordSchema,
   renderStatusSchema,
 } from '@ancs/contracts';
 import { ApiFailure, ERROR_CODES } from '@ancs/contracts';
 import { projects } from '@ancs/db';
-import { createRender, getRender, listRenders, transitionRender, type DomainDeps } from '@ancs/domain';
+import { createRender, getLatestRenderQaReport, getRender, listRenders, precheckRenderReadiness, transitionRender, triggerRenderQa, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -143,6 +144,59 @@ export function registerRenderRoutes(app: FastifyInstance, deps: AuthDeps): void
         ...(request.body.note !== undefined ? { note: request.body.note } : {}),
         actorId: context.userId,
       });
+    },
+  );
+
+  /** 触发 Final QA（P07-05）：仅 QA 状态；生成 RENDER_QA 任务（报告 append-only，重跑产生新报告） */
+  typed.post(
+    '/workspaces/:id/renders/:renderId/qa',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '触发 Final QA（渲染前预检对项目级端点；此处为产物 QA）',
+        params: transitionParamsSchema,
+        response: { 200: z.object({ jobId: opaqueIdSchema }), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      return triggerRenderQa(domain, { workspaceId: request.params.id, renderId: request.params.renderId, requestedBy: context.userId });
+    },
+  );
+
+  /** 最新 QA 报告（未 QA 过 → null） */
+  typed.get(
+    '/workspaces/:id/renders/:renderId/qa',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '最新 QA 报告（P07-05；审核界面消费）',
+        params: transitionParamsSchema,
+        response: { 200: z.object({ report: qaReportSchema.nullable() }), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      const report = await getLatestRenderQaReport(domain, { workspaceId: request.params.id, renderId: request.params.renderId });
+      return { report };
+    },
+  );
+
+  /** 渲染前预检（项目当前状态；只读，不产生报告行） */
+  typed.get(
+    '/projects/:projectId/render-precheck',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '渲染前预检（占位/缺素材/图表数据/来源/未完成 Provider 任务）',
+        params: projectParamsSchema,
+        response: { 200: qaReportSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const workspaceId = await requireWorkspaceOfProject(request.params.projectId);
+      await app.requireWorkspace(request, workspaceId, 'project:read');
+      return precheckRenderReadiness(domain, { workspaceId, projectId: request.params.projectId });
     },
   );
 }

@@ -28,6 +28,11 @@ export const RENDER_FINAL_JOB_TYPE = 'RENDER_FINAL';
  */
 export const MOTION_GENERATE_JOB_TYPE = 'MOTION_GENERATE';
 
+/**
+ * Final QA 任务类型（P07-05）：渲染完成（QA 状态）后自动入队；技术/内容检查 → READY/FAILED。
+ */
+export const RENDER_QA_JOB_TYPE = 'RENDER_QA';
+
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',
   'QUEUED',

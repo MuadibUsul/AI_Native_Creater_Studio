@@ -72,6 +72,17 @@ export type {
   RenderAssetVersionRow,
   RunRenderExecutionResult,
 } from './render-execution.js';
+export {
+  getLatestRenderQaReport,
+  precheckRenderReadiness,
+  parseSrtCues,
+  runContentChecks,
+  runRenderQa,
+  runTechnicalChecks,
+  summarizeQa,
+  triggerRenderQa,
+} from './qa.js';
+export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
 export { createJobInTx } from './jobs.js';
 export {
   assertDependenciesAllowed,

@@ -314,6 +314,25 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 发布前 QA 契约（P07-05 / §86、§87）
+export {
+  QA_CATEGORIES,
+  qaCategorySchema,
+  QA_SEVERITIES,
+  qaSeveritySchema,
+  QA_STATUSES,
+  qaStatusSchema,
+  QA_CHECK_IDS,
+  qaCheckIdSchema,
+  qaCheckSchema,
+  QA_REPORT_VERSION,
+  qaReportSchema,
+  QA_ERROR_REASONS,
+  mediaProbeResultSchema,
+  QA_DURATION_TOLERANCE_MS,
+} from './qa.js';
+export type { QaCategory, QaSeverity, QaStatus, QaCheckId, QaCheck, QaReport, QaErrorReason, MediaProbeResult, RenderMediaProbe } from './qa.js';
+
 // Custom Motion 生成与验证契约（P07-02 / §11.2）
 export {
   MOTION_PROMPT_VERSION,
@@ -669,6 +688,7 @@ export {
   GENERATE_JOB_TYPE,
   RENDER_FINAL_JOB_TYPE,
   MOTION_GENERATE_JOB_TYPE,
+  RENDER_QA_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,

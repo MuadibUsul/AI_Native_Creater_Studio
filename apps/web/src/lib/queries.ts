@@ -19,6 +19,9 @@ export const queryKeys = {
   versions: (projectId: string) => ['projects', projectId, 'versions'] as const,
   directorPlan: (workspaceId: string, projectId: string, planId: string) =>
     ['projects', projectId, 'director-plan', workspaceId, planId] as const,
+  renders: (workspaceId: string, projectId: string) => ['projects', projectId, 'renders', workspaceId] as const,
+  renderQa: (workspaceId: string, renderId: string) => ['renders', renderId, 'qa', workspaceId] as const,
+  renderPrecheck: (projectId: string) => ['projects', projectId, 'render-precheck'] as const,
 };
 
 export function useSession() {
@@ -65,4 +68,24 @@ export function useWorkspaceEvents(workspaceId: string) {
 export function useProjectVersions(projectId: string) {
   const client = useAncsClient();
   return useQuery({ queryKey: queryKeys.versions(projectId), queryFn: () => client.projects.versions.list(projectId) });
+}
+
+/** 渲染列表（P07-05 审核界面：新→旧） */
+export function useRenders(workspaceId: string, projectId: string) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: queryKeys.renders(workspaceId, projectId),
+    queryFn: () => client.renders.list(workspaceId, projectId),
+    refetchInterval: 5000, // 渲染/QA 在途时轮询（队列状态可视化）
+  });
+}
+
+/** 最新 QA 报告（P07-05；仅在该 Render 已生成报告时非空） */
+export function useRenderQaReport(workspaceId: string, renderId: string | null) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: queryKeys.renderQa(workspaceId, renderId ?? 'none'),
+    enabled: renderId !== null,
+    queryFn: () => client.renders.qaReport(workspaceId, renderId as string),
+  });
 }

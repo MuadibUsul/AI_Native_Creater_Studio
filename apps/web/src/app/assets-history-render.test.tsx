@@ -13,13 +13,12 @@ vi.mock('next/link', () => ({
 
 const { default: AssetsPage } = await import('./w/[workspaceId]/p/[projectId]/assets/page.js');
 const { default: HistoryPage } = await import('./w/[workspaceId]/p/[projectId]/history/page.js');
-const { default: RenderPage } = await import('./w/[workspaceId]/p/[projectId]/render/page.js');
 
 /**
  * Assets / History / Render 状态矩阵（P05-03）：
  * Assets：空（可上传）/ 上传调用 SDK（直传三要素）/ 验证失败明确原因 / 正常列表；
  * History：空 / 事件时间线 / 撤销 409（无可撤销）冲突块；
- * Render：**诚实占位**（未接线，不给假按钮）+ 可渲染快照列表。
+ * （Render 审核面测试见 src/ui/render-review.test.tsx——P07-05 起接线。）
  */
 
 describe('Assets × 外部处理回绑（P06-07）', () => {
@@ -142,23 +141,5 @@ describe('History', () => {
     await userEvent.click(screen.getByRole('button', { name: '撤销最近一次编辑' }));
     expect(await screen.findByText('无法撤销/重做')).toBeTruthy();
     expect(screen.getByRole('button', { name: '刷新历史' })).toBeTruthy();
-  });
-});
-
-describe('Render', () => {
-  it('诚实占位：明确"未接线"（不提供假按钮）+ 展示可渲染快照', async () => {
-    const client = mockClient({
-      projects: { versions: { list: vi.fn().mockResolvedValue([{ id: 'ver_1', versionNumber: 3, reason: 'AUTO', createdAt: '2026-10-04T10:00:00.000Z' }]) } },
-    });
-    renderWithClient(<RenderPage />, client);
-    expect(await screen.findByText(/成片渲染将在 P07 接线（尚未实现）/)).toBeTruthy();
-    expect(await screen.findByText(/v3 · AUTO/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /渲染/ })).toBeNull();
-  });
-
-  it('无版本：提示可渲染快照的产生方式（History 链接）', async () => {
-    const client = mockClient({ projects: { versions: { list: vi.fn().mockResolvedValue([]) } } });
-    renderWithClient(<RenderPage />, client);
-    expect(await screen.findByText(/还没有版本快照/)).toBeTruthy();
   });
 });

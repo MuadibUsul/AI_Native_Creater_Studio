@@ -4,6 +4,7 @@ import { claimJob, runMaintenanceTick } from '@ancs/domain';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
+import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 
@@ -33,7 +34,7 @@ const deps = createDomainDeps(handle);
 const registry: JobHandlerRegistry =
   process.env['ANCS_DISABLE_RENDER'] === '1'
     ? createDefaultRegistry()
-    : createDefaultRegistry({ renderExecutor: createProcessRenderExecutor(), motionValidator: createProcessMotionValidator() });
+    : createDefaultRegistry({ renderExecutor: createProcessRenderExecutor(), motionValidator: createProcessMotionValidator(), mediaProbe: createProcessMediaProbe() });
 
 let stopping = false;
 const stop = (signal: string): void => {

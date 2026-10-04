@@ -9,6 +9,7 @@ import {
   RENDER_EXECUTION_FILE_MIME_TYPES,
   RENDER_EXECUTION_SPEC_VERSION,
   RENDER_MANIFEST_VERSION,
+  RENDER_QA_JOB_TYPE,
   planAudioMix,
   projectVersionSnapshotSchema,
   renderExecutionSpecSchema,
@@ -29,6 +30,7 @@ import type { DomainDeps } from './channels.js';
 import { getMasterNarrationById } from './alignment.js';
 import { captionCuesOf } from './mixdown.js';
 import { canTransitionRender, getRender, transitionRender } from './render.js';
+import { createJob } from './jobs.js';
 
 /**
  * Final 合成执行服务（P07-04 / 规范 §28、§39、§58；计划 §8 P07-04）。
@@ -610,12 +612,21 @@ export async function runRenderExecution(
       manifestHash: result.manifestHash,
     });
 
+    // §86：Final Render 后 MUST 经过自动 QA——QA 过渡同一流程内入队 RENDER_QA 任务
+    // （小窗口：入队前进程崩溃 → Render 停在 QA，可由人工/维护重触发 POST /renders/:id/qa）
     const qa = await transitionRender(deps, {
       workspaceId: render.workspaceId,
       renderId: render.id,
       to: 'QA',
       note: `合成完成：${String(result.files.length)} 个产物入库（manifest ${result.manifestHash.slice(0, 12)}…），等待 QA（P07-05）`,
     });
+    await createJob(deps, {
+      workspaceId: render.workspaceId,
+      projectId: render.projectId,
+      type: RENDER_QA_JOB_TYPE,
+      input: { renderId: render.id },
+      maxAttempts: 2,
+    }).catch(() => undefined); // 入队失败不改变渲染结果（QA 可经 API 重触发）
     return { render: qa, result, skipped: null };
   } catch (error) {
     // 明确失败（不落 QA）；恢复 = 人工以新 Render 重试（不允许无限自动重试）

@@ -33,6 +33,7 @@ import {
   directorPlanSchema,
   renderRecordSchema,
   customMotionComponentSchema,
+  qaReportSchema,
   editPlanSchema,
   masterNarrationSchema,
   mixPlanRequestSchema,
@@ -134,6 +135,7 @@ import {
   type DirectorPlan,
   type RenderRecord,
   type CustomMotionComponent,
+  type QaReport,
   type RenderStatus,
   type EditPlan,
   type DirectorPolicyInput,
@@ -339,6 +341,8 @@ export interface AncsClient {
     get(projectId: string): Promise<ProjectDetail>;
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
+    /** 渲染前预检（P07-05；项目当前状态，只读） */
+    renderPrecheck(projectId: string): Promise<QaReport>;
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
     /** 显式生成场景素材（P06-05）：去重键防双击；输入最小化；越界/能力缺失明确阻止 */
     generateScene(
@@ -607,6 +611,10 @@ export interface AncsClient {
     get(workspaceId: string, renderId: string): Promise<RenderRecord>;
     /** 状态推进（单向状态机；QUEUED→RENDERING→QA→READY/FAILED/CANCELLED） */
     transition(workspaceId: string, renderId: string, input: { to: RenderStatus; note?: string }, options?: MutationOptions): Promise<RenderRecord>;
+    /** 触发 Final QA（P07-05；仅 QA 状态——自动入队窗口的恢复入口） */
+    qa(workspaceId: string, renderId: string, options?: MutationOptions): Promise<{ jobId: string }>;
+    /** 最新 QA 报告（未 QA 过 → null） */
+    qaReport(workspaceId: string, renderId: string): Promise<QaReport | null>;
   };
   customMotion: {
     /** 发起 Custom Motion 生成（P07-02：LLM → 四道门禁 → 仅通过时版本化落库） */
@@ -924,6 +932,8 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/projects/${projectId}/restore`, projectSchema, { idempotencyKey: mutation?.idempotencyKey }),
       get: (projectId) => request('GET', `/api/v1/projects/${projectId}`, projectDetailSchema),
       graph: (projectId) => request('GET', `/api/v1/projects/${projectId}/graph`, sceneGraphSchema),
+      /** 渲染前预检（P07-05；项目当前状态，只读） */
+      renderPrecheck: (projectId: string) => request('GET', `/api/v1/projects/${projectId}/render-precheck`, qaReportSchema),
       addScene: (projectId, input, mutation) =>
         request('POST', `/api/v1/projects/${projectId}/scenes`, createSceneResponseSchema, {
           body: input,
@@ -1395,6 +1405,10 @@ export function createClient(options: ClientOptions): AncsClient {
           body: input,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      qa: (workspaceId, renderId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/qa`, z.object({ jobId: z.string() }), { idempotencyKey: mutation?.idempotencyKey }),
+      qaReport: async (workspaceId, renderId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/qa`, z.object({ report: qaReportSchema.nullable() }))).report,
     },
     customMotion: {
       start: (projectId, sceneId, input, mutation) =>
