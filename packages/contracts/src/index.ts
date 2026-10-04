@@ -314,6 +314,18 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 审批与受控导出契约（P07-06 / §87、§54）
+export {
+  APPROVAL_DECISIONS,
+  approvalDecisionSchema,
+  renderApprovalSchema,
+  decideApprovalRequestSchema,
+  APPROVAL_ERROR_REASONS,
+  exportPackageEntrySchema,
+  exportPackageSchema,
+} from './approval.js';
+export type { ApprovalDecision, RenderApproval, DecideApprovalRequest, ApprovalErrorReason, ExportPackageEntry, ExportPackage } from './approval.js';
+
 // 发布前 QA 契约（P07-05 / §86、§87）
 export {
   QA_CATEGORIES,

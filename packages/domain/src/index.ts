@@ -83,6 +83,7 @@ export {
   triggerRenderQa,
 } from './qa.js';
 export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
+export { buildRenderExportPackage, decideRenderApproval, getLatestRenderApproval } from './approval.js';
 export { createJobInTx } from './jobs.js';
 export {
   assertDependenciesAllowed,

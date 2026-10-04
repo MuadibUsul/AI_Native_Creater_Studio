@@ -22,6 +22,7 @@ export const queryKeys = {
   renders: (workspaceId: string, projectId: string) => ['projects', projectId, 'renders', workspaceId] as const,
   renderQa: (workspaceId: string, renderId: string) => ['renders', renderId, 'qa', workspaceId] as const,
   renderPrecheck: (projectId: string) => ['projects', projectId, 'render-precheck'] as const,
+  renderApproval: (workspaceId: string, renderId: string) => ['renders', renderId, 'approval', workspaceId] as const,
 };
 
 export function useSession() {
@@ -87,5 +88,15 @@ export function useRenderQaReport(workspaceId: string, renderId: string | null) 
     queryKey: queryKeys.renderQa(workspaceId, renderId ?? 'none'),
     enabled: renderId !== null,
     queryFn: () => client.renders.qaReport(workspaceId, renderId as string),
+  });
+}
+
+/** 最新审批记录（P07-06；未审批 → null） */
+export function useRenderApproval(workspaceId: string, renderId: string | null) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: queryKeys.renderApproval(workspaceId, renderId ?? 'none'),
+    enabled: renderId !== null,
+    queryFn: () => client.renders.approval(workspaceId, renderId as string),
   });
 }

@@ -2,9 +2,9 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { QaCheck, QaReport, RenderProfile, RenderRecord } from '@ancs/contracts';
+import type { ExportPackage, QaCheck, QaReport, RenderProfile, RenderRecord } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
-import { queryKeys, useRenders, useRenderQaReport } from '@/lib/queries';
+import { queryKeys, useRenderApproval, useRenders, useRenderQaReport } from '@/lib/queries';
 import { StateBlock } from './StateBlock';
 
 /**
@@ -12,7 +12,8 @@ import { StateBlock } from './StateBlock';
  * - 渲染前预检（项目当前状态；同引擎对冻结快照的检查在 QA 报告里）；
  * - 创建渲染（四档 profile）→ 渲染队列状态（QUEUED→RENDERING→QA→READY/FAILED）；
  * - QA 报告：逐项检查（BLOCKER/WARNING/ SKIP）、失败详情；QA 状态可手动触发（自动入队窗口的恢复入口）；
- * - **不提供假按钮**：人工批准与受控导出属 P07-06（本页在 READY 时明确提示"等待批准"）。
+ * - **人工批准与受控导出（P07-06 / §87）**：READY 时批准/驳回（绑定 manifestHash 快照）；批准后展示受控下载入口
+ *   （MP4/SRT/VTT/Manifest 签名 URL）；未批准不提供导出（服务端 409 双重守卫）。
  */
 
 const PROFILES: { value: RenderProfile; label: string }[] = [
@@ -77,6 +78,9 @@ export function RenderReview({ workspaceId, projectId }: { workspaceId: string; 
 
   const latest = renders.data !== undefined && renders.data.length > 0 ? renders.data[0] : undefined;
   const qaReport = useRenderQaReport(workspaceId, latest?.id ?? null);
+  const approval = useRenderApproval(workspaceId, latest?.id ?? null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [exportPackage, setExportPackage] = useState<ExportPackage | null>(null);
 
   const runPrecheck = useMutation({
     mutationFn: () => client.projects.renderPrecheck(projectId),
@@ -97,6 +101,29 @@ export function RenderReview({ workspaceId, projectId }: { workspaceId: string; 
       const message = error instanceof Error ? error.message : '创建失败';
       setNotice(`创建渲染失败：${message}（缺 Master Narration 时请先合成旁白）`);
     },
+  });
+
+  const decideApproval = useMutation({
+    mutationFn: (decision: 'APPROVED' | 'REJECTED') =>
+      client.renders.decideApproval(workspaceId, latest?.id ?? '', {
+        decision,
+        ...(reviewNote === '' ? {} : { note: reviewNote }),
+      }),
+    onSuccess: async () => {
+      setNotice(null);
+      setExportPackage(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.renderApproval(workspaceId, latest?.id ?? 'none') });
+    },
+    onError: (error: unknown) => setNotice(`审批失败：${error instanceof Error ? error.message : '仅 READY 渲染可审批'}`),
+  });
+
+  const runExport = useMutation({
+    mutationFn: () => client.renders.exportPackage(workspaceId, latest?.id ?? ''),
+    onSuccess: (bundle) => {
+      setExportPackage(bundle);
+      setNotice(null);
+    },
+    onError: (error: unknown) => setNotice(`导出被阻止：${error instanceof Error ? error.message : '未批准不能正式导出（§87）'}`),
   });
 
   const triggerQa = useMutation({
@@ -176,7 +203,7 @@ export function RenderReview({ workspaceId, projectId }: { workspaceId: string; 
                     重新触发 QA
                   </button>
                 ) : null}
-                {render.status === 'READY' ? <span className="text-xs text-emerald-300">QA 通过 · 等待人工批准</span> : null}
+                {render.status === 'READY' ? <span className="text-xs text-emerald-300">QA 通过</span> : null}
                 {render.status === 'FAILED' ? <span className="text-xs text-rose-300">{String((render.error as Record<string, unknown> | null)?.['reason'] ?? '失败')}</span> : null}
               </li>
             ))}
@@ -187,6 +214,84 @@ export function RenderReview({ workspaceId, projectId }: { workspaceId: string; 
       {latest !== undefined && qaReport.data !== undefined && qaReport.data !== null ? <QaReportPanel report={qaReport.data} /> : null}
       {latest !== undefined && qaReport.data === null ? (
         <StateBlock variant="info" title="该渲染尚无 QA 报告" description="渲染进入 QA 后由 Worker 自动执行（或点「重新触发 QA」）。" />
+      ) : null}
+
+      {/* 人工批准与受控导出（P07-06 / §87） */}
+      {latest !== undefined && latest.status === 'READY' ? (
+        <div data-testid="approval-panel" className="rounded border border-emerald-900/60 bg-emerald-950/20 p-4">
+          <h2 className="text-sm font-semibold text-emerald-200">人工批准（§87）</h2>
+          {approval.data === undefined || approval.data === null || approval.data.decision === 'REJECTED' ? (
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-xs text-slate-400">
+                QA 已通过。批准将**绑定本次 Render 的 manifest hash**（{latest.manifestHash?.slice(0, 12) ?? '—'}…）；
+                批准后如需修改内容，请重新编辑并渲染（新渲染需重新批准）。
+              </p>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                审批备注（可选）
+                <input
+                  aria-label="审批备注"
+                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                  value={reviewNote}
+                  onChange={(event) => setReviewNote(event.target.value)}
+                />
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-emerald-700 px-3 py-1 text-sm text-emerald-200 hover:border-emerald-500"
+                  onClick={() => decideApproval.mutate('APPROVED')}
+                  disabled={decideApproval.isPending}
+                >
+                  批准
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-rose-800 px-3 py-1 text-sm text-rose-200 hover:border-rose-600"
+                  onClick={() => decideApproval.mutate('REJECTED')}
+                  disabled={decideApproval.isPending}
+                >
+                  驳回
+                </button>
+              </div>
+              {approval.data?.decision === 'REJECTED' ? <p className="text-xs text-rose-300">最近一次审批为驳回{approval.data.note === null ? '' : `：${approval.data.note}`}。</p> : null}
+            </div>
+          ) : (
+            <div className="mt-2 flex flex-col gap-2">
+              <p className="text-xs text-emerald-200">
+                已批准 · {new Date(approval.data.createdAt).toLocaleString()} · manifest {approval.data.manifestHashAtApproval.slice(0, 12)}…
+                {approval.data.note !== null ? <span className="text-slate-300">（{approval.data.note}）</span> : null}
+              </p>
+              <button
+                type="button"
+                className="self-start rounded border border-sky-700 px-3 py-1 text-sm text-sky-200 hover:border-sky-500"
+                onClick={() => runExport.mutate()}
+                disabled={runExport.isPending}
+              >
+                导出受控下载入口
+              </button>
+              {exportPackage !== null ? (
+                <div data-testid="export-package" className="mt-1 flex flex-col gap-1">
+                  <p className="text-xs text-slate-400">
+                    导出内容与已批准 Manifest 一致（{exportPackage.manifestHash.slice(0, 12)}…；下载链接 15 分钟内有效）。
+                  </p>
+                  {exportPackage.projectEditedSinceApproval ? (
+                    <p className="text-xs text-amber-300">批准后项目有新编辑：本次导出仍为已批准的快照版本；如需包含新编辑请重新渲染并批准。</p>
+                  ) : null}
+                  <ul className="flex flex-col gap-1 text-sm">
+                    {exportPackage.entries.map((entry) => (
+                      <li key={entry.kind}>
+                        <a className="text-sky-300 hover:underline" href={entry.download.url}>
+                          {entry.kind}（{entry.mimeType}
+                          {entry.sizeBytes !== null ? `，${String(Math.round(entry.sizeBytes / 1024))} KB` : ''}）
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
       ) : null}
     </section>
   );

@@ -27,6 +27,7 @@ import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
+import { registerApprovalRoutes } from './routes/approval.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
@@ -152,6 +153,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
+          registerApprovalRoutes(instance, authDeps, storageDeps);
         }
       },
       { prefix: API_PREFIX },

@@ -35,3 +35,4 @@ export {
 } from './content.js';
 export { customMotionComponents, customMotionComponentVersions } from './custom-motion.js';
 export { renderQaReports } from './render-qa.js';
+export { renderApprovals } from './render-approvals.js';

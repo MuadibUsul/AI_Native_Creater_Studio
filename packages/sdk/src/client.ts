@@ -34,6 +34,8 @@ import {
   renderRecordSchema,
   customMotionComponentSchema,
   qaReportSchema,
+  renderApprovalSchema,
+  exportPackageSchema,
   editPlanSchema,
   masterNarrationSchema,
   mixPlanRequestSchema,
@@ -136,6 +138,8 @@ import {
   type RenderRecord,
   type CustomMotionComponent,
   type QaReport,
+  type RenderApproval,
+  type ExportPackage,
   type RenderStatus,
   type EditPlan,
   type DirectorPolicyInput,
@@ -615,6 +619,12 @@ export interface AncsClient {
     qa(workspaceId: string, renderId: string, options?: MutationOptions): Promise<{ jobId: string }>;
     /** 最新 QA 报告（未 QA 过 → null） */
     qaReport(workspaceId: string, renderId: string): Promise<QaReport | null>;
+    /** 人工审批（P07-06 / §87；仅 READY 可审批；批准绑定 manifestHash 快照） */
+    decideApproval(workspaceId: string, renderId: string, input: { decision: 'APPROVED' | 'REJECTED'; note?: string }, options?: MutationOptions): Promise<RenderApproval>;
+    /** 最新审批记录（未审批 → null） */
+    approval(workspaceId: string, renderId: string): Promise<RenderApproval | null>;
+    /** 受控导出（未批准/批准失效 → 409；批准 → 逐产物签名下载入口） */
+    exportPackage(workspaceId: string, renderId: string): Promise<ExportPackage>;
   };
   customMotion: {
     /** 发起 Custom Motion 生成（P07-02：LLM → 四道门禁 → 仅通过时版本化落库） */
@@ -1409,6 +1419,15 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/qa`, z.object({ jobId: z.string() }), { idempotencyKey: mutation?.idempotencyKey }),
       qaReport: async (workspaceId, renderId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/qa`, z.object({ report: qaReportSchema.nullable() }))).report,
+      decideApproval: (workspaceId, renderId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/approval`, renderApprovalSchema, {
+          body: input,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      approval: async (workspaceId, renderId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/approval`, z.object({ approval: renderApprovalSchema.nullable() }))).approval,
+      exportPackage: (workspaceId, renderId) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/export`, exportPackageSchema),
     },
     customMotion: {
       start: (projectId, sceneId, input, mutation) =>

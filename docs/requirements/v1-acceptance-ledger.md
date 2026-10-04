@@ -118,6 +118,7 @@
 | LED-C-REL-05 | failure fallback | REQ-55-01 | P04-05/P03-02（P04/P03） | TODO |
 | LED-C-REL-06 | cost ledger | REQ-25-01/REQ-35-02 | P03-05（P03） | VERIFIED（2026-10-04：credit_ledger 只追加（余额为条目效果推论）+ 预算/原子预留/结算幂等/退款（HOLD_RELEASE 释放）全链路测试；Provider 成本数值随 P06 实测写入） |
 | LED-C-REL-07 | pre-publish QA pipeline | REQ-86-01/REQ-86-02 | P07-05（P07） | VERIFIED（2026-10-05：渲染完成后**自动**入队 QA（§86）；同一检查引擎服务渲染前预检与 Final QA；技术核验为**独立复核**（校验和重算/MP4 元数据探测/字幕边界）；内容核验（占位/needs_review/图表数据/来源/缺素材/未完成 Provider 任务）；阻止项失败 → Render FAILED；响度/AI 视觉 QA 显式 SKIP 记录（未交付，不静默）；证据：docs/verification/P07-05.md） |
+| LED-C-REL-08 | human approval gate | REQ-54-02/REQ-87-01 | P07-06（P07） | VERIFIED（2026-10-05：批准绑定 renderId+manifestHash+projectVersionId+projectRevision（append-only）；**未批准/驳回/批准失效不能导出**（409 守卫）；批准 → 受控导出（MP4/SRT/VTT/Manifest 签名 URL，TTL 15 分钟），集成测试真实下载字节与 Manifest sha256 一致；证据：docs/verification/P07-06.md） |
 
 ### 3.6 Security（6）
 
