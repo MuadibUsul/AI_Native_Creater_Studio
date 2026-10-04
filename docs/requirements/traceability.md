@@ -269,8 +269,8 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-48-01 | §48 | 推荐技术栈落地（Next.js/React/Tailwind/TanStack/Zustand；Fastify 或 NestJS；PG + Prisma 或 Drizzle 二选一；Redis/BullMQ；R2 或 S3；Remotion；Docker/CI/CD）。计划 §3.1 裁决默认：Fastify + Drizzle + AWS S3 等 | MUST | V1 | P00-02（P00） | 全新目录可安装/类型检查/测试/构建（P00-02） | TODO |
-| REQ-49-01 | §49 | Monorepo 目录结构（apps + packages 清单）；计划 §3.3 增 motions-worker 等细化 | MUST | V1 | P00-02（P00） | P00-02 验收 | TODO |
-| REQ-49-02 | §49 | 依赖方向 MUST：apps→packages；providers→contracts/domain；web→sdk/contracts；禁 domain 依赖 Next.js / 具体 Provider SDK | MUST | V1 | P00-02（P00） | 依赖规则检查（P00-02）；契约优先（计划 §3.4） | TODO |
+| REQ-49-01 | §49 | Monorepo 目录结构（apps + packages 清单）；计划 §3.3 增 motion-worker 等细化 | MUST | V1 | P00-02（P00） | P00-02 验收（已核实：docs/verification/P00-02.md） | VERIFIED |
+| REQ-49-02 | §49 | 依赖方向 MUST：apps→packages；providers→contracts/domain；web→sdk/contracts；禁 domain 依赖 Next.js / 具体 Provider SDK | MUST | V1 | P00-02（P00） | 依赖规则检查（P00-02）：@ancs/arch-check R1—R6 + 11 个行为测试 + verify 门禁 | VERIFIED |
 | REQ-50-01 | §50 | .env 只存基础 Secret/连接（DATABASE_URL/REDIS_URL/OBJECT_STORAGE/KMS/PLATFORM_PROVIDER_KEYS）；模型路由/价格/并发在配置表/后台 | MUST | V1 | P00-02/P03-03（P00/P03） | P00-02 环境示例无 Secret | TODO |
 | REQ-51-01 | §51 Unit | Unit 覆盖：Visual Grammar 映射/Scene Graph 校验/Director 规则层/Provider router/成本计算/权限检查/编辑补丁与 revision | MUST | V1 | P00-02 命令 + 各任务（全期） | pnpm test:unit（P00-02） | TODO |
 | REQ-51-02 | §51 Contract | 每个 Provider Adapter 用 fixture/mock 做契约测试 | MUST | V1 | P03-07（P03） | CI 可确定性重现故障（P03-07） | TODO |
@@ -372,7 +372,7 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-A-01 | 附录 A | 官方能力基线仅作 Adapter 开发参考，不得硬编码；上线前必须再次核验（HeyGen 并发/处理时间/隐私；Gemini 限额；Veo 约 2 天保留；Runway tier/ephemeral；Remotion Player/Lambda；ElevenLabs timestamps/ZDR） | MUST | V1 | P06-01/P09-06（P06/P09） | P06-01 日期证据；P03-03 版本化配置初值 | TODO |
-| REQ-B-01 | 附录 B | 仓库根 README/AGENTS.md 必须写出 15 条 ARCHITECTURE RULES（Scene Graph SoT/Web 是客户端/版本化 API/domain 不依赖 Next/Provider SDK 限于 Adapter/不暴露 Secret/昂贵生成异步幂等排队/Draft 不触发昂贵生成/Provider URL 临时/写操作带 revision/付费入账本/AI 输出为校验过的结构化操作/事实图表需真实数据/三端共享契约/不重造 Premiere） | MUST | V1 | P00-02（P00） | README 检查（P00-02 验收） | TODO |
+| REQ-B-01 | 附录 B | 仓库根 README/AGENTS.md 必须写出 15 条 ARCHITECTURE RULES（Scene Graph SoT/Web 是客户端/版本化 API/domain 不依赖 Next/Provider SDK 限于 Adapter/不暴露 Secret/昂贵生成异步幂等排队/Draft 不触发昂贵生成/Provider URL 临时/写操作带 revision/付费入账本/AI 输出为校验过的结构化操作/事实图表需真实数据/三端共享契约/不重造 Premiere） | MUST | V1 | P00-02（P00） | README 15 条规则核对（已核实：docs/verification/P00-02.md） | VERIFIED |
 | REQ-C-01 | 附录 C | 首批工程验收清单 49 条（Architecture 8/Domain 10/AI 6/Video 7/Reliability 6/Security 6/Multi-client 6）→ 见验收账本 LED-C-*，P00 逐项建账、阶段门逐项关闭 | MUST | V1 | P00 建账；各阶段关闭（P00—P08） | LED-C-*（G1—G4 逐步关闭） | TODO |
 
 ## Z. Provider 回导、素材与发布质量（§83—§91）
@@ -445,6 +445,8 @@
 ---
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
+
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P00-02，REQ-49-01 / REQ-49-02 / REQ-B-01 → VERIFIED）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

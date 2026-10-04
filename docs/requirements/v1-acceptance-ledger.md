@@ -59,7 +59,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-ARCH-01 | Monorepo exists | REQ-49-01 | P00-02（P00） | TODO |
+| LED-C-ARCH-01 | Monorepo exists | REQ-49-01 | P00-02（P00） | VERIFIED（2026-10-04，证据：docs/verification/P00-02.md） |
 | LED-C-ARCH-02 | Web and API are separate apps | REQ-29-02 | P00-02/P01-05（P00/P01） | TODO |
 | LED-C-ARCH-03 | Shared contracts package exists | REQ-29-04 | P01-01（P01） | TODO |
 | LED-C-ARCH-04 | OpenAPI generated | REQ-29-04/REQ-33-02 | P01-01（P01） | TODO |
