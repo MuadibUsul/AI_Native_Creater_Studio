@@ -93,6 +93,10 @@ export const sceneDraftSchema = z.object({
   dataBindings: z.array(dataBindingSchema).default([]),
   /** Scene 资产绑定（P02-04；撤销"删除 Scene"时一并还原） */
   assetBindings: z.array(assetBindingSchema).default([]),
+  /** 来源旁白块（逻辑 ID；P04-05 Director 建立 旁白 ↔ Scene 关联，锁定旁白据此校验） */
+  narrationBlockIds: z.array(opaqueIdSchema).default([]),
+  /** 锁定场景（P04-05：锁定旁白 → 锁定场景；AI 不得静默修改，§4.7） */
+  locked: z.boolean().default(false),
 });
 
 export const updateProjectOperationSchema = z.object({

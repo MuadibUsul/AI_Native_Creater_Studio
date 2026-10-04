@@ -48,6 +48,26 @@ export {
 } from './narrative.js';
 export { planVisual } from './visual-plan.js';
 export {
+  applyDirectorPlan,
+  buildAssetPlan,
+  buildDirectorScenes,
+  checkBudget,
+  CHART_SCENE_TYPES,
+  DIRECTOR_SCHEMA_VERSION,
+  DIRECTOR_VERSION,
+  evaluatePolicyWarnings,
+  multiplyMoney,
+  planDirector,
+  planProviderJobs,
+  requiredCapabilities,
+  resolveDirectorPolicy,
+  SCENE_PLAN_RULES,
+  SPEECH_CAPABILITY,
+  validateDirectorPlanForApply,
+} from './director.js';
+export { addMoneyStrings } from './director.js';
+
+export {
   datasetShape,
   missingSemanticTypes,
   recognizeSemanticType,

@@ -273,6 +273,34 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// Director 契约（P04-05 / §9）
+export {
+  DIRECTOR_PLAN_VERSION,
+  directorPolicySchema,
+  directorWarningSchema,
+  DIRECTOR_WARNING_CODES,
+  directorAssetRequirementSchema,
+  directorSceneSchema,
+  directorAssetPlanItemSchema,
+  directorProviderJobPlanSchema,
+  directorPlanSchema,
+  directorApplyRequestSchema,
+  DIRECTOR_APPLY_ERROR_REASONS,
+} from './director.js';
+export type {
+  DirectorPolicy,
+  DirectorPolicyInput,
+  DirectorWarning,
+  DirectorWarningCode,
+  DirectorAssetRequirement,
+  DirectorScene,
+  DirectorAssetPlanItem,
+  DirectorProviderJobPlan,
+  DirectorPlan,
+  DirectorApplyRequest,
+  DirectorApplyErrorReason,
+} from './director.js';
+
 // 生成适配器契约（P03-07；真实与 Mock Provider 共用）
 export {
   PROVIDER_JOB_STATES,

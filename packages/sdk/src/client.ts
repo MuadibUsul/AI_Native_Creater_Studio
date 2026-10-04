@@ -18,6 +18,8 @@ import {
   extractionResultSchema,
   factVisualDecisionSchema,
   narrationBlockSchema,
+  directorApplyRequestSchema,
+  directorPlanSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
   visualPlanSchema,
@@ -108,6 +110,8 @@ import {
   type FactVisualDecision,
   type NarrationBlock,
   type NarrativeGenerationResult,
+  type DirectorPlan,
+  type DirectorPolicyInput,
   type NarrativePlan,
   type VisualPlan,
   type CreateContentRequest,
@@ -410,6 +414,16 @@ export interface AncsClient {
     plans(workspaceId: string, projectId: string): Promise<NarrativePlan[]>;
     /** 视觉计划（§10 语义识别 + 场景映射 + §10.3 降级；纯投影可重复） */
     visualPlan(workspaceId: string, projectId: string, planId: string): Promise<VisualPlan>;
+    /** Director 计划（§9：场景/资产/任务/成本/告警/决策摘要；不落库、需验证后应用） */
+    directorPlan(workspaceId: string, projectId: string, planId: string, policy?: DirectorPolicyInput): Promise<DirectorPlan>;
+    /** 应用 Director 计划（Schema/来源/Lock/预算验证 + 原子编辑；仅空项目）。
+     *  idempotencyKey 必填：应用是写操作，重放必须可识别（编辑协议 §4.6）。 */
+    applyDirectorPlan(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      input: { idempotencyKey: string; policy?: DirectorPolicyInput; intent?: string },
+    ): Promise<EditResponse>;
     /** 修订旁白块（锁定后改文本 → 409） */
     updateBlock(
       workspaceId: string,
@@ -1018,6 +1032,22 @@ export function createClient(options: ClientOptions): AncsClient {
           `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/visual-plan`,
           visualPlanSchema,
         ),
+      directorPlan: (workspaceId, projectId, planId, policy) =>
+        request(
+          'GET',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/director-plan${policy === undefined ? '' : `?policy=${encodeURIComponent(JSON.stringify(policy))}`}`,
+          directorPlanSchema,
+        ),
+      applyDirectorPlan: (workspaceId, projectId, planId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/director-plan/apply`, editResponseSchema, {
+          body: {
+            ...(input.policy !== undefined ? { policy: input.policy } : {}),
+            ...(input.intent !== undefined ? { intent: input.intent } : {}),
+            idempotencyKey: input.idempotencyKey,
+          },
+          bodySchema: directorApplyRequestSchema,
+          idempotencyKey: input.idempotencyKey,
+        }),
       updateBlock: (workspaceId, projectId, planId, blockId, input, mutation) =>
         request(
           'PATCH',

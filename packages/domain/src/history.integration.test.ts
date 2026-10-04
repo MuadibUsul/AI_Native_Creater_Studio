@@ -103,6 +103,8 @@ const draft = (durationMs: number, overrides: Record<string, unknown> = {}) => (
   sourceBindings: [],
   dataBindings: [],
   assetBindings: [],
+  narrationBlockIds: [],
+  locked: false,
   ...overrides,
 });
 

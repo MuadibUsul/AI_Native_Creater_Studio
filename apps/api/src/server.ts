@@ -17,6 +17,7 @@ import { registerChannelRoutes } from './routes/channels.js';
 import { registerContentRoutes } from './routes/content.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerCredentialRoutes } from './routes/credentials.js';
+import { registerDirectorRoutes } from './routes/director.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -126,6 +127,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerEvidenceRoutes(instance, authDeps);
         registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
         registerVisualGrammarRoutes(instance, authDeps);
+        registerDirectorRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

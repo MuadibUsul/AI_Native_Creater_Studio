@@ -91,7 +91,7 @@
 | LED-C-AI-02 | NarrativePlan schema | REQ-8-01 | P04-03（P04） | VERIFIED（2026-10-04：NarrativePlan 全字段 + 版本化落库 + 有限修复/锁定保留/逐字门控；证据：docs/verification/P04-03.md） |
 | LED-C-AI-03 | SceneGraph schema | REQ-12-01 | P01-01/P02-01（P01/P02） | VERIFIED（2026-10-04：契约就绪（P01-01）+ DB 状态组装为合法 Graph（P02-01）） |
 | LED-C-AI-04 | Visual Grammar mapping | REQ-10-01 | P04-04（P04） | VERIFIED（2026-10-04：34 类语义映射（23 基础 + 11 财经）+ 确定性识别（33/34；TRANSITION 属结构层）+ 允许类型 ⊆ V1 标准 20 类（DEC-04）+ 数据/来源门控与降级阶梯复用 P04-02；证据：docs/verification/P04-04.md） |
-| LED-C-AI-05 | Director structured output | REQ-9-02/REQ-52-01 | P04-05（P04） | TODO |
+| LED-C-AI-05 | Director structured output | REQ-9-02/REQ-52-01 | P04-05（P04） | VERIFIED（2026-10-04：DirectorPlan 六类输出（场景/资产/任务/成本/告警/决策摘要）+ 确定性规划（章节结构场景、Router 决定 Provider、BigInt 定点成本）+ Schema/来源/Lock/预算四类应用前验证 + 经编辑协议原子应用（幂等）；证据：docs/verification/P04-05.md） |
 | LED-C-AI-06 | AI Edit change plan | REQ-37-01 | P05-06（P05） | TODO |
 | LED-C-AI-07 | Claims/Citations 可追溯（Claim→Citation→Source；图表绑定门控与降级阶梯） | REQ-7-02/REQ-10-03/REQ-56-01 | P04-02（P04） | VERIFIED（2026-10-04：确定性抽取产出 Claim+Citation（块 ID+字符区间+引文）；数据集绑定门控（非 synthetic/非空/有来源）；缺数据降级阶梯（不虚构数列）；证据：docs/verification/P04-02.md） |
 

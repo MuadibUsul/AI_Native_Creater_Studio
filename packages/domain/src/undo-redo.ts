@@ -151,6 +151,8 @@ const draftFromContent = (content: SceneContentSnapshot): SceneDraft => ({
   sourceBindings: structuredClone(content.sourceBindings) as SceneDraft['sourceBindings'],
   dataBindings: structuredClone(content.dataBindings) as SceneDraft['dataBindings'],
   assetBindings: structuredClone(content.assetBindings),
+  narrationBlockIds: content.narrationBlockIds ?? [],
+  locked: content.locked,
 });
 
 /** 内容类事件的逆操作：必要时先解锁（锁定场景只允许显式解锁操作），再恢复内容/锁定状态。 */

@@ -68,6 +68,8 @@ export interface SceneContentSnapshot {
   dataBindings: unknown[];
   /** Scene 资产绑定（P02-04）：replace_asset 变更、restore/undo 一并还原 */
   assetBindings: { assetId: string; role: string }[];
+  /** 来源旁白块（P04-05；旧事件可能缺失 → 还原时保留现值） */
+  narrationBlockIds?: string[];
   locked: boolean;
   status: string;
 }
@@ -87,6 +89,7 @@ export const contentOf = (row: SceneRow): SceneContentSnapshot => ({
   sourceBindings: structuredClone(row.sourceBindings) as unknown[],
   dataBindings: structuredClone(row.dataBindings) as unknown[],
   assetBindings: structuredClone(row.assetBindings) as { assetId: string; role: string }[],
+  narrationBlockIds: structuredClone(row.narrationBlockIds) as string[],
   locked: row.locked,
   status: row.status,
 });
@@ -105,6 +108,7 @@ const contentOfScene = (scene: Scene): SceneContentSnapshot => ({
   sourceBindings: structuredClone(scene.sourceBindings),
   dataBindings: structuredClone(scene.dataBindings),
   assetBindings: structuredClone(scene.assetBindings) as { assetId: string; role: string }[],
+  narrationBlockIds: [...scene.narrationBlockIds],
   locked: scene.locked,
   status: scene.status,
 });
@@ -123,6 +127,8 @@ const applyContent = (row: SceneRow, content: SceneContentSnapshot): void => {
   row.sourceBindings = structuredClone(content.sourceBindings);
   row.dataBindings = structuredClone(content.dataBindings);
   row.assetBindings = structuredClone(content.assetBindings);
+  // 旧事件无 narrationBlockIds → 保留当前值（不误清空）
+  if (content.narrationBlockIds !== undefined) row.narrationBlockIds = [...content.narrationBlockIds];
   row.locked = content.locked;
   row.status = content.status;
 };
@@ -389,7 +395,7 @@ async function applyEditsInTransaction(
             durationMs: draft.durationMs,
             semanticType: draft.semanticType,
             sceneType: draft.sceneType,
-            narrationBlockIds: [],
+            narrationBlockIds: [...draft.narrationBlockIds],
             narration: draft.narration,
             visualIntent: draft.visualIntent,
             componentId: draft.componentId,
@@ -400,7 +406,8 @@ async function applyEditsInTransaction(
             dataBindings: draft.dataBindings,
             assetBindings: structuredClone(draft.assetBindings),
             transition: { in: null, out: null },
-            locked: false,
+            /** 草稿可要求锁定（P04-05：锁定旁白 → 锁定场景；作者仍可显式解锁） */
+            locked: draft.locked,
             approved: false,
             needsReview: false,
             status: 'EMPTY',
