@@ -18,11 +18,22 @@ import {
  * Provider 生成类任务（TTS/Avatar/AI Video 等）随 P03-06/P06 注册——**不在本任务触发真实 Provider 调用**。
  */
 
+export interface JobHandlerContext {
+  jobId: string;
+  workspaceId: string;
+  heartbeat: () => Promise<void>;
+}
+
 export interface JobHandler {
   type: string;
   description: string;
   /** 执行任务；返回值写入 job.result。抛错 → failJob（可重试性由错误类型决定）。 */
-  handle(deps: DomainDeps, input: Record<string, unknown>, context: { jobId: string; heartbeat: () => Promise<void> }): Promise<Record<string, unknown>>;
+  handle(deps: DomainDeps, input: Record<string, unknown>, context: JobHandlerContext): Promise<Record<string, unknown>>;
+  /**
+   * 取消钩子（P03-02 协作式取消 / P03-07 取消失败场景）：
+   * 返回 ok=false 时任务**保持 CANCEL_REQUESTED**（不假装已取消），由人工/对账介入。
+   */
+  onCancel?(deps: DomainDeps, input: Record<string, unknown>, context: JobHandlerContext): Promise<{ ok: boolean; reason?: string }>;
 }
 
 export class JobHandlerRegistry {

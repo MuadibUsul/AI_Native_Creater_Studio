@@ -20,7 +20,7 @@ describe('JobHandlerRegistry', () => {
   });
 
   it('NOOP 处理器无副作用并回显输入', async () => {
-    const result = await noopHandler.handle({ db: null as never } as never, { echo: 'hello' }, { jobId: 'job_1', heartbeat: async () => undefined });
+    const result = await noopHandler.handle({ db: null as never } as never, { echo: 'hello' }, { jobId: 'job_1', workspaceId: 'ws_1', heartbeat: async () => undefined });
     expect(result).toEqual({ ok: true, echo: 'hello' });
   });
 });

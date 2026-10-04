@@ -119,7 +119,7 @@
 | REQ-14-05 | §14.5 | Runway 作为 AI Video fallback/替代模型；可利用其 Model Router，但平台自身保留跨 Provider Router | SHOULD | 后续 | P10-03（P10） | 相同公共契约测试通过（P10-03） | DEFERRED |
 | REQ-14-06 | §14.6 | Remotion 为核心渲染层：标准场景引擎/数据可视化/Motion/Map/字幕/时间线合成/预览/最终渲染 | MUST | V1 | P05/P07（P05—P07） | P00-03 兼容性验证；P07-04 渲染验收 | TODO |
 | REQ-15-01 | §15 | 业务层只依赖内部接口：VideoGenerationProvider / AvatarProvider / VoiceProvider 契约形状（含可选能力方法的判空） | MUST | V1 | P03-03/P01-06（P03） | 契约测试（P03-07） | TODO |
-| REQ-15-02 | §15 | Adapter 必须处理：auth/retries/rate limits/webhooks/polling/Provider 错误/成本元数据/保留元数据/版本变化 | MUST | V1 | P03-04/P03-06（P03） | P03-06 验收；Mock 故障矩阵（P03-07） | TODO |
+| REQ-15-02 | §15 | Adapter 必须处理：auth/retries/rate limits/webhooks/polling/Provider 错误/成本元数据/保留元数据/版本变化 | MUST | V1 | P03-04/P03-06/P03-07（P03） | P03-06 验收；Mock 故障矩阵（P03-07） | 凭据（P03-04）/验签·轮询补偿·结果回收（P03-06）/**Mock 故障矩阵**（P03-07：429、提交结果未知、慢任务、重复回调、取消失败——CI 确定性重现）已覆盖；成本/保留元数据随 P06 真实 Adapter | VERIFIED（成本/保留元数据的真实取值→P06） |
 | REQ-15-03 | §15 | 禁止业务代码直接调用特定 Provider（反例：`if sceneType==='AI_VIDEO' → callVeoDirectly()`） | MUST | V1 | P03-03（P03） | 代码审计 + 契约测试 | TODO |
 | REQ-16-01 | §16 | Director 输出能力需求、Router 决定 Provider；Router 维度含 capability/quality/cost/latency/可用性/队列/失败率/Workspace 策略/地区/隐私/BYOK | MUST | V1 | P03-03/P03-04（P03） | 按能力筛选（P03-03）；BYOK/Workspace 策略/地区（P03-04） | TODO（进度：capability + 核验时效 + 地区 + Workspace 策略 + **BYOK/Managed** 已实现（P03-03/P03-04 的 resolveProviderRoute：决策可审计、全被拒 501）；quality/cost/latency/失败率/队列/隐私维度待 P03-05（成本）与 P06（真实质量/延迟数据）） |
 | REQ-16-02 | §16 | Router 模式：AUTO/QUALITY/BALANCED/FAST/LOW_COST/PRIVATE/PINNED_PROVIDER | SHOULD | V1 | P03-03（P03） | P03-03 验收 | TODO |
@@ -273,7 +273,7 @@
 | REQ-49-02 | §49 | 依赖方向 MUST：apps→packages；providers→contracts/domain；web→sdk/contracts；禁 domain 依赖 Next.js / 具体 Provider SDK | MUST | V1 | P00-02（P00） | 依赖规则检查（P00-02）：@ancs/arch-check R1—R6 + 11 个行为测试 + verify 门禁 | VERIFIED |
 | REQ-50-01 | §50 | .env 只存基础 Secret/连接（DATABASE_URL/REDIS_URL/OBJECT_STORAGE/KMS/PLATFORM_PROVIDER_KEYS）；模型路由/价格/并发在配置表/后台 | MUST | V1 | P00-02/P03-03（P00/P03） | P00-02 环境示例无 Secret | TODO |
 | REQ-51-01 | §51 Unit | Unit 覆盖：Visual Grammar 映射/Scene Graph 校验/Director 规则层/Provider router/成本计算/权限检查/编辑补丁与 revision | MUST | V1 | P00-02 命令 + 各任务（全期） | pnpm test:unit（P00-02） | TODO |
-| REQ-51-02 | §51 Contract | 每个 Provider Adapter 用 fixture/mock 做契约测试 | MUST | V1 | P03-07（P03） | CI 可确定性重现故障（P03-07） | TODO |
+| REQ-51-02 | §51 Contract | 每个 Provider Adapter 用 fixture/mock 做契约测试 | MUST | V1 | P03-07（P03） | CI 可确定性重现故障（P03-07） | Mock Provider 实现 `GenerationProvider` 同一接口（packages/providers/mock-provider）+ 脚本化故障（success/slow/rate_limited/submission_unknown/duplicate_callback/cancel_fails/result_missing）；契约级与端到端（真实 DB/存储/回收链路）测试均为本地确定性（P03-07）；真实 Adapter 的 fixture 随 P06 | VERIFIED（真实 Adapter 契约测试→P06） |
 | REQ-51-03 | §51 Integration | Integration：DB+Queue+Worker、upload intents、render pipeline、webhook 幂等 | MUST | V1 | P00-02 + P02/P03/P07 | pnpm test:integration | TODO |
 | REQ-51-04 | §51 E2E | E2E：创建项目→导入→Narrative→Storyboard→编辑→预览→mock Provider 终渲染→历史恢复 | MUST | V1 | P05/P08（P05—P08） | pnpm test:e2e；计划 AC 系列 | TODO |
 | REQ-51-05 | §51 | Production Provider smoke test 单独运行，不作为普通 CI 必须项 | MUST | V1 | P00-02/P08（P00/P08） | verify 默认零真实费用（计划 §11.1） | TODO |
@@ -353,7 +353,7 @@
 | REQ-75-01 | §75 | MUST NOT 15 条：1) 状态塞 localStorage；2) Scene Graph 单一大 JSON 无 revision；3) Provider 调用写进 Next page/component；4) 客户端持平台 Secret；5) Provider URL 当永久文件；6) 每次改 Draft 触发昂贵 AI Video；7) 整篇私密文章默认发所有 Provider；8) 最终 Timeline 作唯一 SoT；9) Web 与 Mobile 两套业务逻辑；10) Provider 模型 ID 作核心枚举；11) 数据图表 AI 虚构数值；12) 付费 generation 无限自动 retry；13) 删除 Project 立即物理不可恢复；14) Key 进日志或错误返回；15) Custom Motion 代码在主 API 进程无隔离执行。各条已被上方对应 REQ 覆盖（如 5→REQ-26-01、7→REQ-2-07、11→REQ-10-03、15→REQ-11-03），其余由专项审计与 AC 覆盖 | MUST | 全期 | 全阶段（评审规则） | G4/G8 审计逐条核对；相关 AC-01/02/06/08/10/12/18 | TODO |
 | REQ-76-01 | §76 | 每 Phase 顺序：schema/contracts→migration→domain/service→API→SDK→Web UI→tests→docs；不得先在 UI 写临时逻辑再抽取（计划 §7 模板） | MUST | 全期 | 全阶段（流程） | 每任务交接记录按此顺序核验 | TODO |
 | REQ-76-02 | §76 | 所有 TODO 必须写清 why/dependency/intended interface | MUST | 全期 | 全阶段（流程） | 代码审计 | TODO |
-| REQ-76-03 | §76 | 无真实凭据时使用明确 Mock Adapter；UI 标示 MOCK；不得伪造"真实生成成功" | MUST | V1 | P03-07（P03） | Mock 故障矩阵（P03-07）；计划免责声明 | TODO |
+| REQ-76-03 | §76 | 无真实凭据时使用明确 Mock Adapter；UI 标示 MOCK；不得伪造"真实生成成功" | MUST | V1 | P03-07（P03） | Mock 故障矩阵（P03-07）；计划免责声明 | Mock Provider 明确命名（providerId=mock.provider、包名 providers/mock-provider）且**不冒充真实 Provider**（真实调用被 Catalog 核验门控阻止，P03-03/P03-04）；结果与事件中标注 providerId 可辨；UI 的 MOCK 标示随 P05；测试断言不使用"真实成功"字样 | VERIFIED（UI 标示→P05） |
 
 ## X. 验收定义、开发顺序与金样（§77—§82）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-06，REQ-33-04 → VERIFIED（REQ-45-02 记录进度）；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-07，REQ-15-02 / REQ-51-02 / REQ-76-03 → VERIFIED（**P03 阶段 P03-01…P03-07 全部完成**）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

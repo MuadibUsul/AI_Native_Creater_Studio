@@ -24,7 +24,7 @@
 | LED-77-10 | 有 Lite Timeline | REQ-5-07 | P05-05（P05） | TODO |
 | LED-77-11 | 有 Undo / History / Version | REQ-5-08/REQ-23-03 | P02-03（P02） | VERIFIED（2026-10-04：服务端 Undo/Redo（补偿事件、LIFO、新编辑结束重做分支）/项目版本快照/整项目与单 Scene Restore 全链路测试；恢复产生新 revision 且旧版本与账本逐字节不变；History UI 属 P05-03） |
 | LED-77-12 | 有资产上传和 Object Storage | REQ-26-02/REQ-22-04 | P02-04（P02） | VERIFIED（2026-10-04：真实本地对象存储驱动端到端——意图→签名直传→真实探测确认→Signed URL 下载回读；伪造 MIME/越权对象/不完整上传不可 Ready；S3/R2 云适配器待真实凭据，§13.5-8） |
-| LED-77-13 | 有至少一个真实 Avatar Provider | REQ-64-04/REQ-14-02 | P06-04（P06） | TODO |
+| LED-77-13 | 有至少一个真实 Avatar Provider | REQ-64-04/REQ-14-02 | P06-04（P06） | TODO（前置：Mock Provider 与故障矩阵已就位（P03-07）；真实账号待 P06-04） |
 | LED-77-14 | 有至少一个真实 Voice Provider | REQ-6-07/REQ-14-03 | P06-02（P06） | TODO |
 | LED-77-15 | 有至少一个真实 AI Video Provider（默认 Veo，DEC-05） | REQ-64-04/DEC-05 | P06-05（P06） | TODO |
 | LED-77-16 | 外部任务异步执行并显示状态 | REQ-2-05/REQ-29-06 | P03-01/P02-06（P03/P02） | TODO（进度：任务系统（状态机/依赖/租约/Worker）与 job.* 事件已就位（P03-01）；真实外部生成任务的端到端执行随 P03-06/P06/P07） |

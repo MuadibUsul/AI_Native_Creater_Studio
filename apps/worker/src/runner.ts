@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type { Job } from '@ancs/contracts';
 import type { DomainDeps } from '@ancs/domain';
+import { eq } from 'drizzle-orm';
+import { jobs, outboxEvents } from '@ancs/db';
 import { completeJob, failJob, heartbeatJob, transitionJob } from '@ancs/domain';
 import type { JobHandlerRegistry } from './handlers.js';
 
@@ -36,7 +39,7 @@ export async function executeJob(
   registry: JobHandlerRegistry,
   options: ExecuteOptions,
   job: Pick<Job, 'id' | 'workspaceId' | 'type' | 'input'>,
-): Promise<'succeeded' | 'failed' | 'cancelled'> {
+): Promise<'succeeded' | 'failed' | 'cancelled' | 'cancel_failed'> {
   const handler = registry.get(job.type);
   if (handler === undefined) {
     await failJob(deps, {
@@ -78,6 +81,7 @@ export async function executeJob(
   try {
     const result = await handler.handle(deps, job.input, {
       jobId: job.id,
+      workspaceId: job.workspaceId,
       heartbeat: async () => {
         const beat = await heartbeatJob(deps, {
           workspaceId: job.workspaceId,
@@ -93,11 +97,34 @@ export async function executeJob(
     if (leaseLost !== null) throw leaseLost;
 
     await crash('before-complete');
-    await completeJob(deps, { workspaceId: job.workspaceId, jobId: job.id, result });
+    // 复核：处理器可能已自行迁移（如"提交结果未知"→ FAILED_RETRYABLE + 对账标记）；
+    // 仅在任务仍为 RUNNING 时执行完成迁移，避免覆盖处理器的权威结论。
+    const fresh = await deps.db.select({ status: jobs.status }).from(jobs).where(eq(jobs.id, job.id)).limit(1);
+    if (fresh[0]?.status === 'RUNNING') {
+      await completeJob(deps, { workspaceId: job.workspaceId, jobId: job.id, result });
+    }
     return 'succeeded';
   } catch (error) {
     if (crashing) throw error; // 注入的"崩溃"直接穿透（不写终态）
     if (error instanceof CancellationRequested) {
+      // Provider 侧联动（若处理器支持）：取消失败 → 保持 CANCEL_REQUESTED 供人工介入（P03-07）
+      if (handler.onCancel !== undefined) {
+        const cancelResult = await handler
+          .onCancel(deps, job.input, { jobId: job.id, workspaceId: job.workspaceId, heartbeat: async () => undefined })
+          .catch((cancelError: unknown) => ({ ok: false, reason: cancelError instanceof Error ? cancelError.message : 'CANCEL_ERROR' }));
+        if (!cancelResult.ok) {
+          await deps.db
+            .insert(outboxEvents)
+            .values({
+              id: `obx_${randomUUID()}`,
+              workspaceId: job.workspaceId,
+              type: 'job.cancel_failed',
+              payload: { jobId: job.id, reason: cancelResult.reason ?? 'CANCEL_REJECTED', actorType: 'SYSTEM', actorId: null },
+            })
+            .catch(() => undefined);
+          return 'cancel_failed'; // 任务保持 CANCEL_REQUESTED
+        }
+      }
       await transitionJob(deps, {
         workspaceId: job.workspaceId,
         jobId: job.id,

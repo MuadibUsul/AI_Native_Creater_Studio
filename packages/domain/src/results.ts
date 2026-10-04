@@ -195,6 +195,17 @@ export async function processProviderCallback(
     return { jobId: state.jobId, collection: null, stale: true };
   }
 
+  // 已回收（重复回调经不同路径到达）：幂等跳过，不重复收集/不重复记账
+  if (state.status === 'COLLECTED') {
+    if (input.webhookEventId !== undefined) {
+      await deps.db
+        .update(webhookEvents)
+        .set({ status: 'PROCESSED', jobId: state.jobId, attempt: callback.attempt, note: 'ALREADY_COLLECTED', processedAt: now })
+        .where(eq(webhookEvents.id, input.webhookEventId));
+    }
+    return { jobId: state.jobId, collection: null, stale: false };
+  }
+
   if (input.webhookEventId !== undefined) {
     await deps.db
       .update(webhookEvents)

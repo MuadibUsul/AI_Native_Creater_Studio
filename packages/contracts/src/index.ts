@@ -173,6 +173,23 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 生成适配器契约（P03-07；真实与 Mock Provider 共用）
+export {
+  PROVIDER_JOB_STATES,
+  providerJobStateSchema,
+  generationSubmitRequestSchema,
+  ProviderRateLimitedError,
+  ProviderSubmissionUnknownError,
+} from './generation.js';
+export type {
+  ProviderJobState,
+  GenerationSubmitRequest,
+  GenerationSubmitResult,
+  GenerationStatusResult,
+  GenerationCancelResult,
+  GenerationProvider,
+} from './generation.js';
+
 // Provider 结果回收与 Webhook 契约（P03-06 / §30、§31、§33.4）
 export {
   WEBHOOK_VERIFICATION_STATUSES,
