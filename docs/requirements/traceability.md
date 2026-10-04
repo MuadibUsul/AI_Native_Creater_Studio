@@ -134,11 +134,11 @@
 |---|---|---|---|---|---|---|---|
 | REQ-18-01 | §18.1 | Draft 快速便宜（Avatar/AI Video 用 placeholder、标准场景真实预览、预览级声音）；MUST：反复编辑 Draft 不得频繁调用昂贵 Video Provider | MUST | V1 | P05-04（P05） | AC-12；编辑不隐式触发昂贵调用（P05-04） | TODO |
 | REQ-18-02 | §18.2/18.3 | Studio 与 Hero/Premium 档位差异（正式资产/1080p vs Custom Motion/高分辨率）；所有档位为策略配置，不写死供应商 | SHOULD | V1 | P03-03/P07-04（P03/P07） | 档位配置化；P07-04 1080p | TODO |
-| REQ-19-01 | §19.1 | 统一 Job 状态机：WAITING_DEPENDENCY/ QUEUED/RUNNING/PROVIDER_QUEUED/SUCCEEDED/FAILED_RETRYABLE/FAILED_FINAL/CANCEL_REQUESTED/CANCELLED（计划 §5.5 增补执行阶段/提交状态/重试/租约/心跳/对账字段） | MUST | V1 | P03-01（P03） | 状态机测试；AC-06 | TODO |
+| REQ-19-01 | §19.1 | 统一 Job 状态机：WAITING_DEPENDENCY/ QUEUED/RUNNING/PROVIDER_QUEUED/SUCCEEDED/FAILED_RETRYABLE/FAILED_FINAL/CANCEL_REQUESTED/CANCELLED（计划 §5.5 增补执行阶段/提交状态/重试/租约/心跳/对账字段） | MUST | V1 | P03-01（P03） | 状态机测试；AC-06 | 9 状态机 + 唯一迁移服务（非法迁移 409）+ stage/submit_state/attempts/租约/心跳/needs_reconciliation 字段；终态重复上报 409（P03-01/P03-02） | VERIFIED |
 | REQ-19-02 | §19.1 | 项目级状态：DRAFT/SCRIPTING/STORYBOARDING/GENERATING_AUDIO/GENERATING_ASSETS/READY_FOR_REVIEW/RENDER_QUEUED/RENDERING/READY/FAILED/ARCHIVED | MUST | V1 | P02-01（P02） | P02-01 验收 | 状态字段与 §19.1 十一态枚举就绪（P02-01）；状态迁移由编辑/任务系统驱动（P02-02/P03） | VERIFIED |
-| REQ-19-03 | §19.2 | MUST 并发控制：Provider 并发信号量/Workspace 限流/平台限流/队列优先级/指数退避/抖动/幂等/死信与失败检查/人工重试/webhook 验签 | MUST | V1 | P03-01/P03-02（P03） | 杀 Worker 恢复测试（P03-02）；AC-06 | TODO |
+| REQ-19-03 | §19.2 | MUST 并发控制：Provider 并发信号量/Workspace 限流/平台限流/队列优先级/指数退避/抖动/幂等/死信与失败检查/人工重试/webhook 验签 | MUST | V1 | P03-01/P03-02（P03） | 杀 Worker 恢复测试（P03-02）；AC-06 | 队列优先级/指数退避+抖动/自动重试推进/失败检查（inspectJobs）/人工重试/**杀 Worker 恢复**（故障注入三阶段）已实现（P03-01/P03-02）；Provider 并发信号量与限流随 P03-03；webhook 验签随 P03-06 | VERIFIED（并发信号量/限流→P03-03；验签→P03-06） |
 | REQ-19-04 | §19.2 | Provider limit 不得写死，从配置加载 | MUST | V1 | P03-03（P03） | P03-03 验收 | TODO |
-| REQ-19-05 | §19.3 | MVP 基础设施 Redis + BullMQ + PostgreSQL 状态表 + Transactional Outbox；保留 WorkflowEngine 抽象（未来可切 Temporal） | MUST | V1 | P03-01（P03） | Outbox 崩溃恢复（P03-01；AC-06） | TODO |
+| REQ-19-05 | §19.3 | MVP 基础设施 Redis + BullMQ + PostgreSQL 状态表 + Transactional Outbox；保留 WorkflowEngine 抽象（未来可切 Temporal） | MUST | V1 | P03-01（P03） | Outbox 崩溃恢复（P03-01；AC-06） | PostgreSQL 权威状态表 + Transactional Outbox + BullMQ 适配器（真实 Redis 端到端：投递/持久/多 Worker 竞争，P03-02）+ DbPollQueue 回退；WorkflowEngine 以 JobQueueAdapter/状态迁移服务抽象保留 | VERIFIED |
 
 ## H. 隐私、存储与领域模型（§20—§22）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-01，REQ-2-05 / REQ-70-02 → VERIFIED；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-02，REQ-19-01 / REQ-19-03 / REQ-19-05 → VERIFIED；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

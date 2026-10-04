@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   DEFAULT_QUEUE,
@@ -47,6 +47,32 @@ const ALLOWED_TRANSITIONS: Readonly<Record<JobStatus, readonly JobStatus[]>> = {
 
 export const DEFAULT_LEASE_SECONDS = 60;
 
+/**
+ * 退避与抖动（P03-02）：FAILED_RETRYABLE 的下次可认领时间 = base * 2^(attempts-1)，上限 cap，
+ * 再乘 ±jitterRatio 的随机抖动（避免惊群）。可通过 DomainDeps.retryPolicy 覆盖（测试用确定性参数）。
+ */
+export const DEFAULT_RETRY_BASE_SECONDS = 5;
+export const DEFAULT_RETRY_CAP_SECONDS = 300;
+export const DEFAULT_RETRY_JITTER_RATIO = 0.2;
+
+export interface RetryPolicy {
+  baseSeconds?: number;
+  capSeconds?: number;
+  jitterRatio?: number;
+  /** 注入随机源（测试用；返回 [0,1)） */
+  random?: () => number;
+}
+
+export function computeBackoffSeconds(attempts: number, policy: RetryPolicy = {}): number {
+  const base = policy.baseSeconds ?? DEFAULT_RETRY_BASE_SECONDS;
+  const cap = policy.capSeconds ?? DEFAULT_RETRY_CAP_SECONDS;
+  const jitterRatio = policy.jitterRatio ?? DEFAULT_RETRY_JITTER_RATIO;
+  const exponential = Math.min(base * 2 ** Math.max(attempts - 1, 0), cap);
+  const random = policy.random ?? Math.random;
+  const jitter = (random() * 2 - 1) * jitterRatio; // [-jitterRatio, +jitterRatio)
+  return Math.max(0, Math.round(exponential * (1 + jitter)));
+}
+
 /** DB 轮询队列（V1 默认传输）：投递即"标记可认领"，正确性由 jobs 表 + 回收扫描保证。 */
 export class DbPollQueue implements JobQueueAdapter {
   readonly kind = 'db-poll';
@@ -75,6 +101,7 @@ const toJobDto = (row: typeof jobs.$inferSelect): Job =>
     maxAttempts: row.maxAttempts,
     priority: row.priority,
     needsReconciliation: row.needsReconciliation,
+    nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
     enqueuedAt: row.enqueuedAt?.toISOString() ?? null,
     startedAt: row.startedAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
@@ -260,7 +287,13 @@ export async function transitionJob(deps: DomainDeps, input: TransitionInput): P
       throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'job not found', 404);
     }
     const from = row.status as JobStatus;
-    if (from === input.to) return toJobDto(row);
+    if (from === input.to) {
+      // 终态重复上报（陈旧 Worker/重复消费）→ 409：明确拒绝，且绝不覆盖既有结果
+      if (JOB_TERMINAL_STATUSES.includes(from)) {
+        throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, `任务已处于终态：${from}`, 409, { from, to: input.to });
+      }
+      return toJobDto(row);
+    }
     if (!ALLOWED_TRANSITIONS[from].includes(input.to)) {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, `非法状态迁移：${from} → ${input.to}`, 409, {
         from,
@@ -279,7 +312,8 @@ export async function transitionJob(deps: DomainDeps, input: TransitionInput): P
         ...(input.result !== undefined ? { result: input.result } : {}),
         ...(input.error !== undefined ? { error: input.error } : {}),
         ...(input.to === 'RUNNING' && row.startedAt === null ? { startedAt: now } : {}),
-        ...(input.to === 'QUEUED' ? { leaseOwner: null, leaseExpiresAt: null } : {}),
+        // 进入 QUEUED：清租约与退避（任何路径的重新可认领都不再等待退避窗口）
+        ...(input.to === 'QUEUED' ? { leaseOwner: null, leaseExpiresAt: null, nextAttemptAt: null } : {}),
         ...(terminal ? { completedAt: now, leaseOwner: null, leaseExpiresAt: null } : {}),
         updatedAt: now,
       })
@@ -309,10 +343,26 @@ export async function transitionJob(deps: DomainDeps, input: TransitionInput): P
 
     // 终态：解析依赖方（同事务，避免"依赖成功但依赖方永久等待"）
     if (terminal) {
+      await resolveDependentsInTransaction(deps, tx, input.jobId, now);
+    }
+
+    return toJobDto(next);
+  });
+}
+
+/** 终态后的依赖解析（同事务；transitionJob 与 failJob 共用）。 */
+async function resolveDependentsInTransaction(
+  deps: DomainDeps,
+  tx: Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0],
+  jobId: string,
+  now: Date,
+): Promise<void> {
+  {
+    {
       const dependents = await tx
         .select({ jobId: jobDependencies.jobId })
         .from(jobDependencies)
-        .where(eq(jobDependencies.dependsOnJobId, input.jobId));
+        .where(eq(jobDependencies.dependsOnJobId, jobId));
       for (const dependent of dependents) {
         const dependentRows = await tx.select().from(jobs).where(eq(jobs.id, dependent.jobId)).limit(1);
         const dependentRow = dependentRows[0];
@@ -353,9 +403,7 @@ export async function transitionJob(deps: DomainDeps, input: TransitionInput): P
         }
       }
     }
-
-    return toJobDto(next);
-  });
+  }
 }
 
 /** 认领任务（原子：SKIP LOCKED；设置租约；attempts +1）。 */
@@ -366,7 +414,11 @@ export async function claimJob(
   const leaseSeconds = input.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
   const now = input.now ?? new Date();
   return deps.db.transaction(async (tx) => {
-    const conditions = [eq(jobs.status, 'QUEUED')];
+    const conditions = [
+      eq(jobs.status, 'QUEUED'),
+      // 退避未到期的任务不可认领（P03-02）
+      or(isNull(jobs.nextAttemptAt), lte(jobs.nextAttemptAt, now)),
+    ];
     if (input.types !== undefined && input.types.length > 0) conditions.push(inArray(jobs.type, input.types));
     const rows = await tx
       .select({ id: jobs.id })
@@ -492,17 +544,162 @@ export async function completeJob(
 /** 失败：可重试（attempts < maxAttempts）→ FAILED_RETRYABLE 并等待重试；否则 FAILED_FINAL。 */
 export async function failJob(
   deps: DomainDeps,
-  input: { workspaceId: string; jobId: string; error: Record<string, unknown>; retryable?: boolean },
+  input: { workspaceId: string; jobId: string; error: Record<string, unknown>; retryable?: boolean; now?: Date },
 ): Promise<Job> {
   const row = await loadJobRow(deps, input);
   const canRetry = input.retryable !== false && row.attempts < row.maxAttempts;
-  return transitionJob(deps, {
-    workspaceId: input.workspaceId,
-    jobId: input.jobId,
-    to: canRetry ? 'FAILED_RETRYABLE' : 'FAILED_FINAL',
-    error: input.error,
-    reason: canRetry ? 'WORKER_FAILED_RETRYABLE' : 'WORKER_FAILED_FINAL',
+  const now = input.now ?? new Date();
+  return deps.db.transaction(async (tx) => {
+    await tx.execute(sql`select id from jobs where id = ${input.jobId} for update`);
+    const fresh = (await tx.select().from(jobs).where(eq(jobs.id, input.jobId)).limit(1))[0];
+    if (!fresh) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'job not found', 404);
+    const from = fresh.status as JobStatus;
+    const to: JobStatus = canRetry ? 'FAILED_RETRYABLE' : 'FAILED_FINAL';
+    if (!ALLOWED_TRANSITIONS[from].includes(to)) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, `非法状态迁移：${from} → ${to}`, 409, { from, to });
+    }
+    // 退避：可重试时设置下次可认领时间（含抖动，见 computeBackoffSeconds）
+    const backoffSeconds = canRetry ? computeBackoffSeconds(fresh.attempts, deps.retryPolicy ?? {}) : null;
+    const nextAttemptAt = backoffSeconds === null ? null : new Date(now.getTime() + backoffSeconds * 1000);
+    const updated = await tx
+      .update(jobs)
+      .set({
+        status: to,
+        error: input.error,
+        nextAttemptAt,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        ...(canRetry ? {} : { completedAt: now }),
+        updatedAt: now,
+      })
+      .where(eq(jobs.id, input.jobId))
+      .returning();
+    const next = updated[0];
+    if (!next) throw new ApiFailure(ERROR_CODES.INTERNAL, 'job update failed', 500);
+    await emitJobEvent(tx, next, 'job.failed', {
+      from,
+      reason: canRetry ? 'WORKER_FAILED_RETRYABLE' : 'WORKER_FAILED_FINAL',
+      error: input.error,
+      ...(backoffSeconds !== null ? { backoffSeconds, nextAttemptAt: nextAttemptAt?.toISOString() } : {}),
+    });
+    // 终态（FAILED_FINAL）时同事务解析依赖方（与 transitionJob 一致）
+    if (to === 'FAILED_FINAL') {
+      await resolveDependentsInTransaction(deps, tx, input.jobId, now);
+    }
+    return toJobDto(next);
   });
+}
+
+/**
+ * 自动重试推进（P03-02）：FAILED_RETRYABLE 且退避到期 → QUEUED（重新派发）。
+ * 由 Worker tick 调用（可重入）；次数上限由 failJob 的 attempts < maxAttempts 判定。
+ */
+export async function promoteRetryableJobs(
+  deps: DomainDeps,
+  options: { now?: Date; limit?: number } = {},
+): Promise<{ promoted: number }> {
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? 50;
+  const candidates = await deps.db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.status, 'FAILED_RETRYABLE'),
+        or(isNull(jobs.nextAttemptAt), lte(jobs.nextAttemptAt, now)),
+      ),
+    )
+    .limit(limit);
+  let promoted = 0;
+  for (const candidate of candidates) {
+    const outcome = await deps.db.transaction(async (tx) => {
+      await tx.execute(sql`select id from jobs where id = ${candidate.id} for update`);
+      const row = (await tx.select().from(jobs).where(eq(jobs.id, candidate.id)).limit(1))[0];
+      if (!row || row.status !== 'FAILED_RETRYABLE') return false;
+      if (row.nextAttemptAt !== null && row.nextAttemptAt.getTime() > now.getTime()) return false;
+      const updated = await tx
+        .update(jobs)
+        .set({ status: 'QUEUED', nextAttemptAt: null, updatedAt: now })
+        .where(eq(jobs.id, row.id))
+        .returning();
+      const next = updated[0];
+      if (!next) return false;
+      await emitJobEvent(tx, next, 'job.queued', { from: 'FAILED_RETRYABLE', reason: 'BACKOFF_ELAPSED' });
+      return true;
+    });
+    if (outcome) promoted += 1;
+  }
+  return { promoted };
+}
+
+/**
+ * 失败检查（P03-02）：发现"依赖已终态但仍 WAITING_DEPENDENCY"的孤儿等待（并发边缘/依赖行缺失），
+ * 补做一次依赖解析（升级或明确失败）——保证依赖失败不会永久等待。
+ */
+export async function resolveStuckDependents(
+  deps: DomainDeps,
+  options: { limit?: number } = {},
+): Promise<{ resolved: number }> {
+  const limit = options.limit ?? 50;
+  const waiting = await deps.db
+    .select({ id: jobs.id })
+    .from(jobs)
+    .where(eq(jobs.status, 'WAITING_DEPENDENCY'))
+    .limit(limit);
+  let resolved = 0;
+  for (const candidate of waiting) {
+    const outcome = await deps.db.transaction(async (tx) => {
+      await tx.execute(sql`select id from jobs where id = ${candidate.id} for update`);
+      const row = (await tx.select().from(jobs).where(eq(jobs.id, candidate.id)).limit(1))[0];
+      if (!row || row.status !== 'WAITING_DEPENDENCY') return false;
+      const evaluation = await evaluateDependencies(deps, tx, row.id);
+      if (!evaluation.ready && evaluation.blocking === undefined) return false; // 依赖仍在进行
+      const now = new Date();
+      if (evaluation.blocking !== undefined) {
+        const updated = await tx
+          .update(jobs)
+          .set({ status: 'FAILED_FINAL', error: { reason: 'DEPENDENCY_FAILED', ...evaluation.blocking }, completedAt: now, updatedAt: now })
+          .where(eq(jobs.id, row.id))
+          .returning();
+        const next = updated[0];
+        if (!next) return false;
+        await emitJobEvent(tx, next, 'job.failed', { from: 'WAITING_DEPENDENCY', reason: 'DEPENDENCY_FAILED', ...evaluation.blocking });
+        return true;
+      }
+      const updated = await tx
+        .update(jobs)
+        .set({ status: 'QUEUED', updatedAt: now })
+        .where(eq(jobs.id, row.id))
+        .returning();
+      const next = updated[0];
+      if (!next) return false;
+      await emitJobEvent(tx, next, 'job.queued', { from: 'WAITING_DEPENDENCY', reason: 'DEPENDENCIES_RESOLVED' });
+      return true;
+    });
+    if (outcome) resolved += 1;
+  }
+  return { resolved };
+}
+
+/** 失败检查报告（运维视图）：各状态计数 + 需对账任务 + 需人工介入的终态失败。 */
+export async function inspectJobs(
+  deps: DomainDeps,
+  input: { workspaceId: string },
+): Promise<{
+  byStatus: Record<string, number>;
+  needsReconciliation: number;
+  failedFinal: { jobId: string; type: string; error: Record<string, unknown> | null }[];
+}> {
+  const rows = await deps.db.select().from(jobs).where(eq(jobs.workspaceId, input.workspaceId));
+  const byStatus: Record<string, number> = {};
+  for (const row of rows) byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+  return {
+    byStatus,
+    needsReconciliation: rows.filter((row) => row.needsReconciliation).length,
+    failedFinal: rows
+      .filter((row) => row.status === 'FAILED_FINAL')
+      .map((row) => ({ jobId: row.id, type: row.type, error: (row.error ?? null) as Record<string, unknown> | null })),
+  };
 }
 
 /** 取消：QUEUED/WAITING_DEPENDENCY → CANCELLED；RUNNING/PROVIDER_QUEUED → CANCEL_REQUESTED（Worker 协作式收敛）。 */
@@ -534,12 +731,17 @@ export async function retryJob(
   deps: DomainDeps,
   input: { workspaceId: string; jobId: string; reason?: string },
 ): Promise<Job> {
-  return transitionJob(deps, {
+  const job = await transitionJob(deps, {
     workspaceId: input.workspaceId,
     jobId: input.jobId,
     to: 'QUEUED',
     reason: input.reason ?? 'MANUAL_RETRY',
   });
+  // 人工重试立即生效：清退避（不等待自动重试窗口）
+  const updated = await deps.db.update(jobs).set({ nextAttemptAt: null }).where(eq(jobs.id, job.id)).returning();
+  const row = updated[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.INTERNAL, 'job update failed', 500);
+  return toJobDto(row);
 }
 
 export interface JobDispatchReport {
@@ -613,8 +815,15 @@ export async function runJobDispatch(
 export async function runMaintenanceTick(
   deps: DomainDeps,
   options: { now?: Date; limit?: number } = {},
-): Promise<{ leases: { requeued: number; needsReconciliation: number }; dispatch: JobDispatchReport }> {
+): Promise<{
+  leases: { requeued: number; needsReconciliation: number };
+  retries: { promoted: number };
+  dependents: { resolved: number };
+  dispatch: JobDispatchReport;
+}> {
   const leases = await requeueExpiredLeases(deps, options);
+  const retries = await promoteRetryableJobs(deps, options);
+  const dependents = await resolveStuckDependents(deps, options);
   const dispatch = await runJobDispatch(deps, options);
-  return { leases, dispatch };
+  return { leases, retries, dependents, dispatch };
 }

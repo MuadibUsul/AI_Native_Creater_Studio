@@ -1,6 +1,6 @@
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { claimJob, requeueExpiredLeases, runJobDispatch } from '@ancs/domain';
+import { claimJob, runMaintenanceTick } from '@ancs/domain';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
@@ -17,6 +17,8 @@ if (databaseUrl === '') {
 }
 
 const once = process.env['ANCS_WORKER_ONCE'] === '1' || process.argv.includes('--once');
+/** 故障注入（P03-02）：在关键阶段退出进程，用于演练"杀 Worker 后可继续" */
+const crashAt = process.env['ANCS_WORKER_CRASH_AT'] ?? '';
 const workerId = process.env['ANCS_WORKER_ID'] ?? `${hostname()}-${String(process.pid)}`;
 const tickIntervalMs = Number(process.env['ANCS_WORKER_TICK_MS'] ?? 1000);
 const leaseSeconds = Number(process.env['ANCS_WORKER_LEASE_SECONDS'] ?? 60);
@@ -39,14 +41,18 @@ process.on('SIGTERM', () => {
 });
 
 async function tick(): Promise<number> {
-  // 1) 维护：租约回收（崩溃恢复）+ Outbox 派发（投递中断可恢复）
-  const leases = await requeueExpiredLeases(deps, { limit: 50 });
-  if (leases.requeued > 0) {
-    console.log(`[worker ${workerId}] 租约回收：${String(leases.requeued)}（需对账 ${String(leases.needsReconciliation)}）`);
+  // 1) 维护（可重入）：租约回收（崩溃恢复）→ 重试退避推进 → 孤儿依赖检查 → Outbox 派发
+  const tickReport = await runMaintenanceTick(deps, { limit: 50 });
+  if (tickReport.leases.requeued > 0) {
+    console.log(`[worker ${workerId}] 租约回收：${String(tickReport.leases.requeued)}（需对账 ${String(tickReport.leases.needsReconciliation)}）`);
   }
-  const dispatch = await runJobDispatch(deps, { limit: 50 });
-  if (dispatch.enqueued > 0 || dispatch.failed > 0) {
-    console.log(`[worker ${workerId}] 派发：enqueued=${String(dispatch.enqueued)} failed=${String(dispatch.failed)}`);
+  if (tickReport.retries.promoted > 0 || tickReport.dependents.resolved > 0) {
+    console.log(
+      `[worker ${workerId}] 恢复推进：重试升级 ${String(tickReport.retries.promoted)}、孤儿依赖解析 ${String(tickReport.dependents.resolved)}`,
+    );
+  }
+  if (tickReport.dispatch.enqueued > 0 || tickReport.dispatch.failed > 0) {
+    console.log(`[worker ${workerId}] 派发：enqueued=${String(tickReport.dispatch.enqueued)} failed=${String(tickReport.dispatch.failed)}`);
   }
 
   // 2) 认领并执行
@@ -56,7 +62,22 @@ async function tick(): Promise<number> {
     const claimed = await claimJob(deps, { workerId, leaseSeconds, types: registry.types() });
     if (claimed === null) break;
     console.log(`[worker ${workerId}] 认领 ${claimed.id}（${claimed.type}，attempt ${String(claimed.attempts)}）`);
-    const outcome = await executeJob(deps, registry, { workerId, leaseSeconds, heartbeatIntervalMs }, claimed);
+    const outcome = await executeJob(
+      deps,
+      registry,
+      {
+        workerId,
+        leaseSeconds,
+        heartbeatIntervalMs,
+        onPhase: (phase) => {
+          if (crashAt !== '' && crashAt === phase) {
+            console.error(`[worker ${workerId}] 故障注入：在 ${phase} 阶段退出（模拟 Worker 崩溃）`);
+            process.exit(86);
+          }
+        },
+      },
+      claimed,
+    );
     console.log(`[worker ${workerId}] 完成 ${claimed.id} → ${outcome}`);
     executed += 1;
     if (once) break;

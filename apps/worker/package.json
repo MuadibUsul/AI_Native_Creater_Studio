@@ -16,7 +16,8 @@
     "@ancs/db": "workspace:*",
     "@ancs/domain": "workspace:*",
     "@ancs/providers-queue-bullmq": "workspace:*",
-    "@ancs/providers-storage-local": "workspace:*"
+    "@ancs/providers-storage-local": "workspace:*",
+    "drizzle-orm": "0.45.3"
   },
   "devDependencies": {
     "@types/node": "26.6.4",

@@ -51,6 +51,8 @@ export const jobSchema = z.object({
   maxAttempts: z.number().int().positive(),
   priority: z.number().int(),
   needsReconciliation: z.boolean().default(false),
+  /** 退避：最早可再次认领时间（FAILED_RETRYABLE 时非空） */
+  nextAttemptAt: isoDateTimeSchema.nullable().default(null),
   enqueuedAt: isoDateTimeSchema.nullable().default(null),
   startedAt: isoDateTimeSchema.nullable().default(null),
   completedAt: isoDateTimeSchema.nullable().default(null),

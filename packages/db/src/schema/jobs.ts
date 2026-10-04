@@ -48,6 +48,8 @@ export const jobs = pgTable(
     heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
     /** 需要对账（Provider 结果不确定；禁止自动重复付费提交） */
     needsReconciliation: boolean('needs_reconciliation').notNull().default(false),
+    /** 退避与抖动：最早可再次认领时间（P03-02；NULL = 立即可认领） */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
     enqueuedAt: timestamp('enqueued_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -58,8 +60,8 @@ export const jobs = pgTable(
   (table) => [
     index('jobs_workspace_status_idx').on(table.workspaceId, table.status),
     index('jobs_project_idx').on(table.projectId, table.createdAt),
-    /** 认领扫描与租约恢复 */
-    index('jobs_claim_idx').on(table.status, table.priority, table.createdAt),
+    /** 认领扫描（含退避：status + next_attempt_at）与租约恢复 */
+    index('jobs_claim_idx').on(table.status, table.nextAttemptAt, table.priority, table.createdAt),
     index('jobs_lease_idx').on(table.status, table.leaseExpiresAt),
   ],
 );

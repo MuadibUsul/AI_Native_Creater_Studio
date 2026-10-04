@@ -15,6 +15,7 @@ import {
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
 import type { JobQueueAdapter } from '@ancs/contracts';
+import type { RetryPolicy } from './jobs.js';
 import type { RetentionConfig } from './retention.js';
 
 /**
@@ -39,6 +40,8 @@ export interface DomainDeps {
   retention?: RetentionConfig;
   /** 任务队列适配器（P03-01）：缺省为 DB 轮询（权威状态即队列）；Redis/BullMQ 见 providers/queue-bullmq */
   queue?: JobQueueAdapter;
+  /** 重试退避策略（P03-02）：base/cap/jitter + 可注入随机源（测试确定性） */
+  retryPolicy?: RetryPolicy;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

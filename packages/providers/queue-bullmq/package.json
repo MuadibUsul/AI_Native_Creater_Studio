@@ -16,7 +16,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@ancs/contracts": "workspace:*"
+    "@ancs/contracts": "workspace:*",
+    "bullmq": "5.34.0"
   },
   "devDependencies": {
     "@types/node": "26.6.4",

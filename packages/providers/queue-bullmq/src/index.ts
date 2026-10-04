@@ -18,7 +18,7 @@ export interface MinimalQueue {
 
 export interface BullMqOptions {
   redisUrl: string;
-  /** 队列名 → 前缀（默认 ancs） */
+  /** Redis 键前缀（默认与 BullMQ 默认一致：bull；自定义部署可覆盖） */
   prefix?: string;
   /** 注入式工厂（默认惰性 import('bullmq')） */
   createQueue?: (name: string, connection: { url: string }, prefix: string) => Promise<MinimalQueue> | MinimalQueue;
@@ -54,7 +54,7 @@ export class BullMqJobQueue implements JobQueueAdapter {
         }
         return new bullmq.Queue(queueName, { connection, prefix });
       });
-    const created = await factory(name, { url: this.options.redisUrl }, this.options.prefix ?? 'ancs');
+    const created = await factory(name, { url: this.options.redisUrl }, this.options.prefix ?? 'bull');
     registry.set(name, created);
     return created;
   }
