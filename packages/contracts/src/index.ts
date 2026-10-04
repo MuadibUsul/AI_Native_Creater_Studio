@@ -314,6 +314,41 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// Custom Motion 生成与验证契约（P07-02 / §11.2）
+export {
+  MOTION_PROMPT_VERSION,
+  MOTION_VALIDATION_REPORT_VERSION,
+  MOTION_DEPENDENCY_WHITELIST,
+  CUSTOM_MOTION_ERROR_REASONS,
+  motionComponentDraftSchema,
+  motionValidationFixtureSchema,
+  MOTION_VALIDATION_STAGES,
+  motionValidationStageSchema,
+  motionFrameSampleSchema,
+  motionValidationReportSchema,
+  motionGenerationInputSchema,
+  customMotionComponentVersionSchema,
+  customMotionComponentSchema,
+  startCustomMotionRequestSchema,
+  customMotionJobInputSchema,
+  motionSampleFrames,
+  CUSTOM_MOTION_SCENE_TYPE,
+} from './custom-motion.js';
+export type {
+  CustomMotionErrorReason,
+  MotionComponentDraft,
+  MotionValidationFixture,
+  MotionValidationStage,
+  MotionFrameSample,
+  MotionValidationReport,
+  MotionValidator,
+  MotionGenerationInput,
+  CustomMotionComponentVersion,
+  CustomMotionComponent,
+  StartCustomMotionRequest,
+  CustomMotionJobInput,
+} from './custom-motion.js';
+
 export type {
   RenderExecutionErrorReason,
   CompositionSceneInputDto,
@@ -633,6 +668,7 @@ export type {
 export {
   GENERATE_JOB_TYPE,
   RENDER_FINAL_JOB_TYPE,
+  MOTION_GENERATE_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,

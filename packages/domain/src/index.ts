@@ -73,6 +73,18 @@ export type {
   RunRenderExecutionResult,
 } from './render-execution.js';
 export { createJobInTx } from './jobs.js';
+export {
+  assertDependenciesAllowed,
+  buildMotionDesignPrompts,
+  buildMotionFixture,
+  buildMotionGenerationInput,
+  getCustomMotionComponent,
+  listCustomMotionComponents,
+  parseMotionDraft,
+  runCustomMotionGeneration,
+  startCustomMotionGeneration,
+} from './custom-motion.js';
+export type { MotionSceneContext, RunCustomMotionResult } from './custom-motion.js';
 export type { CreateJobTxInput } from './jobs.js';
 
 export { AI_VIDEO_FORBIDDEN_SCENE_TYPES, AI_VIDEO_FORBIDDEN_SEMANTIC, requestSceneGeneration, sceneGenerationDedupeKey } from './scene-generation.js';

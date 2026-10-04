@@ -26,6 +26,7 @@ import { registerJobRoutes } from './routes/jobs.js';
 import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
+import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
@@ -143,6 +144,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerNativeFallbackRoutes(instance, authDeps);
         registerRenderRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
+        registerCustomMotionRoutes(instance, authDeps);
         registerNarrationAudioRoutes(instance, authDeps, {
           ...(audioDeps ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),

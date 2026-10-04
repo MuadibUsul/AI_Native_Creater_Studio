@@ -22,6 +22,12 @@ export const GENERATE_JOB_TYPE = 'GENERATE';
  */
 export const RENDER_FINAL_JOB_TYPE = 'RENDER_FINAL';
 
+/**
+ * Custom Motion 生成任务类型（P07-02）：LLM 生成 → 四道门禁（静态分析/类型检查/沙箱评估/抽帧）
+ * → 仅通过时版本化落库。与 GENERATE/RENDER_FINAL 同理：入队方与处理器共用同一常量。
+ */
+export const MOTION_GENERATE_JOB_TYPE = 'MOTION_GENERATE';
+
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',
   'QUEUED',

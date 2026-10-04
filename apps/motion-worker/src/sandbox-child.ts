@@ -1,10 +1,11 @@
 import { createContext, createElement, useContext, type ReactElement } from 'react';
+import { createHash } from 'node:crypto';
 import * as nodeVm from 'node:vm';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyzeMotionCode } from './analysis.ts';
 
 /**
- * 沙箱子进程（P07-01）：从 stdin 读取提交，隔离评估 + 渲染 smoke，stdout 输出 JSON 回执。
+ * 沙箱子进程（P07-01）：从 stdin 读取提交，隔离评估 + 渲染 smoke（支持多帧抽帧），stdout 输出 JSON 回执。
  *
  * 隔离面（进程内）：
  * - 代码在 `node:vm` **新上下文**评估：上下文仅注入白名单全局（MOTION_SANDBOX_GLOBALS）；
@@ -27,6 +28,7 @@ interface SandboxSubmission {
   submissionId: string;
   code: string;
   fixture: SandboxFixture;
+  sampleFrames?: number[];
 }
 
 interface MotionRegistration {
@@ -136,22 +138,40 @@ const evaluateMotion = (code: string, fixture: SandboxFixture): MotionRegistrati
   return registration;
 };
 
-/* ---------- 渲染 smoke ---------- */
+/* ---------- 渲染 smoke（单帧 / 多帧抽帧） ---------- */
 
-const renderSmoke = (registration: MotionRegistration, fixture: SandboxFixture): { markup: string; renderMs: number } => {
-  const started = Date.now();
+interface FrameSample {
+  frame: number;
+  markup: string;
+  markupLength: number;
+  sha256: string;
+}
+
+const renderFrame = (registration: MotionRegistration, fixture: SandboxFixture, frame: number): string => {
   const component = registration.component;
   if (component === undefined) throw new Error('component 缺失');
   // 通过 React 渲染（组件内 hooks 需要 dispatcher；直接调用会脱离渲染上下文）
   const element = createElement(component as never, { ...fixture.props } as never);
-  const markup = renderToStaticMarkup(
+  return renderToStaticMarkup(
     createElement(
       VideoConfigContext.Provider,
       { value: { fps: fixture.fps, durationInFrames: fixture.durationInFrames, width: fixture.width, height: fixture.height } },
-      createElement(FrameContext.Provider, { value: fixture.frame }, element),
+      createElement(FrameContext.Provider, { value: frame }, element),
     ),
   );
-  return { markup, renderMs: Date.now() - started };
+};
+
+const renderSmoke = (registration: MotionRegistration, fixture: SandboxFixture, sampleFrames: number[]): { frames: FrameSample[]; markupLength: number; renderMs: number } => {
+  const started = Date.now();
+  const frames: FrameSample[] = [];
+  let totalLength = 0;
+  for (const frame of sampleFrames) {
+    const markup = renderFrame(registration, fixture, frame);
+    const sha256 = createHash('sha256').update(markup, 'utf8').digest('hex');
+    frames.push({ frame, markup, markupLength: markup.length, sha256 });
+    totalLength += markup.length;
+  }
+  return { frames, markupLength: totalLength, renderMs: Date.now() - started };
 };
 
 /* ---------- 入口 ---------- */
@@ -191,8 +211,9 @@ const main = async (): Promise<void> => {
     }
 
     try {
-      const { markup, renderMs } = renderSmoke(registration, submission.fixture);
-      emit({ submissionId, verdict: 'APPROVED', stage: 'RENDER_SMOKE', markupLength: markup.length, renderMs });
+      const sampleFrames = submission.sampleFrames !== undefined && submission.sampleFrames.length > 0 ? submission.sampleFrames : [submission.fixture.frame];
+      const { frames, markupLength, renderMs } = renderSmoke(registration, submission.fixture, sampleFrames);
+      emit({ submissionId, verdict: 'APPROVED', stage: 'RENDER_SMOKE', markupLength, renderMs, frames });
     } catch (error) {
       fail(submissionId, 'RENDER_SMOKE', error instanceof Error ? `${error.message}` : String(error));
     }

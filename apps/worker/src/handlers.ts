@@ -6,8 +6,9 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { RenderExecutor } from '@ancs/contracts';
+import type { MotionValidator, RenderExecutor } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
+import { createMotionGenerationHandler } from './motion-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -16,7 +17,8 @@ import { createRenderExecutionHandler } from './render-handler.js';
  * - NOOP：调度/恢复骨架的验证任务（测试与冒烟用，无副作用）；
  * - MAINTENANCE_RETENTION_SWEEP：保留清理（P02-05 的 runRetentionSweep，可重入）；
  * - MAINTENANCE_NOTIFICATION_DISPATCH：Outbox 通知派发（P02-06，可重入）；
- * - RENDER_FINAL：Final 合成（P07-04；执行器注入——生产 = 进程隔离 CLI，见 render-executor-process.ts）。
+ * - RENDER_FINAL：Final 合成（P07-04；执行器注入——生产 = 进程隔离 CLI，见 render-executor-process.ts）；
+ * - MOTION_GENERATE：Custom Motion 生成（P07-02；验证器注入——生产 = 进程隔离 CLI，见 motion-validator-process.ts）。
  *
  * Provider 生成类任务（TTS/Avatar/AI Video 等）随 P03-06/P06 注册——**不在本任务触发真实 Provider 调用**。
  */
@@ -95,12 +97,20 @@ export interface DefaultRegistryOptions {
    * 不提供时 RENDER_FINAL 任务落入"未知类型 → FAILED_FINAL"（明确失败，不静默吞）。
    */
   renderExecutor?: RenderExecutor;
+  /**
+   * Custom Motion 验证器（P07-02）。生产装配传入进程隔离 CLI 验证器；
+   * 不提供时 MOTION_GENERATE 任务落入"未知类型 → FAILED_FINAL"（明确失败，不静默吞）。
+   */
+  motionValidator?: MotionValidator;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
   const handlers = [noopHandler, retentionSweepHandler, notificationDispatchHandler];
   if (options.renderExecutor !== undefined) {
     handlers.push(createRenderExecutionHandler({ executor: options.renderExecutor }));
+  }
+  if (options.motionValidator !== undefined) {
+    handlers.push(createMotionGenerationHandler({ validator: options.motionValidator }));
   }
   return new JobHandlerRegistry(handlers);
 }

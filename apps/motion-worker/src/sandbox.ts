@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { analyzeMotionCode, type MotionAnalysisIssue } from './analysis.js';
+import { analyzeMotionCode, type MotionAnalysisIssue } from './analysis.ts';
 
 /**
  * Motion 沙箱宿主（P07-01 / REQ-11-03）。
@@ -20,8 +20,17 @@ import { analyzeMotionCode, type MotionAnalysisIssue } from './analysis.js';
 
 export interface MotionSandboxInput {
   code: string;
-  /** 渲染 smoke 的固定输入（props + 帧） */
+  /** 渲染 smoke 的固定输入（props + 帧）；`sampleFrames` 提供时对多个帧抽帧（默认仅 fixture.frame） */
   fixture: { props: Record<string, unknown>; frame: number; fps: number; durationInFrames: number; width: number; height: number };
+  /** 抽帧的采样帧（确定性；含 0 与末帧由调用方保证） */
+  sampleFrames?: number[];
+}
+
+export interface MotionSandboxFrameSample {
+  frame: number;
+  markup: string;
+  markupLength: number;
+  sha256: string;
 }
 
 export type MotionSandboxVerdict =
@@ -30,7 +39,7 @@ export type MotionSandboxVerdict =
   | { verdict: 'REJECTED'; stage: 'RENDER_SMOKE'; message: string }
   | { verdict: 'TIMEOUT'; stage: 'EXECUTION'; timeoutMs: number }
   | { verdict: 'CRASHED'; stage: 'EXECUTION'; message: string }
-  | { verdict: 'APPROVED'; stage: 'RENDER_SMOKE'; markupLength: number; renderMs: number };
+  | { verdict: 'APPROVED'; stage: 'RENDER_SMOKE'; markupLength: number; renderMs: number; frames: MotionSandboxFrameSample[] };
 
 export interface MotionSandboxLimits {
   /** 子进程最大堆（MB） */
@@ -110,7 +119,7 @@ export async function runMotionSandbox(input: MotionSandboxInput, limits: Motion
       }
     });
 
-    child.stdin.write(`${JSON.stringify({ submissionId, code: input.code, fixture: input.fixture })}\n`);
+    child.stdin.write(`${JSON.stringify({ submissionId, code: input.code, fixture: input.fixture, sampleFrames: input.sampleFrames ?? [input.fixture.frame] })}\n`);
     child.stdin.end();
   });
 }

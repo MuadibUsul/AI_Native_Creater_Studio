@@ -32,6 +32,7 @@ import {
   createRenderRequestSchema,
   directorPlanSchema,
   renderRecordSchema,
+  customMotionComponentSchema,
   editPlanSchema,
   masterNarrationSchema,
   mixPlanRequestSchema,
@@ -132,6 +133,7 @@ import {
   type CreateRenderRequest,
   type DirectorPlan,
   type RenderRecord,
+  type CustomMotionComponent,
   type RenderStatus,
   type EditPlan,
   type DirectorPolicyInput,
@@ -605,6 +607,12 @@ export interface AncsClient {
     get(workspaceId: string, renderId: string): Promise<RenderRecord>;
     /** 状态推进（单向状态机；QUEUED→RENDERING→QA→READY/FAILED/CANCELLED） */
     transition(workspaceId: string, renderId: string, input: { to: RenderStatus; note?: string }, options?: MutationOptions): Promise<RenderRecord>;
+  };
+  customMotion: {
+    /** 发起 Custom Motion 生成（P07-02：LLM → 四道门禁 → 仅通过时版本化落库） */
+    start(projectId: string, sceneId: string, input?: { brief?: string }, options?: MutationOptions): Promise<{ job: Job; dedupeKey: string; reused: boolean }>;
+    list(projectId: string, query?: { sceneId?: string }): Promise<CustomMotionComponent[]>;
+    get(projectId: string, componentId: string): Promise<CustomMotionComponent>;
   };
   jobs: {
     list(workspaceId: string, query?: { projectId?: string; status?: Job['status']; limit?: number }): Promise<Job[]>;
@@ -1387,6 +1395,18 @@ export function createClient(options: ClientOptions): AncsClient {
           body: input,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+    customMotion: {
+      start: (projectId, sceneId, input, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/scenes/${sceneId}/custom-motion`, z.object({ job: jobSchemaForGeneration, dedupeKey: z.string(), reused: z.boolean() }), {
+          body: input ?? {},
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (projectId, query) => {
+        const suffix = query?.sceneId !== undefined ? `?sceneId=${query.sceneId}` : '';
+        return (await request('GET', `/api/v1/projects/${projectId}/custom-motion${suffix}`, z.object({ items: z.array(customMotionComponentSchema) }))).items;
+      },
+      get: (projectId, componentId) => request('GET', `/api/v1/projects/${projectId}/custom-motion/${componentId}`, customMotionComponentSchema),
     },
     jobs: {
       list: async (workspaceId, query) => {

@@ -169,6 +169,13 @@
       "when": 1791133063956,
       "tag": "0023_unknown_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791145962431,
+      "tag": "0024_omniscient_paper_doll",
+      "breakpoints": true
     }
   ]
 }

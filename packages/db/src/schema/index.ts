@@ -33,3 +33,4 @@ export {
   sourceCitations,
   structuredDatasets,
 } from './content.js';
+export { customMotionComponents, customMotionComponentVersions } from './custom-motion.js';
