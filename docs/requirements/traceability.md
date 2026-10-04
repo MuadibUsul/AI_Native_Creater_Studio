@@ -238,9 +238,9 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-41-01 | §41 | 后期反馈闭环（Content→Video→Publish→Retention/CTR→Scene Performance→Director Learning）；自动学习规则必须可解释、可关闭、可人工覆盖 | MAY | 后续 | P14-01—P14-03（P14） | P14-03 验收（可查看/关闭/接受/恢复） | DEFERRED |
-| REQ-42-01 | §42 | 发布层非 V1 核心；不得假设任何平台存在同等、稳定、永久可用的自动发布能力 | MUST | V1-契约 | P01-06/P13（P01/P13） | LED-96-PUB-01/03 | TODO |
-| REQ-42-02 | §42.1 | Capability Tier：P1 DIRECT_PUBLISH / P2 AUTHORIZED_PUBLISH / P3 UPLOAD_DRAFT-HANDOFF / P4 EXPORT_PACKAGE；能力必须来自 Capability Registry，禁止硬编码"某平台永远是 P1/P2"，可配置降级 | MUST | V1-契约 | P01-06（契约）；P13-01 实现 | LED-96-PUB-01/02；P13-03 验收 | TODO |
-| REQ-42-03 | §42.2 | DistributionProvider 契约（capabilities/authorize/validate/publish/uploadDraft/getStatus/updateMetadata/fetchAnalytics/revoke）与 capabilities 枚举（含 SCHEDULING/THUMBNAIL/AIGC_DISCLOSURE 等 11 项） | MUST | V1-契约 | P01-06（P01）；P13-01 实现 | 契约不依赖 Web（P01-06） | TODO |
+| REQ-42-01 | §42 | 发布层非 V1 核心；不得假设任何平台存在同等、稳定、永久可用的自动发布能力 | MUST | V1-契约 | P01-06/P13（P01/P13） | 分级契约就位（P01-06）；LED-96-PUB-01 已关；PUB-03 待 P13 | TODO |
+| REQ-42-02 | §42.1 | Capability Tier：P1 DIRECT_PUBLISH / P2 AUTHORIZED_PUBLISH / P3 UPLOAD_DRAFT-HANDOFF / P4 EXPORT_PACKAGE；能力必须来自 Capability Registry，禁止硬编码"某平台永远是 P1/P2"，可配置降级 | MUST | V1-契约 | P01-06（契约）；P13-01 实现 | 分级类型 + registry 就位并测试（P01-06；证据 docs/verification/P01-06.md）；真实平台接入 P13-03 | VERIFIED |
+| REQ-42-03 | §42.2 | DistributionProvider 契约（capabilities/authorize/validate/publish/uploadDraft/getStatus/updateMetadata/fetchAnalytics/revoke）与 capabilities 枚举（含 SCHEDULING/THUMBNAIL/AIGC_DISCLOSURE 等 11 项） | MUST | V1-契约 | P01-06（P01）；P13-01 实现 | 接口与枚举契约化；"契约不依赖 Web"由 R3 机械强制（P01-06） | VERIFIED |
 | REQ-42-04 | §42.3 | UI 按 Capability 显示动作（P1 Publish Now/Schedule；P2 Review & Confirm；P3 Send to Draft/Open；P4 Export Package/Send to Phone）；P4 包内容含适配视频/封面/标题/文案/标签/披露/清单 | MUST | 后续 | P13-04（P13） | P13-04 验收；LED-96-PUB-03 | DEFERRED |
 | REQ-42-05 | §42.3 | Mobile App 后续 MUST 能承担可靠 Handoff（制作完成→Send to Phone→下载/保存→Copy 文案→Deep Link） | MUST | 后续 | P15-06（P15） | P15-06 验收 | DEFERRED |
 | REQ-42-06 | §42.4 | 核心产品不得依赖 Selenium/Playwright/Cookie 模拟登录完成第三方发布；实验性自动化必须标记 UNSUPPORTED_EXPERIMENTAL 且不承诺可靠性 | MUST | 全期 | P13-01（P13） | LED-96-PUB-04；代码审计 | TODO |
@@ -402,10 +402,10 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-92-01 | §92 | Core 从第一天必须有稳定 Extension Points；OutputPlugin 契约（manifest/analyze/generate/validate?）；第一版可无插件商城 | MUST | V1-契约 | P01-06（P01） | 契约不依赖 Web；未安装能力返回不支持（P01-06） | TODO |
+| REQ-92-01 | §92 | Core 从第一天必须有稳定 Extension Points；OutputPlugin 契约（manifest/analyze/generate/validate?）；第一版可无插件商城 | MUST | V1-契约 | P01-06（P01） | 接口与数据形状契约化；R3 强制契约不依赖 Web；未安装能力经 requireOutputFormat → CAPABILITY_UNAVAILABLE（P01-06） | VERIFIED |
 | REQ-92-02 | §92.1 | 禁止在 Core 中不断添加 outputType 硬编码分支（youtube/xhs/newsletter if）；输出形态经 Pack 扩展 | MUST | 全期 | P11-03（P11） | LED-96-PLUGIN-02；代码审计 | TODO |
-| REQ-92-03 | §92.2 | 插件 Capability 声明清单（read_content_core/read_project_assets/create_assets/create_scene_graph/provider_access/distribution_access/analytics_access/network_access）；第三方插件未来支持版本/签名/权限提示/资源配额/撤销 | MUST | V1-契约 | P01-06（P01）；P16-01..03 完整 | 越权调用被拒（P16-02） | TODO |
-| REQ-92-04 | §92.3 | 商业模式方向（Core 订阅+官方 Pack+Credits/BYOK+Marketplace 分成）；V1 禁止为未来 Marketplace 增加不必要运行时复杂度，先定义 contracts 与 registry | MUST | V1-契约 | P01-06（P01）；P16-04 完整 | P01-06 验收 | TODO |
+| REQ-92-03 | §92.2 | 插件 Capability 声明清单（read_content_core/read_project_assets/create_assets/create_scene_graph/provider_access/distribution_access/analytics_access/network_access）；第三方插件未来支持版本/签名/权限提示/资源配额/撤销 | MUST | V1-契约 | P01-06（P01）；P16-01..03 完整 | 能力声明清单与签名/配额字段就位（P01-06）；生命周期与隔离执行 P16-01—03（进度：1/2） | TODO |
+| REQ-92-04 | §92.3 | 商业模式方向（Core 订阅+官方 Pack+Credits/BYOK+Marketplace 分成）；V1 禁止为未来 Marketplace 增加不必要运行时复杂度，先定义 contracts 与 registry | MUST | V1-契约 | P01-06（P01）；P16-04 完整 | contracts + 进程内 registry 就位（无 Marketplace 运行时复杂度）（P01-06）；商业结算 P16-04 | VERIFIED |
 | REQ-93-01 | §93 | 多形态必须从平台无关 Content Core 派生（Core→Atoms→Recipes→输出），不得用多个独立生成器；V1 ContentDocument+Narrative MUST 可无损演进 ContentCore | MUST | V1-契约 | P11-01（P11） | LED-96-PLUGIN-03；无损转换前后来源与关键事实一致（P11-01） | TODO |
 | REQ-93-02 | §93.1 | Content Core 数据：core_question/core_thesis/key_claims/key_facts/key_numbers/causal_relations/entities/timeline/geography/source_evidence/story_arcs/uncertainties | SHOULD | 后续 | P11-01（P11） | P11-01 验收 | DEFERRED |
 | REQ-93-03 | §93.2 | Content Atom 可独立传播单元；Shorts 必须从 Atom 重新编导而非从长视频时间轴机械裁切 | MUST | 后续 | P12-01（P12） | P12-01 验收（短片可独立理解） | DEFERRED |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-05，REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01 → VERIFIED；此前 P01-04：REQ-6-01 / REQ-3-03；P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-06，REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04 → VERIFIED；此前 P01-05：REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01；P01-04：REQ-6-01 / REQ-3-03；P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。**P01 阶段全部完成。**
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

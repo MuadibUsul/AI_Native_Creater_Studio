@@ -38,6 +38,9 @@ importers:
       '@ancs/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@ancs/extensions':
+        specifier: workspace:*
+        version: link:../../packages/extensions
       '@fastify/swagger':
         specifier: 9.9.1
         version: 9.9.1
@@ -178,6 +181,22 @@ importers:
       drizzle-orm:
         specifier: 0.45.3
         version: 0.45.3(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/extensions:
+    dependencies:
+      '@ancs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       zod:
         specifier: 4.6.5
         version: 4.6.5

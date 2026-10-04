@@ -4,7 +4,8 @@
  * 规则（新增或放宽规则必须附裁决记录，不得静默修改）：
  *  R1 apps/* 不得依赖其他 apps/*（全部依赖）
  *  R2 packages/* 不得依赖 apps/*（全部依赖）
- *  R3 packages/domain 不得依赖 next / react / react-dom / @remotion/* 及 packages/providers/*（全部依赖）
+ *  R3 平台中立包（packages/domain、packages/contracts、packages/extensions）不得依赖
+ *     next / react / react-dom / @remotion/*（全部依赖）；packages/domain 额外不得依赖 packages/providers/*
  *  R4 packages/providers/* 的【生产】workspace 依赖仅允许 @ancs/contracts、@ancs/domain
  *  R5 apps/web|desktop|mobile 的【生产】workspace 依赖仅允许 @ancs/sdk、@ancs/contracts、@ancs/ui
  *  R6 workspace 依赖必须指向真实存在的 workspace 包（全部依赖）
@@ -49,7 +50,8 @@ export const PROVIDER_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([
 
 /**
  * apps/api、apps/worker（计划 §3.4：api/worker → domain/contracts/db/providers；
- * @ancs/auth 由裁决 0003 加入：规范 §3.3 明确 api = HTTP + 认证接入 + 请求授权入口）。
+ * @ancs/auth 由裁决 0003 加入；@ancs/extensions 由裁决 0004 加入——规范 §92.3 要求
+ * V1 定义 registry，API 是内置注册表的装配点）。
  */
 export const SERVER_APP_DIRS: readonly string[] = ['apps/api', 'apps/worker'];
 export const SERVER_APP_ALLOWED_PROD_DEPS: ReadonlySet<string> = new Set([
@@ -57,6 +59,7 @@ export const SERVER_APP_ALLOWED_PROD_DEPS: ReadonlySet<string> = new Set([
   '@ancs/domain',
   '@ancs/db',
   '@ancs/auth',
+  '@ancs/extensions',
 ]);
 export const SERVER_APP_ALLOWED_PROD_DEP_PREFIXES: readonly string[] = ['packages/providers/'];
 
@@ -70,6 +73,13 @@ export const RENDER_WORKER_ALLOWED_PROD_DEPS: ReadonlySet<string> = new Set([
 ]);
 
 const DOMAIN_FORBIDDEN_DEPS: readonly RegExp[] = [/^next$/, /^react$/, /^react-dom$/, /^@remotion\//];
+
+/** 平台中立包：禁止依赖 Web/渲染框架（契约不依赖 Web 是 §92.1 / REQ-92-01 的 MUST） */
+export const PLATFORM_NEUTRAL_PACKAGE_DIRS: readonly string[] = [
+  'packages/domain',
+  'packages/contracts',
+  'packages/extensions',
+];
 
 export const isWorkspaceDep = (version: string): boolean => version.startsWith('workspace:');
 
@@ -107,21 +117,23 @@ export function checkRules(pkgs: readonly WorkspacePackage[]): Violation[] {
       }
     }
 
-    // R3：domain 的框架与 Provider 隔离（全部依赖）
-    if (pkg.dir === 'packages/domain') {
+    // R3：平台中立包的框架隔离（全部依赖）；domain 额外禁止 providers/*
+    if (PLATFORM_NEUTRAL_PACKAGE_DIRS.includes(pkg.dir)) {
       for (const dep of Object.keys(pkg.deps)) {
         if (DOMAIN_FORBIDDEN_DEPS.some((re) => re.test(dep))) {
           violations.push({
             rule: 'R3',
             pkg: pkg.name,
             dep,
-            message: 'domain 不得依赖 Next.js / React / Remotion',
+            message: `${pkg.dir} 不得依赖 Next.js / React / Remotion（平台中立契约与规则层）`,
           });
           continue;
         }
-        const target = byName.get(dep);
-        if (target?.dir.startsWith('packages/providers/')) {
-          violations.push({ rule: 'R3', pkg: pkg.name, dep, message: 'domain 不得依赖 providers/*' });
+        if (pkg.dir === 'packages/domain') {
+          const target = byName.get(dep);
+          if (target?.dir.startsWith('packages/providers/')) {
+            violations.push({ rule: 'R3', pkg: pkg.name, dep, message: 'domain 不得依赖 providers/*' });
+          }
         }
       }
     }

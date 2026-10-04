@@ -3,11 +3,13 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { API_PREFIX, requestIdSchema } from '@ancs/contracts';
+import { createBuiltInRegistry, type ExtensionRegistry } from '@ancs/extensions';
 import { registerErrorHandler } from './error-handler.js';
 import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -21,6 +23,11 @@ export interface BuildServerOptions {
    * 生产与集成测试必须提供。
    */
   auth?: AuthDeps;
+  /**
+   * 扩展注册表（P01-06）。默认内置注册表（V1 无内置 Pack，诚实空清单）；
+   * 测试可注入带测试 Pack 的注册表。
+   */
+  extensions?: ExtensionRegistry;
 }
 
 /**
@@ -72,9 +79,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     );
   }
 
+  const extensions = options.extensions ?? createBuiltInRegistry();
+
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance);
+      registerCapabilityRoutes(instance, { extensions });
     },
     { prefix: API_PREFIX },
   );

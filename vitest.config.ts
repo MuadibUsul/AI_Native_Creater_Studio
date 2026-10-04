@@ -18,6 +18,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/db': srcAlias('./packages/db/src/index.ts'),
   '@ancs/auth': srcAlias('./packages/auth/src/index.ts'),
   '@ancs/domain': srcAlias('./packages/domain/src/index.ts'),
+  '@ancs/extensions': srcAlias('./packages/extensions/src/index.ts'),
 };
 
 export default defineConfig({

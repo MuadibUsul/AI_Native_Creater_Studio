@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  capabilitiesResponseSchema,
   channelWithStyleSchema,
   contentDocumentSchema,
   creatorIdentitySchema,
   editRequestSchema,
   errorEnvelopeSchema,
   eventEnvelopeSchema,
+  handoffDescriptorSchema,
   healthResponseSchema,
   moneySchema,
+  packManifestSchema,
   pageRequestSchema,
+  publicationRequestSchema,
   sceneGraphSchema,
   sourceSnapshotSchema,
   speechProfileSchema,
@@ -39,6 +43,10 @@ const schemaRegistry: Record<string, z.ZodType> = {
   sourceSnapshot: sourceSnapshotSchema,
   structuredDataset: structuredDatasetSchema,
   editRequest: editRequestSchema,
+  packManifest: packManifestSchema,
+  publicationRequest: publicationRequestSchema,
+  handoffDescriptor: handoffDescriptorSchema,
+  capabilitiesResponse: capabilitiesResponseSchema,
 };
 
 describe('JSON Schema 可生成（OpenAPI 兼容性）', () => {

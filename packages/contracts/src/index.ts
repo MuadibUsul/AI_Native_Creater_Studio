@@ -126,6 +126,82 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
+// 扩展架构契约（P01-06 / §92）
+export {
+  PLUGIN_CAPABILITIES,
+  pluginCapabilitySchema,
+  packManifestSchema,
+  contentCoreRefSchema,
+  pluginContextSchema,
+  outputPlanSchema,
+  outputPlanItemSchema,
+  ARTIFACT_KINDS,
+  artifactSchema,
+  validationIssueSchema,
+  validationResultSchema,
+  HANDOFF_STATES,
+  handoffDescriptorSchema,
+  capabilityAvailabilitySchema,
+  capabilitySnapshotSchema,
+  capabilitiesResponseSchema,
+} from './extensions.js';
+export type {
+  PluginCapability,
+  PackManifest,
+  ContentCoreRef,
+  PluginContext,
+  OutputPlan,
+  Artifact,
+  ValidationResult,
+  HandoffDescriptor,
+  CapabilityAvailability,
+  CapabilitySnapshot,
+  CapabilitiesResponse,
+  OutputPlugin,
+} from './extensions.js';
+
+// 发布契约（P01-06 / §42、§90；DEC-06：V1=契约级）
+export {
+  PUBLISH_CAPABILITY_TIERS,
+  publishCapabilityTierSchema,
+  DISTRIBUTION_CAPABILITIES,
+  distributionCapabilitySchema,
+  distributionCapabilitiesSchema,
+  PUBLICATION_STATES,
+  publicationStatusSchema,
+  publicationKeySchema,
+  publicationRequestSchema,
+  draftTransferResultSchema,
+  providerContextSchema,
+  authorizationRequestSchema,
+  authorizationResultSchema,
+  publicationJobSchema,
+  updatePublicationRequestSchema,
+  analyticsRequestSchema,
+  platformAnalyticsSchema,
+  revokeRequestSchema,
+  distributionProviderRegistrationSchema,
+} from './publishing.js';
+export type {
+  PublishCapabilityTier,
+  DistributionCapability,
+  DistributionCapabilities,
+  PublicationStatus,
+  PublicationKey,
+  PublicationRequest,
+  DraftTransferResult,
+  ProviderContext,
+  AuthorizationRequest,
+  AuthorizationResult,
+  PublicationJob,
+  UpdatePublicationRequest,
+  AnalyticsRequest,
+  PlatformAnalytics,
+  RevokeRequest,
+  DistributionProvider,
+  DistributionProviderRegistration,
+} from './publishing.js';
+
 // 主题 / Channel / 身份 / SpeechProfile 契约（P01-04）
 export { themeTokensSchema, DEFAULT_THEME_TOKENS } from './theme.js';
 export type { ThemeTokens } from './theme.js';

@@ -68,6 +68,17 @@ describe('checkRules：架构依赖方向', () => {
     expect(rules[0]?.dep).toBe('@ancs/providers-llm');
   });
 
+  it('R3：平台中立包（contracts/extensions）不得依赖 Web/渲染框架（裁决 0004）', () => {
+    const pkgs = [
+      pkg('@ancs/contracts', 'packages/contracts', { react: '^19.0.0' }),
+      pkg('@ancs/extensions', 'packages/extensions', { '@remotion/renderer': '^4.0.0' }),
+      pkg('@ancs/domain2', 'packages/domain2', { next: '^15.0.0' }), // 非中立包不受此规则约束
+    ];
+    const rules = checkRules(pkgs).filter((v) => v.rule === 'R3');
+    expect(rules.map((v) => v.pkg)).toEqual(['@ancs/contracts', '@ancs/extensions']);
+    expect(rules.map((v) => v.dep)).toEqual(['react', '@remotion/renderer']);
+  });
+
   it('R4：providers/* 生产依赖仅允许 contracts/domain；外部 SDK 与 devDependency 不受限', () => {
     const bad = [
       pkg('@ancs/db', 'packages/db'),

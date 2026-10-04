@@ -147,7 +147,7 @@
 |---|---|---|---|---|
 | LED-96-SCOPE-01 | V1 明确只以 Article → Professional Long Video 为主链路 | REQ-1-01 | P00/P08-06（P00/P08） | TODO |
 | LED-96-SCOPE-02 | Shorts / Social / Publishing / Newsletter 不阻塞 V1 | REQ-1-01/REQ-4-06 | P00（范围裁决） | TODO |
-| LED-96-SCOPE-03 | Extension contracts 不依赖 Web 前端 | REQ-92-01 | P01-06（P01） | TODO |
+| LED-96-SCOPE-03 | Extension contracts 不依赖 Web 前端 | REQ-92-01 | P01-06（P01） | VERIFIED（2026-10-04：R3 机械强制平台中立包（contracts/extensions 禁 Web 框架）；裁决 0004） |
 
 ### 4.2 Creator Identity / Voice（6）
 
@@ -173,17 +173,17 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-96-PUB-01 | DistributionProvider 有 capability registry | REQ-42-02/REQ-42-03 | P01-06（P01）契约；P13-01 实现 | TODO |
-| LED-96-PUB-02 | 支持 P1/P2/P3/P4 体验（V1=能力分级类型与协议；完整体验 P13-04） | REQ-42-02/REQ-42-04 | P01-06（契约）；P13-04 完整 | TODO |
+| LED-96-PUB-01 | DistributionProvider 有 capability registry | REQ-42-02/REQ-42-03 | P01-06（P01）契约；P13-01 实现 | VERIFIED（2026-10-04：契约级——DistributionProvider 接口 + ExtensionRegistry 持有分发 Provider；真实平台接入 P13-01。证据：docs/verification/P01-06.md） |
+| LED-96-PUB-02 | 支持 P1/P2/P3/P4 体验（V1=能力分级类型与协议；完整体验 P13-04） | REQ-42-02/REQ-42-04 | P01-06（契约）；P13-04 完整 | VERIFIED（2026-10-04：契约级——P1—P4 分级类型与协议就位；完整体验 P13-04） |
 | LED-96-PUB-03 | P4 可生成 Export Package | REQ-42-04 | P13-04（P13） | TODO |
 | LED-96-PUB-04 | 核心产品不以 browser automation 作为可靠发布能力 | REQ-42-06 | 全期；P13-01 审计 | TODO |
-| LED-96-PUB-05 | Mobile Handoff 协议已预留 | REQ-42-05/REQ-42-03 | P01-06（P01）契约；P15-06 完整 | TODO |
+| LED-96-PUB-05 | Mobile Handoff 协议已预留 | REQ-42-05/REQ-42-03 | P01-06（P01）契约；P15-06 完整 | VERIFIED（2026-10-04：HandoffDescriptor 契约（状态机/限时/artifacts）就位；完整实现 P15-06） |
 
 ### 4.5 Plugin Readiness（3）
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-96-PLUGIN-01 | OutputPlugin / Pack registry contract 已定义 | REQ-92-01/REQ-92-03 | P01-06（P01） | TODO |
+| LED-96-PLUGIN-01 | OutputPlugin / Pack registry contract 已定义 | REQ-92-01/REQ-92-03 | P01-06（P01） | VERIFIED（2026-10-04：OutputPlugin 接口 + PackManifest + registry 就位并测试） |
 | LED-96-PLUGIN-02 | Core 业务没有对 XHS/YouTube/Newsletter 等输出类型硬编码分支 | REQ-92-02 | P11-03 审计（P11） | TODO |
 | LED-96-PLUGIN-03 | ContentDocument / Narrative 可向 ContentCore 演进 | REQ-93-01 | P11-01（P11） | TODO |
 
