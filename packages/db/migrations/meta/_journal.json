@@ -127,6 +127,13 @@
       "when": 1791103832056,
       "tag": "0017_numerous_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791104942107,
+      "tag": "0018_chunky_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

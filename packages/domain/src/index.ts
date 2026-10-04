@@ -40,6 +40,29 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  assertDatasetBindableForChart,
+  createClaim,
+  createDataset,
+  getDataset,
+  listClaimCitations,
+  listClaims,
+  listDatasets,
+  resolveFactVisualForClaim,
+  runExtraction,
+  updateClaim,
+} from './evidence.js';
+export {
+  checkChartBinding,
+  classifyFactuality,
+  extractClaimCandidates,
+  extractNumericMentions,
+  extractTimelineMentions,
+  extractionFingerprint,
+  normalizeUnit,
+  planFactVisual,
+  splitSentences,
+} from './evidence-extract.js';
+export {
   createContent,
   createContentFromText,
   createContentFromUrl,

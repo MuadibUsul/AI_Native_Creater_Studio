@@ -81,7 +81,7 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-7-01 | §7 | 任何输入必须先转统一 ContentDocument（id/title/language/author/sourceUrl/publishedAt/blocks/claims/citations/tables/figures/attachments），不得直接发 LLM | MUST | V1 | P04-01（P04） | 抽取验收（P04-01） | 三种文本输入均产出统一 ContentDocument（块规范化落库、稳定块 ID、tables/figures 由块派生）；claims/citations **结构就位但留空**——抽取填充属 P04-02（分任务边界）；归一化不调用 LLM（确定性） | VERIFIED（claims/citations 填充→P04-02） |
-| REQ-7-02 | §7 | Block 类型（heading/paragraph/quote/list/table/image/chart/embed）与 Claim（factuality: fact/analysis/opinion/uncertain + sourceIds + structuredData）建模 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02） | TODO |
+| REQ-7-02 | §7 | Block 类型（heading/paragraph/quote/list/table/image/chart/embed）与 Claim（factuality: fact/analysis/opinion/uncertain + sourceIds + structuredData）建模 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02） | Block 类型（P04-01）与 Claim 全字段建模（claims/source_citations 表；factuality 四类；sourceIds/structuredData；锁定标记）；确定性抽取产出 Claim + **Citation（块 ID + 字符区间 + 引文）**；fact 类必须 ≥1 来源（无来源降级 uncertain 并提示）（P04-02） | VERIFIED |
 | REQ-8-01 | §8 | NarrativePlan 输出结构（title/thesis/hook/chapters/narrationBlocks/keyClaims/requiredVisualFacts/ending/estimatedDuration）；推荐叙事模式但不强制统一模板 | MUST | V1 | P04-03（P04） | Schema 校验与有限修复（P04-03） | TODO |
 | REQ-8-02 | §8.2 | 叙事约束：不逐字朗读文章；语言口语化；保留核心事实与逻辑；锁定文字不得静默修改；事实与分析保留类型信息 | MUST | V1 | P04-03（P04） | 锁定文字与事实类型保留（P04-03）；AC-14 | TODO |
 | REQ-9-01 | §9.1 | Director 输入：NarrativePlan/ContentDocument/CreatorProfile/组件库/资产库/Provider 能力/预算模式/隐私模式/目标平台（历史表现后续） | MUST | V1 | P04-05（P04） | P04-05 验收 | TODO |
@@ -90,7 +90,7 @@
 | REQ-9-04 | §9.4 | 避免长时间连续 Avatar（建议单段 <20～25s）；Avatar 占比 15%～30%、每 4～12s 明显视觉变化、AI Video <10%～20% 等均为可配置默认值，不得硬编码为业务规则 | MUST | V1 | P04-05（P04） | 配置来自 Channel/Director Policy；P08-05 成片比例核验 | TODO |
 | REQ-10-01 | §10.1 | Visual Grammar MUST 支持基础语义类型（NUMBER/KPI_SET/TREND/COMPARISON/RANKING/TIMELINE/CAUSE_EFFECT/FEEDBACK_LOOP/FLOW/GEOGRAPHY/NETWORK/PROCESS/QUOTE/SOURCE/PERSON/COMPANY/DOCUMENT/IMAGE_EVIDENCE/VIDEO_EVIDENCE/CONCEPT/TRANSITION/SUMMARY/HOST_STATEMENT）与财经扩展（YIELD_SPREAD/YIELD_CURVE/PRICE_SERIES/CANDLE_SERIES/PERCENT_CHANGE/BALANCE_SHEET/SUPPLY_DEMAND/TRADE_FLOW/CAPITAL_FLOW/POLICY_PATH/SCENARIO_COMPARE） | MUST | V1 | P04-04（P04） | 固定语义输入得到允许类型（P04-04） | TODO |
 | REQ-10-02 | §10.2 | 首批建议 30～40 个组件类型；本计划裁决 V1 交付 20 个标准类型，其余映射后续任务（DEC-04） | SHOULD | V1 | P05-02（P05）；余额 P06-05/P07-02/P10-04/P14-04 | 每组件独立验收（P05-02）；DEC-04 | TODO |
-| REQ-10-03 | §10.3 | 事实可视化 MUST：数据图表只能绑定结构化数据或可追踪 Source；关键数据缺失不得由 AI 编造图形数据；缺失时降级为 Source/Quote/文字或提示补数据；图表 Scene 必须保存 data_source_ids | MUST | V1 | P04-04/P04-02（P04） | AC-15；缺数据不自动生成虚构数列（P04-02） | TODO |
+| REQ-10-03 | §10.3 | 事实可视化 MUST：数据图表只能绑定结构化数据或可追踪 Source；关键数据缺失不得由 AI 编造图形数据；缺失时降级为 Source/Quote/文字或提示补数据；图表 Scene 必须保存 data_source_ids | MUST | V1 | P04-04/P04-02（P04） | AC-15；缺数据不自动生成虚构数列（P04-02） | 数据集绑定门控（非 synthetic / 非空 / 有来源 → 否则 422 附原因）+ **降级阶梯 planFactVisual（CHART→QUOTE→SOURCE_CARD→TEXTUAL_EXPLANATION→REQUEST_DATA）** + 图表绑定返回必须写入 Scene 的 data_source_ids（P04-02）；组件级渲染与 source label 随 P05-02 | VERIFIED（组件级渲染/source label→P05-02） |
 | REQ-10-04 | §10.3 | 关键财经图表建议画面可选显示 source label | SHOULD | V1 | P05-02（P05） | P05-02 组件验收 | TODO |
 
 ## E. 双视觉引擎、Scene Graph 与主时钟（§11—§13）
@@ -294,7 +294,7 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-55-01 | §55 | 降级链：Primary→Fallback Provider→Fallback Static Visual→Needs Review（示例 Veo→Runway→Image+Ken Burns→Text/Motion）；Final Render 前存在 unresolved required Scene 必须提示 | MUST | V1 | P04-05/P07-05（P04/P07） | AC-15/AC-16；受控降级（P04-04） | TODO |
-| REQ-56-01 | §56 | 关键 Claim 可绑定 Source；Scene 可绑定一个或多个 Claim；Source 可显示在画面或 Description；AI 不得伪造来源；URL/title/访问时间结构化保存 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02）；LED-77 | TODO |
+| REQ-56-01 | §56 | 关键 Claim 可绑定 Source；Scene 可绑定一个或多个 Claim；Source 可显示在画面或 Description；AI 不得伪造来源；URL/title/访问时间结构化保存 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02）；LED-77 | Claim→Source 绑定（sourceIds + citation 定位）；来源结构化保存 URL/title/publisher/author/publishedAt/retrievedAt/contentHash（P04-01/P04-02）；**不得伪造来源**：引用来源必须属于本项目（SOURCE_NOT_IN_PROJECT），fact 无来源即拒绝/降级；Scene 绑定 Claim 属 P04-05 | VERIFIED（Scene 绑定 Claim→P04-05） |
 | REQ-56-02 | §56 | 未来 Citation overlay 与 Source list 自动生成 | MAY | 后续 | P10-05（P10） | P10-05 验收 | DEFERRED |
 | REQ-57-01 | §57 | 组件不得写死颜色/字体；使用 Design Tokens（font/color/spacing/radius/motion）；Creator Profile 选择/保存 Theme；跨组件品牌一致 | MUST | V1 | P05-01（P05） | 字体和颜色可由主题控制（P05-01） | TODO |
 | REQ-58-01 | §58 | MVP 字幕 MUST：自动字幕/词级 timing/改文字/断句/样式 preset/burn-in 可选/SRT-VTT 导出 | MUST | V1 | P06-06（P06） | 字幕不越界；音量调整不重做 TTS（P06-06） | TODO |
@@ -385,7 +385,7 @@
 | REQ-84-02 | §84 | 可发布素材 SHOULD 保存 origin/source_url/provider/author/license_type/license_reference/attribution_required/attribution_text/usage_restrictions/acquired_at | SHOULD | V1 | P02-04（P02） | 授权元数据验收（P02-04） | TODO |
 | REQ-84-03 | §84 | MUST：不把网上图片默认可商用；真实新闻/媒体素材与 AI 生成素材 metadata 可区分；需要 attribution 的素材可自动生成署名（Description/Sources）；用户上传默认声明权利，对外 SaaS 时 Terms 明确责任边界 | MUST | V1 | P02-04（P02）；Terms→P09-06 | 素材许可状态可查（P10-03）；署名自动生成 | TODO |
 | REQ-84-04 | §84 | Licensed Stock Provider 未来仍通过 Asset Acquisition Adapter 接入 | MAY | 后续 | P10-03（P10） | P10-03 验收 | DEFERRED |
-| REQ-85-01 | §85 | Source Snapshot 元数据（source_id/url/title/publisher/author/published_at/retrieved_at/content_hash/excerpt_reference/snapshot_asset_id）；目的：防网页变更失效、可追溯依据、生成 Source Card/Description | SHOULD | V1 | P04-02（P04） | 来源快照与引用（P04-02） | TODO |
+| REQ-85-01 | §85 | Source Snapshot 元数据（source_id/url/title/publisher/author/published_at/retrieved_at/content_hash/excerpt_reference/snapshot_asset_id）；目的：防网页变更失效、可追溯依据、生成 Source Card/Description | SHOULD | V1 | P04-02（P04） | 来源快照与引用（P04-02） | project_sources 落地 url/title/publisher/author/publishedAt/retrievedAt/contentHash/excerpt/note（P04-01）；引用定位（locator/quotedText）随 P04-02；**snapshotAssetId（完整快照资产）** 待 P04-02 后续/P06 真实抓取形态 | TODO（进度：元数据与引用已就位；完整快照资产待补） |
 | REQ-85-02 | §85 | 保存网页截图/全文必须遵循版权与存储策略，不默认永久镜像所有网页内容 | MUST | V1 | P04-02（P04） | P04-02 验收 | TODO |
 | REQ-86-01 | §86 Technical QA | Final Render 后 MUST 自动 QA：文件可读/duration 与 manifest 一致/resolution-fps 正确/黑帧空白帧阈值/无缺失 Asset/音轨存在/响度峰值在配置范围/字幕不越界/关键文本在安全区 | MUST | V1 | P07-05（P07） | AC-16；P07-05 验收；计划 §6.4 响度默认 -16 LUFS±1、True Peak≤-1 dBTP | TODO |
 | REQ-86-02 | §86 Content QA | Scene 数量与 Graph 一致/required source bindings 存在/事实图表数据绑定有效/未解决 placeholder 禁止进入 Final/未完成 Provider Job 不允许发布/needs_review 阻止自动发布 | MUST | V1 | P07-05（P07） | AC-16/AC-17；P07-05 验收 | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-01，REQ-4-01 / REQ-7-01 → VERIFIED（REQ-22-04 补登 P02-04 证据）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-02，REQ-7-02 / REQ-10-03 / REQ-56-01 → VERIFIED（REQ-85-01 记录进度）；此前 P04-01：REQ-4-01 / REQ-7-01（REQ-22-04 补登）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

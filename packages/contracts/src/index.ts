@@ -192,6 +192,33 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 证据与数据契约（P04-02 / §10.3、§85）
+export {
+  EVIDENCE_ERROR_REASONS,
+  claimRecordSchema,
+  citationRecordSchema,
+  numericMentionSchema,
+  extractionResultSchema,
+  createDatasetRequestSchema,
+  datasetRecordSchema,
+  FACT_VISUAL_STRATEGIES,
+  factVisualStrategySchema,
+  factVisualDecisionSchema,
+  chartBindingCheckSchema,
+} from './evidence.js';
+export type {
+  EvidenceErrorReason,
+  ClaimRecord,
+  CitationRecord,
+  NumericMention,
+  ExtractionResult,
+  CreateDatasetRequest,
+  DatasetRecord,
+  FactVisualStrategy,
+  FactVisualDecision,
+  ChartBindingCheck,
+} from './evidence.js';
+
 // 生成适配器契约（P03-07；真实与 Mock Provider 共用）
 export {
   PROVIDER_JOB_STATES,

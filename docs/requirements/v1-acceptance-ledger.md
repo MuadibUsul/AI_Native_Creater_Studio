@@ -64,9 +64,9 @@
 | LED-C-ARCH-03 | Shared contracts package exists | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-04：@ancs/contracts 正式化，被 api/sdk/testing 共用；证据：docs/verification/P01-01.md） |
 | LED-C-ARCH-04 | OpenAPI generated | REQ-29-04/REQ-33-02 | P01-01（P01） | VERIFIED（2026-10-04 机制已核：/openapi.json 由同一份 Zod 契约生成并被测试断言；内容随 P01 扩展。证据：docs/verification/P00-03.md） |
 | LED-C-ARCH-05 | SDK usable independently | REQ-29-02 | P01-05（P01） | VERIFIED（2026-10-04：全量 SDK + 独立客户端示例实跑 + CI 工作流测试；证据：docs/verification/P01-05.md） |
-| LED-C-ARCH-06 | PostgreSQL migration system works | REQ-34-01 | P00-02 起（P00/P02） | TODO |
-| LED-C-ARCH-07 | Redis/BullMQ works | REQ-19-05 | P03-01（P03） | TODO |
-| LED-C-ARCH-08 | Object Storage direct upload works | REQ-26-02 | P02-04（P02） | TODO |
+| LED-C-ARCH-06 | PostgreSQL migration system works | REQ-34-01 | P00-02 起（P00/P02） | VERIFIED（2026-10-04：drizzle-kit 生成 + runMigrations + CI 每套件执行；已累积迁移 0000—0018） |
+| LED-C-ARCH-07 | Redis/BullMQ works | REQ-19-05 | P03-01（P03） | VERIFIED（2026-10-04：真实 Redis + BullMQ 端到端（投递/持久/多 Worker 无重复消费）；DbPollQueue 回退；证据：docs/verification/P03-02.md） |
+| LED-C-ARCH-08 | Object Storage direct upload works | REQ-26-02 | P02-04（P02） | VERIFIED（2026-10-04：意图→签名直传→确认→下载（真实本地驱动）；S3/R2 云适配器待真实凭据） |
 
 ### 3.2 Domain（10）
 
@@ -77,22 +77,23 @@
 | LED-C-DOM-03 | Creator Profile | REQ-6-02 | P01-04（P01） | VERIFIED（2026-10-04：CreatorIdentity + 独立版本化子身份（Avatar/Voice/Brand）+ SpeechProfile；证据：docs/verification/P01-04.md） |
 | LED-C-DOM-04 | Project | REQ-22-02 | P02-01（P02） | VERIFIED（2026-10-04：projects 表 + Channel 快照 FK + revision；证据：docs/verification/P02-01.md） |
 | LED-C-DOM-05 | Scene | REQ-22-03 | P02-01（P02） | VERIFIED（2026-10-04：scenes 规范化表 + 独立 revision + Graph 组装） |
-| LED-C-DOM-06 | Asset | REQ-22-04 | P02-04（P02） | TODO |
-| LED-C-DOM-07 | Version | REQ-23-03 | P02-03（P02） | TODO |
+| LED-C-DOM-06 | Asset | REQ-22-04 | P02-04（P02） | VERIFIED（2026-10-04：assets/asset_versions 全字段 + 17 种 AssetType；证据：docs/verification/P02-04.md） |
+| LED-C-DOM-07 | Version | REQ-23-03 | P02-03（P02） | VERIFIED（2026-10-04：project_versions 不可变快照 + 自动时机；证据：docs/verification/P02-03.md） |
 | LED-C-DOM-08 | Edit Event | REQ-23-02 | P02-02（P02） | VERIFIED（2026-10-04：edit_events 全字段 + base/result revision + 同事务 Outbox；证据：docs/verification/P02-02.md） |
-| LED-C-DOM-09 | Job | REQ-19-01 | P03-01（P03） | TODO |
-| LED-C-DOM-10 | Provider Generation | REQ-25-01 | P03-05（P03） | TODO（进度：模型就位（provider_generations，P03-05）；生成链路写入随 P03-06/P06） |
+| LED-C-DOM-09 | Job | REQ-19-01 | P03-01（P03） | VERIFIED（2026-10-04：jobs 九态状态机 + 依赖 + 租约 + 对账字段；证据：docs/verification/P03-01.md） |
+| LED-C-DOM-10 | Provider Generation | REQ-25-01 | P03-05（P03） | VERIFIED（2026-10-04：provider_generations 全字段 + 幂等记录/结算；回收链路写入（P03-06）；真实成本数值待 P06） |
 
 ### 3.3 AI（6）
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-AI-01 | ContentDocument schema | REQ-7-01 | P04-01（P04） | TODO |
+| LED-C-AI-01 | ContentDocument schema | REQ-7-01 | P04-01（P04） | VERIFIED（2026-10-04：三种文本输入 → 统一 ContentDocument（块规范化落库）；证据：docs/verification/P04-01.md） |
 | LED-C-AI-02 | NarrativePlan schema | REQ-8-01 | P04-03（P04） | TODO |
 | LED-C-AI-03 | SceneGraph schema | REQ-12-01 | P01-01/P02-01（P01/P02） | VERIFIED（2026-10-04：契约就绪（P01-01）+ DB 状态组装为合法 Graph（P02-01）） |
 | LED-C-AI-04 | Visual Grammar mapping | REQ-10-01 | P04-04（P04） | TODO |
 | LED-C-AI-05 | Director structured output | REQ-9-02/REQ-52-01 | P04-05（P04） | TODO |
 | LED-C-AI-06 | AI Edit change plan | REQ-37-01 | P05-06（P05） | TODO |
+| LED-C-AI-07 | Claims/Citations 可追溯（Claim→Citation→Source；图表绑定门控与降级阶梯） | REQ-7-02/REQ-10-03/REQ-56-01 | P04-02（P04） | VERIFIED（2026-10-04：确定性抽取产出 Claim+Citation（块 ID+字符区间+引文）；数据集绑定门控（非 synthetic/非空/有来源）；缺数据降级阶梯（不虚构数列）；证据：docs/verification/P04-02.md） |
 
 ### 3.4 Video（7）
 
@@ -193,8 +194,8 @@
 |---|---|---|
 | §77 Web MVP DoD | 24 | 全部 TODO |
 | §78 Multi-Client Readiness | 11 | 全部 TODO |
-| 附录 C | 49 | 全部 TODO |
+| 附录 C | 50 | 全部 TODO（含 P04-02 新增 LED-C-AI-07） |
 | §96 增量验收 | 21 | 全部 TODO |
-| 合计 | 105 | — |
+| 合计 | 106 | — |
 
 本账本与 `traceability.md` 的"状态"列同步维护；关闭动作记录在 `docs/verification/` 对应阶段文件中。

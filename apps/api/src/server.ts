@@ -18,6 +18,7 @@ import { registerContentRoutes } from './routes/content.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerCredentialRoutes } from './routes/credentials.js';
 import { registerEventRoutes } from './routes/events.js';
+import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -117,6 +118,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           registerWebhookRoutes(instance, authDeps, webhookDeps);
         }
         registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher);
+        registerEvidenceRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

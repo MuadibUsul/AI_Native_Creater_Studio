@@ -8,8 +8,15 @@ import {
   assetSchema,
   billingStatusSchema,
   catalogResponseSchema,
+  chartBindingCheckSchema,
+  claimRecordSchema,
+  citationRecordSchema,
   contentDocumentRecordSchema,
   contentSourceSchema,
+  createDatasetRequestSchema,
+  datasetRecordSchema,
+  extractionResultSchema,
+  factVisualDecisionSchema,
   createContentRequestSchema,
   updateSourceRequestSchema,
   capabilitySelectionSchema,
@@ -85,8 +92,15 @@ import {
   type AssetDetail,
   type BillingStatus,
   type CatalogResponse,
+  type ChartBindingCheck,
+  type ClaimRecord,
+  type CitationRecord,
   type ContentDocumentRecord,
   type ContentSource,
+  type CreateDatasetRequest,
+  type DatasetRecord,
+  type ExtractionResult,
+  type FactVisualDecision,
   type CreateContentRequest,
   type UpdateSourceRequest,
   type CapabilitySelection,
@@ -371,6 +385,33 @@ export interface AncsClient {
       input: UpdateSourceRequest,
       options?: MutationOptions,
     ): Promise<ContentSource>;
+  };
+  evidence: {
+    /** 确定性抽取（Claim/Citation/数值提及/时间线；可重入） */
+    extract(workspaceId: string, projectId: string, documentId: string, options?: MutationOptions): Promise<ExtractionResult>;
+    claims(workspaceId: string, projectId: string, query?: { documentId?: string }): Promise<ClaimRecord[]>;
+    /** 手动创建 Claim（fact 必须带来源） */
+    createClaim(
+      workspaceId: string,
+      projectId: string,
+      input: { text: string; factuality: 'fact' | 'analysis' | 'opinion' | 'uncertain'; sourceIds?: string[]; locator?: string; quotedText?: string | null },
+      options?: MutationOptions,
+    ): Promise<{ claim: ClaimRecord; citations: CitationRecord[] }>;
+    updateClaim(
+      workspaceId: string,
+      projectId: string,
+      claimId: string,
+      input: { text?: string; factuality?: 'fact' | 'analysis' | 'opinion' | 'uncertain'; locked?: boolean },
+      options?: MutationOptions,
+    ): Promise<ClaimRecord>;
+    citations(workspaceId: string, projectId: string, claimId: string): Promise<CitationRecord[]>;
+    /** 事实可视化策略（§10.3 降级阶梯） */
+    factVisual(workspaceId: string, projectId: string, claimId: string, query?: { datasetId?: string }): Promise<FactVisualDecision>;
+    datasets(workspaceId: string, projectId: string): Promise<DatasetRecord[]>;
+    createDataset(workspaceId: string, projectId: string, input: CreateDatasetRequest, options?: MutationOptions): Promise<DatasetRecord>;
+    getDataset(workspaceId: string, projectId: string, datasetId: string): Promise<DatasetRecord>;
+    /** 图表绑定校验（不可绑定 → 422，附原因） */
+    datasetBindingCheck(workspaceId: string, projectId: string, datasetId: string): Promise<ChartBindingCheck>;
   };
   billing: {
     /** 计费状态（余额/预算/周期消耗与预留） */
@@ -918,6 +959,78 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: updateSourceRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+
+    evidence: {
+      extract: (workspaceId, projectId, documentId, mutation) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content/${documentId}/extract`,
+          extractionResultSchema,
+          { idempotencyKey: mutation?.idempotencyKey },
+        ),
+      claims: async (workspaceId, projectId, query) => {
+        const suffix = query?.documentId !== undefined ? `?documentId=${query.documentId}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/claims${suffix}`, listOf(claimRecordSchema))).items;
+      },
+      createClaim: (workspaceId, projectId, input, mutation) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/claims`,
+          z.object({ claim: claimRecordSchema, citations: z.array(citationRecordSchema) }),
+          {
+            body: input,
+            bodySchema: z.object({
+              text: z.string().min(1),
+              factuality: z.enum(['fact', 'analysis', 'opinion', 'uncertain']),
+              sourceIds: z.array(z.string()).optional(),
+              locator: z.string().optional(),
+              quotedText: z.string().nullable().optional(),
+            }),
+            idempotencyKey: mutation?.idempotencyKey,
+          },
+        ),
+      updateClaim: (workspaceId, projectId, claimId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/claims/${claimId}`, claimRecordSchema, {
+          body: input,
+          bodySchema: z
+            .object({
+              text: z.string().min(1),
+              factuality: z.enum(['fact', 'analysis', 'opinion', 'uncertain']),
+              locked: z.boolean(),
+            })
+            .partial()
+            .strict(),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      citations: async (workspaceId, projectId, claimId) =>
+        (
+          await request(
+            'GET',
+            `/api/v1/workspaces/${workspaceId}/projects/${projectId}/claims/${claimId}/citations`,
+            listOf(citationRecordSchema),
+          )
+        ).items,
+      factVisual: (workspaceId, projectId, claimId, query) => {
+        const suffix = query?.datasetId !== undefined ? `?datasetId=${query.datasetId}` : '';
+        return request(
+          'GET',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/claims/${claimId}/fact-visual${suffix}`,
+          factVisualDecisionSchema,
+        );
+      },
+      datasets: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/datasets`, listOf(datasetRecordSchema))).items,
+      createDataset: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/datasets`, datasetRecordSchema, {
+          body: input,
+          bodySchema: createDatasetRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      getDataset: (workspaceId, projectId, datasetId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/datasets/${datasetId}`, datasetRecordSchema),
+      datasetBindingCheck: (workspaceId, projectId, datasetId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/datasets/${datasetId}/binding-check`, chartBindingCheckSchema),
     },
 
     billing: {

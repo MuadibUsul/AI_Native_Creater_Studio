@@ -46,7 +46,7 @@ const sha256Hex = (text: string): string => createHash('sha256').update(text, 'u
  * 文档内保持稳定（供 Citation/Scene 引用），跨文档保证唯一。
  */
 function scopeBlocks(documentId: string, blocks: ContentBlock[]): ContentBlock[] {
-  const prefix = documentId.replace(/^doc_/, '').slice(0, 12);
+  const prefix = documentId.replace(/^doc_/, '').replace(/[^a-f0-9]/gi, '').slice(0, 12);
   return blocks.map((block) => ({
     ...block,
     id: block.id.startsWith('blk_') ? `blk_${prefix}_${block.id.slice(4)}` : `${prefix}_${block.id}`,
