@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import {
   errorEnvelopeSchema,
@@ -120,6 +120,10 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
 });
 
+beforeEach(async () => {
+  await handle.db.delete(workspaces);
+});
+
 afterAll(async () => {
   await app.close();
   await handle.close();
@@ -136,7 +140,7 @@ async function makeSubmitted(): Promise<{ workspaceId: string; jobId: string; pr
     type: NOOP_JOB_TYPE,
     input: { modelId: 'mock-video-1', operation: 'video.generate', credentialMode: 'PLATFORM_MANAGED', inputHash: 'sha256:x', estimatedCredits: 10 },
   });
-  await claimJob(deps(), { workerId: 'w', leaseSeconds: 60 });
+  await claimJob(deps(), { workerId: 'w', leaseSeconds: 60, types: [NOOP_JOB_TYPE] });
   await transitionJob(deps(), { workspaceId, jobId: job.id, to: 'PROVIDER_QUEUED', submitState: 'SUBMITTED', reason: 'SUBMITTED' });
   await reserveCredits(deps(), { workspaceId, jobId: job.id, estimatedCredits: 10 });
   const providerJobId = `pjob_${randomUUID()}`;
@@ -222,7 +226,7 @@ describe('Webhook 端点（P03-06 HTTP）', () => {
       type: NOOP_JOB_TYPE,
       input: { modelId: 'mock-video-1', operation: 'video.generate', credentialMode: 'PLATFORM_MANAGED', inputHash: 'sha256:y', estimatedCredits: 10 },
     });
-    await claimJob(deps(), { workerId: 'w', leaseSeconds: 60 });
+    await claimJob(deps(), { workerId: 'w', leaseSeconds: 60, types: [NOOP_JOB_TYPE] });
     await transitionJob(deps(), { workspaceId: workspace.id, jobId: job.id, to: 'PROVIDER_QUEUED', submitState: 'SUBMITTED', reason: 'SUBMITTED' });
     await reserveCredits(deps(), { workspaceId: workspace.id, jobId: job.id, estimatedCredits: 10 });
     const providerJobId = `pjob_${randomUUID()}`;

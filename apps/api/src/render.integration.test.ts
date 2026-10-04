@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { createDb, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { createDb, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import type { ArticleFetcher, LlmAdapter } from '@ancs/contracts';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { MockTtsAdapter } from '@ancs/providers-mock-tts';
@@ -73,6 +73,11 @@ beforeAll(async () => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+});
+
+beforeEach(async () => {
+  // 共享测试库：每个用例前清理（P07-04 起 createRender 会入队 RENDER_FINAL 任务，遗留任务会影响其他套件）
+  await handle.db.delete(workspaces);
 });
 
 afterAll(async () => {

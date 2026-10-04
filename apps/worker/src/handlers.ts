@@ -6,6 +6,8 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
+import type { RenderExecutor } from '@ancs/contracts';
+import { createRenderExecutionHandler } from './render-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -13,7 +15,8 @@ import {
  * V1 已注册的处理器：
  * - NOOP：调度/恢复骨架的验证任务（测试与冒烟用，无副作用）；
  * - MAINTENANCE_RETENTION_SWEEP：保留清理（P02-05 的 runRetentionSweep，可重入）；
- * - MAINTENANCE_NOTIFICATION_DISPATCH：Outbox 通知派发（P02-06，可重入）。
+ * - MAINTENANCE_NOTIFICATION_DISPATCH：Outbox 通知派发（P02-06，可重入）；
+ * - RENDER_FINAL：Final 合成（P07-04；执行器注入——生产 = 进程隔离 CLI，见 render-executor-process.ts）。
  *
  * Provider 生成类任务（TTS/Avatar/AI Video 等）随 P03-06/P06 注册——**不在本任务触发真实 Provider 调用**。
  */
@@ -86,6 +89,18 @@ export const notificationDispatchHandler: JobHandler = {
   },
 };
 
-export function createDefaultRegistry(): JobHandlerRegistry {
-  return new JobHandlerRegistry([noopHandler, retentionSweepHandler, notificationDispatchHandler]);
+export interface DefaultRegistryOptions {
+  /**
+   * Final 合成执行器（P07-04）。生产装配传入进程隔离 CLI 执行器；
+   * 不提供时 RENDER_FINAL 任务落入"未知类型 → FAILED_FINAL"（明确失败，不静默吞）。
+   */
+  renderExecutor?: RenderExecutor;
+}
+
+export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
+  const handlers = [noopHandler, retentionSweepHandler, notificationDispatchHandler];
+  if (options.renderExecutor !== undefined) {
+    handlers.push(createRenderExecutionHandler({ executor: options.renderExecutor }));
+  }
+  return new JobHandlerRegistry(handlers);
 }

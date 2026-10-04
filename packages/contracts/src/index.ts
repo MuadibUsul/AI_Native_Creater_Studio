@@ -294,6 +294,41 @@ export type {
   CreateRenderRequest,
 } from './render.js';
 
+// Final 合成执行契约（P07-04 / §28、§39、§58）
+export {
+  RENDER_EXECUTION_SPEC_VERSION,
+  RENDER_EXECUTION_RESULT_VERSION,
+  RENDER_MANIFEST_VERSION,
+  RENDER_EXECUTION_ERROR_REASONS,
+  compositionSceneInputSchema,
+  stagedAssetSchema,
+  renderExecutionMusicTrackSchema,
+  renderExecutionCaptionsSchema,
+  renderManifestBaseSchema,
+  RENDER_EXECUTION_FILE_KINDS,
+  renderExecutionFileKindSchema,
+  renderExecutionFileSchema,
+  renderManifestSchema,
+  renderExecutionSpecSchema,
+  renderExecutionResultSchema,
+  RENDER_EXECUTION_FILE_NAMES,
+  RENDER_EXECUTION_FILE_MIME_TYPES,
+} from './render-execution.js';
+export type {
+  RenderExecutionErrorReason,
+  CompositionSceneInputDto,
+  StagedAsset,
+  RenderExecutionMusicTrack,
+  RenderExecutionCaptions,
+  RenderManifestBase,
+  RenderExecutionFileKind,
+  RenderExecutionFile,
+  RenderManifest,
+  RenderExecutionSpec,
+  RenderExecutionResult,
+  RenderExecutor,
+} from './render-execution.js';
+
 // Native Fallback 回绑契约（P06-07 / §39、§40、§45）
 export { REBIND_ERROR_REASONS, rebindExternalResultRequestSchema } from './billing.js';
 export type { RebindErrorReason, RebindExternalResultRequest } from './billing.js';
@@ -597,6 +632,7 @@ export type {
 // 任务契约（P03-01 / 计划 §5.5）
 export {
   GENERATE_JOB_TYPE,
+  RENDER_FINAL_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,

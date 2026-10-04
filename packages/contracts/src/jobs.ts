@@ -16,6 +16,12 @@ import { isoDateTimeSchema } from './common/time.js';
  */
 export const GENERATE_JOB_TYPE = 'GENERATE';
 
+/**
+ * Final 合成任务类型（P07-04）：消费 Render 快照（P07-03）执行 Remotion 服务端渲染。
+ * 与 GENERATE 同理：API/domain 入队与 Worker 处理器共用同一常量（跨包字符串漂移会导致任务永不执行）。
+ */
+export const RENDER_FINAL_JOB_TYPE = 'RENDER_FINAL';
+
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',
   'QUEUED',

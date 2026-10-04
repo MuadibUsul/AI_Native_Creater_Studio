@@ -22,6 +22,9 @@
   },
   "devDependencies": {
     "@types/node": "26.6.4",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "@ancs/providers-mock-llm": "workspace:*",
+    "@ancs/providers-mock-tts": "workspace:*",
+    "@remotion/media-parser": "4.0.532"
   }
 }

@@ -369,6 +369,7 @@ const toMasterDto = (row: typeof masterNarrations.$inferSelect): MasterNarration
     narrativePlanId: row.narrativePlanId,
     narrativePlanRevision: row.narrativePlanRevision,
     assetId: row.assetId,
+    assetVersionId: row.assetVersionId,
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     checksumSha256: row.checksumSha256,
@@ -394,6 +395,23 @@ export async function getCurrentMasterNarration(
     .from(masterNarrations)
     .where(and(...conditions))
     .orderBy(desc(masterNarrations.createdAt))
+    .limit(1);
+  const row = rows[0];
+  return row === undefined ? null : toMasterDto(row);
+}
+
+/**
+ * 按 id 读取 Master Narration（P07-04：渲染输入引用的是**被冻结的具体行**，而非"当前最新"——
+ * 追加式表上二者可能不同；渲染必须消费快照引用的那一条）。
+ */
+export async function getMasterNarrationById(
+  deps: DomainDeps,
+  input: { workspaceId: string; narrationId: string },
+): Promise<MasterNarration | null> {
+  const rows = await deps.db
+    .select()
+    .from(masterNarrations)
+    .where(and(eq(masterNarrations.id, input.narrationId), eq(masterNarrations.workspaceId, input.workspaceId)))
     .limit(1);
   const row = rows[0];
   return row === undefined ? null : toMasterDto(row);

@@ -114,7 +114,12 @@ export async function buildSnapshotPayload(
     sceneRows,
   });
 
-  return projectVersionSnapshotSchema.parse({ schemaVersion: '0.1', graph, meta: extraMeta });
+  return projectVersionSnapshotSchema.parse({
+    schemaVersion: '0.1',
+    graph,
+    // P07-04：主题 tokens 随快照固化（成片渲染必须与快照一致——渠道后续改主题不影响既有版本）
+    meta: { themeTokens: defaults.themeTokens, ...extraMeta },
+  });
 }
 
 /** 当前项目的事件 seq 水位线（"每 N 事件自动快照"的计数基准，避免时间戳并列歧义）。 */

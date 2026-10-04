@@ -260,6 +260,48 @@ export async function createJob(deps: DomainDeps, input: CreateJobInput): Promis
   });
 }
 
+export interface CreateJobTxInput {
+  workspaceId: string;
+  projectId?: string | null;
+  type: string;
+  input?: Record<string, unknown>;
+  priority?: number;
+  maxAttempts?: number;
+  createdBy?: string | null;
+}
+
+/**
+ * 事务内创建**无依赖**任务（QUEUED + `job.queued` 事件）。
+ *
+ * P07-04：Render 记录与 Final 合成任务在**同一事务**入队——避免"渲染已创建但任务丢失"
+ * 的半提交窗口（提交后 Outbox 事件保证派发；进程崩溃由重跑派发恢复）。
+ */
+export async function createJobInTx(
+  tx: Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0],
+  input: CreateJobTxInput,
+): Promise<Job> {
+  const now = new Date();
+  const inserted = await tx
+    .insert(jobs)
+    .values({
+      id: `job_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId ?? null,
+      type: input.type,
+      status: 'QUEUED',
+      input: input.input ?? {},
+      priority: input.priority ?? 0,
+      maxAttempts: input.maxAttempts ?? 3,
+      createdBy: input.createdBy ?? null,
+      updatedAt: now,
+    })
+    .returning();
+  const row = inserted[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.INTERNAL, 'job insert failed', 500);
+  await emitJobEvent(tx, row, 'job.queued');
+  return toJobDto(row);
+}
+
 export interface TransitionInput {
   workspaceId: string;
   jobId: string;

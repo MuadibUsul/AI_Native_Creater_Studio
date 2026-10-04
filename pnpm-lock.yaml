@@ -109,6 +109,9 @@ importers:
       '@ancs/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ancs/remotion-core':
+        specifier: workspace:*
+        version: link:../../packages/remotion-core
       '@ancs/scene-components':
         specifier: workspace:*
         version: link:../../packages/scene-components
@@ -134,6 +137,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@ancs/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@ancs/providers-mock-tts':
+        specifier: workspace:*
+        version: link:../../packages/providers/mock-tts
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4
@@ -241,6 +250,15 @@ importers:
         specifier: 0.45.3
         version: 0.45.3(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
     devDependencies:
+      '@ancs/providers-mock-llm':
+        specifier: workspace:*
+        version: link:../../packages/providers/mock-llm
+      '@ancs/providers-mock-tts':
+        specifier: workspace:*
+        version: link:../../packages/providers/mock-tts
+      '@remotion/media-parser':
+        specifier: 4.0.532
+        version: 4.0.532
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4

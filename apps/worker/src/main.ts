@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { claimJob, runMaintenanceTick } from '@ancs/domain';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
+import { createProcessRenderExecutor } from './render-executor-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 
@@ -26,7 +27,10 @@ const heartbeatIntervalMs = Number(process.env['ANCS_WORKER_HEARTBEAT_MS'] ?? Ma
 
 const handle = createDb(databaseUrl);
 const deps = createDomainDeps(handle);
-const registry: JobHandlerRegistry = createDefaultRegistry();
+// P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
+// 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
+const registry: JobHandlerRegistry =
+  process.env['ANCS_DISABLE_RENDER'] === '1' ? createDefaultRegistry() : createDefaultRegistry({ renderExecutor: createProcessRenderExecutor() });
 
 let stopping = false;
 const stop = (signal: string): void => {

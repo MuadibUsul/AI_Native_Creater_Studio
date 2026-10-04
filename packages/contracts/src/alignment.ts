@@ -79,6 +79,8 @@ export const masterNarrationSchema = z.object({
   narrativePlanRevision: z.number().int().positive(),
   /** 拼接后的 Master 音频资产（WAV 可拼接时；否则为 null，交由渲染管线） */
   assetId: opaqueIdSchema.nullable().default(null),
+  /** Master 音频的**具体资产版本**（P07-04：渲染按版本级引用冻结，绝不指向"当前版本"） */
+  assetVersionId: opaqueIdSchema.nullable().default(null),
   mimeType: z.string().nullable().default(null),
   sizeBytes: z.number().int().nonnegative().nullable().default(null),
   checksumSha256: z.string().nullable().default(null),

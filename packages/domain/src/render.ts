@@ -4,6 +4,7 @@ import {
   ApiFailure,
   ERROR_CODES,
   RENDER_ERROR_REASONS,
+  RENDER_FINAL_JOB_TYPE,
   RENDER_PROFILE_SPECS,
   renderRecordSchema,
   type CreateRenderRequest,
@@ -12,6 +13,7 @@ import {
 } from '@ancs/contracts';
 import { assetVersions, masterNarrations, projectVersions, renderEvents, renders } from '@ancs/db';
 import { loadProjectRow } from './projects.js';
+import { createJobInTx } from './jobs.js';
 import { createProjectVersionInTx } from './versions.js';
 import type { DomainDeps } from './channels.js';
 
@@ -140,7 +142,7 @@ export async function createRender(
       });
     }
 
-    // 4) 落 Render（QUEUED）+ 审计事件
+    // 4) 落 Render（QUEUED）+ 审计事件 + Final 合成任务（同事务入队：渲染与任务不半提交）
     const spec = RENDER_PROFILE_SPECS[input.request.profile];
     const now = new Date();
     const renderId = `rnd_${randomUUID()}`;
@@ -169,6 +171,16 @@ export async function createRender(
       status: 'QUEUED',
       note: `输入冻结：version=${versionId} narration=${master.id} assets=${String(assetVersionIds.length)}`,
       actorId: input.createdBy ?? null,
+    });
+    // Final 合成任务（P07-04）：maxAttempts=2 —— 崩溃后租约回收可续跑一次（渲染从零重做，产物幂等）；
+    // 执行失败由处理器显式定性为 FAILED_FINAL（不允许无限自动重试）
+    await createJobInTx(tx, {
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      type: RENDER_FINAL_JOB_TYPE,
+      input: { renderId, profile: input.request.profile },
+      maxAttempts: 2,
+      createdBy: input.createdBy ?? null,
     });
     const row = (await tx.select().from(renders).where(eq(renders.id, renderId)).limit(1))[0];
     if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'render insert failed', 500);

@@ -14,6 +14,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "remotion": "4.0.532",
+    "@ancs/remotion-core": "workspace:*",
     "@ancs/scene-components": "workspace:*",
     "@ancs/contracts": "workspace:*",
     "zod": "4.6.5"
@@ -22,6 +23,8 @@
     "@types/node": "26.6.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "@ancs/domain": "workspace:*",
+    "@ancs/providers-mock-tts": "workspace:*"
   }
 }

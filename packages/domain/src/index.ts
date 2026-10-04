@@ -47,7 +47,7 @@ export {
   updateNarrationBlock,
 } from './narrative.js';
 export { planVisual } from './visual-plan.js';
-export { buildAlignment, cueForBlock, concatWavSegments, getCurrentMasterNarration, resolveSynthesisVoice, segmentCacheKey, segmentStorageKey, synthesizeMasterNarration } from './alignment.js';
+export { buildAlignment, cueForBlock, concatWavSegments, getCurrentMasterNarration, getMasterNarrationById, resolveSynthesisVoice, segmentCacheKey, segmentStorageKey, synthesizeMasterNarration } from './alignment.js';
 export { encodeWavPcm16, parseWavPcm16 } from './wav.js';
 export { buildMixPlan, buildSubtitleOutput, captionCuesOf, previewCaptionLines } from './mixdown.js';
 export { listRebindableGenerations, rebindExternalResult } from './native-fallback.js';
@@ -59,6 +59,21 @@ export {
   transitionRender,
   verifyRenderInputFrozen,
 } from './render.js';
+export {
+  buildRenderExecutionSpec,
+  persistRenderArtifacts,
+  runRenderExecution,
+} from './render-execution.js';
+export type {
+  BuildRenderExecutionInput,
+  BuiltRenderExecution,
+  FinalizeRenderArtifact,
+  RenderAssetRow,
+  RenderAssetVersionRow,
+  RunRenderExecutionResult,
+} from './render-execution.js';
+export { createJobInTx } from './jobs.js';
+export type { CreateJobTxInput } from './jobs.js';
 
 export { AI_VIDEO_FORBIDDEN_SCENE_TYPES, AI_VIDEO_FORBIDDEN_SEMANTIC, requestSceneGeneration, sceneGenerationDedupeKey } from './scene-generation.js';
 export type { SceneGenerationResult } from './scene-generation.js';

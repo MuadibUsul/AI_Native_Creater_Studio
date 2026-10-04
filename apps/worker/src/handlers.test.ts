@@ -14,6 +14,13 @@ describe('JobHandlerRegistry', () => {
     expect(registry.get('NOT_REGISTERED')).toBeUndefined();
   });
 
+  it('提供渲染执行器时注册 RENDER_FINAL（P07-04）；不提供则保持默认集合（任务明确落 UNKNOWN_JOB_TYPE）', () => {
+    const executor = { kind: 'test', execute: async () => ({}) as never };
+    const withRender = createDefaultRegistry({ renderExecutor: executor });
+    expect(withRender.types()).toContain('RENDER_FINAL');
+    expect(createDefaultRegistry().types()).not.toContain('RENDER_FINAL');
+  });
+
   it('重复注册同一类型 → 拒绝（防止覆盖语义）', () => {
     const registry = new JobHandlerRegistry([noopHandler]);
     expect(() => registry.register(noopHandler)).toThrow(/重复注册/);
