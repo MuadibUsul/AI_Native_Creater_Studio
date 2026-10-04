@@ -19,6 +19,10 @@ export const ERROR_CODES = {
   VERSION_CONFLICT: 'VERSION_CONFLICT',
   /** 同幂等键、不同请求体（§4.6） */
   IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
+  /** 授权码/刷新令牌无效：不存在、过期、已使用（含刷新重放）或校验失败（P01-02） */
+  INVALID_GRANT: 'INVALID_GRANT',
+  /** 客户端未注册或 redirectUri 不在允许列表（P01-02） */
+  INVALID_CLIENT: 'INVALID_CLIENT',
   RATE_LIMITED: 'RATE_LIMITED',
   /** 预算/成本保护熔断（计划 §6.1 / §68） */
   BUDGET_EXCEEDED: 'BUDGET_EXCEEDED',
@@ -39,6 +43,16 @@ export const errorEnvelopeSchema = z.object({
 });
 
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
+
+/** 生成统一错误信封（服务端各层共用，避免各处手写形状）。 */
+export function errorEnvelope(
+  code: ErrorCode,
+  message: string,
+  requestId: string,
+  details: Record<string, unknown> = {},
+): ErrorEnvelope {
+  return { error: { code, message, requestId, details } };
+}
 
 /**
  * VERSION_CONFLICT 的 details 结构（§4.6："冲突返回 409 VERSION_CONFLICT 和刷新所需信息"）。

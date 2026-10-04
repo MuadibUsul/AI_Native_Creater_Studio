@@ -126,12 +126,13 @@ describe('checkRules：架构依赖方向', () => {
       pkg('@ancs/contracts', 'packages/contracts'),
       pkg('@ancs/domain', 'packages/domain'),
       pkg('@ancs/db', 'packages/db'),
+      pkg('@ancs/auth', 'packages/auth'),
       pkg('@ancs/providers-llm', 'packages/providers/llm'),
       pkg(
         '@ancs/api',
         'apps/api',
-        { '@ancs/contracts': 'workspace:*', '@ancs/sdk': 'workspace:*' },
-        ['@ancs/contracts'],
+        { '@ancs/contracts': 'workspace:*', '@ancs/auth': 'workspace:*', '@ancs/sdk': 'workspace:*' },
+        ['@ancs/contracts', '@ancs/auth'],
       ),
       pkg(
         '@ancs/worker',

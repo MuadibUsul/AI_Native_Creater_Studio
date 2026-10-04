@@ -47,12 +47,16 @@ export const PROVIDER_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([
   '@ancs/domain',
 ]);
 
-/** apps/api、apps/worker（计划 §3.4：api/worker → domain/contracts/db/providers） */
+/**
+ * apps/api、apps/worker（计划 §3.4：api/worker → domain/contracts/db/providers；
+ * @ancs/auth 由裁决 0003 加入：规范 §3.3 明确 api = HTTP + 认证接入 + 请求授权入口）。
+ */
 export const SERVER_APP_DIRS: readonly string[] = ['apps/api', 'apps/worker'];
 export const SERVER_APP_ALLOWED_PROD_DEPS: ReadonlySet<string> = new Set([
   '@ancs/contracts',
   '@ancs/domain',
   '@ancs/db',
+  '@ancs/auth',
 ]);
 export const SERVER_APP_ALLOWED_PROD_DEP_PREFIXES: readonly string[] = ['packages/providers/'];
 

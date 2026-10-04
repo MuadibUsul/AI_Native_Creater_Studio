@@ -14,7 +14,7 @@ export { pageRequestSchema, pageResponseSchema } from './common/pagination.js';
 export type { PageRequest } from './common/pagination.js';
 export { eventEnvelopeSchema, EVENT_TYPES } from './common/events.js';
 export type { EventEnvelope } from './common/events.js';
-export { errorEnvelopeSchema, ERROR_CODES, versionConflictDetailsSchema } from './common/error.js';
+export { errorEnvelopeSchema, ERROR_CODES, versionConflictDetailsSchema, errorEnvelope } from './common/error.js';
 export type { ErrorEnvelope, ErrorCode, VersionConflictDetails } from './common/error.js';
 
 // 领域契约
@@ -99,6 +99,28 @@ export {
   restoreProjectVersionOperationSchema,
 } from './edits.js';
 export type { EditRequest, EditOperation, EditOperationType } from './edits.js';
+
+// 认证契约（P01-02）
+export {
+  authUserSchema,
+  sessionInfoSchema,
+  signInRequestSchema,
+  signInResponseSchema,
+  nativeAuthorizeQuerySchema,
+  authorizationCodeGrantSchema,
+  refreshTokenGrantSchema,
+  tokenRequestSchema,
+  tokenResponseSchema,
+  revokeTokenRequestSchema,
+  AUTH_METHODS,
+} from './auth.js';
+export type {
+  AuthUser,
+  SessionInfo,
+  TokenRequest,
+  TokenResponse,
+  RevokeTokenRequest,
+} from './auth.js';
 
 // 既有接口
 export { healthResponseSchema } from './health.js';

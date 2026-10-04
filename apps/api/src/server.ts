@@ -4,11 +4,18 @@ import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { API_PREFIX } from '@ancs/contracts';
 import { registerErrorHandler } from './error-handler.js';
+import { registerAuth, type AuthDeps } from './plugins/auth.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerEchoRoutes } from './routes/echo.js';
 import { registerHealthRoutes } from './routes/health.js';
 
 export interface BuildServerOptions {
   logger?: boolean;
+  /**
+   * 认证依赖（P01-02）。未提供时不注册认证路由（用于无数据库的单元测试）；
+   * 生产与集成测试必须提供。
+   */
+  auth?: AuthDeps;
 }
 
 /**
@@ -37,6 +44,17 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     },
     transform: jsonSchemaTransform,
   });
+
+  const authDeps = options.auth;
+  if (authDeps !== undefined) {
+    registerAuth(app, authDeps);
+    await app.register(
+      async (instance) => {
+        registerAuthRoutes(instance, authDeps);
+      },
+      { prefix: API_PREFIX },
+    );
+  }
 
   await app.register(
     async (instance) => {

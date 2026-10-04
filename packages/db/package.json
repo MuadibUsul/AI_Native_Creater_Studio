@@ -16,7 +16,8 @@
   "scripts": {
     "build": "pnpm run clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@types/node": "26.6.4",
     "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
     "typescript": "6.0.3"
   }
 }

@@ -16,6 +16,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/contracts': srcAlias('./packages/contracts/src/index.ts'),
   '@ancs/sdk': srcAlias('./packages/sdk/src/index.ts'),
   '@ancs/db': srcAlias('./packages/db/src/index.ts'),
+  '@ancs/auth': srcAlias('./packages/auth/src/index.ts'),
 };
 
 export default defineConfig({
@@ -26,7 +27,13 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['packages/**/*.test.ts', 'apps/api/src/**/*.test.ts'],
-          exclude: ['**/node_modules/**', 'packages/db/**', 'packages/testing/**'],
+          exclude: [
+            '**/node_modules/**',
+            'packages/db/**',
+            'packages/testing/**',
+            'packages/auth/**',
+            'apps/api/src/**/*.integration.test.ts',
+          ],
           alias: workspaceAliases,
           passWithNoTests: false,
         },
@@ -35,7 +42,11 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['packages/db/**/*.test.ts'],
+          include: [
+            'packages/db/**/*.test.ts',
+            'packages/auth/**/*.test.ts',
+            'apps/api/src/**/*.integration.test.ts',
+          ],
           exclude: ['**/node_modules/**'],
           alias: workspaceAliases,
           testTimeout: 30000,

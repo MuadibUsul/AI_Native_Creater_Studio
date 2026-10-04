@@ -188,9 +188,9 @@
 | REQ-29-06 | §29.6 | 实时状态：REST 获取状态 + SSE/WebSocket 推送 Job 事件（project.updated/scene.updated/job.*/render.progress/asset.ready）；不得让客户端每秒轮询 | MUST | V1 | P02-06（P02） | 断线重连恢复状态（P02-06） | TODO |
 | REQ-29-07 | §29.7 | Desktop 后续：Tauri/Electron 评估；初期 Final Render 仍云端，不分叉渲染逻辑；未来 Local RenderProvider 遵循契约 | SHOULD | 后续 | P15-01（P15） | P15-01 验收 | DEFERRED |
 | REQ-29-08 | §29.8 | Mobile 后续：React Native 共享 contracts/SDK；重点为查看/审核/预览/AI 修改/轻编辑/Approve/状态/下载/Push；不复制桌面 Timeline 全能力 | SHOULD | 后续 | P15-04（P15） | P15-04 验收 | DEFERRED |
-| REQ-30-01 | §30 | 不可只依赖 Web Cookie Session：Auth service + 短生命周期 Access Token + Rotating Refresh Token；Web 用 HttpOnly Secure Cookie；Native 用 Secure Storage/Keychain/Keystore | MUST | V1 | P01-02（P01） | 过期/退出/刷新重放/错误回调正确；客户端无长期明文凭据（P01-02） | TODO |
+| REQ-30-01 | §30 | 不可只依赖 Web Cookie Session：Auth service + 短生命周期 Access Token + Rotating Refresh Token；Web 用 HttpOnly Secure Cookie；Native 用 Secure Storage/Keychain/Keystore | MUST | V1 | P01-02（P01） | 全部验收项通过：过期/退出/刷新重放/错误回调 + 令牌仅存哈希（P01-02；证据 docs/verification/P01-02.md；Native 端存储属 P15-05） | VERIFIED |
 | REQ-30-02 | §30 | 所有 API 根据用户 + workspace membership 授权 | MUST | V1 | P01-03（P01） | AC-01 | TODO |
-| REQ-30-03 | §30 | Auth Contract 必须兼容原生客户端（PKCE）；未来 Email/Magic Link/Google/SSO 可扩展 | MUST | V1-契约 | P01-02（P01）；SSO→P16-05 | 原生 PKCE 流程通过（P01-02） | TODO |
+| REQ-30-03 | §30 | Auth Contract 必须兼容原生客户端（PKCE）；未来 Email/Magic Link/Google/SSO 可扩展 | MUST | V1-契约 | P01-02（P01）；SSO→P16-05 | 原生 PKCE（S256）全流程通过（P01-02；SSO/社交扩展由 P16-05 承接） | VERIFIED |
 
 ## K. RBAC 与 API 契约（§31—§33）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-01，REQ-33-02 → VERIFIED；此前 P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-02，REQ-30-01 / REQ-30-03 → VERIFIED；此前 P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

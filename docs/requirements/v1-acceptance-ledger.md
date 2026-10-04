@@ -133,7 +133,7 @@
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
 | LED-C-MC-01 | no domain logic in web-only components | REQ-2-06/REQ-49-02 | P00-02/P01-05（P00/P01） | TODO |
-| LED-C-MC-02 | auth flow supports native clients | REQ-30-03 | P01-02（P01） | TODO |
+| LED-C-MC-02 | auth flow supports native clients | REQ-30-03 | P01-02（P01） | VERIFIED（2026-10-04：PKCE S256 + 轮换令牌全流程真实测试；证据：docs/verification/P01-02.md） |
 | LED-C-MC-03 | revision-based edits | REQ-23-04/REQ-29-05 | P02-02（P02） | TODO |
 | LED-C-MC-04 | realtime event protocol | REQ-29-06 | P02-06（P02） | TODO |
 | LED-C-MC-05 | shared SDK | REQ-29-04 | P01-05（P01） | TODO |
