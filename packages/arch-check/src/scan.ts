@@ -25,16 +25,20 @@ async function readPackage(dir: string, rootDir: string): Promise<WorkspacePacka
   if (typeof name !== 'string' || name.length === 0) return null;
 
   const deps: Record<string, string> = {};
+  const prodDeps = new Set<string>();
   for (const field of ['dependencies', 'devDependencies'] as const) {
     const candidate = obj[field];
     if (typeof candidate === 'object' && candidate !== null) {
       for (const [dep, version] of Object.entries(candidate as Record<string, unknown>)) {
-        if (typeof version === 'string') deps[dep] = version;
+        if (typeof version === 'string') {
+          deps[dep] = version;
+          if (field === 'dependencies') prodDeps.add(dep);
+        }
       }
     }
   }
 
-  return { name, dir: toPosix(relative(rootDir, dir)), deps };
+  return { name, dir: toPosix(relative(rootDir, dir)), deps, prodDeps };
 }
 
 async function listDirs(dir: string): Promise<string[]> {

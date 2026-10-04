@@ -39,4 +39,10 @@ describe('scanWorkspace', () => {
     const web = pkgs.find((p) => p.name === '@ancs/web');
     expect(web?.deps).toEqual({ '@ancs/sdk': 'workspace:*', vite: '^6.0.0' });
   });
+
+  it('prodDeps 只包含 dependencies（不含 devDependencies）', async () => {
+    const pkgs = await scanWorkspace(root);
+    const web = pkgs.find((p) => p.name === '@ancs/web');
+    expect([...(web?.prodDeps ?? [])]).toEqual(['@ancs/sdk']);
+  });
 });

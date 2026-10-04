@@ -8,7 +8,26 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ancs
+          POSTGRES_PASSWORD: ancs
+          POSTGRES_DB: ancs_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ancs -d ancs_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      ANCS_TEST_DATABASE_URL: postgres://ancs:ancs@localhost:5432/ancs_dev
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,5 +43,5 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Verify（lint → typecheck → build → arch:check → 测试套件）
+      - name: Verify（secrets → lint → typecheck → build → arch:check → 测试套件）
         run: pnpm verify

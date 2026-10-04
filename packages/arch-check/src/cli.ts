@@ -19,4 +19,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log('[arch-check] 依赖方向检查通过（R1—R6）。');
+console.log('[arch-check] 依赖方向检查通过（R1—R8）。');

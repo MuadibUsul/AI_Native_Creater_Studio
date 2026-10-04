@@ -1,0 +1,23 @@
+# 本地开发依赖服务（P00-03 引入；生产部署见 P08 / 计划 §3.1）
+# 端口故意使用非默认值，避免与本机已运行的其他项目服务冲突。
+#   docker compose -f infra/docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ancs-dev-db
+    environment:
+      POSTGRES_USER: ancs
+      POSTGRES_PASSWORD: ancs
+      POSTGRES_DB: ancs_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - ancs_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ancs -d ancs_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  ancs_dev_pgdata:

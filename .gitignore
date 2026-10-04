@@ -23,3 +23,6 @@ Thumbs.db
 # 测试与临时产物
 *.tmp
 tmp/
+
+# 渲染/验证产物（证据路径记录在 docs/verification/，产物本体不入库）
+.artifacts/

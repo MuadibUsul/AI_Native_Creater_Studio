@@ -16,11 +16,12 @@ V1 主链路：**Article / Research → Professional Long Video**。
 
 ## 快速开始
 
-要求：Node ≥ 22、pnpm 9。
+要求：Node ≥ 22、pnpm 9；集成测试需要本地 PostgreSQL（Docker 提供）。
 
 ```bash
 pnpm install
-pnpm verify                  # lint → typecheck → build → arch:check → 已实现的测试套件
+docker compose -f infra/docker-compose.dev.yml up -d   # 本地 PostgreSQL（端口 55432）
+pnpm verify                  # secrets → lint → typecheck → build → arch:check → 全部测试套件（含真实渲染）
 pnpm test:provider-smoke     # 真实 Provider smoke（默认关闭，需显式开启与凭据，会产生费用）
 ```
 
@@ -32,9 +33,11 @@ pnpm test:provider-smoke     # 真实 Provider smoke（默认关闭，需显式�
 | `pnpm secrets:check` | 仓库 Secret 扫描（禁止凭据入库，REQ-43-06） |
 | `pnpm typecheck` | 全工作区严格类型检查 |
 | `pnpm build` | 全工作区构建 |
-| `pnpm arch:check` | 依赖方向强制检查（R1—R6，见 `packages/arch-check`） |
-| `pnpm test:unit` | 单元测试（Vitest） |
-| `pnpm test:contract` / `test:integration` / `test:e2e` / `test:security` / `test:render` / `test:golden` | 分层测试套件；未实现阶段以 `[PLANNED]` 显式占位，不伪造通过 |
+| `pnpm arch:check` | 依赖方向强制检查（R1—R8，见 `packages/arch-check`） |
+| `pnpm test:unit` | 单元测试（Vitest；含 Fastify inject 路由测试与 SDK↔API 往返） |
+| `pnpm test:integration` | 真实 PostgreSQL 集成测试（事务/回滚/乐观并发原语） |
+| `pnpm test:render` | 真实 Remotion 渲染（预览静帧 PNG + MP4 元数据校验；本机 Chrome 复用或自动下载 Headless Shell） |
+| `pnpm test:contract` / `test:e2e` / `test:security` / `test:golden` | 尚未实现的套件以 `[PLANNED]` 显式占位，不伪造通过 |
 | `pnpm test:provider-smoke` | 真实 Provider smoke，单独开启 |
 | `pnpm verify` | 默认验证入口，不产生真实 Provider 费用 |
 
