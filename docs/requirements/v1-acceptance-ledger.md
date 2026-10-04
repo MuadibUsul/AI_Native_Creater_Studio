@@ -79,7 +79,7 @@
 | LED-C-DOM-05 | Scene | REQ-22-03 | P02-01（P02） | VERIFIED（2026-10-04：scenes 规范化表 + 独立 revision + Graph 组装） |
 | LED-C-DOM-06 | Asset | REQ-22-04 | P02-04（P02） | TODO |
 | LED-C-DOM-07 | Version | REQ-23-03 | P02-03（P02） | TODO |
-| LED-C-DOM-08 | Edit Event | REQ-23-02 | P02-02（P02） | TODO |
+| LED-C-DOM-08 | Edit Event | REQ-23-02 | P02-02（P02） | VERIFIED（2026-10-04：edit_events 全字段 + base/result revision + 同事务 Outbox；证据：docs/verification/P02-02.md） |
 | LED-C-DOM-09 | Job | REQ-19-01 | P03-01（P03） | TODO |
 | LED-C-DOM-10 | Provider Generation | REQ-25-01 | P03-05（P03） | TODO |
 
@@ -110,7 +110,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO |
+| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO（进度：API/编辑协议幂等已锁定（AC-03，P02-02）；账本结算幂等待 P03-05） |
 | LED-C-REL-02 | retry policy | REQ-19-03/REQ-71-01 | P03-02（P03） | TODO |
 | LED-C-REL-03 | provider concurrency limiter | REQ-19-03/REQ-19-04 | P03-01/P03-03（P03） | TODO |
 | LED-C-REL-04 | result persistence | REQ-45-02/REQ-71-01 | P03-06（P03） | TODO |
@@ -134,7 +134,7 @@
 |---|---|---|---|---|
 | LED-C-MC-01 | no domain logic in web-only components | REQ-2-06/REQ-49-02 | P00-02/P01-05（P00/P01） | TODO |
 | LED-C-MC-02 | auth flow supports native clients | REQ-30-03 | P01-02（P01） | VERIFIED（2026-10-04：PKCE S256 + 轮换令牌全流程真实测试；证据：docs/verification/P01-02.md） |
-| LED-C-MC-03 | revision-based edits | REQ-23-04/REQ-29-05 | P02-02（P02） | TODO |
+| LED-C-MC-03 | revision-based edits | REQ-23-04/REQ-29-05 | P02-02（P02） | VERIFIED（2026-10-04：条件更新 + 409 刷新信息，服务与 HTTP 双层锁定） |
 | LED-C-MC-04 | realtime event protocol | REQ-29-06 | P02-06（P02） | TODO |
 | LED-C-MC-05 | shared SDK | REQ-29-04 | P01-05（P01） | VERIFIED（2026-10-04：@ancs/sdk 全量资源面，双认证模式） |
 | LED-C-MC-06 | no browser-only asset model | REQ-26-02/REQ-63-01 | P02-04（P02） | TODO |

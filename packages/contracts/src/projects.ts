@@ -4,6 +4,7 @@ import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { revisionSchema } from './common/revision.js';
 import { sceneDraftSchema } from './edits.js';
+import { editEventSchema } from './history.js';
 import { sceneSchema } from './scene-graph.js';
 
 /**
@@ -102,3 +103,12 @@ export const createSceneResponseSchema = z.object({
 });
 
 export type CreateSceneResponse = z.infer<typeof createSceneResponseSchema>;
+
+/** 编辑事务的服务端权威结果：新项目状态 + 全量场景（编辑后）+ 本次 EditEvent */
+export const editResponseSchema = z.object({
+  project: projectSchema,
+  scenes: z.array(sceneSchema),
+  editEvents: z.array(editEventSchema),
+});
+
+export type EditResponse = z.infer<typeof editResponseSchema>;

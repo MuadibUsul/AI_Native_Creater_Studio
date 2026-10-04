@@ -21,5 +21,13 @@ export const requestIdSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/, 'requestId 仅允许字母数字与 . _ : -');
 
-/** 幂等键（写请求）；语义见计划 §4.6 */
-export const idempotencyKeySchema = z.string().min(8).max(200);
+/**
+ * 幂等键（写请求）；语义见计划 §4.6。
+ * 限定 ASCII 可打印字符：该值经 Idempotency-Key 请求头传输（HTTP 头为 ByteString 语义，
+ * 非 Latin-1 字符会在客户端 Headers 设置或代理层引发错误）。
+ */
+export const idempotencyKeySchema = z
+  .string()
+  .min(8)
+  .max(200)
+  .regex(/^[\x21-\x7E]+$/, 'idempotencyKey 仅允许 ASCII 可打印字符（经请求头传输）');

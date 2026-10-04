@@ -86,6 +86,8 @@ export {
   editOperationSchema,
   EDIT_OPERATION_TYPES,
   sceneDraftSchema,
+  projectChangesSchema,
+  sceneChangesSchema,
   updateProjectOperationSchema,
   updateScriptOperationSchema,
   insertSceneOperationSchema,
@@ -101,7 +103,7 @@ export {
   restoreSceneOperationSchema,
   restoreProjectVersionOperationSchema,
 } from './edits.js';
-export type { EditRequest, EditOperation, EditOperationType } from './edits.js';
+export type { EditRequest, EditOperation, EditOperationType, ProjectChanges, SceneChanges } from './edits.js';
 
 // 认证契约（P01-02）
 export {
@@ -126,6 +128,10 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
+// 编辑历史契约（P02-02 / §23、§24）
+export { EDIT_ACTOR_TYPES, editEventSchema } from './history.js';
+export type { EditEvent } from './history.js';
+
 // Project / Scene 契约（P02-01 / §22.3、§19.1）
 export {
   PROJECT_STATUSES,
@@ -138,6 +144,7 @@ export {
   createProjectRequestSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
+  editResponseSchema,
 } from './projects.js';
 export type {
   ProjectStatus,
@@ -148,6 +155,7 @@ export type {
   CreateProjectRequest,
   CreateSceneRequest,
   CreateSceneResponse,
+  EditResponse,
 } from './projects.js';
 
 // 扩展架构契约（P01-06 / §92）

@@ -3,7 +3,12 @@ import { idempotencyKeySchema } from './common/http.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { revisionSchema } from './common/revision.js';
 import { durationMsSchema, videoMsSchema } from './common/time.js';
-import { dataBindingSchema, providerRequirementSchema, sourceBindingSchema } from './scene-graph.js';
+import {
+  dataBindingSchema,
+  providerRequirementSchema,
+  sceneTransitionSchema,
+  sourceBindingSchema,
+} from './scene-graph.js';
 
 /**
  * 编辑协议契约（计划 §4.6）：客户端不得提交任意数据库补丁，只能提交显式类型的操作。
@@ -37,6 +42,40 @@ export type EditOperationType = (typeof EDIT_OPERATION_TYPES)[number];
 
 const changesSchema = z.record(z.string(), z.unknown());
 
+/**
+ * 类型化的变更补丁（§4.6：不允许客户端提交任意数据库补丁）：
+ * 仅白名单字段可改；strict() 拒绝未知字段。
+ */
+export const projectChangesSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    targetDurationMs: z.number().int().positive().nullable(),
+  })
+  .partial()
+  .strict();
+
+export type ProjectChanges = z.infer<typeof projectChangesSchema>;
+
+export const sceneChangesSchema = z
+  .object({
+    narration: z.string(),
+    visualIntent: z.string(),
+    sceneType: z.string().min(1),
+    semanticType: z.string().min(1),
+    durationMs: durationMsSchema,
+    componentId: z.string().nullable(),
+    componentVersion: z.string().nullable(),
+    props: z.record(z.string(), z.unknown()),
+    providerRequirement: providerRequirementSchema.nullable(),
+    transition: sceneTransitionSchema,
+    sourceBindings: z.array(sourceBindingSchema),
+    dataBindings: z.array(dataBindingSchema),
+  })
+  .partial()
+  .strict();
+
+export type SceneChanges = z.infer<typeof sceneChangesSchema>;
+
 /** 插入场景时的草稿（可复用部分保留：组件/Provider 需求/绑定与叙事信息） */
 export const sceneDraftSchema = z.object({
   sceneType: z.string().min(1),
@@ -54,7 +93,7 @@ export const sceneDraftSchema = z.object({
 
 export const updateProjectOperationSchema = z.object({
   op: z.literal('update_project'),
-  changes: changesSchema,
+  changes: projectChangesSchema,
 });
 
 export const updateScriptOperationSchema = z.object({
@@ -74,7 +113,7 @@ export const insertSceneOperationSchema = z.object({
 export const updateSceneOperationSchema = z.object({
   op: z.literal('update_scene'),
   sceneId: opaqueIdSchema,
-  changes: changesSchema,
+  changes: sceneChangesSchema,
 });
 
 export const deleteSceneOperationSchema = z.object({
@@ -163,6 +202,8 @@ export const editRequestSchema = z.object({
   operations: z.array(editOperationSchema).min(1),
   /** 幂等键：同一 key + 同一请求摘要返回原结果；同 key 不同请求返回 IDEMPOTENCY_CONFLICT */
   idempotencyKey: idempotencyKeySchema,
+  /** 自然语言意图（可空；写入 EditEvent 供 History 展示，§5.7） */
+  intent: z.string().max(500).optional(),
 });
 
 export type EditRequest = z.infer<typeof editRequestSchema>;

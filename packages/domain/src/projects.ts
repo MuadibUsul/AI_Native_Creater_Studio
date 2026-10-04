@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import {
   ApiFailure,
   channelStyleDefaultsSchema,
+  createSceneRequestSchema,
+  editRequestSchema,
   ERROR_CODES,
   sceneGraphSchema,
-  sceneSchema,
   V1_DEFAULT_FORMAT,
   type CreateProjectRequest,
   type CreateSceneRequest,
@@ -26,6 +27,8 @@ import {
   voiceIdentities,
 } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { processEdits } from './edits.js';
+import { toProjectDto, toSceneDto, type ProjectRow } from './mappers.js';
 
 /**
  * Project / Scene 服务（P02-01）。
@@ -61,51 +64,6 @@ const parseResolution = (resolution: string): { width: number; height: number } 
   const [widthText, heightText] = resolution.split('x');
   return { width: Number(widthText), height: Number(heightText) };
 };
-
-type ProjectRow = typeof projects.$inferSelect;
-type SceneRow = typeof scenes.$inferSelect;
-
-const toProjectDto = (row: ProjectRow): Project => ({
-  id: row.id,
-  workspaceId: row.workspaceId,
-  channelId: row.channelId,
-  title: row.title,
-  sourceType: row.sourceType as Project['sourceType'],
-  status: row.status as Project['status'],
-  revision: row.revision,
-  aspectRatio: row.aspectRatio,
-  resolution: row.resolution,
-  fps: row.fps,
-  targetDurationMs: row.targetDurationMs,
-  createdAt: row.createdAt.toISOString(),
-  updatedAt: row.updatedAt.toISOString(),
-});
-
-const toSceneDto = (row: SceneRow): Scene =>
-  sceneSchema.parse({
-    id: row.id,
-    revision: row.revision,
-    position: row.position,
-    startMs: row.startMs,
-    durationMs: row.durationMs,
-    semanticType: row.semanticType,
-    sceneType: row.sceneType,
-    narrationBlockIds: row.narrationBlockIds,
-    narration: row.narration,
-    visualIntent: row.visualIntent,
-    componentId: row.componentId,
-    componentVersion: row.componentVersion,
-    props: row.props,
-    providerRequirement: row.providerRequirement,
-    sourceBindings: row.sourceBindings,
-    dataBindings: row.dataBindings,
-    assetBindings: row.assetBindings,
-    transition: row.transition,
-    locked: row.locked,
-    approved: row.approved,
-    needsReview: row.needsReview,
-    status: row.status,
-  });
 
 async function loadProjectRow(db: NodePgDatabase, workspaceId: string, projectId: string): Promise<ProjectRow> {
   const rows = await db
@@ -225,85 +183,47 @@ export async function getProjectDetail(
 }
 
 /**
- * 追加 Scene（P02-01 基础形态）：
- * - position 追加到末尾；startMs 与前序场景**无间隙相接**（SceneGraph 时间线不变量）；
- * - Project 行锁保证并发追加的 position/startMs 不互相覆盖；
- * - Project 聚合 revision +1（§4.1）。统一操作协议与预期 revision 校验见 P02-02。
+ * 追加 Scene（P02-01 对外形态；P02-02 起经统一编辑协议实现）：
+ * 构造单操作 insert_scene（afterSceneId = 末尾）走 processEdits ——
+ * 保留"追加到末尾 + position/startMs 相接 + revision+1"语义，
+ * 同时获得并发控制（base revision 精确匹配）、EditEvent 与 Outbox。
  */
 export async function addScene(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; input: CreateSceneRequest },
 ): Promise<{ project: Project; scene: Scene }> {
-  await loadProjectRow(deps.db, input.workspaceId, input.projectId);
+  const project = await getProject(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+  const lastRows = await deps.db
+    .select({ id: scenes.id })
+    .from(scenes)
+    .where(and(eq(scenes.projectId, input.projectId), eq(scenes.workspaceId, input.workspaceId)))
+    .orderBy(desc(scenes.position))
+    .limit(1);
 
-  let createdSceneId = '';
-  const updatedProject = await deps.db.transaction(async (tx) => {
-    await tx.execute(sql`select id from projects where id = ${input.projectId} for update`);
-
-    const freshRows = await tx
-      .select()
-      .from(projects)
-      .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId)))
-      .limit(1);
-    const fresh = freshRows[0];
-    if (!fresh) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-
-    const aggregateRows = await tx
-      .select({
-        nextPosition: sql<number>`coalesce(max(${scenes.position}), -1) + 1`,
-        endMs: sql<number>`coalesce(sum(${scenes.durationMs}), 0)`,
-      })
-      .from(scenes)
-      .where(eq(scenes.projectId, input.projectId));
-    const nextPosition = aggregateRows[0]?.nextPosition ?? 0;
-    const startMs = aggregateRows[0]?.endMs ?? 0;
-
-    createdSceneId = newId('scn');
-    const now = new Date();
-    await tx.insert(scenes).values({
-      id: createdSceneId,
-      workspaceId: input.workspaceId,
-      projectId: input.projectId,
-      revision: 1,
-      position: Number(nextPosition),
-      startMs: Number(startMs),
-      durationMs: input.input.durationMs,
-      semanticType: input.input.semanticType,
-      sceneType: input.input.sceneType,
-      narrationBlockIds: [],
-      narration: input.input.narration ?? '',
-      visualIntent: input.input.visualIntent ?? '',
-      componentId: input.input.componentId ?? null,
-      componentVersion: input.input.componentVersion ?? null,
-      props: input.input.props ?? {},
-      providerRequirement: input.input.providerRequirement ?? null,
-      sourceBindings: input.input.sourceBindings ?? [],
-      dataBindings: input.input.dataBindings ?? [],
-      assetBindings: [],
-      transition: { in: null, out: null },
-      locked: false,
-      approved: false,
-      needsReview: false,
-      status: 'EMPTY',
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const bumped = await tx
-      .update(projects)
-      .set({ revision: fresh.revision + 1, updatedAt: now })
-      .where(eq(projects.id, input.projectId))
-      .returning();
-    const bumpedRow = bumped[0];
-    if (!bumpedRow) throw new ApiFailure(ERROR_CODES.INTERNAL, 'project update failed', 500);
-    return bumpedRow;
+  const request = editRequestSchema.parse({
+    baseProjectRevision: project.revision,
+    expectedSceneRevisions: {},
+    operations: [
+      {
+        op: 'insert_scene',
+        afterSceneId: lastRows[0]?.id ?? null,
+        sceneDraft: createSceneRequestSchema.parse(input.input),
+      },
+    ],
+    idempotencyKey: `idem_add_scene_${randomUUID()}`,
   });
 
-  const sceneRows = await deps.db.select().from(scenes).where(eq(scenes.id, createdSceneId)).limit(1);
-  const sceneRow = sceneRows[0];
-  if (!sceneRow) throw new ApiFailure(ERROR_CODES.INTERNAL, 'scene insert failed', 500);
+  const result = await processEdits(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    actor: { type: 'SYSTEM', id: null },
+    request,
+  });
 
-  return { project: toProjectDto(updatedProject), scene: toSceneDto(sceneRow) };
+  const createdId = result.createdSceneIds[0];
+  const createdScene = result.response.scenes.find((scene) => scene.id === createdId);
+  if (!createdScene) throw new ApiFailure(ERROR_CODES.INTERNAL, 'insert_scene 结果缺失', 500);
+  return { project: result.response.project, scene: createdScene };
 }
 
 /** 组装 SceneGraph：DB 规范化状态 → 契约校验通过的合法 Graph（P02-01 验收核心）。 */

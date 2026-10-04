@@ -29,7 +29,13 @@ export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void 
   app.addHook('preHandler', async (request, reply) => {
     if (!MUTATING_METHODS.has(request.method)) return;
 
-    const rawKey = request.headers['idempotency-key'];
+    // 幂等键来源：请求头优先；其次请求体内的 idempotencyKey（编辑协议 §4.6 的信封字段）
+    const headerKey = request.headers['idempotency-key'];
+    const bodyKey =
+      typeof request.body === 'object' && request.body !== null && 'idempotencyKey' in request.body
+        ? (request.body as { idempotencyKey?: unknown }).idempotencyKey
+        : undefined;
+    const rawKey: unknown = headerKey ?? bodyKey;
     if (rawKey === undefined) return;
     if (typeof rawKey !== 'string' || !idempotencyKeySchema.safeParse(rawKey).success) {
       throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'Idempotency-Key 非法（8—200 字符）', 400);

@@ -294,6 +294,16 @@ describe('租户隔离（AC-01：跨租户一律拒绝）', () => {
         url: `/api/v1/projects/${projectId}/scenes`,
         payload: { sceneType: 'SUMMARY', semanticType: 'SUMMARY', durationMs: 5000 },
       },
+      {
+        method: 'POST',
+        url: `/api/v1/projects/${projectId}/edits`,
+        payload: {
+          baseProjectRevision: 1,
+          expectedSceneRevisions: {},
+          operations: [{ op: 'update_project', changes: { title: '越权改名' } }],
+          idempotencyKey: 'idem_sec_probe_01',
+        },
+      },
     ];
     for (const attempt of attempts) {
       const response = await app.inject({

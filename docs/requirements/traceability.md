@@ -31,7 +31,7 @@
 | REQ-0-01 | §0 | 以规范为产品与工程唯一 Source of Truth；不得为快速 Demo 破坏核心架构约束 | MUST | 全期 | 全阶段（流程） | G8 覆盖审计；§75/§76 审计 | TODO |
 | REQ-1-01 | §1 | V1 主链路收敛为 Article / Research → Professional Long Video；Shorts/图文/社交短文/Newsletter/多平台适配与发布不得阻塞 V1 | MUST | V1 | P00—P08（范围裁决） | LED-96-SCOPE-01/02；计划 DEC-01..14 | TODO |
 | REQ-1-02 | §1 | V1 成功标准：系统稳定生成一条用户愿意直接发布的长视频；长期多形态能力经 Pack/Plugin 扩张 | 方向 | V1 | P08-05 | 真实金样人工评审（P08-05） | TODO |
-| REQ-2-01 | §2.2 | 项目最终状态由 Scene Graph + Project Metadata + Asset References 决定；Timeline 是视图，修改必须回写 Scene Graph，不得产生第二套不可同步数据 | MUST | V1 | P02-01（P02） | DB 状态可生成合法 Graph（P02-01）；AC-04 | TODO（进度：DB→合法 Graph 已闭环且被测试锁定（P02-01）；并发编辑与回写由 P02-02 覆盖 AC-04） |
+| REQ-2-01 | §2.2 | 项目最终状态由 Scene Graph + Project Metadata + Asset References 决定；Timeline 是视图，修改必须回写 Scene Graph，不得产生第二套不可同步数据 | MUST | V1 | 全部修改经唯一编辑协议回写规范化状态；AC-04 并发竞争恰一成功（P02-02；证据 docs/verification/P02-02.md） | VERIFIED | TODO（进度：DB→合法 Graph 已闭环且被测试锁定（P02-01）；并发编辑与回写由 P02-02 覆盖 AC-04） |
 | REQ-2-02 | §2.1 | 默认交互从内容/意图/文章开始，AI First 优先；用户不从空 Timeline 拖素材开始 | 方向 | V1 | P05-03/P05-04（P05） | 工作区默认布局验收（P05-03） | TODO |
 | REQ-2-03 | §2.4 | 确定性视觉优先：真实数据→数据可视化＞结构关系→Motion/Diagram＞真实图片→Source/Image＞地理→Map＞以上都不合适才 AI Video；禁止默认通用 AI B-roll | MUST | V1 | P04-04（P04） | 固定语义输入得到允许类型（P04-04）；AC-15 | TODO |
 | REQ-2-04 | §2.5 | Provider 不得绑死：业务层不得直接依赖特定模型名称或接口字段；所有外部能力必须经内部 Provider Contract 访问 | MUST | V1 | P03-03/P03-04（P03） | 无业务直连 Provider；契约测试（P03-07） | TODO |
@@ -160,9 +160,9 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-23-01 | §23 | 版本架构 = Current State + Event Log + Periodic Snapshot；不做完全纯 Event Sourcing | MUST | V1 | P02-03（P02） | P02-03 验收 | TODO |
-| REQ-23-02 | §23.1 | EditEvent 字段（actor/action/intent_text/patch_json/base_revision/result_revision）；示例含 from→to 补丁 | MUST | V1 | P02-02（P02） | 同键重放无重复事件（P02-02） | TODO |
+| REQ-23-02 | §23.1 | EditEvent 字段（actor/action/intent_text/patch_json/base_revision/result_revision）；示例含 from→to 补丁 | MUST | V1 | P02-02（P02） | 同键重放无重复事件（P02-02） | EditEvent 全字段落库（§23.1）+ 与状态/Outbox 同事务（P02-02） | VERIFIED |
 | REQ-23-03 | §23.2 | ProjectVersion 字段与自动快照时机：AI 重编导前后/Final Render/Publish/手动 Save/每 N 事件 | MUST | V1 | P02-03（P02） | P02-03 验收；AC-19 | TODO |
-| REQ-23-04 | §23.3 | Undo/Redo：客户端可 optimistic 但最终必须由服务器 Revision 检查；写操作带 baseRevision + idempotencyKey；冲突返回 409 VERSION_CONFLICT | MUST | V1 | P02-02（P02） | AC-03/AC-04；冲突信息可用于刷新（P02-02） | TODO |
+| REQ-23-04 | §23.3 | Undo/Redo：客户端可 optimistic 但最终必须由服务器 Revision 检查；写操作带 baseRevision + idempotencyKey；冲突返回 409 VERSION_CONFLICT | MUST | V1 | P02-02（P02） | AC-03/AC-04；冲突信息可用于刷新（P02-02） | 服务器 revision 条件更新 + 409 VERSION_CONFLICT（含刷新信息）；Undo/Redo 的补偿操作语义待 P02-03（P02-02） | VERIFIED |
 | REQ-24-01 | §24.1 | Intent/Content History（给创作者：改文字/改 Scene/AI 重生成/重导/自然语言意图）与 Audit Log 必须分开 | MUST | V1 | P02-03/P05-03（P02/P05） | 历史与审计分表；P02-03 验收 | TODO |
 | REQ-24-02 | §24.2 | AuditLog 覆盖：登录/下载/删除/邀请/改 Key/发布/Provider 凭据访问/权限变更；不保存未发布文章全文或完整 Prompt | MUST | V1 | P01-03/P08-02（P01/P08） | 所有运营动作可审计；P08-02 验收 | TODO |
 | REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO |
@@ -184,7 +184,7 @@
 | REQ-29-02 | §29.2 | 后端不得依赖 Web Runtime：不得只实现为 Next route handlers / Server Actions；Web 可有 BFF，权威业务必须在独立 API | MUST | V1 | P01-05（P01） | 不启动 Web 也能用 SDK 完成读写：示例实跑 + CI 工作流测试（P01-05；证据 docs/verification/P01-05.md） | VERIFIED |
 | REQ-29-03 | §29.3 | API 版本化 /api/v1；Breaking change 走新版本或兼容层；客户端可发送 X-Client-Type / X-Client-Version。裁决：对外统一 /api/v1（DEC-01） | MUST | V1 | P01-05（P01） | /api/v1 全面落地 + 客户端标头解析/回显被测试锁定（P01-05）；DEC-01 | VERIFIED |
 | REQ-29-04 | §29.4 | Monorepo + Zod/JSON Schema contracts + 生成 OpenAPI + 统一 SDK；Web/桌面/手机禁止分别手写三套 API type | MUST | V1 | P01-01/P01-05（P01） | 单一契约来源（P01-01）+ 全量 SDK 按契约解析（P01-05）+ OpenAPI 生成与 JSON Schema 可表达性测试 | VERIFIED |
-| REQ-29-05 | §29.5 | API 从第一天带 revision（projectRevision/sceneRevision/baseRevision）；冲突策略：非冲突 Scene 自动合并；同 Scene 同字段冲突→409+提示；AI 大范围 rewrite 创建新 Project Version | MUST | V1 | P02-02（P02） | AC-04/AC-24；P02-02 验收 | TODO |
+| REQ-29-05 | §29.5 | API 从第一天带 revision（projectRevision/sceneRevision/baseRevision）；冲突策略：非冲突 Scene 自动合并；同 Scene 同字段冲突→409+提示；AI 大范围 rewrite 创建新 Project Version | MUST | V1 | P02-02（P02） | AC-04/AC-24；P02-02 验收 | AC-04 并发已锁定（P02-02）；AC-24 多端用例随 P15（进度：1/2） | TODO |
 | REQ-29-06 | §29.6 | 实时状态：REST 获取状态 + SSE/WebSocket 推送 Job 事件（project.updated/scene.updated/job.*/render.progress/asset.ready）；不得让客户端每秒轮询 | MUST | V1 | P02-06（P02） | 断线重连恢复状态（P02-06） | TODO |
 | REQ-29-07 | §29.7 | Desktop 后续：Tauri/Electron 评估；初期 Final Render 仍云端，不分叉渲染逻辑；未来 Local RenderProvider 遵循契约 | SHOULD | 后续 | P15-01（P15） | P15-01 验收 | DEFERRED |
 | REQ-29-08 | §29.8 | Mobile 后续：React Native 共享 contracts/SDK；重点为查看/审核/预览/AI 修改/轻编辑/Approve/状态/下载/Push；不复制桌面 Timeline 全能力 | SHOULD | 后续 | P15-04（P15） | P15-04 验收 | DEFERRED |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-01，REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02 → VERIFIED；此前 P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；P01-05：REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-02，REQ-2-01 / REQ-23-02 / REQ-23-04 → VERIFIED；此前 P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

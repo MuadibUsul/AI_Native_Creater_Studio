@@ -7,6 +7,8 @@ import {
   createProjectRequestSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
+  editRequestSchema,
+  editResponseSchema,
   ERROR_CODES,
   errorEnvelopeSchema,
   opaqueIdSchema,
@@ -21,6 +23,7 @@ import {
   createProject,
   getProjectDetail,
   listProjects,
+  processEdits,
   type DomainDeps,
 } from '@ancs/domain';
 import { projects as projectsTable } from '@ancs/db';
@@ -46,7 +49,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
     request: FastifyRequest,
     projectId: string,
     capability: 'project:read' | 'project:write',
-  ): Promise<string> {
+  ): Promise<{ workspaceId: string; userId: string }> {
     const rows = await deps.db
       .select({ workspaceId: projectsTable.workspaceId })
       .from(projectsTable)
@@ -54,8 +57,8 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
       .limit(1);
     const row = rows[0];
     if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-    await app.requireWorkspace(request, row.workspaceId, capability);
-    return row.workspaceId;
+    const { context } = await app.requireWorkspace(request, row.workspaceId, capability);
+    return { workspaceId: row.workspaceId, userId: context.userId };
   }
 
   typed.post(
@@ -108,7 +111,7 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
       },
     },
     async (request) => {
-      const workspaceId = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
       return getProjectDetail(domain, { workspaceId, projectId: request.params.projectId });
     },
   );
@@ -124,8 +127,36 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
       },
     },
     async (request) => {
-      const workspaceId = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
       return assembleSceneGraph(domain, { workspaceId, projectId: request.params.projectId });
+    },
+  );
+
+  typed.post(
+    '/projects/:projectId/edits',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '统一编辑协议（§4.6）：条件更新 / 幂等（Idempotency-Key）/ EditEvent + Outbox 同事务',
+        params: projectParamsSchema,
+        body: editRequestSchema,
+        response: {
+          200: editResponseSchema,
+          409: errorEnvelopeSchema,
+          501: errorEnvelopeSchema,
+          ...ERROR_RESPONSES,
+        },
+      },
+    },
+    async (request) => {
+      const { workspaceId, userId } = await requireProjectAccess(request, request.params.projectId, 'project:write');
+      const result = await processEdits(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        actor: { type: 'USER', id: userId },
+        request: request.body,
+      });
+      return result.response;
     },
   );
 
@@ -134,14 +165,14 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
     {
       schema: {
         tags: ['projects'],
-        summary: '追加 Scene（P02-01 基础形态；统一操作协议在 P02-02）',
+        summary: '追加 Scene（经统一编辑协议实现：insert_scene 追加到末尾）',
         params: projectParamsSchema,
         body: createSceneRequestSchema,
         response: { 201: createSceneResponseSchema, ...ERROR_RESPONSES },
       },
     },
     async (request, reply) => {
-      const workspaceId = await requireProjectAccess(request, request.params.projectId, 'project:write');
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:write');
       const result = await addScene(domain, {
         workspaceId,
         projectId: request.params.projectId,

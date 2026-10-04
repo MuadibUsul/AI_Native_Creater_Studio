@@ -39,10 +39,12 @@ describe('HTTP 传输约定（§29.3 / §33）', () => {
     expect(requestIdSchema.safeParse('x'.repeat(129)).success).toBe(false);
   });
 
-  it('幂等键长度 8—200', () => {
+  it('幂等键长度 8—200，且仅允许 ASCII 可打印字符（经请求头传输）', () => {
     expect(idempotencyKeySchema.safeParse('idem_workflow_0001').success).toBe(true);
     expect(idempotencyKeySchema.safeParse('short').success).toBe(false);
     expect(idempotencyKeySchema.safeParse('k'.repeat(201)).success).toBe(false);
+    expect(idempotencyKeySchema.safeParse('idem_并发_0001').success).toBe(false);
+    expect(idempotencyKeySchema.safeParse('idem_with space').success).toBe(false);
   });
 });
 

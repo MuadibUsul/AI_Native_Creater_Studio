@@ -28,3 +28,5 @@ export {
   getProjectDetail,
   listProjects,
 } from './projects.js';
+export { processEdits } from './edits.js';
+export type { ProcessEditsInput, ProcessEditsResult } from './edits.js';

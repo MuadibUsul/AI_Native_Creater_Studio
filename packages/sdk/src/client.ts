@@ -7,6 +7,8 @@ import {
   createProjectRequestSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
+  editRequestSchema,
+  editResponseSchema,
   createSpeechProfileRequestSchema,
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
@@ -43,6 +45,8 @@ import {
   type ChannelStyleVersion,
   type CreateSceneResponse,
   type CreatorIdentity,
+  type EditRequest,
+  type EditResponse,
   type Project,
   type ProjectDetail,
   type SceneGraph,
@@ -212,6 +216,8 @@ export interface AncsClient {
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
+    /** 统一编辑协议（§4.6）：条件更新 + EditEvent/Outbox；冲突返回 409 VERSION_CONFLICT */
+    edit(projectId: string, editRequest: EditRequest, options?: MutationOptions): Promise<EditResponse>;
   };
 }
 
@@ -493,6 +499,13 @@ export function createClient(options: ClientOptions): AncsClient {
           body: input,
           bodySchema: createSceneRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
+        }),
+      edit: (projectId, editRequest, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/edits`, editResponseSchema, {
+          body: editRequest,
+          bodySchema: editRequestSchema,
+          // §4.6 的幂等键位于请求信封；SDK 同时镜像到 Idempotency-Key 头
+          idempotencyKey: mutation?.idempotencyKey ?? editRequest.idempotencyKey,
         }),
     },
   };
