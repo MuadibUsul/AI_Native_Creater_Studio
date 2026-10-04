@@ -134,6 +134,25 @@ describe('资产安全（§51：cross-workspace / Signed URL scope / credential 
     expect(confirmFailure).toMatchObject({ status: 403 });
   });
 
+  it('跨租户删除/恢复：他人 Trash 操作一律 404（抗枚举，不泄漏存在性）', async () => {
+    const owner = await newUser();
+    const attacker = await newUser();
+    const workspace = await owner.client.workspaces.create({ name: `trash-sec-${randomUUID().slice(0, 8)}` });
+    const asset = await owner.client.assets.upload(workspace.id, {
+      assetType: 'USER_UPLOAD',
+      filename: 'guarded.png',
+      contentType: 'image/png',
+      data: makePng(),
+    });
+
+    const deleteFailure = await attacker.client.assets.delete(workspace.id, asset.id).catch((error: unknown) => error);
+    expect(deleteFailure).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    const restoreFailure = await attacker.client.assets.restore(workspace.id, asset.id).catch((error: unknown) => error);
+    expect(restoreFailure).toMatchObject({ status: 404 });
+    // 资产未被越权删除
+    expect((await owner.client.assets.get(workspace.id, asset.id)).id).toBe(asset.id);
+  });
+
   it('Signed URL scope：键由服务端签发（无客户端可控参数）；篡改/过期/用途不符一律拒绝', async () => {
     const owner = await newUser();
     const workspace = await owner.client.workspaces.create({ name: `scope-${randomUUID().slice(0, 8)}` });

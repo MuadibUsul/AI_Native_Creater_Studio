@@ -228,7 +228,11 @@ export interface AncsClient {
       input: { title: string; channelId: string; sourceType?: string; aspectRatio?: string },
       options?: MutationOptions,
     ): Promise<ProjectDetail>;
-    list(workspaceId: string): Promise<Project[]>;
+    list(workspaceId: string, query?: { trashed?: boolean }): Promise<Project[]>;
+    /** 软删除（Trash，保留 30 天；§27） */
+    delete(projectId: string, options?: MutationOptions): Promise<Project>;
+    /** 从 Trash 恢复（保留期内） */
+    restore(projectId: string, options?: MutationOptions): Promise<Project>;
     get(projectId: string): Promise<ProjectDetail>;
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
@@ -260,7 +264,11 @@ export interface AncsClient {
     ): Promise<UploadIntentResponse>;
     /** 确认上传（服务端真实探测；重复确认幂等） */
     confirm(workspaceId: string, assetId: string, input: ConfirmUploadRequest, options?: MutationOptions): Promise<AssetDetail>;
-    list(workspaceId: string, query?: { projectId?: string; assetType?: string }): Promise<Asset[]>;
+    list(workspaceId: string, query?: { projectId?: string; assetType?: string; trashed?: boolean }): Promise<Asset[]>;
+    /** 软删除资产（Trash，保留 30 天；引用保护由清理流程执行） */
+    delete(workspaceId: string, assetId: string, options?: MutationOptions): Promise<Asset>;
+    /** 从 Trash 恢复资产 */
+    restore(workspaceId: string, assetId: string, options?: MutationOptions): Promise<Asset>;
     get(workspaceId: string, assetId: string): Promise<AssetDetail>;
     /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
     downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
@@ -568,8 +576,14 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createProjectRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      list: async (workspaceId) =>
-        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects`, listOf(projectSchema))).items,
+      list: async (workspaceId, query) => {
+        const suffix = query?.trashed === true ? '?trashed=true' : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/projects${suffix}`, listOf(projectSchema))).items;
+      },
+      delete: (projectId, mutation) =>
+        request('DELETE', `/api/v1/projects/${projectId}`, projectSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      restore: (projectId, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/restore`, projectSchema, { idempotencyKey: mutation?.idempotencyKey }),
       get: (projectId) => request('GET', `/api/v1/projects/${projectId}`, projectDetailSchema),
       graph: (projectId) => request('GET', `/api/v1/projects/${projectId}/graph`, sceneGraphSchema),
       addScene: (projectId, input, mutation) =>
@@ -626,9 +640,18 @@ export function createClient(options: ClientOptions): AncsClient {
         const search = new URLSearchParams();
         if (query?.projectId !== undefined) search.set('projectId', query.projectId);
         if (query?.assetType !== undefined) search.set('assetType', query.assetType);
+        if (query?.trashed === true) search.set('trashed', 'true');
         const suffix = search.size > 0 ? `?${search.toString()}` : '';
         return (await request('GET', `/api/v1/workspaces/${workspaceId}/assets${suffix}`, listOf(assetSchema))).items;
       },
+      delete: (workspaceId, assetId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      restore: (workspaceId, assetId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/restore`, assetSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
       get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),

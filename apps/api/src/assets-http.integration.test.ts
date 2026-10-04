@@ -219,6 +219,39 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(listed[0]?.status).toBe('PENDING_UPLOAD');
   });
 
+  it('Trash：软删 → trashed 视图可见 → 下载 404 → 恢复；项目软删/恢复同理', async () => {
+    const client = await newSignedInClient();
+    const workspaceId = await makeWorkspace(client);
+    const asset = await client.assets.upload(workspaceId, {
+      assetType: 'USER_UPLOAD',
+      filename: 'trash-me.png',
+      contentType: 'image/png',
+      data: makePng(24, 24),
+    });
+
+    const deleted = await client.assets.delete(workspaceId, asset.id);
+    expect(deleted.id).toBe(asset.id);
+    expect(await client.assets.list(workspaceId)).toHaveLength(0);
+    expect((await client.assets.list(workspaceId, { trashed: true })).map((row) => row.id)).toEqual([asset.id]);
+    const gone = await client.assets.get(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(gone).toMatchObject({ status: 404 });
+
+    const restored = await client.assets.restore(workspaceId, asset.id);
+    expect(restored.id).toBe(asset.id);
+    expect(await client.assets.list(workspaceId)).toHaveLength(1);
+
+    // 项目：软删 → trashed 视图 → 读写 404 → 恢复
+    const project = await client.projects.create(workspaceId, { title: 'Trash 项目', channelId: (await client.channels.create(workspaceId, { name: '栏目' })).id });
+    await client.projects.delete(project.id);
+    expect(await client.projects.list(workspaceId)).toHaveLength(0);
+    expect((await client.projects.list(workspaceId, { trashed: true })).map((row) => row.id)).toEqual([project.id]);
+    const projectGone = await client.projects.get(project.id).catch((error: unknown) => error);
+    expect(projectGone).toMatchObject({ status: 404 });
+    const projectRestored = await client.projects.restore(project.id);
+    expect(projectRestored.id).toBe(project.id);
+    expect(await client.projects.list(workspaceId)).toHaveLength(1);
+  });
+
   it('跨租户：他人 workspace 的资产不可确认/查看/取下载链接（404 抗枚举）', async () => {
     const owner = await newSignedInClient();
     const stranger = await newSignedInClient();

@@ -40,6 +40,20 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
+  isAssetBoundToScene,
+  isAssetReferencedByVersionSnapshot,
+  listTrashedAssets,
+  listTrashedProjects,
+  restoreAsset,
+  restoreProject,
+  runRetentionSweep,
+  softDeleteAsset,
+  softDeleteProject,
+  TRASH_RETENTION_DAYS,
+} from './retention.js';
+export type { RetentionConfig, RetentionSweepReport } from './retention.js';
+export {
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,

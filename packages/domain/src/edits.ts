@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   editRequestSchema,
@@ -246,7 +246,7 @@ async function applyEditsInTransaction(
     const projectRows = await tx
       .select()
       .from(projects)
-      .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId)))
+      .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt)))
       .limit(1);
     const project = projectRows[0];
     if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
@@ -922,7 +922,7 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
   const projectRows = await deps.db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId)))
+    .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt)))
     .limit(1);
   const project = projectRows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);

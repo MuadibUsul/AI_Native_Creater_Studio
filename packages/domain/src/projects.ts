@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import {
   ApiFailure,
   channelStyleDefaultsSchema,
@@ -69,7 +69,7 @@ async function loadProjectRow(db: NodePgDatabase, workspaceId: string, projectId
   const rows = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)))
+    .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt)))
     .limit(1);
   const row = rows[0];
   if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
@@ -146,12 +146,17 @@ export async function getProject(
 
 export async function listProjects(
   deps: DomainDeps,
-  input: { workspaceId: string },
+  input: { workspaceId: string; trashed?: boolean },
 ): Promise<Project[]> {
   const rows = await deps.db
     .select()
     .from(projects)
-    .where(eq(projects.workspaceId, input.workspaceId))
+    .where(
+      and(
+        eq(projects.workspaceId, input.workspaceId),
+        input.trashed === true ? isNotNull(projects.deletedAt) : isNull(projects.deletedAt),
+      ),
+    )
     .orderBy(projects.createdAt);
   return rows.map(toProjectDto);
 }

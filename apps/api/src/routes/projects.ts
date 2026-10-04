@@ -31,6 +31,8 @@ import {
   listProjectVersions,
   processEdits,
   redoProject,
+  restoreProject,
+  softDeleteProject,
   undoProject,
   type DomainDeps,
 } from '@ancs/domain';
@@ -58,7 +60,25 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
   async function requireProjectAccess(
     request: FastifyRequest,
     projectId: string,
-    capability: 'project:read' | 'project:write',
+    capability: 'project:read' | 'project:write' | 'project:delete',
+  ): Promise<{ workspaceId: string; userId: string }> {
+    const rows = await deps.db
+      .select({ workspaceId: projectsTable.workspaceId, deletedAt: projectsTable.deletedAt })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+    const row = rows[0];
+    // Trash 中的项目对读/写一律 404（只允许显式恢复端点触达）
+    if (!row || row.deletedAt !== null) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    const { context } = await app.requireWorkspace(request, row.workspaceId, capability);
+    return { workspaceId: row.workspaceId, userId: context.userId };
+  }
+
+  /** 恢复端点专用：允许定位 Trash 中的项目（仍要求 workspace 能力）。 */
+  async function requireProjectAccessIncludingTrashed(
+    request: FastifyRequest,
+    projectId: string,
+    capability: 'project:delete',
   ): Promise<{ workspaceId: string; userId: string }> {
     const rows = await deps.db
       .select({ workspaceId: projectsTable.workspaceId })
@@ -100,12 +120,16 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
         tags: ['projects'],
         summary: 'Project 列表',
         params: wsParamsSchema,
+        querystring: z.object({ trashed: z.enum(['true', 'false']).optional() }),
         response: { 200: projectListSchema, ...ERROR_RESPONSES },
       },
     },
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'project:read');
-      const items = await listProjects(domain, { workspaceId: request.params.id });
+      const items = await listProjects(domain, {
+        workspaceId: request.params.id,
+        trashed: request.query.trashed === 'true',
+      });
       return { items, nextCursor: null };
     },
   );
@@ -292,6 +316,38 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
         actor: { type: 'USER', id: userId },
       });
       return result.response;
+    },
+  );
+
+  typed.delete(
+    '/projects/:projectId',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '软删除 Project（Trash，保留 30 天；期间可恢复，§27）',
+        params: projectParamsSchema,
+        response: { 200: projectSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:delete');
+      return softDeleteProject(domain, { workspaceId, projectId: request.params.projectId });
+    },
+  );
+
+  typed.post(
+    '/projects/:projectId/restore',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '从 Trash 恢复 Project（保留期内）',
+        params: projectParamsSchema,
+        response: { 200: projectSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccessIncludingTrashed(request, request.params.projectId, 'project:delete');
+      return restoreProject(domain, { workspaceId, projectId: request.params.projectId });
     },
   );
 }

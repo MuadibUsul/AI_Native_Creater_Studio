@@ -19,6 +19,8 @@ import {
   createUploadIntent,
   getAsset,
   listAssets,
+  restoreAsset,
+  softDeleteAsset,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
@@ -36,6 +38,8 @@ const assetParamsSchema = z.object({ id: opaqueIdSchema, assetId: opaqueIdSchema
 const assetListQuerySchema = z.object({
   projectId: opaqueIdSchema.optional(),
   assetType: assetTypeSchema.optional(),
+  /** Trash 视图（默认排除已软删资产） */
+  trashed: z.enum(['true', 'false']).optional(),
 });
 const assetListSchema = pageResponseSchema(assetSchema);
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema };
@@ -105,6 +109,7 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         workspaceId: request.params.id,
         projectId: request.query.projectId,
         assetType: request.query.assetType,
+        trashed: request.query.trashed === 'true',
       });
       return { items, nextCursor: null };
     },
@@ -139,6 +144,38 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return createAssetDownloadUrl(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.delete(
+    '/workspaces/:id/assets/:assetId',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '软删除资产（Trash，保留 30 天；引用保护由清理流程执行，§27）',
+        params: assetParamsSchema,
+        response: { 200: assetSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return softDeleteAsset(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/restore',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '从 Trash 恢复资产（保留期内）',
+        params: assetParamsSchema,
+        response: { 200: assetSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return restoreAsset(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
     },
   );
 }

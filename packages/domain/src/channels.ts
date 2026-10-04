@@ -14,6 +14,7 @@ import {
   type UpdateChannelRequest,
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
+import type { RetentionConfig } from './retention.js';
 
 /**
  * Channel 服务（P01-04）。
@@ -33,6 +34,8 @@ export interface DomainDeps {
   storage?: ObjectStorageAdapter;
   /** 上传意图/直传 URL 的 TTL 秒数（§26.1）；默认 15 分钟，测试可调小/构造过期 */
   uploadIntentTtlSeconds?: number;
+  /** 保留策略配置（P02-05）：Trash 天数与幂等键 TTL；默认 30 天 / 24 小时 */
+  retention?: RetentionConfig;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

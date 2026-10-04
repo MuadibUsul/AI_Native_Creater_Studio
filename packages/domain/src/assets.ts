@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ASSET_DEFAULT_RETENTION,
@@ -514,9 +514,12 @@ export async function confirmUpload(
 
 export async function listAssets(
   deps: DomainDeps,
-  input: { workspaceId: string; projectId?: string; assetType?: AssetType },
+  input: { workspaceId: string; projectId?: string; assetType?: AssetType; trashed?: boolean },
 ): Promise<Asset[]> {
-  const conditions = [eq(assets.workspaceId, input.workspaceId), isNull(assets.deletedAt)];
+  const conditions = [
+    eq(assets.workspaceId, input.workspaceId),
+    input.trashed === true ? isNotNull(assets.deletedAt) : isNull(assets.deletedAt),
+  ];
   if (input.projectId !== undefined) conditions.push(eq(assets.projectId, input.projectId));
   if (input.assetType !== undefined) conditions.push(eq(assets.assetType, input.assetType));
   const rows = await deps.db
