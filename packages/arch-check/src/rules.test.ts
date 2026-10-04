@@ -105,14 +105,15 @@ describe('checkRules：架构依赖方向', () => {
     expect(checkRules(devOnly).filter((v) => v.rule === 'R4')).toEqual([]);
   });
 
-  it('R5：web/desktop/mobile 生产依赖仅允许 sdk/contracts/ui/scene-components（裁决 0005）', () => {
+  it('R5：web/desktop/mobile 生产依赖仅允许 sdk/contracts/ui/scene-components/remotion-core（裁决 0005/0006）', () => {
     const pkgs = [
       pkg('@ancs/db', 'packages/db'),
       pkg('@ancs/web', 'apps/web', { '@ancs/db': 'workspace:*' }),
       pkg('@ancs/desktop', 'apps/desktop', { '@ancs/sdk': 'workspace:*' }),
       pkg('@ancs/mobile', 'apps/mobile', { '@ancs/ui': 'workspace:*' }),
-      // 裁决 0005：组件库（预览/编辑单一来源）在生产依赖中被允许
+      // 裁决 0005/0006：组件库与预览时序包（预览/编辑/成片单一来源）在生产依赖中被允许
       pkg('@ancs/web2', 'apps/web', { '@ancs/scene-components': 'workspace:*' }),
+      pkg('@ancs/web3', 'apps/web', { '@ancs/remotion-core': 'workspace:*' }),
     ];
     const rules = checkRules(pkgs).filter((v) => v.rule === 'R5');
     expect(rules).toHaveLength(1);

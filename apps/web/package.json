@@ -19,7 +19,10 @@
     "@tanstack/react-query": "^5.66.0",
     "next": "^15.5.0",
     "zod": "4.6.5",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.3",
+    "@ancs/remotion-core": "workspace:*",
+    "@remotion/player": "4.0.532",
+    "remotion": "4.0.532"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.0",

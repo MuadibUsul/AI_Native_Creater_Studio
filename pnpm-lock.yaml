@@ -124,12 +124,18 @@ importers:
       '@ancs/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ancs/remotion-core':
+        specifier: workspace:*
+        version: link:../../packages/remotion-core
       '@ancs/scene-components':
         specifier: workspace:*
         version: link:../../packages/scene-components
       '@ancs/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
+      '@remotion/player':
+        specifier: 4.0.532
+        version: 4.0.532(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.104.1(react@19.3.0)
@@ -142,6 +148,9 @@ importers:
       react-dom:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
+      remotion:
+        specifier: 4.0.532
+        version: 4.0.532(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -391,6 +400,31 @@ importers:
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/remotion-core:
+    dependencies:
+      '@ancs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ancs/scene-components':
+        specifier: workspace:*
+        version: link:../scene-components
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      remotion:
+        specifier: 4.0.532
+        version: 4.0.532(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3

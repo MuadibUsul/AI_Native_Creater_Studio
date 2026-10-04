@@ -7,7 +7,7 @@
  *  R3 平台中立包（packages/domain、packages/contracts、packages/extensions）不得依赖
  *     next / react / react-dom / @remotion/*（全部依赖）；packages/domain 额外不得依赖 packages/providers/*
  *  R4 packages/providers/* 的【生产】workspace 依赖仅允许 @ancs/contracts、@ancs/domain
- *  R5 apps/web|desktop|mobile 的【生产】workspace 依赖仅允许 @ancs/sdk、@ancs/contracts、@ancs/ui、@ancs/scene-components（裁决 0005）
+ *  R5 apps/web|desktop|mobile 的【生产】workspace 依赖仅允许 @ancs/sdk、@ancs/contracts、@ancs/ui、@ancs/scene-components（裁决 0005）、@ancs/remotion-core（裁决 0006）
  *  R6 workspace 依赖必须指向真实存在的 workspace 包（全部依赖）
  *  R7 apps/api|worker 的【生产】workspace 依赖仅允许 domain/contracts/db 与 packages/providers/*（计划 §3.4）
  *  R8 apps/render-worker|motion-worker 的【生产】workspace 依赖仅允许 contracts/scene-schema/scene-components/remotion-core
@@ -46,6 +46,8 @@ export const WEB_APP_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([
   '@ancs/contracts',
   '@ancs/ui',
   '@ancs/scene-components',
+  // 裁决 0006：Preview 与成片渲染共用时序/Composition（packages/remotion-core）
+  '@ancs/remotion-core',
 ]);
 
 export const PROVIDER_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([

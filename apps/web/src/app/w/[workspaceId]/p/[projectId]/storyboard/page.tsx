@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys, useNarrative, useSceneGraph } from '@/lib/queries';
+import { PreviewPlayer } from '@/ui/PreviewPlayer';
 import { ScenePreview } from '@/ui/ScenePreview';
 import { StateBlock } from '@/ui/StateBlock';
 
@@ -24,6 +25,30 @@ export default function StoryboardPage() {
 
   const graph = useSceneGraph(workspaceId, projectId);
   const narrative = useNarrative(workspaceId, projectId);
+
+  /**
+   * 素材解析（预览用）：assetId → 预览 URL（Signed URL）。
+   * 未解析（未绑定/解析失败）→ 组件自身的明确占位；**解析不触发任何生成调用**。
+   */
+  const assetUrls = useQuery({
+    queryKey: [...queryKeys.assets(workspaceId, projectId), 'preview-urls'],
+    enabled: graph.data !== undefined,
+    queryFn: async () => {
+      const ids = [...new Set((graph.data?.scenes ?? []).flatMap((scene) => scene.assetBindings.map((binding) => binding.assetId)))];
+      const entries = await Promise.all(
+        ids.map(async (assetId) => {
+          try {
+            const response = await client.assets.downloadUrl(workspaceId, assetId);
+            return [assetId, response.url] as const;
+          } catch {
+            return [assetId, null] as const;
+          }
+        }),
+      );
+      return new Map(entries);
+    },
+  });
+  const resolveAssetUrl = (assetId: string): string | null => assetUrls.data?.get(assetId) ?? null;
 
   const applyDirector = useMutation({
     mutationFn: async () => {
@@ -81,6 +106,12 @@ export default function StoryboardPage() {
           project revision {graph.data?.projectRevision} · {scenes.length} 个场景
         </span>
       </div>
+      {/* Preview（P05-04）：Remotion Player 消费 Graph；与成片共用时序映射 */}
+      <section data-testid="preview-panel" className="rounded border border-slate-800 bg-slate-900/60 p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-300">Preview</h2>
+        <PreviewPlayer graph={graph.data} resolveAssetUrl={resolveAssetUrl} width={720} />
+      </section>
+
       <ol className="flex flex-col gap-3">
         {scenes.map((scene) => (
           <li key={scene.id} className="flex gap-4 rounded border border-slate-800 bg-slate-900/60 p-3">
