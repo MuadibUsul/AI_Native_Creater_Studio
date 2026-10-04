@@ -41,6 +41,9 @@ importers:
       '@fastify/swagger':
         specifier: 9.9.1
         version: 9.9.1
+      drizzle-orm:
+        specifier: 0.45.3
+        version: 0.45.3(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
       fastify:
         specifier: 5.12.5
         version: 5.12.5

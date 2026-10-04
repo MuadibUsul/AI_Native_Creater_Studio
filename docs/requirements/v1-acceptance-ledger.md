@@ -34,7 +34,7 @@
 | LED-77-20 | 能生成 Project Manifest | REQ-28-01 | P07-04（P07） | TODO |
 | LED-77-21 | 有 per-generation cost 记录 | REQ-25-01 | P03-05（P03） | TODO |
 | LED-77-22 | 有 Workspace 数据隔离测试 | REQ-43-01/REQ-51-06 | P01-03（P01） | TODO |
-| LED-77-23 | 后端 API 可独立于 Web 被调用 | REQ-29-02 | P01-05（P01） | TODO |
+| LED-77-23 | 后端 API 可独立于 Web 被调用 | REQ-29-02 | P01-05（P01） | VERIFIED（2026-10-04：示例与 CI 均在不启动 Web 下完成授权读写） |
 | LED-77-24 | Shared SDK 可以被未来 Native Client 使用 | REQ-29-04/REQ-63-01 | P01-05（P01） | TODO |
 
 ## 2. §78 Definition of Done — Multi-Client Readiness（11 项）
@@ -42,9 +42,9 @@
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
 | LED-78-01 | 所有业务能力有 REST API | REQ-32-01 | P01-05 起各阶段（P01+） | TODO |
-| LED-78-02 | API 有版本 | REQ-29-03（DEC-01：/api/v1） | P01-05（P01） | TODO |
+| LED-78-02 | API 有版本 | REQ-29-03（DEC-01：/api/v1） | P01-05（P01） | VERIFIED（2026-10-04：全路由 /api/v1 + 客户端标头） |
 | LED-78-03 | Auth 可以支持 Native token flow | REQ-30-03 | P01-02（P01） | TODO |
-| LED-78-04 | 所有 DTO 有 shared schema | REQ-29-04 | P01-01（P01） | TODO |
+| LED-78-04 | 所有 DTO 有 shared schema | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-04：全部 DTO 位于 @ancs/contracts，api/sdk/testing 共用） |
 | LED-78-05 | Asset 上传流程不依赖 browser-only logic | REQ-26-02 | P02-04（P02） | TODO |
 | LED-78-06 | Job progress 有通用事件协议 | REQ-29-06 | P02-06（P02） | TODO |
 | LED-78-07 | Project/Scene 使用 server revision | REQ-29-05 | P02-02（P02） | TODO |
@@ -63,7 +63,7 @@
 | LED-C-ARCH-02 | Web and API are separate apps | REQ-29-02 | P00-02/P01-05（P00/P01） | TODO |
 | LED-C-ARCH-03 | Shared contracts package exists | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-04：@ancs/contracts 正式化，被 api/sdk/testing 共用；证据：docs/verification/P01-01.md） |
 | LED-C-ARCH-04 | OpenAPI generated | REQ-29-04/REQ-33-02 | P01-01（P01） | VERIFIED（2026-10-04 机制已核：/openapi.json 由同一份 Zod 契约生成并被测试断言；内容随 P01 扩展。证据：docs/verification/P00-03.md） |
-| LED-C-ARCH-05 | SDK usable independently | REQ-29-02 | P01-05（P01） | TODO |
+| LED-C-ARCH-05 | SDK usable independently | REQ-29-02 | P01-05（P01） | VERIFIED（2026-10-04：全量 SDK + 独立客户端示例实跑 + CI 工作流测试；证据：docs/verification/P01-05.md） |
 | LED-C-ARCH-06 | PostgreSQL migration system works | REQ-34-01 | P00-02 起（P00/P02） | TODO |
 | LED-C-ARCH-07 | Redis/BullMQ works | REQ-19-05 | P03-01（P03） | TODO |
 | LED-C-ARCH-08 | Object Storage direct upload works | REQ-26-02 | P02-04（P02） | TODO |
@@ -136,7 +136,7 @@
 | LED-C-MC-02 | auth flow supports native clients | REQ-30-03 | P01-02（P01） | VERIFIED（2026-10-04：PKCE S256 + 轮换令牌全流程真实测试；证据：docs/verification/P01-02.md） |
 | LED-C-MC-03 | revision-based edits | REQ-23-04/REQ-29-05 | P02-02（P02） | TODO |
 | LED-C-MC-04 | realtime event protocol | REQ-29-06 | P02-06（P02） | TODO |
-| LED-C-MC-05 | shared SDK | REQ-29-04 | P01-05（P01） | TODO |
+| LED-C-MC-05 | shared SDK | REQ-29-04 | P01-05（P01） | VERIFIED（2026-10-04：@ancs/sdk 全量资源面，双认证模式） |
 | LED-C-MC-06 | no browser-only asset model | REQ-26-02/REQ-63-01 | P02-04（P02） | TODO |
 
 ## 4. §96 v0.2 增量验收清单（21 项）

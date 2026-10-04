@@ -14,6 +14,8 @@ export { pageRequestSchema, pageResponseSchema } from './common/pagination.js';
 export type { PageRequest } from './common/pagination.js';
 export { eventEnvelopeSchema, EVENT_TYPES } from './common/events.js';
 export type { EventEnvelope } from './common/events.js';
+export { CLIENT_TYPES, clientTypeSchema, clientVersionSchema, requestIdSchema, idempotencyKeySchema } from './common/http.js';
+export type { ClientType } from './common/http.js';
 export { errorEnvelopeSchema, ERROR_CODES, versionConflictDetailsSchema, errorEnvelope } from './common/error.js';
 export type { ErrorEnvelope, ErrorCode, VersionConflictDetails } from './common/error.js';
 export { ApiFailure } from './common/failure.js';
@@ -118,6 +120,7 @@ export {
 export type {
   AuthUser,
   SessionInfo,
+  SignInResponse,
   TokenRequest,
   TokenResponse,
   RevokeTokenRequest,
@@ -198,8 +201,5 @@ export {
 } from './workspaces.js';
 export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember } from './workspaces.js';
 
-// 既有接口
 export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
-export { echoRequestSchema, echoResponseSchema } from './echo.js';
-export type { EchoRequest, EchoResponse } from './echo.js';

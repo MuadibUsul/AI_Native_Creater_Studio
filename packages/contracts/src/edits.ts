@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { idempotencyKeySchema } from './common/http.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { revisionSchema } from './common/revision.js';
 import { durationMsSchema, videoMsSchema } from './common/time.js';
@@ -161,7 +162,7 @@ export const editRequestSchema = z.object({
   expectedSceneRevisions: z.record(opaqueIdSchema, revisionSchema).default({}),
   operations: z.array(editOperationSchema).min(1),
   /** 幂等键：同一 key + 同一请求摘要返回原结果；同 key 不同请求返回 IDEMPOTENCY_CONFLICT */
-  idempotencyKey: z.string().min(8).max(200),
+  idempotencyKey: idempotencyKeySchema,
 });
 
 export type EditRequest = z.infer<typeof editRequestSchema>;

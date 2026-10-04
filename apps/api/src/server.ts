@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
-import { API_PREFIX } from '@ancs/contracts';
+import { API_PREFIX, requestIdSchema } from '@ancs/contracts';
 import { registerErrorHandler } from './error-handler.js';
 import { registerAuth, type AuthDeps } from './plugins/auth.js';
+import { registerClientContext } from './plugins/client-context.js';
+import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
-import { registerEchoRoutes } from './routes/echo.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
@@ -29,13 +30,19 @@ export interface BuildServerOptions {
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
-    genReqId: () => `req_${randomUUID()}`,
+    // 请求追踪（§33）：客户端可提供合法 X-Request-Id，否则服务端生成
+    genReqId: (raw) => {
+      const provided = raw.headers['x-request-id'];
+      if (typeof provided === 'string' && requestIdSchema.safeParse(provided).success) return provided;
+      return `req_${randomUUID()}`;
+    },
   });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
   registerErrorHandler(app);
+  registerClientContext(app);
 
   await app.register(swagger, {
     openapi: {
@@ -54,6 +61,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     registerAuth(app, authDeps);
     await app.register(
       async (instance) => {
+        registerIdempotency(instance, authDeps);
         registerAuthRoutes(instance, authDeps);
         registerWorkspaceRoutes(instance, authDeps);
         registerChannelRoutes(instance, authDeps);
@@ -67,7 +75,6 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance);
-      registerEchoRoutes(instance);
     },
     { prefix: API_PREFIX },
   );

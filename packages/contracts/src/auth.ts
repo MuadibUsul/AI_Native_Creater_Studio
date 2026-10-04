@@ -44,6 +44,8 @@ export const signInResponseSchema = z.object({
   user: authUserSchema,
 });
 
+export type SignInResponse = z.infer<typeof signInResponseSchema>;
+
 /** GET /api/v1/auth/authorize（原生 PKCE 第一步；由已登录的 Web 会话发起） */
 export const nativeAuthorizeQuerySchema = z.object({
   responseType: z.literal('code'),

@@ -14,14 +14,21 @@ import { createAuth } from '../auth-core.js';
 import { createInternalUser } from '../internal-users.js';
 
 function parseArgs(argv: readonly string[]): { email: string; password: string; name: string } {
+  // 忽略 pnpm 透传的分隔符 "--"
+  const tokens = argv.filter((token) => token !== '--');
   const args = new Map<string, string>();
-  for (let i = 0; i < argv.length; i += 2) {
-    const flag = argv[i];
-    const value = argv[i + 1];
-    if (flag === undefined || !flag.startsWith('--') || value === undefined) {
+  let index = 0;
+  while (index < tokens.length) {
+    const flag = tokens[index];
+    const value = tokens[index + 1];
+    if (flag === undefined || !flag.startsWith('--')) {
       throw new Error(`无法解析参数 "${flag ?? ''}"；用法：--email <e> --password <p> --name <n>`);
     }
+    if (value === undefined) {
+      throw new Error(`参数 ${flag} 缺少值`);
+    }
     args.set(flag.slice(2), value);
+    index += 2;
   }
   const email = args.get('email');
   const password = args.get('password');

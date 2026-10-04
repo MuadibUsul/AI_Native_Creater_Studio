@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  channelWithStyleSchema,
   contentDocumentSchema,
+  creatorIdentitySchema,
   editRequestSchema,
-  echoRequestSchema,
   errorEnvelopeSchema,
   eventEnvelopeSchema,
   healthResponseSchema,
@@ -11,8 +12,10 @@ import {
   pageRequestSchema,
   sceneGraphSchema,
   sourceSnapshotSchema,
+  speechProfileSchema,
   structuredDatasetSchema,
   versionConflictDetailsSchema,
+  workspaceWithRoleSchema,
 } from './index.js';
 
 /**
@@ -22,7 +25,10 @@ import {
  */
 const schemaRegistry: Record<string, z.ZodType> = {
   healthResponse: healthResponseSchema,
-  echoRequest: echoRequestSchema,
+  workspaceWithRole: workspaceWithRoleSchema,
+  channelWithStyle: channelWithStyleSchema,
+  creatorIdentity: creatorIdentitySchema,
+  speechProfile: speechProfileSchema,
   errorEnvelope: errorEnvelopeSchema,
   versionConflictDetails: versionConflictDetailsSchema,
   eventEnvelope: eventEnvelopeSchema,

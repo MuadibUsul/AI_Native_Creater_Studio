@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { echoRequestSchema, echoResponseSchema, errorEnvelopeSchema, healthResponseSchema } from './index.js';
+import {
+  CLIENT_TYPES,
+  clientTypeSchema,
+  errorEnvelopeSchema,
+  healthResponseSchema,
+  idempotencyKeySchema,
+  requestIdSchema,
+} from './index.js';
 
 describe('healthResponseSchema', () => {
   it('接受合法响应并保留字段', () => {
@@ -18,16 +25,24 @@ describe('healthResponseSchema', () => {
   });
 });
 
-describe('echoRequestSchema', () => {
-  it('count 缺省为 1', () => {
-    expect(echoRequestSchema.parse({ message: 'hi' })).toEqual({ message: 'hi', count: 1 });
+describe('HTTP 传输约定（§29.3 / §33）', () => {
+  it('客户端类型枚举为 web/desktop/ios/android', () => {
+    expect([...CLIENT_TYPES]).toEqual(['web', 'desktop', 'ios', 'android']);
+    expect(clientTypeSchema.safeParse('web').success).toBe(true);
+    expect(clientTypeSchema.safeParse('cli').success).toBe(false);
   });
 
-  it('拒绝空 message、越界 count 与非整数', () => {
-    expect(echoRequestSchema.safeParse({ message: '' }).success).toBe(false);
-    expect(echoRequestSchema.safeParse({ message: 'x', count: 0 }).success).toBe(false);
-    expect(echoRequestSchema.safeParse({ message: 'x', count: 11 }).success).toBe(false);
-    expect(echoRequestSchema.safeParse({ message: 'x', count: 1.5 }).success).toBe(false);
+  it('requestId 仅允许限定字符集且长度受限', () => {
+    expect(requestIdSchema.safeParse('req_abc-123.def:1').success).toBe(true);
+    expect(requestIdSchema.safeParse('req with space').success).toBe(false);
+    expect(requestIdSchema.safeParse('').success).toBe(false);
+    expect(requestIdSchema.safeParse('x'.repeat(129)).success).toBe(false);
+  });
+
+  it('幂等键长度 8—200', () => {
+    expect(idempotencyKeySchema.safeParse('idem_workflow_0001').success).toBe(true);
+    expect(idempotencyKeySchema.safeParse('short').success).toBe(false);
+    expect(idempotencyKeySchema.safeParse('k'.repeat(201)).success).toBe(false);
   });
 });
 
@@ -47,11 +62,5 @@ describe('errorEnvelopeSchema', () => {
   it('拒绝缺少 code 的错误响应', () => {
     const result = errorEnvelopeSchema.safeParse({ error: { message: 'x', requestId: 'r', details: {} } });
     expect(result.success).toBe(false);
-  });
-});
-
-describe('echoResponseSchema', () => {
-  it('拒绝非字符串数组', () => {
-    expect(echoResponseSchema.safeParse({ message: 'x', repeated: [1, 2] }).success).toBe(false);
   });
 });

@@ -181,9 +181,9 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-29-01 | §29.1 | 三端使用相同 Backend API / Auth+Workspace+Project ID / Scene Graph Contract / Assets / Job 状态 / History | MUST | V1 | P01-05（P01） | LED-78-01..11 | TODO |
-| REQ-29-02 | §29.2 | 后端不得依赖 Web Runtime：不得只实现为 Next route handlers / Server Actions；Web 可有 BFF，权威业务必须在独立 API | MUST | V1 | P01-05（P01） | 不启动 Web 也能用 SDK 完成读写（P01-05） | TODO |
-| REQ-29-03 | §29.3 | API 版本化 /api/v1；Breaking change 走新版本或兼容层；客户端可发送 X-Client-Type / X-Client-Version。裁决：对外统一 /api/v1（DEC-01） | MUST | V1 | P01-05（P01） | DEC-01；P01-05 验收 | TODO |
-| REQ-29-04 | §29.4 | Monorepo + Zod/JSON Schema contracts + 生成 OpenAPI + 统一 SDK；Web/桌面/手机禁止分别手写三套 API type | MUST | V1 | P01-01/P01-05（P01） | 生成 OpenAPI（P01-01）；SDK 独立可用（P01-05） | TODO |
+| REQ-29-02 | §29.2 | 后端不得依赖 Web Runtime：不得只实现为 Next route handlers / Server Actions；Web 可有 BFF，权威业务必须在独立 API | MUST | V1 | P01-05（P01） | 不启动 Web 也能用 SDK 完成读写：示例实跑 + CI 工作流测试（P01-05；证据 docs/verification/P01-05.md） | VERIFIED |
+| REQ-29-03 | §29.3 | API 版本化 /api/v1；Breaking change 走新版本或兼容层；客户端可发送 X-Client-Type / X-Client-Version。裁决：对外统一 /api/v1（DEC-01） | MUST | V1 | P01-05（P01） | /api/v1 全面落地 + 客户端标头解析/回显被测试锁定（P01-05）；DEC-01 | VERIFIED |
+| REQ-29-04 | §29.4 | Monorepo + Zod/JSON Schema contracts + 生成 OpenAPI + 统一 SDK；Web/桌面/手机禁止分别手写三套 API type | MUST | V1 | P01-01/P01-05（P01） | 单一契约来源（P01-01）+ 全量 SDK 按契约解析（P01-05）+ OpenAPI 生成与 JSON Schema 可表达性测试 | VERIFIED |
 | REQ-29-05 | §29.5 | API 从第一天带 revision（projectRevision/sceneRevision/baseRevision）；冲突策略：非冲突 Scene 自动合并；同 Scene 同字段冲突→409+提示；AI 大范围 rewrite 创建新 Project Version | MUST | V1 | P02-02（P02） | AC-04/AC-24；P02-02 验收 | TODO |
 | REQ-29-06 | §29.6 | 实时状态：REST 获取状态 + SSE/WebSocket 推送 Job 事件（project.updated/scene.updated/job.*/render.progress/asset.ready）；不得让客户端每秒轮询 | MUST | V1 | P02-06（P02） | 断线重连恢复状态（P02-06） | TODO |
 | REQ-29-07 | §29.7 | Desktop 后续：Tauri/Electron 评估；初期 Final Render 仍云端，不分叉渲染逻辑；未来 Local RenderProvider 遵循契约 | SHOULD | 后续 | P15-01（P15） | P15-01 验收 | DEFERRED |
@@ -198,11 +198,11 @@
 |---|---|---|---|---|---|---|---|
 | REQ-31-01 | §31 | 角色：OWNER/ADMIN/EDITOR/REVIEWER/VIEWER（计划 §6.2 增 PLATFORM_ADMIN 且不复用 Workspace ADMIN） | MUST | V1 | P01-03（P01） | 能力矩阵按 §6.2 实现并被测试锁定；PLATFORM_ADMIN 明确独立（§67，P08-02 建立）（P01-03；证据 docs/verification/P01-03.md） | VERIFIED |
 | REQ-31-02 | §31 | 每个资源请求 MUST 验证 workspace membership；禁止只按 project_id 查询后直接返回 | MUST | V1 | P01-03（P01） | 统一授权入口 requireWorkspace（认证→成员→能力）；workspace 端点跨租户全 404 被测试锁定（P01-03） | VERIFIED |
-| REQ-32-01 | §32 | 资源接口集：Auth/Workspace/Channels/Sources/Narrative-Director/Scenes/Assets/History/Jobs/Render/Providers/Usage/Events；统一挂载 /api/v1（DEC-01） | MUST | V1 | P01-05（P01）+各阶段 | P01-05 验收；计划 §10 增补清单 | TODO |
+| REQ-32-01 | §32 | 资源接口集：Auth/Workspace/Channels/Sources/Narrative-Director/Scenes/Assets/History/Jobs/Render/Providers/Usage/Events；统一挂载 /api/v1（DEC-01） | MUST | V1 | P01-05（P01）+各阶段 | P01 资源面完成（auth/workspaces/members/channels/creator-identities/speech-profiles）；Sources/Narrative/Scenes/Assets/Jobs/Render 等随 P02+ 按同一契约模式落地（P01-05） | TODO |
 | REQ-32-02 | §32 | director/edit 请求形状（instruction/selection/baseRevision/mode: plan_then_apply）；SHOULD 先返回 change plan，Apply 后 commit | MUST | V1 | P05-06（P05） | 计划未 Apply 不改数据库（P05-06） | TODO |
-| REQ-33-01 | §33 | 每个写请求 SHOULD 支持 Idempotency-Key 与 X-Request-Id | SHOULD | V1 | P01-05/P02-02（P01/P02） | AC-03；同键重放原结果（P02-02） | TODO |
+| REQ-33-01 | §33 | 每个写请求 SHOULD 支持 Idempotency-Key 与 X-Request-Id | SHOULD | V1 | P01-05/P02-02（P01/P02） | 基线机制被测试锁定：X-Request-Id 透传/回显、幂等键回放原结果、同键不同请求 409（AC-03 的 API 层形态）（P01-05）；编辑协议复用同一机制（P02-02） | VERIFIED |
 | REQ-33-02 | §33 | 统一错误格式（error.code/message/requestId/details），含 VERSION_CONFLICT 示例 | MUST | V1 | P01-01（P01） | 错误信封 + 10 项错误码表 + VERSION_CONFLICT details 契约化并被 api/测试使用（P01-01；证据 docs/verification/P01-01.md） | VERIFIED |
-| REQ-33-03 | §33 | API 必须支持分页/过滤/排序/请求追踪/向后兼容 JSON | MUST | V1 | P01-05（P01） | P01-05 验收 | TODO |
+| REQ-33-03 | §33 | API 必须支持分页/过滤/排序/请求追踪/向后兼容 JSON | MUST | V1 | P01-05（P01） | 分页（游标）与请求追踪已就绪并被测试；过滤/排序随 P02+ 列表规模需要实现（进度：3/5）（P01-05） | TODO |
 | REQ-33-04 | §33 | Webhook 必须：校验签名/防 replay/幂等处理 | MUST | V1 | P03-06（P03） | AC-08；伪造事件被拒（P03-06） | TODO |
 ## L. 数据库、用量与配额（§34—§36）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-04，REQ-6-01 / REQ-3-03 → VERIFIED；此前 P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-05，REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01 → VERIFIED；此前 P01-04：REQ-6-01 / REQ-3-03；P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

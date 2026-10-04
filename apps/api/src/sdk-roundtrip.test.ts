@@ -1,15 +1,14 @@
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { errorEnvelopeSchema } from '@ancs/contracts';
-import { createClient } from '@ancs/sdk';
+import { AncsApiError, createClient } from '@ancs/sdk';
 import { buildServer } from './server.js';
 
 /**
- * SDK ↔ API 真实 HTTP 往返（P00-03 兼容性验证）：
- * 证明"Zod 契约 → Fastify 路由 → SDK 客户端"整条管线可用。
- * SDK 以 devDependency 引入（架构规则 R7 只约束生产依赖方向）。
+ * SDK ↔ API 真实 HTTP 往返（无数据库模式，P01-05 基线）：
+ * - 覆盖成功路径（health）与统一错误信封路径（未注册资源 → NOT_FOUND）；
+ * - 授权后的完整业务读写工作流见 sdk-workflow.integration.test.ts（真实数据库）。
  */
-describe('SDK ↔ API 端到端', () => {
+describe('SDK ↔ API 端到端（HTTP）', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let baseUrl: string;
 
@@ -17,7 +16,7 @@ describe('SDK ↔ API 端到端', () => {
     app = await buildServer();
     await app.listen({ port: 0, host: '127.0.0.1' });
     const address = app.server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    baseUrl = `http://127.0.0.1:${String(address.port)}`;
   });
 
   afterAll(async () => {
@@ -25,26 +24,17 @@ describe('SDK ↔ API 端到端', () => {
   });
 
   it('health 往返并通过契约解析', async () => {
-    const client = createClient({ baseUrl });
+    const client = createClient({ baseUrl, clientType: 'desktop' });
     const health = await client.health();
     expect(health.status).toBe('ok');
     expect(health.service).toBe('ancs-api');
   });
 
-  it('echo 往返（含服务端默认值）', async () => {
+  it('错误路径：SDK 收到统一错误信封并转换为 AncsApiError', async () => {
+    // 无数据库模式下未注册认证路由，workspaces 不存在 → 404 信封
     const client = createClient({ baseUrl });
-    const result = await client.echo({ message: 'ping' });
-    expect(result).toEqual({ message: 'ping', repeated: ['ping'] });
-  });
-
-  it('服务端校验失败返回统一错误信封（原始 HTTP）', async () => {
-    const response = await fetch(`${baseUrl}/api/v1/echo`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: '', count: 99 }),
-    });
-    expect(response.status).toBe(400);
-    const envelope = errorEnvelopeSchema.parse(await response.json());
-    expect(envelope.error.code).toBe('VALIDATION_FAILED');
+    const error = await client.workspaces.list().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AncsApiError);
+    expect(error).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 });
