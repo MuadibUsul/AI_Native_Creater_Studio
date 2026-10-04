@@ -21,11 +21,28 @@ const mediaCommon = {
   assetUrl: z.string().max(1000).nullable().default(null),
   caption: z.string().max(200).nullable().default(null),
   sourceLabel: z.string().max(200).nullable().default(null),
+  /** 画面缩放与位移（crop/framing 的 Lite 参数；1/0/0 = 原始构图） */
+  scale: z.number().min(0.1).max(4).default(1),
+  offsetX: z.number().min(-100).max(100).default(0),
+  offsetY: z.number().min(-100).max(100).default(0),
 };
 
-const MediaImage = ({ url, alt, fit }: { url: string | null; alt: string; fit: 'cover' | 'contain' }): ReactElement | null =>
+/** 媒体画面变换（scale/offset；在组件协议内、由 props 驱动，预览与成片一致）。 */
+const mediaTransform = (props: { scale: number; offsetX: number; offsetY: number }): string =>
+  props.scale === 1 && props.offsetX === 0 && props.offsetY === 0
+    ? 'none'
+    : `scale(${String(props.scale)}) translate(${String(props.offsetX)}%, ${String(props.offsetY)}%)`;
+
+const MediaImage = ({ url, alt, fit, transform }: { url: string | null; alt: string; fit: 'cover' | 'contain'; transform?: string }): ReactElement | null =>
   url === null ? null : (
-    <img data-role="media-image" src={url} alt={alt} style={{ width: '100%', height: '100%', objectFit: fit }} />
+    <div data-role="media-frame" style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+      <img
+        data-role="media-image"
+        src={url}
+        alt={alt}
+        style={{ width: '100%', height: '100%', objectFit: fit, transform: transform ?? 'none' }}
+      />
+    </div>
   );
 
 /* ---------- HOST_FULL ---------- */
@@ -56,7 +73,7 @@ export function HostFullScene({ props }: ComponentRenderInput<HostFullProps>): R
         </div>
       ) : (
         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-          <MediaImage url={props.assetUrl} alt={props.presenterName ?? '主持人'} fit="cover" />
+          <MediaImage url={props.assetUrl} alt={props.presenterName ?? '主持人'} fit="cover" transform={mediaTransform(props)} />
           {props.presenterName !== null ? (
             <div style={{ position: 'absolute', left: theme.spacing.lg, bottom: theme.spacing.lg }}>
               <Kicker text={props.presenterName} />
@@ -77,7 +94,7 @@ export const hostFullComponent = defineComponent({
   title: '主持全屏',
   description: '真人主持全屏（Avatar 驱动；未绑定素材时明确占位）',
   inputSchema: hostFullPropsSchema,
-  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, lines: '', presenterName: null },
+  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, scale: 1, offsetX: 0, offsetY: 0, lines: '', presenterName: null },
   supportedAspectRatios: ['16:9', '9:16', '1:1', '4:5'],
   minDurationMs: 2000,
   maxDurationMs: 25_000,
@@ -109,7 +126,7 @@ export function HostSideScene({ props }: ComponentRenderInput<HostSideProps>): R
       {props.assetUrl === null ? (
         <Placeholder text="主持画面（待绑定素材）" detail="Draft 占位，不冒充真实出镜" />
       ) : (
-        <MediaImage url={props.assetUrl} alt={props.presenterName ?? '主持人'} fit="cover" />
+        <MediaImage url={props.assetUrl} alt={props.presenterName ?? '主持人'} fit="cover" transform={mediaTransform(props)} />
       )}
     </div>
   );
@@ -136,7 +153,7 @@ export const hostSideComponent = defineComponent({
   title: '主持侧栏',
   description: '主持人在侧、内容在另一侧（未绑定素材时明确占位）',
   inputSchema: hostSidePropsSchema,
-  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, side: 'LEFT', lines: '', presenterName: null },
+  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, scale: 1, offsetX: 0, offsetY: 0, side: 'LEFT', lines: '', presenterName: null },
   supportedAspectRatios: ['16:9', '9:16', '1:1', '4:5'],
   minDurationMs: 2000,
   maxDurationMs: 25_000,
@@ -172,7 +189,7 @@ export function ImageFullScene({ props }: ComponentRenderInput<ImageFullProps>):
   }
   return (
     <SceneRoot padding={0}>
-      <MediaImage url={props.assetUrl} alt={props.caption ?? props.headline ?? '画面'} fit="cover" />
+      <MediaImage url={props.assetUrl} alt={props.caption ?? props.headline ?? '画面'} fit="cover" transform={mediaTransform(props)} />
       {props.headline !== null ? (
         <div
           style={{
@@ -200,7 +217,7 @@ export const imageFullComponent = defineComponent({
   title: '全屏画面',
   description: '全屏图片（AI 生成或作者上传；未绑定素材时明确占位）',
   inputSchema: imageFullPropsSchema,
-  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, headline: null },
+  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, scale: 1, offsetX: 0, offsetY: 0, headline: null },
   supportedAspectRatios: ['16:9', '9:16', '1:1', '4:5'],
   minDurationMs: 2000,
   maxDurationMs: 25_000,
@@ -236,7 +253,7 @@ export function RealBrollScene({ props }: ComponentRenderInput<RealBrollProps>):
   }
   return (
     <SceneRoot padding={0}>
-      <MediaImage url={props.assetUrl} alt={props.caption ?? '真实素材'} fit="cover" />
+      <MediaImage url={props.assetUrl} alt={props.caption ?? '真实素材'} fit="cover" transform={mediaTransform(props)} />
       <div style={{ position: 'absolute', left: theme.spacing.lg, bottom: theme.spacing.md, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {props.footageCredit !== null ? <div style={{ fontSize: 24, opacity: 0.85 }}>素材：{props.footageCredit}</div> : null}
         <SourceLabel label={props.sourceLabel} />
@@ -251,7 +268,7 @@ export const realBrollComponent = defineComponent({
   title: '真实素材',
   description: '真实拍摄/授权素材（未导入时明确占位；不得以 AI 冒充真实画面）',
   inputSchema: realBrollPropsSchema,
-  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, footageCredit: null },
+  defaults: { assetId: null, assetUrl: null, caption: null, sourceLabel: null, scale: 1, offsetX: 0, offsetY: 0, footageCredit: null },
   supportedAspectRatios: ['16:9', '9:16', '1:1', '4:5'],
   minDurationMs: 2000,
   maxDurationMs: 25_000,

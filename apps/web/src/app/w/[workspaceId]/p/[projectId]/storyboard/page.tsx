@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys, useNarrative, useSceneGraph } from '@/lib/queries';
+import { LiteTimeline, type TimelineEditRequest } from '@/ui/LiteTimeline';
 import { PreviewPlayer } from '@/ui/PreviewPlayer';
 import { ScenePreview } from '@/ui/ScenePreview';
 import { StateBlock } from '@/ui/StateBlock';
@@ -49,6 +50,24 @@ export default function StoryboardPage() {
     },
   });
   const resolveAssetUrl = (assetId: string): string | null => assetUrls.data?.get(assetId) ?? null;
+
+  /** Lite Timeline 的编辑提交（P05-05）：统一走编辑协议；成功后失效 graph 查询（刷新后以服务端为准）。 */
+  const timelineEdit = useMutation({
+    mutationFn: async (request: TimelineEditRequest) => {
+      const current = graph.data;
+      if (current === undefined) throw new Error('场景图尚未加载');
+      return client.projects.edit(projectId, {
+        baseProjectRevision: current.projectRevision,
+        expectedSceneRevisions: request.expectedSceneRevisions,
+        operations: request.operations,
+        idempotencyKey: `idem_web_timeline_${String(current.projectRevision)}_${String(Date.now())}`,
+        intent: `Lite Timeline：${request.operations.map((operation) => operation.op).join(', ')}`,
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.graph(workspaceId, projectId) });
+    },
+  });
 
   const applyDirector = useMutation({
     mutationFn: async () => {
@@ -111,6 +130,20 @@ export default function StoryboardPage() {
         <h2 className="mb-2 text-sm font-semibold text-slate-300">Preview</h2>
         <PreviewPlayer graph={graph.data} resolveAssetUrl={resolveAssetUrl} width={720} />
       </section>
+
+      {/* Lite Timeline（P05-05）：默认折叠（REQ-5-03 不默认展示复杂时间线） */}
+      <details data-testid="timeline-panel" className="rounded border border-slate-800 bg-slate-900/40">
+        <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-slate-300">Lite Timeline（排序/时长/拆分/复制/删除/替换素材/转场/缩放/音量/字幕）</summary>
+        <div className="p-3 pt-0">
+          <LiteTimeline
+            graph={graph.data}
+            assets={(assetUrls.data === undefined ? [] : [...assetUrls.data.entries()]).map(([id]) => ({ id, assetType: 'ASSET' }))}
+            pending={timelineEdit.isPending}
+            onEdit={(request) => timelineEdit.mutate(request)}
+            error={timelineEdit.isError ? (() => { const d = describeError(timelineEdit.error); return { kind: d.kind, message: d.message, code: d.code }; })() : null}
+          />
+        </div>
+      </details>
 
       <ol className="flex flex-col gap-3">
         {scenes.map((scene) => (
