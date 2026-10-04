@@ -273,6 +273,26 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// 组件协议契约（P05-01 / §11.1、§57）
+export {
+  COMPONENT_PROTOCOL_VERSION,
+  componentVersionSchema,
+  sceneComponentTypeSchema,
+  aspectRatioSchema,
+  componentFixtureSchema,
+  componentCatalogEntrySchema,
+  COMPONENT_VALIDATION_REASONS,
+  sceneRenderContextSchema,
+  ASPECT_RATIO_SIZES,
+} from './scene-components.js';
+export type {
+  AspectRatio,
+  ComponentFixture,
+  ComponentCatalogEntry,
+  ComponentValidationReason,
+  SceneRenderContext,
+} from './scene-components.js';
+
 // SpeechPlan 契约（P04-06 / §94、§6.4）
 export {
   SPEECH_PLAN_VERSION,

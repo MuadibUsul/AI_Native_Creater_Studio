@@ -24,6 +24,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-credential-vault-local': srcAlias('./packages/providers/credential-vault-local/src/index.ts'),
   '@ancs/providers-mock-provider': srcAlias('./packages/providers/mock-provider/src/index.ts'),
   '@ancs/providers-mock-llm': srcAlias('./packages/providers/mock-llm/src/index.ts'),
+  '@ancs/scene-components': srcAlias('./packages/scene-components/src/index.ts'),
 };
 
 export default defineConfig({
@@ -33,7 +34,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['packages/**/*.test.ts', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts'],
+          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts'],
           exclude: [
             '**/node_modules/**',
             'packages/db/**',

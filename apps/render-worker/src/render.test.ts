@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { bundle } from '@remotion/bundler';
 import { parseMedia } from '@remotion/media-parser';
@@ -54,6 +54,36 @@ describe('Remotion 服务端渲染（标准 Scene：BigNumberScene）', () => {
       console.log(`[render] 预览静帧：${output}（${String(info.size)} bytes）`);
     }
   }, 600_000);
+
+  it('注册表组件渲染（P05-01）：ComponentDefinition → PNG；主题 tokens 改变像素输出', async () => {
+    const composition = await selectComposition({ serveUrl, id: 'RegistryBigNumberScene', browserExecutable });
+    const themed = (name: string, background: string): { output: string; props: Record<string, unknown> } => ({
+      output: path.join(outDir, `registry-theme-${name}.png`),
+      props: {
+        theme: {
+          color: { background, foreground: '#FFFFFF', accent: '#FF00AA', positive: '#00FF00', negative: '#FF0000' },
+          font: { heading: 'Georgia, serif', body: 'Georgia, serif' },
+        },
+      },
+    });
+    const dark = themed('dark', '#0B1220');
+    const magenta = themed('magenta', '#FF00FF');
+    for (const variant of [dark, magenta]) {
+      await renderStill({
+        composition: { ...composition, props: { ...composition.props, ...variant.props } },
+        serveUrl,
+        output: variant.output,
+        frame: 30,
+        imageFormat: 'png',
+        browserExecutable,
+      });
+      const info = await stat(variant.output);
+      expect(info.size, `注册表组件静帧 ${variant.output} 应大于 10KB`).toBeGreaterThan(10_000);
+      console.log(`[render] 注册表组件静帧（theme）：${variant.output}（${String(info.size)} bytes）`);
+    }
+    const [darkBytes, magentaBytes] = await Promise.all([readFile(dark.output), readFile(magenta.output)]);
+    expect(darkBytes.equals(magentaBytes), '不同主题必须产生不同像素（主题 tokens 生效）').toBe(false);
+  }, 900_000);
 
   it('渲染 MP4 并通过元数据校验（1920×1080 / 3s / 30fps）', async () => {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, browserExecutable });

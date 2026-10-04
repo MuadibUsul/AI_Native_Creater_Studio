@@ -97,7 +97,7 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-11-01 | §11.1 | Standard Scene Engine（Remotion 组件库，约 70%～85% 场景）；每个组件必须有 ComponentDefinition（type/version/inputSchema/defaults/supportedAspectRatios/min-maxDuration/previewFixture/renderer） | MUST | V1 | P05-01（P05） | 每个组件可独立校验与渲染（P05-01） | TODO |
+| REQ-11-01 | §11.1 | Standard Scene Engine（Remotion 组件库，约 70%～85% 场景）；每个组件必须有 ComponentDefinition（type/version/inputSchema/defaults/supportedAspectRatios/min-maxDuration/previewFixture/renderer） | MUST | V1 | P05-01（P05） | 每个组件可独立校验与渲染（P05-01） | VERIFIED（P05-01：协议 + 注册表（自检/多版本/擦除边界）+ 参考组件 BIG_NUMBER + 挂载点；单测矩阵 + 真实 Remotion 渲染（PNG）；20 类组件实现为 P05-02） |
 | REQ-11-02 | §11.2 | Generative Motion Engine（15%～30% 高光场景）；标准组件无法表达时 Director 输出 CUSTOM_MOTION_REQUIRED，由 Motion Designer Agent 生成独立 Scene | MUST | V1 | P07-02（P07） | P07-02 验收 | TODO |
 | REQ-11-03 | §11.2 | Custom Motion 安全 MUST 10 条：隔离沙箱、默认无网络、白名单依赖、TS 编译、静态分析、Render smoke、CPU/RAM/超时限制、不得访问 Secret、不得任意文件路径、通过后才能进入项目 | MUST | V1 | P07-01/P07-02（P07） | AC-18；攻击 fixture 被拒（P07-01） | TODO |
 | REQ-11-04 | §11.2 | 优秀 Custom Motion 可"Save as Component"经审核进入个人/平台组件库 | MAY | 后续 | P07-02 后续 / P16 | — | DEFERRED |
@@ -296,7 +296,7 @@
 | REQ-55-01 | §55 | 降级链：Primary→Fallback Provider→Fallback Static Visual→Needs Review（示例 Veo→Runway→Image+Ken Burns→Text/Motion）；Final Render 前存在 unresolved required Scene 必须提示 | MUST | V1 | P04-05/P07-05（P04/P07） | AC-15/AC-16；受控降级（P04-04） | TODO |
 | REQ-56-01 | §56 | 关键 Claim 可绑定 Source；Scene 可绑定一个或多个 Claim；Source 可显示在画面或 Description；AI 不得伪造来源；URL/title/访问时间结构化保存 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02）；LED-77 | Claim→Source 绑定（sourceIds + citation 定位）；来源结构化保存 URL/title/publisher/author/publishedAt/retrievedAt/contentHash（P04-01/P04-02）；**不得伪造来源**：引用来源必须属于本项目（SOURCE_NOT_IN_PROJECT），fact 无来源即拒绝/降级；Scene 绑定 Claim 属 P04-05 | VERIFIED（Scene 绑定 Claim→P04-05） |
 | REQ-56-02 | §56 | 未来 Citation overlay 与 Source list 自动生成 | MAY | 后续 | P10-05（P10） | P10-05 验收 | DEFERRED |
-| REQ-57-01 | §57 | 组件不得写死颜色/字体；使用 Design Tokens（font/color/spacing/radius/motion）；Creator Profile 选择/保存 Theme；跨组件品牌一致 | MUST | V1 | P05-01（P05） | 字体和颜色可由主题控制（P05-01） | TODO |
+| REQ-57-01 | §57 | 组件不得写死颜色/字体；使用 Design Tokens（font/color/spacing/radius/motion）；Creator Profile 选择/保存 Theme；跨组件品牌一致 | MUST | V1 | P05-01（P05） | 字体和颜色可由主题控制（P05-01） | VERIFIED（P05-01：SceneThemeProvider/useSceneTheme 全量 tokens；单测断言两主题输出不同且不残留默认主题色/字体；真实渲染两主题 PNG 字节不同；Creator Profile 侧 Theme 选择随 P05-03/P06） |
 | REQ-58-01 | §58 | MVP 字幕 MUST：自动字幕/词级 timing/改文字/断句/样式 preset/burn-in 可选/SRT-VTT 导出 | MUST | V1 | P06-06（P06） | 字幕不越界；音量调整不重做 TTS（P06-06） | TODO |
 | REQ-58-02 | §58 | 字幕是 Scene Graph/Project 结构化数据，不只存在最终 MP4 | MUST | V1 | P02-01/P06-06（P02/P06） | Graph 含 captions（P02-01） | TODO |
 | REQ-59-01 | §59 | MVP 音频：1 条 BGM + Voice track + Scene media audio；简单音量/ducking/fade in-out；不做完整 DAW | MUST | V1 | P06-06（P06） | 无重叠双人声（P06-06） | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-06，REQ-94-01 / REQ-94-03 → VERIFIED（REQ-94-02/REQ-6-08 保持 P06/P14）；此前 P04-05，REQ-9-02 / REQ-9-03 / REQ-9-04 → VERIFIED（REQ-9-01 记录进度）；此前 P04-04，REQ-10-01 → VERIFIED（REQ-10-03 记录 P04-04 进度）；此前 P04-03，REQ-8-01 / REQ-8-02 / REQ-52-01 / REQ-52-02 → VERIFIED；此前 P04-02：REQ-7-02 / REQ-10-03 / REQ-56-01（REQ-85-01 记录进度）；此前 P04-01：REQ-4-01 / REQ-7-01（REQ-22-04 补登）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P05-01，REQ-11-01 / REQ-57-01 → VERIFIED；此前 P04-06，REQ-94-01 / REQ-94-03 → VERIFIED（REQ-94-02/REQ-6-08 保持 P06/P14）；此前 P04-05，REQ-9-02 / REQ-9-03 / REQ-9-04 → VERIFIED（REQ-9-01 记录进度）；此前 P04-04，REQ-10-01 → VERIFIED（REQ-10-03 记录 P04-04 进度）；此前 P04-03，REQ-8-01 / REQ-8-02 / REQ-52-01 / REQ-52-02 → VERIFIED；此前 P04-02：REQ-7-02 / REQ-10-03 / REQ-56-01（REQ-85-01 记录进度）；此前 P04-01：REQ-4-01 / REQ-7-01（REQ-22-04 补登）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

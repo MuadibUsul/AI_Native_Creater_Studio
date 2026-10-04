@@ -13,7 +13,10 @@
     "@remotion/renderer": "4.0.532",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.532"
+    "remotion": "4.0.532",
+    "@ancs/scene-components": "workspace:*",
+    "@ancs/contracts": "workspace:*",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/node": "26.6.4",
