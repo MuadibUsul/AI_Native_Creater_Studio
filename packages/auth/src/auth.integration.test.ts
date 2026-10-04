@@ -61,7 +61,7 @@ beforeAll(async () => {
   await runMigrations(handle);
   auth = createAuth({
     db: handle.db,
-    secret: 'integration-test-secret-0123456789abcdef',
+    secret: 'integration-test-secret-0123456789abcdef', // secrets:check-ignore：测试专用假密钥（非真实凭据）
     baseUrl: 'http://localhost:3001',
     // 便于会话过期测试：2 秒 TTL，且不做滑动续期
     sessionTtlSeconds: 2,
@@ -140,7 +140,7 @@ describe('Web 会话（Better Auth）', () => {
     const created = await createUser();
     await expect(
       auth.api.signInEmail({
-        body: { email: created.email, password: 'wrong-password-1' },
+        body: { email: created.email, password: 'wrong-pass-1' },
         headers: new Headers(),
       }),
     ).rejects.toThrowError();

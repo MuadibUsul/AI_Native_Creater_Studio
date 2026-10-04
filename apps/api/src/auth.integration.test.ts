@@ -43,7 +43,7 @@ beforeAll(async () => {
 
   auth = createAuth({
     db: handle.db,
-    secret: 'api-integration-secret-0123456789abcdef',
+    secret: 'api-integration-secret-0123456789abcdef', // secrets:check-ignore：测试专用假密钥（非真实凭据）
     baseUrl: 'http://localhost:3001',
   });
   app = await buildServer({
@@ -97,7 +97,7 @@ describe('Web 会话（HTTP）', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/sign-in',
-      payload: { email: created.email, password: 'wrong-password-1' },
+      payload: { email: created.email, password: 'wrong-pass-1' },
     });
     expect(response.statusCode).toBe(401);
     const envelope = errorEnvelopeSchema.parse(response.json());
