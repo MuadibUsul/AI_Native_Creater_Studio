@@ -8,6 +8,10 @@ import {
   assetSchema,
   billingStatusSchema,
   catalogResponseSchema,
+  contentDocumentRecordSchema,
+  contentSourceSchema,
+  createContentRequestSchema,
+  updateSourceRequestSchema,
   capabilitySelectionSchema,
   creditHoldSchema,
   ledgerEntrySchema,
@@ -81,6 +85,10 @@ import {
   type AssetDetail,
   type BillingStatus,
   type CatalogResponse,
+  type ContentDocumentRecord,
+  type ContentSource,
+  type CreateContentRequest,
+  type UpdateSourceRequest,
   type CapabilitySelection,
   type CreditHold,
   type LedgerEntry,
@@ -343,6 +351,26 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  content: {
+    /** 输入归一化：URL 文章 / 粘贴正文 / 手写脚本 → ContentDocument（API 路径含 workspace） */
+    create(
+      workspaceId: string,
+      projectId: string,
+      input: CreateContentRequest,
+      options?: MutationOptions,
+    ): Promise<ContentDocumentRecord>;
+    list(workspaceId: string, projectId: string): Promise<ContentDocumentRecord[]>;
+    get(workspaceId: string, projectId: string, documentId: string): Promise<ContentDocumentRecord>;
+    sources(workspaceId: string, projectId: string): Promise<ContentSource[]>;
+    /** Sources 编辑：仅元数据（内容与哈希是快照事实） */
+    updateSource(
+      workspaceId: string,
+      projectId: string,
+      sourceId: string,
+      input: UpdateSourceRequest,
+      options?: MutationOptions,
+    ): Promise<ContentSource>;
   };
   billing: {
     /** 计费状态（余额/预算/周期消耗与预留） */
@@ -869,6 +897,27 @@ export function createClient(options: ClientOptions): AncsClient {
           await reader.cancel().catch(() => undefined);
         }
       },
+    },
+
+    content: {
+      create: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content`, contentDocumentRecordSchema, {
+          body: input,
+          bodySchema: createContentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content`, listOf(contentDocumentRecordSchema))).items,
+      get: (workspaceId, projectId, documentId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content/${documentId}`, contentDocumentRecordSchema),
+      sources: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sources`, listOf(contentSourceSchema))).items,
+      updateSource: (workspaceId, projectId, sourceId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sources/${sourceId}`, contentSourceSchema, {
+          body: input,
+          bodySchema: updateSourceRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     billing: {

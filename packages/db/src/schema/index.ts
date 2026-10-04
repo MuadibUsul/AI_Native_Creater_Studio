@@ -21,3 +21,4 @@ export { providerCatalogVersions } from './providers.js';
 export { providerConnections, workspaceProviderSettings } from './credentials.js';
 export { budgetCounters, creditHolds, creditLedger, providerGenerations, workspaceBudgets } from './billing.js';
 export { providerResultStates, webhookEvents } from './results.js';
+export { contentBlocks, contentDocuments, projectSources } from './content.js';

@@ -14,7 +14,7 @@ import {
   type UpdateChannelRequest,
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
-import type { CredentialCipher, JobQueueAdapter, PlatformCredentialRegistry, ProviderTestHook, ResultFetcher } from '@ancs/contracts';
+import type { ArticleFetcher, CredentialCipher, JobQueueAdapter, PlatformCredentialRegistry, ProviderTestHook, ResultFetcher } from '@ancs/contracts';
 import type { BillingPolicy } from './billing.js';
 import type { RetryPolicy } from './jobs.js';
 import type { RetentionConfig } from './retention.js';
@@ -53,6 +53,8 @@ export interface DomainDeps {
   billingPolicy?: BillingPolicy;
   /** 结果拉取器（P03-06）：HTTP 等 I/O 由宿主注入（apps/worker 的 HTTP 实现；测试脚本化） */
   resultFetcher?: ResultFetcher;
+  /** 文章抓取器（P04-01）：URL 输入归一化的 I/O（逐跳 SSRF 校验由实现方保证） */
+  articleFetcher?: ArticleFetcher;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

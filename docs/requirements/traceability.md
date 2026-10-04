@@ -48,7 +48,7 @@
 | REQ-3-03 | §3.2C | 故事 C 栏目化：Creator Profile（Twin/Voice/Logo/字体/色彩/图表/字幕样式/Avatar 占比/时长/Hook/结尾/B-roll 强度）保存并被后续文章继承 | SHOULD | V1 | P01-04（P01） | Profile 全字段落库（Channel 样式 + 身份 + 主题 tokens）；继承语义由快照版本机制保证（P01-04）；"后续文章继承"随 P02-01 项目创建补用例 | VERIFIED |
 | REQ-3-04 | §3.2D | 故事 D AI 修改：分析→缩短/增加变化→重写必要旁白→变更计划→用户 Apply 后形成新版本 | MUST | V1 | P05-06（P05） | 计划未 Apply 不改数据库（P05-06）；AC-14 | TODO |
 | REQ-3-05 | §3.2E | 故事 E 精确手动修正：拖动排序/Trim/Split/Replace/音量/字幕/图表字段/Transition 均可用 | MUST | V1 | P05-05（P05） | 操作全部回写统一协议（P05-05） | TODO |
-| REQ-4-01 | §4.1 | MVP 输入 MUST：文章 URL、粘贴正文、手写脚本、上传图片/视频/音频、Sources 编辑 | MUST | V1 | P04-01（P04） | URL 异常/安全限制/空正文/错误编码有明确结果（P04-01） | TODO |
+| REQ-4-01 | §4.1 | MVP 输入 MUST：文章 URL、粘贴正文、手写脚本、上传图片/视频/音频、Sources 编辑 | MUST | V1 | P04-01（P04） | URL 异常/安全限制/空正文/错误编码有明确结果（P04-01） | URL 文章（抓取+SSRF 守卫）/粘贴正文/手写脚本 → 统一 ContentDocument；Sources 编辑（仅元数据，快照哈希不可改）；上传媒体走资产链路（P02-04）；**明确结果**：INVALID_URL/BLOCKED_TARGET/UNREACHABLE/TIMEOUT/TOO_LARGE/UNSUPPORTED_CONTENT_TYPE/EMPTY_CONTENT/ENCODING_UNSUPPORTED（P04-01） | VERIFIED |
 | REQ-4-02 | §4.1 | SHOULD 输入：PDF/Markdown/DOCX 导入、RSS/CMS Webhook、网站 Publish Webhook、Newsletter 导入（不阻塞 V1） | SHOULD | 后续 | P10-01/P13-06（P10/P13） | P10-01 验收 | DEFERRED |
 | REQ-4-03 | §4.1 | MAY 输入：Notion / Google Docs / Substack / WordPress / Ghost / 自定义 CMS | MAY | 后续 | 未排期（P10 后评估） | — | DEFERRED |
 | REQ-4-04 | §4.2 | MVP 输出 MUST：16:9 1080p MP4、Draft Preview、SRT/VTT 字幕、Project Manifest | MUST | V1 | P05-04/P07-04（P05/P07） | LED-77-18/19/20；P07-04 验收 | TODO |
@@ -80,7 +80,7 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-7-01 | §7 | 任何输入必须先转统一 ContentDocument（id/title/language/author/sourceUrl/publishedAt/blocks/claims/citations/tables/figures/attachments），不得直接发 LLM | MUST | V1 | P04-01（P04） | 抽取验收（P04-01） | TODO |
+| REQ-7-01 | §7 | 任何输入必须先转统一 ContentDocument（id/title/language/author/sourceUrl/publishedAt/blocks/claims/citations/tables/figures/attachments），不得直接发 LLM | MUST | V1 | P04-01（P04） | 抽取验收（P04-01） | 三种文本输入均产出统一 ContentDocument（块规范化落库、稳定块 ID、tables/figures 由块派生）；claims/citations **结构就位但留空**——抽取填充属 P04-02（分任务边界）；归一化不调用 LLM（确定性） | VERIFIED（claims/citations 填充→P04-02） |
 | REQ-7-02 | §7 | Block 类型（heading/paragraph/quote/list/table/image/chart/embed）与 Claim（factuality: fact/analysis/opinion/uncertain + sourceIds + structuredData）建模 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02） | TODO |
 | REQ-8-01 | §8 | NarrativePlan 输出结构（title/thesis/hook/chapters/narrationBlocks/keyClaims/requiredVisualFacts/ending/estimatedDuration）；推荐叙事模式但不强制统一模板 | MUST | V1 | P04-03（P04） | Schema 校验与有限修复（P04-03） | TODO |
 | REQ-8-02 | §8.2 | 叙事约束：不逐字朗读文章；语言口语化；保留核心事实与逻辑；锁定文字不得静默修改；事实与分析保留类型信息 | MUST | V1 | P04-03（P04） | 锁定文字与事实类型保留（P04-03）；AC-14 | TODO |
@@ -153,7 +153,7 @@
 | REQ-22-01 | §22.1 | 所有业务资源 MUST 归属 Workspace（Members/Channels/Provider Credentials/Projects/Assets/Billing/Usage） | MUST | V1 | P01-03/P02-01（P01/P02） | AC-01；跨租户引用被拒（P02-01） | 全部业务记录归属可验证：core 表均携带 workspace_id 且查询强制作用域；跨租户引用被拒（P01-03/P02-01）；后续资源表沿用同一约束 | VERIFIED |
 | REQ-22-02 | §22.3 | Project 字段：workspace/channel/title/source_type/status/current_version_id/aspect/resolution/fps/target_duration_ms/created_by/时间戳/deleted_at | MUST | V1 | P02-01（P02） | P02-01 验收 | projects 表逐字段落地并通过创建/详情/列表测试（P02-01） | VERIFIED |
 | REQ-22-03 | §22.4 | Scene 规范化记录（含 revision/position/start_ms/duration_ms/semantic_type/scene_type 等）；不得把所有 Scene 塞进一个巨大 JSON 作为唯一状态；Graph 由规范化记录生成 Snapshot | MUST | V1 | P02-01（P02） | P02-01 验收 | scenes 规范化表 + 独立 revision + Graph 由规范化记录生成（P02-01；证据 docs/verification/P02-01.md） | VERIFIED |
-| REQ-22-04 | §22.5 | Asset 字段集与 AssetType 至少 16 类（SOURCE_DOCUMENT/SOURCE_IMAGE/USER_UPLOAD/AVATAR_CLIP/VOICE_AUDIO/MUSIC/GENERATED_IMAGE/GENERATED_VIDEO/CHART_RENDER/CUSTOM_MOTION_RENDER/SUBTITLE/DRAFT_RENDER/FINAL_VIDEO/SHORT_VIDEO/THUMBNAIL/MANIFEST） | MUST | V1 | P02-04（P02） | P02-04 验收 | TODO |
+| REQ-22-04 | §22.5 | Asset 字段集与 AssetType 至少 16 类（SOURCE_DOCUMENT/SOURCE_IMAGE/USER_UPLOAD/AVATAR_CLIP/VOICE_AUDIO/MUSIC/GENERATED_IMAGE/GENERATED_VIDEO/CHART_RENDER/CUSTOM_MOTION_RENDER/SUBTITLE/DRAFT_RENDER/FINAL_VIDEO/SHORT_VIDEO/THUMBNAIL/MANIFEST） | MUST | V1 | P02-04（P02） | P02-04 验收 | assets/asset_versions 字段逐项落地；**17 种 AssetType** 枚举（含 §22.5 全部 16 类）经契约与测试覆盖（P02-04）；Provider 生成类经 P03-06 回收写入 | VERIFIED |
 
 ## I. 版本、历史、账本与存储策略（§23—§28）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-07，REQ-15-02 / REQ-51-02 / REQ-76-03 → VERIFIED（**P03 阶段 P03-01…P03-07 全部完成**）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-01，REQ-4-01 / REQ-7-01 → VERIFIED（REQ-22-04 补登 P02-04 证据）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

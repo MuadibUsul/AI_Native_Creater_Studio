@@ -68,7 +68,26 @@ export {
   CLAIM_FACTUALITIES,
   ENTITY_KINDS,
 } from './content.js';
-export type { ContentDocument, ContentBlock, Claim, ContentExtractions } from './content.js';
+export type { ContentDocument, ContentBlock, Claim, ContentExtractions, ArticleFetcher } from './content.js';
+export {
+  CONTENT_SOURCE_TYPES,
+  contentSourceTypeSchema,
+  CONTENT_INPUT_ERROR_REASONS,
+  createContentRequestSchema,
+  contentNormalizationSchema,
+  contentDocumentRecordSchema,
+  contentSourceSchema,
+  updateSourceRequestSchema,
+} from './content.js';
+export type {
+  ContentSourceType,
+  ContentInputErrorReason,
+  CreateContentRequest,
+  ContentNormalization,
+  ContentDocumentRecord,
+  ContentSource,
+  UpdateSourceRequest,
+} from './content.js';
 
 export { sourceSnapshotSchema, SNAPSHOT_KINDS } from './sources.js';
 export type { SourceSnapshot } from './sources.js';

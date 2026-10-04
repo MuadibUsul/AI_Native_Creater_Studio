@@ -40,6 +40,27 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  createContent,
+  createContentFromText,
+  createContentFromUrl,
+  getContentDocument,
+  listContentDocuments,
+  listProjectSources,
+  updateSource,
+} from './content.js';
+export {
+  assertSafeUrl,
+  decodeContentBytes,
+  decodeHtmlEntities,
+  detectLanguage,
+  extractBlocksFromHtml,
+  extractBlocksFromText,
+  isBlockedAddress,
+  normalizeCharset,
+  resolveCharset,
+  stableBlockId,
+} from './content-extract.js';
+export {
   collectProviderResult,
   createHmacWebhookVerifier,
   ingestProviderWebhook,

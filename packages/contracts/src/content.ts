@@ -138,6 +138,135 @@ export const contentDocumentSchema = z.object({
 });
 
 export type ContentDocument = z.infer<typeof contentDocumentSchema>;
+
+/** ---------- 输入归一化契约（P04-01 / 规范 §7、§8；计划 P04-01） ---------- */
+
+/** V1 文本输入形态（上传图片/视频/音频走资产链路，P02-04） */
+export const CONTENT_SOURCE_TYPES = ['URL_ARTICLE', 'PASTED_TEXT', 'MANUAL_SCRIPT'] as const;
+export const contentSourceTypeSchema = z.enum(CONTENT_SOURCE_TYPES);
+export type ContentSourceType = z.infer<typeof contentSourceTypeSchema>;
+
+/**
+ * 输入归一化的**明确结果**（计划 P04-01 验收：URL 异常、安全限制、空正文、错误编码都要有明确结果）。
+ * 每个原因对应一个可判定的错误（不放宽校验、不静默降级）。
+ */
+export const CONTENT_INPUT_ERROR_REASONS = {
+  /** URL 形态非法（非 http/https、缺 host、超长） */
+  INVALID_URL: 'INVALID_URL',
+  /** 安全限制：目标为内网/回环/元数据地址/非允许端口（SSRF 防护） */
+  BLOCKED_TARGET: 'BLOCKED_TARGET',
+  /** 网络不可达/DNS 失败/HTTP 非 2xx */
+  UNREACHABLE: 'UNREACHABLE',
+  /** 超时 */
+  TIMEOUT: 'TIMEOUT',
+  /** 超出大小上限 */
+  TOO_LARGE: 'TOO_LARGE',
+  /** Content-Type 不是可抽取的文本/HTML */
+  UNSUPPORTED_CONTENT_TYPE: 'UNSUPPORTED_CONTENT_TYPE',
+  /** 抽取后正文为空（页面上没有可读内容） */
+  EMPTY_CONTENT: 'EMPTY_CONTENT',
+  /** 编码无法解析（未知 charset / 解码失败） */
+  ENCODING_UNSUPPORTED: 'ENCODING_UNSUPPORTED',
+  /** 输入为空（粘贴文本/手写脚本） */
+  EMPTY_INPUT: 'EMPTY_INPUT',
+} as const;
+
+export type ContentInputErrorReason = (typeof CONTENT_INPUT_ERROR_REASONS)[keyof typeof CONTENT_INPUT_ERROR_REASONS];
+
+export const createContentRequestSchema = z
+  .object({
+    sourceType: contentSourceTypeSchema,
+    /** URL_ARTICLE 必填 */
+    url: z.string().min(1).max(2048).optional(),
+    /** PASTED_TEXT / MANUAL_SCRIPT 必填 */
+    text: z.string().max(2_000_000).optional(),
+    /** 可选覆盖（否则从内容推断） */
+    title: z.string().min(1).max(500).optional(),
+    language: z.string().min(2).max(20).optional(),
+    author: z.string().max(200).optional(),
+    publishedAt: z.string().max(40).optional(),
+  })
+  .refine((value) => (value.sourceType === 'URL_ARTICLE' ? value.url !== undefined : value.text !== undefined), {
+    message: 'URL_ARTICLE 需要 url；PASTED_TEXT/MANUAL_SCRIPT 需要 text',
+  });
+
+export type CreateContentRequest = z.infer<typeof createContentRequestSchema>;
+
+/** 解析归一化结果（随文档返回，供 UI 显示"这次输入发生了什么"） */
+export const contentNormalizationSchema = z.object({
+  sourceType: contentSourceTypeSchema,
+  /** 原始 URL（URL_ARTICLE）或 null */
+  fetchedUrl: z.string().nullable().default(null),
+  /** 最终 URL（重定向后） */
+  finalUrl: z.string().nullable().default(null),
+  charset: z.string().nullable().default(null),
+  title: z.string().min(1),
+  blockCount: z.number().int().nonnegative(),
+  claims: z.number().int().nonnegative().default(0),
+  tables: z.number().int().nonnegative().default(0),
+  figures: z.number().int().nonnegative().default(0),
+  notes: z.array(z.string().max(200)).default([]),
+});
+
+export type ContentNormalization = z.infer<typeof contentNormalizationSchema>;
+
+export const contentDocumentRecordSchema = z.object({
+  document: contentDocumentSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  sourceId: opaqueIdSchema.nullable().default(null),
+  normalization: contentNormalizationSchema,
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+
+export type ContentDocumentRecord = z.infer<typeof contentDocumentRecordSchema>;
+
+/** 来源（project_sources；§85 SourceSnapshot 的持久化形态） */
+export const contentSourceSchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  url: z.string().min(1),
+  title: z.string().min(1),
+  publisher: z.string().min(1),
+  author: z.string().nullable().default(null),
+  publishedAt: z.string().nullable().default(null),
+  retrievedAt: z.string().min(1),
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  excerpt: z.string().min(1),
+  snapshotKind: z.enum(['live_fetch', 'fixture_reconstruction']),
+  note: z.string().nullable().default(null),
+});
+
+export type ContentSource = z.infer<typeof contentSourceSchema>;
+
+/** Sources 编辑（元数据可改；抓取内容与哈希不可改——那是快照事实） */
+export const updateSourceRequestSchema = z
+  .object({
+    title: z.string().min(1).max(500),
+    author: z.string().max(200).nullable(),
+    publisher: z.string().min(1).max(200),
+    publishedAt: z.string().max(40).nullable(),
+    note: z.string().max(1000).nullable(),
+  })
+  .partial()
+  .strict();
+
+export type UpdateSourceRequest = z.infer<typeof updateSourceRequestSchema>;
+
+/**
+ * 文章抓取器（I/O 由宿主注入；domain 不直接访问网络——同 P03-06 的结果拉取器模式）。
+ * 实现方必须：逐跳校验 SSRF（assertSafeUrl）、限制重定向次数/大小/超时、遵循 Content-Type/charset。
+ */
+export interface ArticleFetcher {
+  readonly kind: string;
+  fetch(input: { url: string; maxBytes?: number; timeoutMs?: number }): Promise<{
+    finalUrl: string;
+    contentType: string | null;
+    bytes: Uint8Array;
+  }>;
+}
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
 export type Claim = z.infer<typeof claimSchema>;
 export type ContentExtractions = z.infer<typeof contentExtractionsSchema>;

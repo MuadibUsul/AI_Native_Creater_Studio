@@ -8,6 +8,7 @@ import { createStorageDeps } from './plugins/storage.js';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
 import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
+import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -76,6 +77,7 @@ const app = await buildServer({
   logger: true,
   credentials: credentialDeps,
   webhooks: webhookDeps,
+  content: { articleFetcher: createHttpArticleFetcher() },
   auth: {
     auth,
     db: handle.db,

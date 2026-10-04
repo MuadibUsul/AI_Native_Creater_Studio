@@ -14,6 +14,7 @@ import { registerBillingRoutes } from './routes/billing.js';
 import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerChannelRoutes } from './routes/channels.js';
+import { registerContentRoutes } from './routes/content.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerCredentialRoutes } from './routes/credentials.js';
 import { registerEventRoutes } from './routes/events.js';
@@ -52,6 +53,8 @@ export interface BuildServerOptions {
    * Webhook 验签与回收依赖（P03-06）。未提供时 Webhook 端点不注册（无验签能力即不可信，fail-closed）。
    */
   webhooks?: WebhookRouteDeps;
+  /** 内容输入依赖（P04-01）：文章抓取器（URL 归一化所需） */
+  content?: { articleFetcher?: import('@ancs/contracts').ArticleFetcher };
 }
 
 /**
@@ -91,6 +94,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const storageDeps = options.storage;
   const credentialDeps = options.credentials;
   const webhookDeps = options.webhooks;
+  const contentDeps = options.content;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
     await app.register(
@@ -112,6 +116,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         if (webhookDeps !== undefined) {
           registerWebhookRoutes(instance, authDeps, webhookDeps);
         }
+        registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

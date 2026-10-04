@@ -38,7 +38,8 @@ export default defineConfig({
             'packages/db/**',
             'packages/testing/**',
             'packages/auth/**',
-            'packages/domain/**',
+            // domain 的集成测试需要数据库 → 排除；纯函数单测（如 content-extract.test.ts）保留在 unit
+            'packages/domain/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
             'apps/worker/src/**/*.integration.test.ts',
             'packages/providers/**/*.integration.test.ts',

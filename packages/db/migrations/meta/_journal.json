@@ -120,6 +120,13 @@
       "when": 1791102234274,
       "tag": "0016_useful_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791103832056,
+      "tag": "0017_numerous_wendigo",
+      "breakpoints": true
     }
   ]
 }
