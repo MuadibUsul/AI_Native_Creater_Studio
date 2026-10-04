@@ -28,7 +28,8 @@
     "provider:verify": "node scripts/provider-verify.mjs",
     "test:motion": "vitest run --project motion",
     "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs",
-    "recovery:rehearsal": "node scripts/recovery-rehearsal.mjs"
+    "recovery:rehearsal": "node scripts/recovery-rehearsal.mjs",
+    "perf:baseline": "node scripts/perf-baseline.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
