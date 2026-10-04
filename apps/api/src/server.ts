@@ -13,6 +13,7 @@ import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerProjectRoutes } from './routes/projects.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
@@ -74,6 +75,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerChannelRoutes(instance, authDeps);
         registerCreatorIdentityRoutes(instance, authDeps);
         registerSpeechProfileRoutes(instance, authDeps);
+        registerProjectRoutes(instance, authDeps);
       },
       { prefix: API_PREFIX },
     );

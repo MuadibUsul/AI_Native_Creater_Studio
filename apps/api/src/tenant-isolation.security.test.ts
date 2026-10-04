@@ -251,6 +251,71 @@ describe('租户隔离（AC-01：跨租户一律拒绝）', () => {
     expect((verify.json() as { name: string }).name).toBe('A 的栏目');
   });
 
+  it('Project / Scene 跨租户全拒绝（AC-01 资源维度扩充）', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const workspaceA = await createWorkspaceFor(a.cookie, 'A 的项目租户');
+
+    // A 建立 Channel → Project → Scene
+    const channel = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceA}/channels`,
+      payload: { name: 'A 的栏目' },
+      headers: { cookie: a.cookie },
+    });
+    expect(channel.statusCode).toBe(201);
+    const channelId = (channel.json() as { id: string }).id;
+
+    const project = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceA}/projects`,
+      payload: { title: 'A 的项目', channelId },
+      headers: { cookie: a.cookie },
+    });
+    expect(project.statusCode).toBe(201);
+    const projectId = (project.json() as { id: string }).id;
+
+    const scene = await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/scenes`,
+      payload: { sceneType: 'HOST_FULL', semanticType: 'HOST_STATEMENT', durationMs: 5000 },
+      headers: { cookie: a.cookie },
+    });
+    expect(scene.statusCode).toBe(201);
+
+    // B 以自己身份访问 A 的项目资源：全部 404（与不存在不可区分）
+    const attempts: Array<{ method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; payload?: unknown }> = [
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/projects` },
+      { method: 'POST', url: `/api/v1/workspaces/${workspaceA}/projects`, payload: { title: '越权', channelId } },
+      { method: 'GET', url: `/api/v1/projects/${projectId}` },
+      { method: 'GET', url: `/api/v1/projects/${projectId}/graph` },
+      {
+        method: 'POST',
+        url: `/api/v1/projects/${projectId}/scenes`,
+        payload: { sceneType: 'SUMMARY', semanticType: 'SUMMARY', durationMs: 5000 },
+      },
+    ];
+    for (const attempt of attempts) {
+      const response = await app.inject({
+        method: attempt.method,
+        url: attempt.url,
+        payload: attempt.payload as object | undefined,
+        headers: { cookie: b.cookie },
+      });
+      expect(response.statusCode, `${attempt.method} ${attempt.url}`).toBe(404);
+      expect(errorEnvelopeSchema.parse(response.json()).error.code).toBe('NOT_FOUND');
+    }
+
+    // A 的项目未被篡改且可正常组装
+    const graph = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectId}/graph`,
+      headers: { cookie: a.cookie },
+    });
+    expect(graph.statusCode).toBe(200);
+    expect((graph.json() as { scenes: unknown[] }).scenes).toHaveLength(1);
+  });
+
   it('成员管理规则（HTTP）：重复添加 409；最后 OWNER 降级 409；ADMIN 不能授予 OWNER 403', async () => {
     const owner = await newUser();
     const admin = await newUser();

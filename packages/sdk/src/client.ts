@@ -4,13 +4,19 @@ import {
   channelWithStyleSchema,
   createChannelRequestSchema,
   createCreatorIdentityRequestSchema,
+  createProjectRequestSchema,
+  createSceneRequestSchema,
+  createSceneResponseSchema,
   createSpeechProfileRequestSchema,
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
   healthResponseSchema,
   nativeAuthorizeQuerySchema,
   pageResponseSchema,
+  projectDetailSchema,
+  projectSchema,
   revokeTokenRequestSchema,
+  sceneGraphSchema,
   sessionInfoSchema,
   signInRequestSchema,
   signInResponseSchema,
@@ -35,7 +41,11 @@ import {
   type WorkspaceWithRole,
   type ChannelWithStyle,
   type ChannelStyleVersion,
+  type CreateSceneResponse,
   type CreatorIdentity,
+  type Project,
+  type ProjectDetail,
+  type SceneGraph,
 } from '@ancs/contracts';
 
 /**
@@ -190,6 +200,18 @@ export interface AncsClient {
       input: Record<string, unknown>,
       options?: MutationOptions,
     ): Promise<SpeechProfile>;
+  };
+  projects: {
+    create(
+      workspaceId: string,
+      input: { title: string; channelId: string; sourceType?: string; aspectRatio?: string },
+      options?: MutationOptions,
+    ): Promise<ProjectDetail>;
+    list(workspaceId: string): Promise<Project[]>;
+    get(projectId: string): Promise<ProjectDetail>;
+    /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
+    graph(projectId: string): Promise<SceneGraph>;
+    addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
   };
 }
 
@@ -451,6 +473,25 @@ export function createClient(options: ClientOptions): AncsClient {
       update: (workspaceId, speechProfileId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}/speech-profiles/${speechProfileId}`, speechProfileSchema, {
           body: input, bodySchema: updateSpeechProfileRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    projects: {
+      create: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects`, projectDetailSchema, {
+          body: input,
+          bodySchema: createProjectRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects`, listOf(projectSchema))).items,
+      get: (projectId) => request('GET', `/api/v1/projects/${projectId}`, projectDetailSchema),
+      graph: (projectId) => request('GET', `/api/v1/projects/${projectId}/graph`, sceneGraphSchema),
+      addScene: (projectId, input, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/scenes`, createSceneResponseSchema, {
+          body: input,
+          bodySchema: createSceneRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

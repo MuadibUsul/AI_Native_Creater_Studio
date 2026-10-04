@@ -75,8 +75,8 @@
 | LED-C-DOM-01 | Workspace | REQ-22-01 | P01-03（P01） | VERIFIED（2026-10-04：workspaces/workspace_members + 迁移 0001 + 服务与授权；证据：docs/verification/P01-03.md） |
 | LED-C-DOM-02 | Channel | REQ-6-01/REQ-22-02 | P01-04（P01） | VERIFIED（2026-10-04：channels + 不可变样式版本 + 快照语义测试；证据：docs/verification/P01-04.md） |
 | LED-C-DOM-03 | Creator Profile | REQ-6-02 | P01-04（P01） | VERIFIED（2026-10-04：CreatorIdentity + 独立版本化子身份（Avatar/Voice/Brand）+ SpeechProfile；证据：docs/verification/P01-04.md） |
-| LED-C-DOM-04 | Project | REQ-22-02 | P02-01（P02） | TODO |
-| LED-C-DOM-05 | Scene | REQ-22-03 | P02-01（P02） | TODO |
+| LED-C-DOM-04 | Project | REQ-22-02 | P02-01（P02） | VERIFIED（2026-10-04：projects 表 + Channel 快照 FK + revision；证据：docs/verification/P02-01.md） |
+| LED-C-DOM-05 | Scene | REQ-22-03 | P02-01（P02） | VERIFIED（2026-10-04：scenes 规范化表 + 独立 revision + Graph 组装） |
 | LED-C-DOM-06 | Asset | REQ-22-04 | P02-04（P02） | TODO |
 | LED-C-DOM-07 | Version | REQ-23-03 | P02-03（P02） | TODO |
 | LED-C-DOM-08 | Edit Event | REQ-23-02 | P02-02（P02） | TODO |
@@ -89,7 +89,7 @@
 |---|---|---|---|---|
 | LED-C-AI-01 | ContentDocument schema | REQ-7-01 | P04-01（P04） | TODO |
 | LED-C-AI-02 | NarrativePlan schema | REQ-8-01 | P04-03（P04） | TODO |
-| LED-C-AI-03 | SceneGraph schema | REQ-12-01 | P01-01/P02-01（P01/P02） | TODO |
+| LED-C-AI-03 | SceneGraph schema | REQ-12-01 | P01-01/P02-01（P01/P02） | VERIFIED（2026-10-04：契约就绪（P01-01）+ DB 状态组装为合法 Graph（P02-01）） |
 | LED-C-AI-04 | Visual Grammar mapping | REQ-10-01 | P04-04（P04） | TODO |
 | LED-C-AI-05 | Director structured output | REQ-9-02/REQ-52-01 | P04-05（P04） | TODO |
 | LED-C-AI-06 | AI Edit change plan | REQ-37-01 | P05-06（P05） | TODO |

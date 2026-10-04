@@ -12,3 +12,4 @@ export {
   speechProfiles,
   voiceIdentities,
 } from './creator.js';
+export { projects, scenes } from './projects.js';

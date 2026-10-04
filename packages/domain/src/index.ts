@@ -20,3 +20,11 @@ export {
   listSpeechProfiles,
   updateSpeechProfile,
 } from './speech-profiles.js';
+export {
+  addScene,
+  assembleSceneGraph,
+  createProject,
+  getProject,
+  getProjectDetail,
+  listProjects,
+} from './projects.js';

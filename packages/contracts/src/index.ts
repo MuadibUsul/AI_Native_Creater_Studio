@@ -126,6 +126,30 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
+// Project / Scene 契约（P02-01 / §22.3、§19.1）
+export {
+  PROJECT_STATUSES,
+  projectStatusSchema,
+  PROJECT_SOURCE_TYPES,
+  projectSourceTypeSchema,
+  projectSchema,
+  projectChannelSnapshotSchema,
+  projectDetailSchema,
+  createProjectRequestSchema,
+  createSceneRequestSchema,
+  createSceneResponseSchema,
+} from './projects.js';
+export type {
+  ProjectStatus,
+  ProjectSourceType,
+  Project,
+  ProjectChannelSnapshot,
+  ProjectDetail,
+  CreateProjectRequest,
+  CreateSceneRequest,
+  CreateSceneResponse,
+} from './projects.js';
+
 // 扩展架构契约（P01-06 / §92）
 export {
   PLUGIN_CAPABILITIES,

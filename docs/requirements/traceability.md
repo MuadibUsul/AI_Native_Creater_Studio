@@ -31,7 +31,7 @@
 | REQ-0-01 | §0 | 以规范为产品与工程唯一 Source of Truth；不得为快速 Demo 破坏核心架构约束 | MUST | 全期 | 全阶段（流程） | G8 覆盖审计；§75/§76 审计 | TODO |
 | REQ-1-01 | §1 | V1 主链路收敛为 Article / Research → Professional Long Video；Shorts/图文/社交短文/Newsletter/多平台适配与发布不得阻塞 V1 | MUST | V1 | P00—P08（范围裁决） | LED-96-SCOPE-01/02；计划 DEC-01..14 | TODO |
 | REQ-1-02 | §1 | V1 成功标准：系统稳定生成一条用户愿意直接发布的长视频；长期多形态能力经 Pack/Plugin 扩张 | 方向 | V1 | P08-05 | 真实金样人工评审（P08-05） | TODO |
-| REQ-2-01 | §2.2 | 项目最终状态由 Scene Graph + Project Metadata + Asset References 决定；Timeline 是视图，修改必须回写 Scene Graph，不得产生第二套不可同步数据 | MUST | V1 | P02-01（P02） | DB 状态可生成合法 Graph（P02-01）；AC-04 | TODO |
+| REQ-2-01 | §2.2 | 项目最终状态由 Scene Graph + Project Metadata + Asset References 决定；Timeline 是视图，修改必须回写 Scene Graph，不得产生第二套不可同步数据 | MUST | V1 | P02-01（P02） | DB 状态可生成合法 Graph（P02-01）；AC-04 | TODO（进度：DB→合法 Graph 已闭环且被测试锁定（P02-01）；并发编辑与回写由 P02-02 覆盖 AC-04） |
 | REQ-2-02 | §2.1 | 默认交互从内容/意图/文章开始，AI First 优先；用户不从空 Timeline 拖素材开始 | 方向 | V1 | P05-03/P05-04（P05） | 工作区默认布局验收（P05-03） | TODO |
 | REQ-2-03 | §2.4 | 确定性视觉优先：真实数据→数据可视化＞结构关系→Motion/Diagram＞真实图片→Source/Image＞地理→Map＞以上都不合适才 AI Video；禁止默认通用 AI B-roll | MUST | V1 | P04-04（P04） | 固定语义输入得到允许类型（P04-04）；AC-15 | TODO |
 | REQ-2-04 | §2.5 | Provider 不得绑死：业务层不得直接依赖特定模型名称或接口字段；所有外部能力必须经内部 Provider Contract 访问 | MUST | V1 | P03-03/P03-04（P03） | 无业务直连 Provider；契约测试（P03-07） | TODO |
@@ -101,8 +101,8 @@
 | REQ-11-02 | §11.2 | Generative Motion Engine（15%～30% 高光场景）；标准组件无法表达时 Director 输出 CUSTOM_MOTION_REQUIRED，由 Motion Designer Agent 生成独立 Scene | MUST | V1 | P07-02（P07） | P07-02 验收 | TODO |
 | REQ-11-03 | §11.2 | Custom Motion 安全 MUST 10 条：隔离沙箱、默认无网络、白名单依赖、TS 编译、静态分析、Render smoke、CPU/RAM/超时限制、不得访问 Secret、不得任意文件路径、通过后才能进入项目 | MUST | V1 | P07-01/P07-02（P07） | AC-18；攻击 fixture 被拒（P07-01） | TODO |
 | REQ-11-04 | §11.2 | 优秀 Custom Motion 可"Save as Component"经审核进入个人/平台组件库 | MAY | 后续 | P07-02 后续 / P16 | — | DEFERRED |
-| REQ-12-01 | §12 | Scene Graph 是跨 Web/Desktop/Mobile 的统一数据模型（schemaVersion/projectId/projectRevision/channelSnapshot/format/timeline/scenes/captions/audioTracks/overlays/sourceReferences） | MUST | V1 | P02-01/P01-01（P01/P02） | 契约往返无损（P01-01）；合法 Graph（P02-01） | TODO |
-| REQ-12-02 | §12.2 | Scene 必备字段（id/project_id/revision/order/start_ms/duration_ms/semantic_type/scene_type/narration/visual_intent/component 或 provider strategy/settings/asset refs/source-data refs/locked/status/时间戳） | MUST | V1 | P02-01（P02） | P02-01 验收 | TODO |
+| REQ-12-01 | §12 | Scene Graph 是跨 Web/Desktop/Mobile 的统一数据模型（schemaVersion/projectId/projectRevision/channelSnapshot/format/timeline/scenes/captions/audioTracks/overlays/sourceReferences） | MUST | V1 | P02-01/P01-01（P01/P02） | 契约往返无损（P01-01）；合法 Graph（P02-01） | 契约往返无损（P01-01）+ DB 状态组装为合法 Graph（P02-01） | VERIFIED |
+| REQ-12-02 | §12.2 | Scene 必备字段（id/project_id/revision/order/start_ms/duration_ms/semantic_type/scene_type/narration/visual_intent/component 或 provider strategy/settings/asset refs/source-data refs/locked/status/时间戳） | MUST | V1 | P02-01（P02） | P02-01 验收 | Scene 必备字段与 sceneSchema 逐字段对齐并落库（P02-01） | VERIFIED |
 | REQ-12-03 | §12.2 | Scene SHOULD 字段：cost_estimate/actual_cost/quality_score/render_status/provider_job_ids/user_notes/ai_reasoning_summary（非私密 CoT）/performance_metrics | SHOULD | V1 | P02-01/P07-05（P02/P07） | P07-05 验收 | TODO |
 | REQ-12-04 | §12.3 | 时间模型：权威值用整数毫秒或整数 frame，不用 float 秒；统一一套；渲染前转换。裁决：持久化权威 = 整数毫秒，渲染边界转 frame（DEC-02） | MUST | V1 | P02-01（P02） | 10 分钟样例无累计漂移；DEC-02 | TODO |
 | REQ-13-01 | §13 | Audio-First：主时钟 = Master Narration；流程 Final Script→Master Voice→Timestamps→Scene/Motion/Subtitle Timing | MUST | V1 | P06-03（P06） | 中英文/数字/缩写/停顿通过（P06-03） | TODO |
@@ -135,7 +135,7 @@
 | REQ-18-01 | §18.1 | Draft 快速便宜（Avatar/AI Video 用 placeholder、标准场景真实预览、预览级声音）；MUST：反复编辑 Draft 不得频繁调用昂贵 Video Provider | MUST | V1 | P05-04（P05） | AC-12；编辑不隐式触发昂贵调用（P05-04） | TODO |
 | REQ-18-02 | §18.2/18.3 | Studio 与 Hero/Premium 档位差异（正式资产/1080p vs Custom Motion/高分辨率）；所有档位为策略配置，不写死供应商 | SHOULD | V1 | P03-03/P07-04（P03/P07） | 档位配置化；P07-04 1080p | TODO |
 | REQ-19-01 | §19.1 | 统一 Job 状态机：WAITING_DEPENDENCY/ QUEUED/RUNNING/PROVIDER_QUEUED/SUCCEEDED/FAILED_RETRYABLE/FAILED_FINAL/CANCEL_REQUESTED/CANCELLED（计划 §5.5 增补执行阶段/提交状态/重试/租约/心跳/对账字段） | MUST | V1 | P03-01（P03） | 状态机测试；AC-06 | TODO |
-| REQ-19-02 | §19.1 | 项目级状态：DRAFT/SCRIPTING/STORYBOARDING/GENERATING_AUDIO/GENERATING_ASSETS/READY_FOR_REVIEW/RENDER_QUEUED/RENDERING/READY/FAILED/ARCHIVED | MUST | V1 | P02-01（P02） | P02-01 验收 | TODO |
+| REQ-19-02 | §19.1 | 项目级状态：DRAFT/SCRIPTING/STORYBOARDING/GENERATING_AUDIO/GENERATING_ASSETS/READY_FOR_REVIEW/RENDER_QUEUED/RENDERING/READY/FAILED/ARCHIVED | MUST | V1 | P02-01（P02） | P02-01 验收 | 状态字段与 §19.1 十一态枚举就绪（P02-01）；状态迁移由编辑/任务系统驱动（P02-02/P03） | VERIFIED |
 | REQ-19-03 | §19.2 | MUST 并发控制：Provider 并发信号量/Workspace 限流/平台限流/队列优先级/指数退避/抖动/幂等/死信与失败检查/人工重试/webhook 验签 | MUST | V1 | P03-01/P03-02（P03） | 杀 Worker 恢复测试（P03-02）；AC-06 | TODO |
 | REQ-19-04 | §19.2 | Provider limit 不得写死，从配置加载 | MUST | V1 | P03-03（P03） | P03-03 验收 | TODO |
 | REQ-19-05 | §19.3 | MVP 基础设施 Redis + BullMQ + PostgreSQL 状态表 + Transactional Outbox；保留 WorkflowEngine 抽象（未来可切 Temporal） | MUST | V1 | P03-01（P03） | Outbox 崩溃恢复（P03-01；AC-06） | TODO |
@@ -150,9 +150,9 @@
 | REQ-20-04 | §20.4 | Privacy 模式：Standard（平台托管常规）；Private（Scene 级最小数据/Signed URL/结果立即回收/禁发全文/更严日志/BYOK 可选）；Enterprise（ZDR/Dedicated/DPA/Regional/Audit） | MUST | 后续 | P09-04（Private）；P16-07（Enterprise）；V1 底线见 REQ-6-3 系列 | 撤销成员后访问立即受限（P09-04） | DEFERRED |
 | REQ-20-05 | §20.4 | 必须区分并分别处理：No training != No storage；API != Zero retention；Delete output != Delete logs（隐私说明与工程代码分别处理） | MUST | V1 | P03-03/P03-06（P03） | Catalog 分别记录三项；P08-01 | TODO |
 | REQ-21-01 | §21 | PG=状态/关系/元数据；Object Storage=文件；Redis=队列/锁/缓存/限流；Analytics 后期 ClickHouse；禁止视频 blob 入 PG | MUST | V1 | P02-04（P02） | P02-04 验收 | TODO |
-| REQ-22-01 | §22.1 | 所有业务资源 MUST 归属 Workspace（Members/Channels/Provider Credentials/Projects/Assets/Billing/Usage） | MUST | V1 | P01-03/P02-01（P01/P02） | AC-01；跨租户引用被拒（P02-01） | TODO |
-| REQ-22-02 | §22.3 | Project 字段：workspace/channel/title/source_type/status/current_version_id/aspect/resolution/fps/target_duration_ms/created_by/时间戳/deleted_at | MUST | V1 | P02-01（P02） | P02-01 验收 | TODO |
-| REQ-22-03 | §22.4 | Scene 规范化记录（含 revision/position/start_ms/duration_ms/semantic_type/scene_type 等）；不得把所有 Scene 塞进一个巨大 JSON 作为唯一状态；Graph 由规范化记录生成 Snapshot | MUST | V1 | P02-01（P02） | P02-01 验收 | TODO |
+| REQ-22-01 | §22.1 | 所有业务资源 MUST 归属 Workspace（Members/Channels/Provider Credentials/Projects/Assets/Billing/Usage） | MUST | V1 | P01-03/P02-01（P01/P02） | AC-01；跨租户引用被拒（P02-01） | 全部业务记录归属可验证：core 表均携带 workspace_id 且查询强制作用域；跨租户引用被拒（P01-03/P02-01）；后续资源表沿用同一约束 | VERIFIED |
+| REQ-22-02 | §22.3 | Project 字段：workspace/channel/title/source_type/status/current_version_id/aspect/resolution/fps/target_duration_ms/created_by/时间戳/deleted_at | MUST | V1 | P02-01（P02） | P02-01 验收 | projects 表逐字段落地并通过创建/详情/列表测试（P02-01） | VERIFIED |
+| REQ-22-03 | §22.4 | Scene 规范化记录（含 revision/position/start_ms/duration_ms/semantic_type/scene_type 等）；不得把所有 Scene 塞进一个巨大 JSON 作为唯一状态；Graph 由规范化记录生成 Snapshot | MUST | V1 | P02-01（P02） | P02-01 验收 | scenes 规范化表 + 独立 revision + Graph 由规范化记录生成（P02-01；证据 docs/verification/P02-01.md） | VERIFIED |
 | REQ-22-04 | §22.5 | Asset 字段集与 AssetType 至少 16 类（SOURCE_DOCUMENT/SOURCE_IMAGE/USER_UPLOAD/AVATAR_CLIP/VOICE_AUDIO/MUSIC/GENERATED_IMAGE/GENERATED_VIDEO/CHART_RENDER/CUSTOM_MOTION_RENDER/SUBTITLE/DRAFT_RENDER/FINAL_VIDEO/SHORT_VIDEO/THUMBNAIL/MANIFEST） | MUST | V1 | P02-04（P02） | P02-04 验收 | TODO |
 
 ## I. 版本、历史、账本与存储策略（§23—§28）
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-06，REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04 → VERIFIED；此前 P01-05：REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01；P01-04：REQ-6-01 / REQ-3-03；P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。**P01 阶段全部完成。**
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-01，REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02 → VERIFIED；此前 P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；P01-05：REQ-29-02 / REQ-29-03 / REQ-29-04 / REQ-33-01；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 
