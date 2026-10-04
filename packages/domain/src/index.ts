@@ -51,6 +51,15 @@ export { buildAlignment, cueForBlock, concatWavSegments, getCurrentMasterNarrati
 export { encodeWavPcm16, parseWavPcm16 } from './wav.js';
 export { buildMixPlan, buildSubtitleOutput, captionCuesOf, previewCaptionLines } from './mixdown.js';
 export { listRebindableGenerations, rebindExternalResult } from './native-fallback.js';
+export {
+  canTransitionRender,
+  createRender,
+  getRender,
+  listRenders,
+  transitionRender,
+  verifyRenderInputFrozen,
+} from './render.js';
+
 export { AI_VIDEO_FORBIDDEN_SCENE_TYPES, AI_VIDEO_FORBIDDEN_SEMANTIC, requestSceneGeneration, sceneGenerationDedupeKey } from './scene-generation.js';
 export type { SceneGenerationResult } from './scene-generation.js';
 

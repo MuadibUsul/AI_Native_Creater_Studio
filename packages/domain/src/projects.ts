@@ -65,7 +65,7 @@ const parseResolution = (resolution: string): { width: number; height: number } 
   return { width: Number(widthText), height: Number(heightText) };
 };
 
-async function loadProjectRow(db: NodePgDatabase, workspaceId: string, projectId: string): Promise<ProjectRow> {
+export async function loadProjectRow(db: NodePgDatabase, workspaceId: string, projectId: string): Promise<ProjectRow> {
   const rows = await db
     .select()
     .from(projects)

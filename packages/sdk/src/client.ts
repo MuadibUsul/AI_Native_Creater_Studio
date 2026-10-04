@@ -29,7 +29,9 @@ import {
   narrationBlockSchema,
   directorApplyRequestSchema,
   createEditPlanRequestSchema,
+  createRenderRequestSchema,
   directorPlanSchema,
+  renderRecordSchema,
   editPlanSchema,
   masterNarrationSchema,
   mixPlanRequestSchema,
@@ -127,7 +129,10 @@ import {
   type FactVisualDecision,
   type NarrationBlock,
   type NarrativeGenerationResult,
+  type CreateRenderRequest,
   type DirectorPlan,
+  type RenderRecord,
+  type RenderStatus,
   type EditPlan,
   type DirectorPolicyInput,
   type MasterNarration,
@@ -592,6 +597,14 @@ export interface AncsClient {
       capability: string,
       query?: { region?: string; callableOnly?: boolean },
     ): Promise<CapabilitySelection>;
+  };
+  renders: {
+    /** 创建渲染（P07-03：冻结输入快照；无版本则自动 FINAL_RENDER 快照） */
+    create(workspaceId: string, projectId: string, input: CreateRenderRequest, options?: MutationOptions): Promise<RenderRecord>;
+    list(workspaceId: string, projectId?: string): Promise<RenderRecord[]>;
+    get(workspaceId: string, renderId: string): Promise<RenderRecord>;
+    /** 状态推进（单向状态机；QUEUED→RENDERING→QA→READY/FAILED/CANCELLED） */
+    transition(workspaceId: string, renderId: string, input: { to: RenderStatus; note?: string }, options?: MutationOptions): Promise<RenderRecord>;
   };
   jobs: {
     list(workspaceId: string, query?: { projectId?: string; status?: Job['status']; limit?: number }): Promise<Job[]>;
@@ -1354,6 +1367,27 @@ export function createClient(options: ClientOptions): AncsClient {
       },
     },
 
+    renders: {
+      create: (workspaceId, projectId, input, mutation) =>
+        // 项目级路由（工作区由服务端从项目反查鉴权）
+        request('POST', `/api/v1/projects/${projectId}/renders`, renderRecordSchema, {
+          body: input,
+          bodySchema: createRenderRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId, projectId) => {
+        if (projectId === undefined) return [];
+        const payload = await request('GET', `/api/v1/projects/${projectId}/renders`, listOf(renderRecordSchema));
+        return payload.items;
+      },
+      get: (workspaceId, renderId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}`, renderRecordSchema),
+      transition: (workspaceId, renderId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/transition`, renderRecordSchema, {
+          body: input,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
     jobs: {
       list: async (workspaceId, query) => {
         const search = new URLSearchParams();

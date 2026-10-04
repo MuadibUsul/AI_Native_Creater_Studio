@@ -162,6 +162,13 @@
       "when": 1791128968649,
       "tag": "0022_last_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791133063956,
+      "tag": "0023_unknown_gambit",
+      "breakpoints": true
     }
   ]
 }

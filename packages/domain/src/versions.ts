@@ -149,43 +149,51 @@ export async function createProjectVersion(
   await loadProjectRow(deps.db, input.workspaceId, input.projectId);
 
   return deps.db.transaction(async (tx) => {
-    await tx.execute(sql`select id from projects where id = ${input.projectId} for update`);
-    const freshRows = await tx
-      .select()
-      .from(projects)
-      .where(eq(projects.id, input.projectId))
-      .limit(1);
-    const fresh = freshRows[0];
-    if (!fresh) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-
-    const sceneRows = await tx.select().from(scenes).where(eq(scenes.projectId, input.projectId)).orderBy(scenes.position);
-    const eventSeq = await currentEventSeq(tx as unknown as NodePgDatabase, input.projectId);
-    const snapshot = await buildSnapshotPayload(tx as unknown as NodePgDatabase, fresh, sceneRows, { eventSeq });
-    const versionRows = await tx
-      .select({ max: sql<number>`coalesce(max(${projectVersions.versionNumber}), 0)` })
-      .from(projectVersions)
-      .where(eq(projectVersions.projectId, input.projectId));
-    const versionNumber = Number(versionRows[0]?.max ?? 0) + 1;
-
-    const inserted = await tx
-      .insert(projectVersions)
-      .values({
-        id: `pv_${randomUUID()}`,
-        workspaceId: input.workspaceId,
-        projectId: input.projectId,
-        versionNumber,
-        snapshot,
-        reason: input.reason,
-        note: input.note ?? null,
-        createdBy: input.createdBy ?? null,
-      })
-      .returning();
-    const row = inserted[0];
-    if (!row) throw new ApiFailure(ERROR_CODES.INTERNAL, 'version insert failed', 500);
-
-    await tx.update(projects).set({ currentVersionId: row.id }).where(eq(projects.id, input.projectId));
-    return toVersionDto(row);
+    return createProjectVersionInTx(tx, input);
   });
+}
+
+/** 事务内版本创建（P07-03：Render 冻结输入快照时在同一事务内建版本）。 */
+export async function createProjectVersionInTx(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; reason: ProjectVersion['reason']; note?: string; createdBy?: string | null },
+): Promise<ProjectVersion> {
+  await tx.execute(sql`select id from projects where id = ${input.projectId} for update`);
+  const freshRows = await tx
+    .select()
+    .from(projects)
+    .where(eq(projects.id, input.projectId))
+    .limit(1);
+  const fresh = freshRows[0];
+  if (!fresh) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+
+  const sceneRows = await tx.select().from(scenes).where(eq(scenes.projectId, input.projectId)).orderBy(scenes.position);
+  const eventSeq = await currentEventSeq(tx, input.projectId);
+  const snapshot = await buildSnapshotPayload(tx, fresh, sceneRows, { eventSeq });
+  const versionRows = await tx
+    .select({ max: sql<number>`coalesce(max(${projectVersions.versionNumber}), 0)` })
+    .from(projectVersions)
+    .where(eq(projectVersions.projectId, input.projectId));
+  const versionNumber = Number(versionRows[0]?.max ?? 0) + 1;
+
+  const inserted = await tx
+    .insert(projectVersions)
+    .values({
+      id: `pv_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      versionNumber,
+      snapshot,
+      reason: input.reason,
+      note: input.note ?? null,
+      createdBy: input.createdBy ?? null,
+    })
+    .returning();
+  const row = inserted[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.INTERNAL, 'version insert failed', 500);
+
+  await tx.update(projects).set({ currentVersionId: row.id }).where(eq(projects.id, input.projectId));
+  return toVersionDto(row);
 }
 
 export async function listProjectVersions(

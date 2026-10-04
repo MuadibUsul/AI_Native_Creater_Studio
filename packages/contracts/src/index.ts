@@ -273,6 +273,27 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// Render 契约（P07-03 / §28、§39）
+export {
+  RENDER_PROFILES,
+  renderProfileSchema,
+  RENDER_PROFILE_SPECS,
+  RENDER_STATUSES,
+  renderStatusSchema,
+  RENDER_ERROR_REASONS,
+  renderInputSchema,
+  renderRecordSchema,
+  createRenderRequestSchema,
+} from './render.js';
+export type {
+  RenderProfile,
+  RenderStatus,
+  RenderErrorReason,
+  RenderInput,
+  RenderRecord,
+  CreateRenderRequest,
+} from './render.js';
+
 // Native Fallback 回绑契约（P06-07 / §39、§40、§45）
 export { REBIND_ERROR_REASONS, rebindExternalResultRequestSchema } from './billing.js';
 export type { RebindErrorReason, RebindExternalResultRequest } from './billing.js';
