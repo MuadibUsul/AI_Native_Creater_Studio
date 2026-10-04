@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { user } from './auth.js';
 import { channelStyleVersions, channels } from './creator.js';
 import { workspaces } from './workspaces.js';
@@ -35,7 +35,12 @@ export const projects = pgTable(
     resolution: text('resolution').notNull(),
     fps: integer('fps').notNull().default(30),
     targetDurationMs: integer('target_duration_ms'),
-    /** TODO(P02-03)：建立 project_versions 后补 FK 约束 */
+    /**
+     * 当前项目版本（P02-03 起：指向不可变快照；restore 只产生新版本，不改写旧版本）。
+     * 有意不建立指向 project_versions 的 FK：与 project_versions.project_id 的 FK 形成
+     * 类型循环（两张表的行类型互相引用会坍缩）；版本行不可变、不会单独删除，
+     * 其级联删除由 project_versions.project_id → projects 一侧负责。
+     */
     currentVersionId: text('current_version_id'),
     createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -46,6 +51,36 @@ export const projects = pgTable(
   (table) => [
     index('projects_workspace_idx').on(table.workspaceId),
     index('projects_channel_idx').on(table.channelId),
+  ],
+);
+
+/**
+ * 项目版本快照（P02-03 / 规范 §23.2）：
+ * 版本行**不可变**；快照在自动时机（AI 重编导前、Final/Publish、手动、每 N 编辑事件）建立；
+ * Restore 从快照构建新的当前状态（不回拨 revision、不改写旧版本与历史事件）。
+ */
+export const projectVersions = pgTable(
+  'project_versions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    versionNumber: integer('version_number').notNull(),
+    /** 快照内容：{ schemaVersion, graph, meta } */
+    snapshot: jsonb('snapshot').notNull(),
+    /** MANUAL / AI_REDIRECT / FINAL_RENDER / PUBLISH / AUTO_EVERY_N_EVENTS */
+    reason: text('reason').notNull(),
+    note: text('note'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('project_versions_project_version_uq').on(table.projectId, table.versionNumber),
+    index('project_versions_project_idx').on(table.projectId, table.createdAt),
   ],
 );
 

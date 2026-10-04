@@ -43,6 +43,27 @@
       "when": 1791092051835,
       "tag": "0005_white_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791093804636,
+      "tag": "0006_open_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791094105035,
+      "tag": "0007_spotty_frank_castle",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791094139345,
+      "tag": "0008_pink_bloodstrike",
+      "breakpoints": true
     }
   ]
 }

@@ -108,6 +108,11 @@ export const insertSceneOperationSchema = z.object({
   /** 插入到该 Scene 之后；null 表示插入到开头 */
   afterSceneId: opaqueIdSchema.nullable().default(null),
   sceneDraft: sceneDraftSchema,
+  /**
+   * 补偿专用（Undo/Redo）：复用原 Scene id，保持历史事件/引用一致；
+   * 普通客户端不提供（由服务端生成）；提供且 id 已被占用时拒绝。
+   */
+  restoreSceneId: opaqueIdSchema.optional(),
 });
 
 export const updateSceneOperationSchema = z.object({
@@ -125,12 +130,16 @@ export const duplicateSceneOperationSchema = z.object({
   op: z.literal('duplicate_scene'),
   sceneId: opaqueIdSchema,
   afterSceneId: opaqueIdSchema.nullable().default(null),
+  /** 补偿专用（Undo/Redo）：复用原副本 id */
+  restoreSceneId: opaqueIdSchema.optional(),
 });
 
 export const splitSceneOperationSchema = z.object({
   op: z.literal('split_scene'),
   sceneId: opaqueIdSchema,
   atMs: videoMsSchema,
+  /** 补偿专用（Undo/Redo）：复用原尾部 Scene id */
+  restoreTailSceneId: opaqueIdSchema.optional(),
 });
 
 export const reorderScenesOperationSchema = z.object({

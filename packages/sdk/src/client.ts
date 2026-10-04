@@ -5,6 +5,7 @@ import {
   createChannelRequestSchema,
   createCreatorIdentityRequestSchema,
   createProjectRequestSchema,
+  createProjectVersionRequestSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
   editRequestSchema,
@@ -17,6 +18,8 @@ import {
   pageResponseSchema,
   projectDetailSchema,
   projectSchema,
+  projectVersionDetailSchema,
+  projectVersionSchema,
   revokeTokenRequestSchema,
   sceneGraphSchema,
   sessionInfoSchema,
@@ -49,6 +52,8 @@ import {
   type EditResponse,
   type Project,
   type ProjectDetail,
+  type ProjectVersion,
+  type ProjectVersionDetail,
   type SceneGraph,
 } from '@ancs/contracts';
 
@@ -218,6 +223,21 @@ export interface AncsClient {
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
     /** 统一编辑协议（§4.6）：条件更新 + EditEvent/Outbox；冲突返回 409 VERSION_CONFLICT */
     edit(projectId: string, editRequest: EditRequest, options?: MutationOptions): Promise<EditResponse>;
+    versions: {
+      /** 建立不可变快照（MANUAL / AI_REDIRECT / FINAL_RENDER / PUBLISH） */
+      create(
+        projectId: string,
+        input: { reason: 'MANUAL' | 'AI_REDIRECT' | 'FINAL_RENDER' | 'PUBLISH'; note?: string },
+        options?: MutationOptions,
+      ): Promise<ProjectVersion>;
+      list(projectId: string): Promise<ProjectVersion[]>;
+      /** 版本详情（含快照本体） */
+      get(projectId: string, versionId: string): Promise<ProjectVersionDetail>;
+    };
+    /** 撤销最近一次编辑（补偿事件；恢复产生新 revision，历史不改写） */
+    undo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
+    /** 重做最近一次撤销（LIFO；新编辑结束重做分支，§4.8） */
+    redo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
   };
 }
 
@@ -506,6 +526,28 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: editRequestSchema,
           // §4.6 的幂等键位于请求信封；SDK 同时镜像到 Idempotency-Key 头
           idempotencyKey: mutation?.idempotencyKey ?? editRequest.idempotencyKey,
+        }),
+      versions: {
+        create: (projectId, input, mutation) =>
+          request('POST', `/api/v1/projects/${projectId}/versions`, projectVersionSchema, {
+            body: input,
+            bodySchema: createProjectVersionRequestSchema,
+            idempotencyKey: mutation?.idempotencyKey,
+          }),
+        list: async (projectId) =>
+          (
+            await request('GET', `/api/v1/projects/${projectId}/versions`, listOf(projectVersionSchema))
+          ).items,
+        get: (projectId, versionId) =>
+          request('GET', `/api/v1/projects/${projectId}/versions/${versionId}`, projectVersionDetailSchema),
+      },
+      undo: (projectId, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/undo`, editResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      redo: (projectId, mutation) =>
+        request('POST', `/api/v1/projects/${projectId}/redo`, editResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
         }),
     },
   };

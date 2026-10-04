@@ -66,7 +66,7 @@
 | REQ-5-05 | §5.4 | Storyboard 页面：Scene 卡片（顺序/类型/缩略图/旁白/时长/数据源/Provider/状态/成本/锁定）与操作（拖排/多选/重生成/改类型/Lock/复制/删除） | MUST | V1 | P05-03（P05） | 同上 | TODO |
 | REQ-5-06 | §5.5 | Scene Editor 属性面板：类型/时长/旁白/视觉意图/数据绑定/Source/组件/动画/布局/背景/Transition/Avatar/资产引用/Provider 策略/AI 编辑框 | MUST | V1 | P05-03（P05） | 同上 | TODO |
 | REQ-5-07 | §5.6 | Lite Timeline MUST 存在（非默认首页）：Narration/Scenes/Music/Captions/Overlays 轨道；支持 reorder/Trim/Split/Duplicate/Delete/Move/Replace/Transition/音量/字幕修正/简单 Crop-Scale；不做复杂 Track 嵌套与高级曲线 | MUST | V1 | P05-05（P05） | 全部操作回写统一协议；刷新后状态一致（P05-05） | TODO |
-| REQ-5-08 | §5.7 | History：人类可读 Intent History；支持 Undo/Redo/Restore 项目版本/Restore 单 Scene；Compare 后续 | MUST | V1 | P02-03/P05-03（P02/P05） | 恢复产生新 revision（P02-03）；AC-19 | TODO |
+| REQ-5-08 | §5.7 | History：人类可读 Intent History；支持 Undo/Redo/Restore 项目版本/Restore 单 Scene；Compare 后续 | MUST | V1 | P02-03/P05-03（P02/P05） | 恢复产生新 revision（P02-03）；AC-19 | TODO（进度：服务端 Undo/Redo（补偿事件）/Restore 项目版本/Restore 单 Scene 已完成（P02-03：恢复产生新 revision、旧版本与账本逐字节不变）；Intent History UI 待 P05-03） |
 | REQ-6-01 | §6 | Channel 长期默认值字段集；修改 Profile 后新项目用新值、旧项目不被静默覆盖、Project 可覆盖 Channel 默认值 | MUST | V1 | P01-04（P01） | 字段集 + 不可变样式版本 + 快照语义被测试锁定（旧快照逐字段不变、新读取继承新值）（P01-04；证据 docs/verification/P01-04.md）；Project 级用例随 P02-01 补入 | VERIFIED |
 | REQ-6-02 | §6 | Creator Identity 拆分为 AvatarIdentity / VoiceIdentity / BrandIdentity / PresenterStyle；Creator Identity 与 Channel Style 可分别版本化，支持同创作者多风格 Channel | MUST | V1 | P01-04/P06-02（P01/P06） | P01-04 验收；身份版本固定（P06-02） | TODO |
 | REQ-6-03 | §6.1 | AvatarIdentity 字段（provider/provider_avatar_id/凭据引用/display_name/status/consent/default look/时间戳）；原则：原始训练素材优先 Provider 托管，平台只存 provider 引用 | MUST | V1 | P06-04（P06） | 校验时长与口型资产（P06-04）；§20.3 | TODO |
@@ -159,11 +159,11 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-23-01 | §23 | 版本架构 = Current State + Event Log + Periodic Snapshot；不做完全纯 Event Sourcing | MUST | V1 | P02-03（P02） | P02-03 验收 | TODO |
+| REQ-23-01 | §23 | 版本架构 = Current State + Event Log + Periodic Snapshot；不做完全纯 Event Sourcing | MUST | V1 | P02-03（P02） | P02-03 验收 | Current State（projects/scenes 规范化表）+ Event Log（edit_events.seq）+ Periodic Snapshot（project_versions 不可变行）三层就位；恢复只追加、不回拨（P02-03） | VERIFIED |
 | REQ-23-02 | §23.1 | EditEvent 字段（actor/action/intent_text/patch_json/base_revision/result_revision）；示例含 from→to 补丁 | MUST | V1 | P02-02（P02） | 同键重放无重复事件（P02-02） | EditEvent 全字段落库（§23.1）+ 与状态/Outbox 同事务（P02-02） | VERIFIED |
-| REQ-23-03 | §23.2 | ProjectVersion 字段与自动快照时机：AI 重编导前后/Final Render/Publish/手动 Save/每 N 事件 | MUST | V1 | P02-03（P02） | P02-03 验收；AC-19 | TODO |
+| REQ-23-03 | §23.2 | ProjectVersion 字段与自动快照时机：AI 重编导前后/Final Render/Publish/手动 Save/每 N 事件 | MUST | V1 | P02-03（P02） | P02-03 验收；AC-19 | ProjectVersion 全字段 + 不可变快照；自动时机已实现：AI 重编导前（AI_REDIRECT，pre-apply 状态）/Restore 后/手动 Save/每 N 事件（seq 水位线，P02-03）；FINAL_RENDER、PUBLISH 是 reason 枚举已就绪，自动接入随 P07-05/P12 | VERIFIED |
 | REQ-23-04 | §23.3 | Undo/Redo：客户端可 optimistic 但最终必须由服务器 Revision 检查；写操作带 baseRevision + idempotencyKey；冲突返回 409 VERSION_CONFLICT | MUST | V1 | P02-02（P02） | AC-03/AC-04；冲突信息可用于刷新（P02-02） | 服务器 revision 条件更新 + 409 VERSION_CONFLICT（含刷新信息）；Undo/Redo 的补偿操作语义待 P02-03（P02-02） | VERIFIED |
-| REQ-24-01 | §24.1 | Intent/Content History（给创作者：改文字/改 Scene/AI 重生成/重导/自然语言意图）与 Audit Log 必须分开 | MUST | V1 | P02-03/P05-03（P02/P05） | 历史与审计分表；P02-03 验收 | TODO |
+| REQ-24-01 | §24.1 | Intent/Content History（给创作者：改文字/改 Scene/AI 重生成/重导/自然语言意图）与 Audit Log 必须分开 | MUST | V1 | P02-03/P05-03（P02/P05） | 历史与审计分表；P02-03 验收 | TODO（进度：Intent/Content History 独立成表（edit_events + intentText，P02-03）；Audit Log 表待 P02-06/P08-02，届时验证分表与字段分离） |
 | REQ-24-02 | §24.2 | AuditLog 覆盖：登录/下载/删除/邀请/改 Key/发布/Provider 凭据访问/权限变更；不保存未发布文章全文或完整 Prompt | MUST | V1 | P01-03/P08-02（P01/P08） | 所有运营动作可审计；P08-02 验收 | TODO |
 | REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO |
 | REQ-25-02 | §25 | Prompt 如需保存使用加密字段并做敏感信息控制；普通日志不得打印完整 Prompt | SHOULD | V1 | P03-04/P03-05（P03） | 日志脱敏验收（P08-03） | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-02，REQ-2-01 / REQ-23-02 / REQ-23-04 → VERIFIED；此前 P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-03，REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

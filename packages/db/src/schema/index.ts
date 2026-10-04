@@ -12,5 +12,5 @@ export {
   speechProfiles,
   voiceIdentities,
 } from './creator.js';
-export { projects, scenes } from './projects.js';
+export { projectVersions, projects, scenes } from './projects.js';
 export { editEvents, outboxEvents } from './history.js';

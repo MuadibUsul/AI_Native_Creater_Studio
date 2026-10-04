@@ -26,6 +26,8 @@ import { channelStyleVersions, channels } from '@ancs/db';
 
 export interface DomainDeps {
   db: NodePgDatabase;
+  /** 自动快照间隔（每 N 个编辑事件，§23.2）；默认 50，测试可调小 */
+  autoSnapshotEveryEvents?: number;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

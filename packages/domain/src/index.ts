@@ -28,5 +28,14 @@ export {
   getProjectDetail,
   listProjects,
 } from './projects.js';
-export { processEdits } from './edits.js';
-export type { ProcessEditsInput, ProcessEditsResult } from './edits.js';
+export { processEdits, replaySceneContent } from './edits.js';
+export type { ProcessEditsInput, ProcessEditsResult, SceneContentSnapshot } from './edits.js';
+export {
+  AUTO_SNAPSHOT_INTERVAL,
+  buildSnapshotPayload,
+  createProjectVersion,
+  getProjectVersion,
+  listProjectVersions,
+  loadSceneRows,
+} from './versions.js';
+export { redoProject, undoProject } from './undo-redo.js';

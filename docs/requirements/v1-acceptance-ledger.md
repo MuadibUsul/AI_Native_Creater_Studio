@@ -22,7 +22,7 @@
 | LED-77-08 | 用户可自然语言要求修改 Scene/Storyboard | REQ-37-01 | P05-06（P05） | TODO |
 | LED-77-09 | 用户可手动 reorder/trim/delete/replace Scene | REQ-3-05/REQ-5-07 | P05-05（P05） | TODO |
 | LED-77-10 | 有 Lite Timeline | REQ-5-07 | P05-05（P05） | TODO |
-| LED-77-11 | 有 Undo / History / Version | REQ-5-08/REQ-23-03 | P02-03（P02） | TODO |
+| LED-77-11 | 有 Undo / History / Version | REQ-5-08/REQ-23-03 | P02-03（P02） | VERIFIED（2026-10-04：服务端 Undo/Redo（补偿事件、LIFO、新编辑结束重做分支）/项目版本快照/整项目与单 Scene Restore 全链路测试；恢复产生新 revision 且旧版本与账本逐字节不变；History UI 属 P05-03） |
 | LED-77-12 | 有资产上传和 Object Storage | REQ-26-02/REQ-22-04 | P02-04（P02） | TODO |
 | LED-77-13 | 有至少一个真实 Avatar Provider | REQ-64-04/REQ-14-02 | P06-04（P06） | TODO |
 | LED-77-14 | 有至少一个真实 Voice Provider | REQ-6-07/REQ-14-03 | P06-02（P06） | TODO |

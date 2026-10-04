@@ -128,9 +128,24 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
-// 编辑历史契约（P02-02 / §23、§24）
-export { EDIT_ACTOR_TYPES, editEventSchema } from './history.js';
-export type { EditEvent } from './history.js';
+// 编辑历史与版本契约（P02-02/P02-03 / §23、§24）
+export {
+  EDIT_ACTOR_TYPES,
+  editEventSchema,
+  VERSION_REASONS,
+  versionReasonSchema,
+  projectVersionSnapshotSchema,
+  projectVersionSchema,
+  projectVersionDetailSchema,
+  createProjectVersionRequestSchema,
+} from './history.js';
+export type {
+  EditEvent,
+  VersionReason,
+  ProjectVersionSnapshot,
+  ProjectVersion,
+  ProjectVersionDetail,
+} from './history.js';
 
 // Project / Scene 契约（P02-01 / §22.3、§19.1）
 export {

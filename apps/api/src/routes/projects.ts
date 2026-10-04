@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import {
   ApiFailure,
   createProjectRequestSchema,
+  createProjectVersionRequestSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
   editRequestSchema,
@@ -15,15 +16,22 @@ import {
   pageResponseSchema,
   projectDetailSchema,
   projectSchema,
+  projectVersionDetailSchema,
+  projectVersionSchema,
   sceneGraphSchema,
 } from '@ancs/contracts';
 import {
   addScene,
   assembleSceneGraph,
   createProject,
+  createProjectVersion,
   getProjectDetail,
+  getProjectVersion,
   listProjects,
+  listProjectVersions,
   processEdits,
+  redoProject,
+  undoProject,
   type DomainDeps,
 } from '@ancs/domain';
 import { projects as projectsTable } from '@ancs/db';
@@ -31,7 +39,9 @@ import type { AuthDeps } from '../plugins/auth.js';
 
 const wsParamsSchema = z.object({ id: opaqueIdSchema });
 const projectParamsSchema = z.object({ projectId: opaqueIdSchema });
+const versionParamsSchema = z.object({ projectId: opaqueIdSchema, versionId: opaqueIdSchema });
 const projectListSchema = pageResponseSchema(projectSchema);
+const versionListSchema = pageResponseSchema(projectVersionSchema);
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema };
 
 /**
@@ -179,6 +189,109 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
         input: request.body,
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  typed.get(
+    '/projects/:projectId/versions',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '项目版本列表（不可变快照；§23.2）',
+        params: projectParamsSchema,
+        response: { 200: versionListSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      const items = await listProjectVersions(domain, { workspaceId, projectId: request.params.projectId });
+      return { items, nextCursor: null };
+    },
+  );
+
+  typed.post(
+    '/projects/:projectId/versions',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '手动建立项目版本快照（MANUAL / AI_REDIRECT / FINAL_RENDER / PUBLISH）',
+        params: projectParamsSchema,
+        body: createProjectVersionRequestSchema,
+        response: { 201: projectVersionSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request, reply) => {
+      const { workspaceId, userId } = await requireProjectAccess(request, request.params.projectId, 'project:write');
+      const version = await createProjectVersion(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        reason: request.body.reason,
+        note: request.body.note,
+        createdBy: userId,
+      });
+      return reply.status(201).send(version);
+    },
+  );
+
+  typed.get(
+    '/projects/:projectId/versions/:versionId',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '版本详情（含快照本体）',
+        params: versionParamsSchema,
+        response: { 200: projectVersionDetailSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      return getProjectVersion(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        versionId: request.params.versionId,
+      });
+    },
+  );
+
+  typed.post(
+    '/projects/:projectId/undo',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '撤销最近一次编辑（补偿事件；恢复产生新 revision，历史不改写）',
+        params: projectParamsSchema,
+        response: { 200: editResponseSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId, userId } = await requireProjectAccess(request, request.params.projectId, 'project:write');
+      const result = await undoProject(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        actor: { type: 'USER', id: userId },
+      });
+      return result.response;
+    },
+  );
+
+  typed.post(
+    '/projects/:projectId/redo',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '重做最近一次撤销（LIFO；新编辑结束重做分支，§4.8）',
+        params: projectParamsSchema,
+        response: { 200: editResponseSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId, userId } = await requireProjectAccess(request, request.params.projectId, 'project:write');
+      const result = await redoProject(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        actor: { type: 'USER', id: userId },
+      });
+      return result.response;
     },
   );
 }

@@ -238,7 +238,7 @@ describe('编辑事务（§4.6）', () => {
     expect(afterUnlock.response.scenes.find((s) => s.id === sceneId)?.narration).toBe('合法修改');
   });
 
-  it('缺失 expectedSceneRevisions → 400；同一请求重复操作同一 Scene → 400', async () => {
+  it('缺失 expectedSceneRevisions → 400；同一请求对同一 Scene 的多个操作按顺序应用（预期只校验一次）', async () => {
     const fixture = await makeFixture();
     const [a] = fixture.sceneIds;
 
@@ -248,15 +248,22 @@ describe('编辑事务（§4.6）', () => {
     })).catch((error: unknown) => error as { code?: string });
     expect(missing).toMatchObject({ code: 'VALIDATION_FAILED' });
 
-    const duplicated = await edit(fixture, makeRequest({
+    // P02-03 起：一个 editRequest 是一个逻辑编辑，同 Scene 多操作顺序应用，
+    // expectedSceneRevisions 在该 Scene 首次被触达时校验一次（§4.6 并发规则不变：竞争仍只允许一个成功）。
+    const sequential = await edit(fixture, makeRequest({
       baseProjectRevision: fixture.projectRevision,
       expectedSceneRevisions: { [a ?? '']: 1 },
       operations: [
         { op: 'update_scene', sceneId: a ?? '', changes: { narration: 'x' } },
-        { op: 'update_scene', sceneId: a ?? '', changes: { narration: 'y' } },
+        { op: 'update_scene', sceneId: a ?? '', changes: { narration: 'y', durationMs: 4000 } },
       ],
-    })).catch((error: unknown) => error as { code?: string; message?: string });
-    expect(duplicated).toMatchObject({ code: 'VALIDATION_FAILED' });
+    }));
+
+    const scene = sequential.response.scenes.find((candidate) => candidate.id === a);
+    expect(scene?.narration).toBe('y');
+    expect(scene?.durationMs).toBe(4000);
+    expect(scene?.revision).toBe(3); // 两个操作各自 +1
+    expect(sequential.response.editEvents.map((event) => event.action)).toEqual(['UPDATE_SCENE', 'UPDATE_SCENE']);
   });
 
   it('结构性操作重算时间线：reorder + split + duplicate + delete 后仍连续相接', async () => {
@@ -301,13 +308,13 @@ describe('编辑事务（§4.6）', () => {
       expectedSceneRevisions: { [fixture.sceneIds[0] ?? '']: 1 },
       operations: [
         { op: 'update_scene', sceneId: fixture.sceneIds[0] ?? '', changes: { narration: '不应生效' } },
-        { op: 'restore_project_version', versionId: 'pv_1' },
+        { op: 'update_script', narrationBlockId: null, changes: { text: 'not ready' } },
       ],
     })).catch((error: unknown) => error as { code?: string; httpStatus?: number; details?: { plannedPhase?: string } });
 
     expect(failure).toMatchObject({ code: 'CAPABILITY_UNAVAILABLE', httpStatus: 501 });
     const failureDetails = (failure as { details?: { plannedPhase?: string } }).details;
-    expect(failureDetails?.plannedPhase).toBe('P02-03（历史恢复）');
+    expect(failureDetails?.plannedPhase).toBe('P04（Script/ContentBlock 模型）');
 
     // 整批不提交：项目 revision 未变、目标 Scene 未改
     const fresh = await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId });

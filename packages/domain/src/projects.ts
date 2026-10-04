@@ -28,7 +28,7 @@ import {
 } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { processEdits } from './edits.js';
-import { toProjectDto, toSceneDto, type ProjectRow } from './mappers.js';
+import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 
 /**
  * Project / Scene 服务（P02-01）。
@@ -275,31 +275,58 @@ export async function assembleSceneGraph(
   const brand = brandRows[0];
   const speech = speechRows[0];
 
-  const sceneDtos = sceneRows.map(toSceneDto);
-  const totalMs = sceneDtos.reduce((sum, scene) => sum + scene.durationMs, 0);
-  const { width, height } = parseResolution(detail.resolution);
+  return buildSceneGraph({
+    project: detail,
+    channelStyleVersion: detail.channelSnapshot.styleVersion,
+    speechProfile: speech ? { id: speech.id, version: speech.currentVersion } : null,
+    identity: {
+      avatar: avatar ? { id: avatar.id, version: avatar.version } : null,
+      voice: voice ? { id: voice.id, version: voice.version } : null,
+      brand: brand ? { id: brand.id, version: brand.version } : null,
+    },
+    sceneRows,
+  });
+}
 
-  const graph: SceneGraph = sceneGraphSchema.parse({
+export interface SceneGraphBuildParams {
+  project: Pick<Project, 'id' | 'channelId' | 'revision' | 'aspectRatio' | 'resolution' | 'fps' | 'targetDurationMs'>;
+  channelStyleVersion: number;
+  speechProfile: { id: string; version: number } | null;
+  identity: {
+    avatar: { id: string; version: number } | null;
+    voice: { id: string; version: number } | null;
+    brand: { id: string; version: number } | null;
+  };
+  sceneRows: SceneRow[];
+}
+
+/** SceneGraph 构建器（组装端点与版本快照共用；出口一律经契约校验）。 */
+export function buildSceneGraph(params: SceneGraphBuildParams): SceneGraph {
+  const sceneDtos = params.sceneRows.map(toSceneDto);
+  const totalMs = sceneDtos.reduce((sum, scene) => sum + scene.durationMs, 0);
+  const { width, height } = parseResolution(params.project.resolution);
+
+  return sceneGraphSchema.parse({
     schemaVersion: '0.1',
-    projectId: detail.id,
-    projectRevision: detail.revision,
+    projectId: params.project.id,
+    projectRevision: params.project.revision,
     channelSnapshot: {
-      channelId: detail.channelId,
-      channelStyleVersion: String(detail.channelSnapshot.styleVersion),
-      speechProfileId: speech?.id ?? null,
-      speechProfileVersion: speech ? String(speech.currentVersion) : null,
+      channelId: params.project.channelId,
+      channelStyleVersion: String(params.channelStyleVersion),
+      speechProfileId: params.speechProfile?.id ?? null,
+      speechProfileVersion: params.speechProfile ? String(params.speechProfile.version) : null,
     },
     identitySnapshot: {
-      avatarIdentityId: avatar?.id ?? null,
-      avatarIdentityVersion: avatar ? String(avatar.version) : null,
-      voiceIdentityId: voice?.id ?? null,
-      voiceIdentityVersion: voice ? String(voice.version) : null,
-      brandIdentityId: brand?.id ?? null,
-      brandIdentityVersion: brand ? String(brand.version) : null,
+      avatarIdentityId: params.identity.avatar?.id ?? null,
+      avatarIdentityVersion: params.identity.avatar ? String(params.identity.avatar.version) : null,
+      voiceIdentityId: params.identity.voice?.id ?? null,
+      voiceIdentityVersion: params.identity.voice ? String(params.identity.voice.version) : null,
+      brandIdentityId: params.identity.brand?.id ?? null,
+      brandIdentityVersion: params.identity.brand ? String(params.identity.brand.version) : null,
     },
-    format: { width, height, fps: detail.fps, aspectRatio: detail.aspectRatio },
+    format: { width, height, fps: params.project.fps, aspectRatio: params.project.aspectRatio },
     timeline: {
-      durationMs: totalMs > 0 ? totalMs : (detail.targetDurationMs ?? 60_000),
+      durationMs: totalMs > 0 ? totalMs : (params.project.targetDurationMs ?? 60_000),
       masterAudioAssetId: null,
     },
     scenes: sceneDtos,
@@ -308,6 +335,4 @@ export async function assembleSceneGraph(
     overlays: [],
     sourceReferences: [],
   });
-
-  return graph;
 }

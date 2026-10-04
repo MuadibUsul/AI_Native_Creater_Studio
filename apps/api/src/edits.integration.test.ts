@@ -158,7 +158,7 @@ describe('编辑事务（HTTP / SDK）', () => {
       .edit(projectId, {
         baseProjectRevision: revision,
         expectedSceneRevisions: {},
-        operations: [{ op: 'restore_project_version', versionId: 'pv_1' }],
+        operations: [{ op: 'update_script', narrationBlockId: null, changes: { text: 'not ready' } }],
         idempotencyKey: `idem_unimpl_sdk_${randomUUID()}`,
       })
       .catch((error: unknown) => error);
@@ -174,6 +174,6 @@ describe('编辑事务（HTTP / SDK）', () => {
         details: (failure as AncsApiError).details,
       },
     });
-    expect(envelope.error.details['plannedPhase']).toBe('P02-03（历史恢复）');
+    expect(envelope.error.details['plannedPhase']).toBe('P04（Script/ContentBlock 模型）');
   });
 });
