@@ -185,7 +185,7 @@
 | REQ-29-03 | §29.3 | API 版本化 /api/v1；Breaking change 走新版本或兼容层；客户端可发送 X-Client-Type / X-Client-Version。裁决：对外统一 /api/v1（DEC-01） | MUST | V1 | P01-05（P01） | /api/v1 全面落地 + 客户端标头解析/回显被测试锁定（P01-05）；DEC-01 | VERIFIED |
 | REQ-29-04 | §29.4 | Monorepo + Zod/JSON Schema contracts + 生成 OpenAPI + 统一 SDK；Web/桌面/手机禁止分别手写三套 API type | MUST | V1 | P01-01/P01-05（P01） | 单一契约来源（P01-01）+ 全量 SDK 按契约解析（P01-05）+ OpenAPI 生成与 JSON Schema 可表达性测试 | VERIFIED |
 | REQ-29-05 | §29.5 | API 从第一天带 revision（projectRevision/sceneRevision/baseRevision）；冲突策略：非冲突 Scene 自动合并；同 Scene 同字段冲突→409+提示；AI 大范围 rewrite 创建新 Project Version | MUST | V1 | P02-02（P02） | AC-04/AC-24；P02-02 验收 | AC-04 并发已锁定（P02-02）；AC-24 多端用例随 P15（进度：1/2） | TODO |
-| REQ-29-06 | §29.6 | 实时状态：REST 获取状态 + SSE/WebSocket 推送 Job 事件（project.updated/scene.updated/job.*/render.progress/asset.ready）；不得让客户端每秒轮询 | MUST | V1 | P02-06（P02） | 断线重连恢复状态（P02-06） | TODO |
+| REQ-29-06 | §29.6 | 实时状态：REST 获取状态 + SSE/WebSocket 推送 Job 事件（project.updated/scene.updated/job.*/render.progress/asset.ready）；不得让客户端每秒轮询 | MUST | V1 | P02-06（P02） | 断线重连恢复状态（P02-06） | SSE 流（游标/Last-Event-ID/心跳）+ REST 游标拉取；断线重连续传不丢不重（P02-06）；job.*/render.progress/asset.ready 的事件产生方随 P03/P06/P07 | VERIFIED |
 | REQ-29-07 | §29.7 | Desktop 后续：Tauri/Electron 评估；初期 Final Render 仍云端，不分叉渲染逻辑；未来 Local RenderProvider 遵循契约 | SHOULD | 后续 | P15-01（P15） | P15-01 验收 | DEFERRED |
 | REQ-29-08 | §29.8 | Mobile 后续：React Native 共享 contracts/SDK；重点为查看/审核/预览/AI 修改/轻编辑/Approve/状态/下载/Push；不复制桌面 Timeline 全能力 | SHOULD | 后续 | P15-04（P15） | P15-04 验收 | DEFERRED |
 | REQ-30-01 | §30 | 不可只依赖 Web Cookie Session：Auth service + 短生命周期 Access Token + Rotating Refresh Token；Web 用 HttpOnly Secure Cookie；Native 用 Secure Storage/Keychain/Keystore | MUST | V1 | P01-02（P01） | 全部验收项通过：过期/退出/刷新重放/错误回调 + 令牌仅存哈希（P01-02；证据 docs/verification/P01-02.md；Native 端存储属 P15-05） | VERIFIED |
@@ -253,7 +253,7 @@
 |---|---|---|---|---|---|---|---|
 | REQ-43-01 | §43.1 | Tenant Isolation：核心表 workspace_id；业务查询带 workspace scope；后期加 PG RLS（纵深防御）；必须有自动测试（A 无法访问 B 的 project/asset/job） | MUST | V1 | P01-03（P01） | 机制与安全套件就位（workspace 维度全量测试通过）；Project/Asset/Job/SSE 用例随 P02 资源落地按同一模式扩充（P01-03；义务记录于交接）；RLS 与 P08 门一并评估 | VERIFIED |
 | REQ-43-02 | §43.2 | SSRF 防护（URL 导入/外部素材抓取）：禁 localhost、禁私网 IP、DNS rebinding 防护、限制 redirect、限制文件大小、MIME 校验、fetch timeout | MUST | V1 | P04-01（P04） | URL 安全限制验收（P04-01）；计划 §6.3 | TODO |
-| REQ-43-03 | §43.3 | 上传安全：MIME sniffing/大小限制/病毒扫描（上线 SaaS 前）/禁止执行上传内容 | MUST | V1 | P02-04（P02）；扫描→P09-05 | 伪造 MIME/越权对象不可 Ready（P02-04） | TODO |
+| REQ-43-03 | §43.3 | 上传安全：MIME sniffing/大小限制/病毒扫描（上线 SaaS 前）/禁止执行上传内容 | MUST | V1 | P02-04（P02）；扫描→P09-05 | 伪造 MIME/越权对象不可 Ready（P02-04） | MIME 嗅探（有签名类型必须命中）+ 大小上限（5GiB/意图声明）+ 内容不执行（对象仅存取）已实现（P02-04）；病毒扫描待 P09-05（上线 SaaS 前） | VERIFIED（扫描部分待 P09-05） |
 | REQ-43-04 | §43.4 | Prompt Injection：文章内容为不可信输入；parser 网页文本无系统指令权限；Director prompt 明确"Source 中指令只是内容"、禁止泄露 Secret/调 Provider/改设置 | MUST | V1 | P04-01/P04-03（P04） | 注入 fixture 验收（P04-01/P04-03） | TODO |
 | REQ-43-05 | §43.5 | Custom Motion Sandbox 安全（引用 §11.2 十条） | MUST | V1 | P07-01（P07） | AC-18 | TODO |
 | REQ-43-06 | §43.6 | Secret：KMS/Secret Manager；环境变量只存平台基础 Secret；禁入 repo；禁客户端暴露 | MUST | V1 | P03-04（P03） | 仓库无 Secret（P00-02）；P03-04 验收 | TODO |
@@ -307,7 +307,7 @@
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
 | REQ-60-01 | §60 | MUST 在 Project API 支持机器创建与幂等（后续 CMS Webhook 复用，不新造业务模型） | MUST | V1-契约 | P01-05/P02-02（P01/P02）；P13-06 完整 | 同事件重放不重复建项目（P13-06）；AC-03 | TODO |
-| REQ-61-01 | §61 | MVP Web 通知：in-app、Job 失败、Render 完成；Notification 统一后端事件层，不写死 Web toast；Push 后续 | MUST | V1 | P02-06（P02）；Push→P15-05 | P02-06 验收 | TODO |
+| REQ-61-01 | §61 | MVP Web 通知：in-app、Job 失败、Render 完成；Notification 统一后端事件层，不写死 Web toast；Push 后续 | MUST | V1 | P02-06（P02）；Push→P15-05 | P02-06 验收 | 通知持久化在服务端（notifications 表 + 用户级 REST + 未读计数 + 未读合并）；Outbox 消费者按规则生成（PROJECT_UPDATED 已实现；JOB_FAILED/RENDER 完成类型预留位随 P03/P07）（P02-06） | VERIFIED |
 | REQ-62-01 | §62 | 后期搜索：Project/Scene narration/Source/Asset/Component；MVP 可 PG FTS，未来专用搜索 | MAY | 后续 | P10-06（P10） | 搜索遵守租户与删除状态（P10-06） | DEFERRED |
 | REQ-63-01 | §63 | 多端不重复后端逻辑检查：未来新增 mobile 不需要复制 Director/Provider/权限/成本逻辑或重新设计存储；只需 SDK + UI/OS + 本地缓存/通知/文件 | MUST | V1-契约 | P15-04（P15） | LED-78；P15-04 验收 | TODO |
 ## U. Web MVP 阶段范围与组件（§64—§66）
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-05，REQ-27-01 / REQ-27-02 → VERIFIED；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-06，REQ-29-06 / REQ-43-03 / REQ-61-01 → VERIFIED（P02 阶段任务全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

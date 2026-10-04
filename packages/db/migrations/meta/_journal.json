@@ -71,6 +71,13 @@
       "when": 1791095488770,
       "tag": "0009_slimy_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791097015172,
+      "tag": "0010_magical_paper_doll",
+      "breakpoints": true
     }
   ]
 }

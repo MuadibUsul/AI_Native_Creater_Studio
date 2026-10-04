@@ -47,6 +47,8 @@ export const outboxEvents = pgTable(
   'outbox_events',
   {
     id: text('id').primaryKey(),
+    /** 单调事件序号（SSE 游标；同一事务内多事件 createdAt 并列，必须以 seq 定序） */
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
     workspaceId: text('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
@@ -55,5 +57,8 @@ export const outboxEvents = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp('published_at', { withTimezone: true }),
   },
-  (table) => [index('outbox_events_pending_idx').on(table.publishedAt, table.createdAt)],
+  (table) => [
+    index('outbox_events_pending_idx').on(table.publishedAt, table.createdAt),
+    index('outbox_events_workspace_seq_idx').on(table.workspaceId, table.seq),
+  ],
 );

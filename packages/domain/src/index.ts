@@ -40,6 +40,17 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  getEventCursor,
+  getUnreadNotificationCount,
+  listEventsAfter,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  pollEvents,
+  runNotificationDispatch,
+} from './events.js';
+export type { EventPage, NotificationDispatchReport } from './events.js';
+export {
   DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
   isAssetBoundToScene,
   isAssetReferencedByVersionSnapshot,

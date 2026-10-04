@@ -1,4 +1,4 @@
-import type { ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 import {
   channelStyleVersionSchema,
   channelWithStyleSchema,
@@ -6,6 +6,10 @@ import {
   createCreatorIdentityRequestSchema,
   assetDetailSchema,
   assetSchema,
+  eventCursorSchema,
+  notificationSchema,
+  unreadCountResponseSchema,
+  workspaceEventSchema,
   createProjectRequestSchema,
   createProjectVersionRequestSchema,
   createUploadIntentRequestSchema,
@@ -58,6 +62,9 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type EventCursor,
+  type Notification,
+  type WorkspaceEvent,
   type ConfirmUploadRequest,
   type CreateUploadIntentInput,
   type DownloadUrlResponse,
@@ -294,6 +301,26 @@ export interface AncsClient {
       options?: MutationOptions,
     ): Promise<AssetDetail>;
   };
+  events: {
+    /** 游标快照（headSeq；从 head 起仅收新事件） */
+    cursor(workspaceId: string): Promise<EventCursor>;
+    /** 按游标拉取事件（断线恢复原语；cursor=0 全量重放；超出 head → 409 CURSOR_AHEAD） */
+    list(workspaceId: string, options?: { cursor?: number; limit?: number }): Promise<{ events: WorkspaceEvent[]; headSeq: number }>;
+    /**
+     * SSE 订阅（异步迭代器）：`for await (const event of client.events.subscribe(id, {cursor})) { … }`
+     * 断线后可用最后收到的 seq 作为 cursor 重连续传。
+     */
+    subscribe(
+      workspaceId: string,
+      options?: { cursor?: number; signal?: AbortSignal },
+    ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  notifications: {
+    list(options?: { workspaceId?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]>;
+    unreadCount(options?: { workspaceId?: string }): Promise<number>;
+    markRead(notificationId: string, options?: MutationOptions): Promise<Notification>;
+    markAllRead(options?: { workspaceId?: string } & MutationOptions): Promise<number>;
+  };
 }
 
 export function createClient(options: ClientOptions): AncsClient {
@@ -392,6 +419,10 @@ export function createClient(options: ClientOptions): AncsClient {
   } as unknown as ZodType<void>;
 
   const listOf = <T>(schema: ZodType<T>) => pageResponseSchema(schema);
+  const eventListSchema = z.object({
+    events: z.array(workspaceEventSchema),
+    headSeq: z.number().int().nonnegative(),
+  });
 
   /** 客户端预计算 SHA-256（用于 workspace 内去重与完整性校验；无 WebCrypto 环境返回 null） */
   const sha256Hex = async (data: Uint8Array): Promise<string | null> => {
@@ -695,6 +726,82 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: confirmUploadRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         });
+      },
+    },
+
+    events: {
+      cursor: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/events/cursor`, eventCursorSchema),
+      list: (workspaceId, options) => {
+        const search = new URLSearchParams();
+        if (options?.cursor !== undefined) search.set('cursor', String(options.cursor));
+        if (options?.limit !== undefined) search.set('limit', String(options.limit));
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return request('GET', `/api/v1/workspaces/${workspaceId}/events${suffix}`, eventListSchema);
+      },
+      subscribe: async function* (workspaceId, options) {
+        const headers = await buildHeaders(false);
+        headers.set('accept', 'text/event-stream');
+        if (options?.cursor !== undefined) headers.set('last-event-id', String(options.cursor));
+        const init: RequestInit = { method: 'GET', headers };
+        if (credentials === 'include') init.credentials = 'include';
+        if (options?.signal !== undefined) init.signal = options.signal;
+        const response = await doFetch(`${baseUrl}/api/v1/workspaces/${workspaceId}/events/stream`, init);
+        if (!response.ok || response.body === null) {
+          throw new Error(`事件流连接失败：HTTP ${String(response.status)}`);
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+            let separatorIndex = buffer.indexOf('\n\n');
+            while (separatorIndex >= 0) {
+              const frame = buffer.slice(0, separatorIndex);
+              buffer = buffer.slice(separatorIndex + 2);
+              separatorIndex = buffer.indexOf('\n\n');
+              const dataLines = frame
+                .split('\n')
+                .filter((line) => line.startsWith('data:'))
+                .map((line) => line.slice(5).trim());
+              if (dataLines.length === 0) continue; // 注释/心跳帧
+              yield workspaceEventSchema.parse(JSON.parse(dataLines.join('\n')));
+            }
+          }
+        } finally {
+          await reader.cancel().catch(() => undefined);
+        }
+      },
+    },
+
+    notifications: {
+      list: async (options) => {
+        const search = new URLSearchParams();
+        if (options?.workspaceId !== undefined) search.set('workspaceId', options.workspaceId);
+        if (options?.unreadOnly === true) search.set('unreadOnly', 'true');
+        if (options?.limit !== undefined) search.set('limit', String(options.limit));
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return (await request('GET', `/api/v1/notifications${suffix}`, listOf(notificationSchema))).items;
+      },
+      unreadCount: async (options) => {
+        const suffix = options?.workspaceId !== undefined ? `?workspaceId=${options.workspaceId}` : '';
+        return (await request('GET', `/api/v1/notifications/unread-count${suffix}`, unreadCountResponseSchema)).unread;
+      },
+      markRead: (notificationId, mutation) =>
+        request('POST', `/api/v1/notifications/${notificationId}/read`, notificationSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      markAllRead: async (options) => {
+        const suffix = options?.workspaceId !== undefined ? `?workspaceId=${options.workspaceId}` : '';
+        const result = await request(
+          'POST',
+          `/api/v1/notifications/read-all${suffix}`,
+          z.object({ updated: z.number().int().nonnegative() }),
+          { idempotencyKey: options?.idempotencyKey },
+        );
+        return result.updated;
       },
     },
   };

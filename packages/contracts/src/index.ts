@@ -173,6 +173,17 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 事件与通知契约（P02-06 / §34）
+export {
+  NOTIFICATION_TYPES,
+  notificationTypeSchema,
+  notificationSchema,
+  unreadCountResponseSchema,
+  workspaceEventSchema,
+  eventCursorSchema,
+} from './notifications.js';
+export type { NotificationType, Notification, UnreadCountResponse, WorkspaceEvent, EventCursor } from './notifications.js';
+
 // 资产与对象存储契约（P02-04 / §22.5、§26、§27、§51）
 export {
   ASSET_TYPES,

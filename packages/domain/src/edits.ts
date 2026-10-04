@@ -842,6 +842,10 @@ async function applyEditsInTransaction(
         revision: bumpedRow.revision,
         operations: request.operations.map((op) => op.op),
         sceneIds: [...affectedSceneIds],
+        // 通知规则需要发起人（不通知本人）与补偿标记（撤销/重做聚合展示）
+        actorId: input.actor.id,
+        actorType: input.actor.type,
+        ...(input.compensation !== undefined ? { compensation: input.compensation.kind } : {}),
       },
     });
 
