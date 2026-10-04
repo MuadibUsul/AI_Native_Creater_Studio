@@ -92,6 +92,13 @@
       "when": 1791098487101,
       "tag": "0012_slow_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791099256077,
+      "tag": "0013_lame_prowler",
+      "breakpoints": true
     }
   ]
 }

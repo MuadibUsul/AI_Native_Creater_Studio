@@ -165,7 +165,7 @@
 | REQ-23-04 | §23.3 | Undo/Redo：客户端可 optimistic 但最终必须由服务器 Revision 检查；写操作带 baseRevision + idempotencyKey；冲突返回 409 VERSION_CONFLICT | MUST | V1 | P02-02（P02） | AC-03/AC-04；冲突信息可用于刷新（P02-02） | 服务器 revision 条件更新 + 409 VERSION_CONFLICT（含刷新信息）；Undo/Redo 的补偿操作语义待 P02-03（P02-02） | VERIFIED |
 | REQ-24-01 | §24.1 | Intent/Content History（给创作者：改文字/改 Scene/AI 重生成/重导/自然语言意图）与 Audit Log 必须分开 | MUST | V1 | P02-03/P05-03（P02/P05） | 历史与审计分表；P02-03 验收 | TODO（进度：Intent/Content History 独立成表（edit_events + intentText，P02-03）；Audit Log 表待 P02-06/P08-02，届时验证分表与字段分离） |
 | REQ-24-02 | §24.2 | AuditLog 覆盖：登录/下载/删除/邀请/改 Key/发布/Provider 凭据访问/权限变更；不保存未发布文章全文或完整 Prompt | MUST | V1 | P01-03/P08-02（P01/P08） | 所有运营动作可审计；P08-02 验收 | TODO |
-| REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO |
+| REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO（进度：价格/限额/模型核验时间的版本化配置已就位（Catalog，P03-03）；追踪表与成本记录随 P03-05） |
 | REQ-25-02 | §25 | Prompt 如需保存使用加密字段并做敏感信息控制；普通日志不得打印完整 Prompt | SHOULD | V1 | P03-04/P03-05（P03） | 日志脱敏验收（P08-03） | TODO |
 | REQ-26-01 | §26 | DB 只存 storage_key；Object URL 不得作为永久标识；路径按 workspace/project 逻辑分层 | MUST | V1 | P02-04（P02） | AC-10；P02-04 验收 | assets/asset_versions 只存 storage_key（assets 表注释与测试断言 DTO 无对象 URL）；键布局 workspaces/{ws}/projects/{project|library}/{category}/assets/{id}/v{n}/（P02-04） | VERIFIED |
 | REQ-26-02 | §26.1 | MUST 大文件 Client 直传 Object Storage（upload-intents→signed URL→直传→确认）；禁止 5GB 视频经 Web App Server 中转 | MUST | V1 | P02-04（P02） | P02-04 验收 | 意图→签名直传 URL→确认链路完成（本地驱动为 dev 转发，生产用 S3/R2 预签名；单文件上限 5 GiB；云适配器待真实凭据，§13.5-8）（P02-04） | VERIFIED |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-02，REQ-19-01 / REQ-19-03 / REQ-19-05 → VERIFIED；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-03，REQ-19-03 的并发信号量配置模型落地（Provider Catalog 版本化 + 调用门控）；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

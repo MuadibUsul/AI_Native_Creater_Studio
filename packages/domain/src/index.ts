@@ -40,6 +40,14 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  buildSeedCatalogEntries,
+  createCatalogVersion,
+  evaluateModelAvailability,
+  getCurrentCatalog,
+  requireCallableModel,
+  selectByCapability,
+} from './catalog.js';
+export {
   cancelJob,
   claimJob,
   computeBackoffSeconds,

@@ -173,6 +173,45 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// Provider Catalog 契约（P03-03）
+export {
+  PROVIDER_KINDS,
+  providerKindSchema,
+  PROVIDER_CAPABILITIES,
+  DATA_RETENTION_POLICIES,
+  dataRetentionPolicySchema,
+  MODEL_STATUSES,
+  modelStatusSchema,
+  PRICE_UNITS,
+  priceUnitSchema,
+  priceProfileSchema,
+  modelLimitsSchema,
+  providerModelSchema,
+  providerCatalogEntrySchema,
+  providerCatalogSchema,
+  modelAvailabilitySchema,
+  DEFAULT_MAX_VERIFICATION_AGE_DAYS,
+  catalogResponseSchema,
+  capabilitySelectionSchema,
+  catalogSeedRequestSchema,
+  CATALOG_ERROR_REASONS,
+} from './providers.js';
+export type {
+  ProviderKind,
+  DataRetentionPolicy,
+  ModelStatus,
+  PriceUnit,
+  PriceProfile,
+  ModelLimits,
+  ProviderModel,
+  ProviderCatalogEntry,
+  ProviderCatalog,
+  ModelAvailability,
+  CatalogResponse,
+  CapabilitySelection,
+  CatalogSeedRequest,
+} from './providers.js';
+
 // 任务契约（P03-01 / 计划 §5.5）
 export {
   JOB_STATUSES,

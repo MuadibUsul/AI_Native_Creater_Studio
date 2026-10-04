@@ -6,6 +6,8 @@ import {
   createCreatorIdentityRequestSchema,
   assetDetailSchema,
   assetSchema,
+  catalogResponseSchema,
+  capabilitySelectionSchema,
   eventCursorSchema,
   jobSchema,
   notificationSchema,
@@ -63,6 +65,8 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type CatalogResponse,
+  type CapabilitySelection,
   type EventCursor,
   type Job,
   type Notification,
@@ -316,6 +320,16 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  providerCatalog: {
+    /** 当前 Provider Catalog（版本化配置 + 核验时间） */
+    get(workspaceId: string): Promise<CatalogResponse>;
+    /** Router 按能力筛选候选（含可用性判定；默认仅可调用） */
+    capabilities(
+      workspaceId: string,
+      capability: string,
+      query?: { region?: string; callableOnly?: boolean },
+    ): Promise<CapabilitySelection>;
   };
   jobs: {
     list(workspaceId: string, query?: { projectId?: string; status?: Job['status']; limit?: number }): Promise<Job[]>;
@@ -783,6 +797,21 @@ export function createClient(options: ClientOptions): AncsClient {
         } finally {
           await reader.cancel().catch(() => undefined);
         }
+      },
+    },
+
+    providerCatalog: {
+      get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/provider-catalog`, catalogResponseSchema),
+      capabilities: (workspaceId, capability, query) => {
+        const search = new URLSearchParams();
+        if (query?.region !== undefined) search.set('region', query.region);
+        if (query?.callableOnly === false) search.set('callableOnly', 'false');
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return request(
+          'GET',
+          `/api/v1/workspaces/${workspaceId}/provider-catalog/capabilities/${encodeURIComponent(capability)}${suffix}`,
+          capabilitySelectionSchema,
+        );
       },
     },
 

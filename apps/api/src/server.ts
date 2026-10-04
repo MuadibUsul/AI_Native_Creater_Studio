@@ -11,6 +11,7 @@ import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCapabilityRoutes } from './routes/capabilities.js';
+import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerEventRoutes } from './routes/events.js';
@@ -88,6 +89,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerProjectRoutes(instance, authDeps);
         registerEventRoutes(instance, authDeps);
         registerJobRoutes(instance, authDeps);
+        registerCatalogRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }
