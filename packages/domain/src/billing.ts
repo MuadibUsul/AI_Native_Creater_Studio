@@ -624,6 +624,21 @@ export async function completeProviderGeneration(
   return toGenerationDto(next);
 }
 
+/** 单个 Provider 用量记录（P06-07 回绑用；工作区隔离）。 */
+export async function getProviderGeneration(
+  deps: DomainDeps,
+  input: { workspaceId: string; generationId: string },
+): Promise<ProviderGeneration> {
+  const rows = await deps.db
+    .select()
+    .from(providerGenerations)
+    .where(and(eq(providerGenerations.id, input.generationId), eq(providerGenerations.workspaceId, input.workspaceId)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'provider generation not found', 404);
+  return toGenerationDto(row);
+}
+
 export async function listProviderGenerations(
   deps: DomainDeps,
   input: { workspaceId: string; jobId?: string; limit?: number },

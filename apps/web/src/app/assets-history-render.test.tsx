@@ -22,6 +22,39 @@ const { default: RenderPage } = await import('./w/[workspaceId]/p/[projectId]/re
  * Render：**诚实占位**（未接线，不给假按钮）+ 可渲染快照列表。
  */
 
+describe('Assets × 外部处理回绑（P06-07）', () => {
+  it('展示待回绑的 Provider 任务引用；选择 READY 资产 → 回绑调用 SDK', async () => {
+    const rebind = vi.fn().mockResolvedValue({ id: 'pgn_1', resultAssetId: 'ast_1' });
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([{ id: 'ast_1', assetType: 'USER_UPLOAD', status: 'READY', origin: 'USER_UPLOAD', retentionClass: 'KEEP_DRAFT' }]),
+      },
+      billing: {
+        externalResults: vi.fn().mockResolvedValue([
+          { id: 'pgn_1', providerId: 'veo.mock', providerJobId: 'pj_abcdef123456', status: 'SUBMITTED', resultAssetId: null },
+        ]),
+        rebindExternalResult: rebind,
+      },
+    });
+    renderWithClient(<AssetsPage />, client);
+    expect(await screen.findByTestId('external-results')).toBeTruthy();
+    expect(await screen.findByText('veo.mock')).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText('回绑资产 pgn_1'), 'ast_1');
+    await userEvent.click(screen.getByRole('button', { name: '回绑' }));
+    await waitFor(() => expect(rebind).toHaveBeenCalledWith('ws_1', 'pgn_1', { assetId: 'ast_1', note: '平台外处理完成后回绑' }));
+  });
+
+  it('无任务引用：诚实空态（说明来源与用途）', async () => {
+    const client = mockClient({
+      assets: { list: vi.fn().mockResolvedValue([]) },
+      billing: { externalResults: vi.fn().mockResolvedValue([]), rebindExternalResult: vi.fn() },
+    });
+    renderWithClient(<AssetsPage />, client);
+    await screen.findByTestId('external-results');
+    expect(screen.getByText(/没有待回绑的 Provider 任务引用/)).toBeTruthy();
+  });
+});
+
 describe('Assets', () => {
   it('空：上传表单可用；提交调用 SDK 一体化上传（含 projectId）', async () => {
     const upload = vi.fn().mockResolvedValue({ id: 'ast_1', status: 'READY' });

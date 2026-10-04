@@ -37,6 +37,7 @@ import {
   creditHoldSchema,
   ledgerEntrySchema,
   providerGenerationSchema,
+  rebindExternalResultRequestSchema,
   topUpRequestSchema,
   upsertBudgetRequestSchema,
   workspaceBudgetSchema,
@@ -134,6 +135,7 @@ import {
   type CreditHold,
   type LedgerEntry,
   type ProviderGeneration,
+  type RebindExternalResultRequest,
   type WorkspaceBudget,
   type ProviderConnection,
   type ProviderRouteDecision,
@@ -528,6 +530,15 @@ export interface AncsClient {
     /** 预留（原子；超限 402 BUDGET_EXCEEDED） */
     reserve(workspaceId: string, input: { jobId: string; estimatedCredits: number }, options?: MutationOptions): Promise<CreditHold>;
     generations(workspaceId: string, query?: { jobId?: string; limit?: number }): Promise<ProviderGeneration[]>;
+    /** Provider 任务引用（Native Fallback 入口；onlyUnfulfilled 筛未回绑）（P06-07） */
+    externalResults(workspaceId: string, query?: { onlyUnfulfilled?: boolean; limit?: number }): Promise<ProviderGeneration[]>;
+    /** 回绑外部处理产物（READY 资产 → 任务引用；场景绑定仍走编辑协议） */
+    rebindExternalResult(
+      workspaceId: string,
+      generationId: string,
+      input: RebindExternalResultRequest,
+      options?: MutationOptions,
+    ): Promise<ProviderGeneration>;
   };
   providerConnections: {
     /** 创建 BYOK 连接（secret 只进不出；响应只含掩码） */
@@ -1237,6 +1248,19 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/billing/reservations`, creditHoldSchema, {
           body: input,
           bodySchema: z.object({ jobId: z.string().min(1), estimatedCredits: z.number().int().nonnegative() }),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      externalResults: async (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.onlyUnfulfilled !== undefined) search.set('onlyUnfulfilled', String(query.onlyUnfulfilled));
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/external-results${suffix}`, listOf(providerGenerationSchema))).items;
+      },
+      rebindExternalResult: (workspaceId, generationId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/external-results/${generationId}/rebind`, providerGenerationSchema, {
+          body: input,
+          bodySchema: rebindExternalResultRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
       generations: async (workspaceId, query) => {

@@ -273,6 +273,10 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// Native Fallback 回绑契约（P06-07 / §39、§40、§45）
+export { REBIND_ERROR_REASONS, rebindExternalResultRequestSchema } from './billing.js';
+export type { RebindErrorReason, RebindExternalResultRequest } from './billing.js';
+
 // 混音与字幕契约（P06-06 / §58、§59）
 export {
   MIX_ERROR_REASONS,

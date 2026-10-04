@@ -141,11 +141,37 @@ export const providerGenerationSchema = z.object({
   actualCredits: creditsSchema.nullable().default(null),
   attempt: z.number().int().nonnegative().default(0),
   error: z.record(z.string(), z.unknown()).nullable().default(null),
+  /** P06-07：外部处理回绑的结果资产（新 AssetVersion；来源/授权随资产保留） */
+  resultAssetId: opaqueIdSchema.nullable().default(null),
+  resultAssetVersionId: opaqueIdSchema.nullable().default(null),
+  rebindSource: z.enum(['EXTERNAL_UPLOAD']).nullable().default(null),
+  reboundAt: isoDateTimeSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
 
 export type ProviderGeneration = z.infer<typeof providerGenerationSchema>;
+
+/** P06-07 Native Fallback：把外部处理完成的产物资产回绑到 Provider 任务引用 */
+export const REBIND_ERROR_REASONS = {
+  /** 资产不属于该工作区（跨租户/错误引用一律拒绝） */
+  ASSET_NOT_IN_WORKSPACE: 'ASSET_NOT_IN_WORKSPACE',
+  /** 资产尚未 READY（未完成上传/探测失败） */
+  ASSET_NOT_READY: 'ASSET_NOT_READY',
+  /** Provider 任务引用不存在（本工作区） */
+  GENERATION_NOT_FOUND: 'GENERATION_NOT_FOUND',
+} as const;
+
+export type RebindErrorReason = (typeof REBIND_ERROR_REASONS)[keyof typeof REBIND_ERROR_REASONS];
+
+export const rebindExternalResultRequestSchema = z.object({
+  /** 外部处理后上传的资产（必须是 READY 且属于同一工作区） */
+  assetId: opaqueIdSchema,
+  /** 备注（例如"人工在 Provider 后台完成"） */
+  note: z.string().max(300).optional(),
+});
+
+export type RebindExternalResultRequest = z.infer<typeof rebindExternalResultRequestSchema>;
 
 /** 记录一次 Provider 调用（P03-06/P06 使用；本任务提供幂等的记录/结算原语） */
 export const recordGenerationRequestSchema = z.object({

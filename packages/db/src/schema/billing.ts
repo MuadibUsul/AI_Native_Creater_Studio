@@ -119,6 +119,12 @@ export const providerGenerations = pgTable(
     estimatedCredits: integer('estimated_credits'),
     actualCredits: integer('actual_credits'),
     error: jsonb('error'),
+    /** P06-07 Native Fallback：外部处理完成后回绑的结果资产（新 AssetVersion；不原地覆盖） */
+    resultAssetId: text('result_asset_id'),
+    resultAssetVersionId: text('result_asset_version_id'),
+    /** 回绑来源（EXTERNAL_UPLOAD = 用户在平台外处理后上传） */
+    rebindSource: text('rebind_source'),
+    reboundAt: timestamp('rebound_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

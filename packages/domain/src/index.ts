@@ -50,6 +50,8 @@ export { planVisual } from './visual-plan.js';
 export { buildAlignment, cueForBlock, concatWavSegments, getCurrentMasterNarration, resolveSynthesisVoice, segmentCacheKey, segmentStorageKey, synthesizeMasterNarration } from './alignment.js';
 export { encodeWavPcm16, parseWavPcm16 } from './wav.js';
 export { buildMixPlan, buildSubtitleOutput, captionCuesOf, previewCaptionLines } from './mixdown.js';
+export { listRebindableGenerations, rebindExternalResult } from './native-fallback.js';
+
 
 
 export {

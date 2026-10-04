@@ -155,6 +155,13 @@
       "when": 1791127436719,
       "tag": "0021_peaceful_tana_nile",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791128968649,
+      "tag": "0022_last_weapon_omega",
+      "breakpoints": true
     }
   ]
 }
