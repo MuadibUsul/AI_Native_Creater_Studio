@@ -173,6 +173,41 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 账本与预算契约（P03-05 / 规范 §35.1、§68）
+export {
+  LEDGER_ENTRY_TYPES,
+  ledgerEntryTypeSchema,
+  ledgerEntrySchema,
+  HOLD_STATUSES,
+  holdStatusSchema,
+  creditHoldSchema,
+  BUDGET_PERIODS,
+  budgetPeriodSchema,
+  workspaceBudgetSchema,
+  upsertBudgetRequestSchema,
+  billingStatusSchema,
+  topUpRequestSchema,
+  PROVIDER_GENERATION_STATUSES,
+  providerGenerationStatusSchema,
+  providerGenerationSchema,
+  recordGenerationRequestSchema,
+  BUDGET_REJECTION_REASONS,
+} from './billing.js';
+export type {
+  LedgerEntryType,
+  LedgerEntry,
+  HoldStatus,
+  CreditHold,
+  BudgetPeriod,
+  WorkspaceBudget,
+  UpsertBudgetRequest,
+  BillingStatus,
+  TopUpRequest,
+  ProviderGenerationStatus,
+  ProviderGeneration,
+  RecordGenerationRequest,
+} from './billing.js';
+
 // Provider 凭据与路由契约（P03-04 / 规范 §17.2、§17.3）
 export {
   CREDENTIAL_MODES,

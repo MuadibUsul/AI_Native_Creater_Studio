@@ -10,6 +10,7 @@ import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerBillingRoutes } from './routes/billing.js';
 import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerChannelRoutes } from './routes/channels.js';
@@ -97,6 +98,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerEventRoutes(instance, authDeps);
         registerJobRoutes(instance, authDeps);
         registerCatalogRoutes(instance, authDeps);
+        registerBillingRoutes(instance, authDeps);
         if (credentialDeps !== undefined) {
           registerCredentialRoutes(instance, authDeps, credentialDeps);
         }

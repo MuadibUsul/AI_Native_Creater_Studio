@@ -165,7 +165,7 @@
 | REQ-23-04 | §23.3 | Undo/Redo：客户端可 optimistic 但最终必须由服务器 Revision 检查；写操作带 baseRevision + idempotencyKey；冲突返回 409 VERSION_CONFLICT | MUST | V1 | P02-02（P02） | AC-03/AC-04；冲突信息可用于刷新（P02-02） | 服务器 revision 条件更新 + 409 VERSION_CONFLICT（含刷新信息）；Undo/Redo 的补偿操作语义待 P02-03（P02-02） | VERIFIED |
 | REQ-24-01 | §24.1 | Intent/Content History（给创作者：改文字/改 Scene/AI 重生成/重导/自然语言意图）与 Audit Log 必须分开 | MUST | V1 | P02-03/P05-03（P02/P05） | 历史与审计分表；P02-03 验收 | TODO（进度：Intent/Content History 独立成表（edit_events + intentText，P02-03）；Audit Log 表待 P02-06/P08-02，届时验证分表与字段分离） |
 | REQ-24-02 | §24.2 | AuditLog 覆盖：登录/下载/删除/邀请/改 Key/发布/Provider 凭据访问/权限变更；不保存未发布文章全文或完整 Prompt | MUST | V1 | P01-03/P08-02（P01/P08） | 所有运营动作可审计；P08-02 验收 | TODO |
-| REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | TODO（进度：价格/限额/模型核验时间的版本化配置已就位（Catalog，P03-03）；追踪表与成本记录随 P03-05） |
+| REQ-25-01 | §25 | 每次 Provider 调用可追踪（provider_generations：provider/model/operation/credential_mode/provider_job_id/input_hash/状态/延迟/估算与实际成本/币种/重试/错误/时间戳） | MUST | V1 | P03-05（P03） | 付费尝试均记录成本（P03-05） | provider_generations 全字段表 + 幂等记录/结算原语（唯一键 (workspace,job,attempt,provider,operation) 重放返回原行）；BYOK 计费经可注入策略（不硬编码）；**真实 Provider 成本**待 P06 实测（当前由调用方写入估算/实际值） | VERIFIED（真实成本写入待 P06） |
 | REQ-25-02 | §25 | Prompt 如需保存使用加密字段并做敏感信息控制；普通日志不得打印完整 Prompt | SHOULD | V1 | P03-04/P03-05（P03） | 日志脱敏验收（P08-03） | TODO |
 | REQ-26-01 | §26 | DB 只存 storage_key；Object URL 不得作为永久标识；路径按 workspace/project 逻辑分层 | MUST | V1 | P02-04（P02） | AC-10；P02-04 验收 | assets/asset_versions 只存 storage_key（assets 表注释与测试断言 DTO 无对象 URL）；键布局 workspaces/{ws}/projects/{project|library}/{category}/assets/{id}/v{n}/（P02-04） | VERIFIED |
 | REQ-26-02 | §26.1 | MUST 大文件 Client 直传 Object Storage（upload-intents→signed URL→直传→确认）；禁止 5GB 视频经 Web App Server 中转 | MUST | V1 | P02-04（P02） | P02-04 验收 | 意图→签名直传 URL→确认链路完成（本地驱动为 dev 转发，生产用 S3/R2 预签名；单文件上限 5 GiB；云适配器待真实凭据，§13.5-8）（P02-04） | VERIFIED |
@@ -210,7 +210,7 @@
 |---|---|---|---|---|---|---|---|
 | REQ-34-01 | §34 | 第一版表清单（users/sessions/workspaces/members/channels/creator_profiles/projects/project_sources/claims/source_citations/narrative_plans/scripts/scenes/scene_data_bindings/assets/scene_assets/project_versions/edit_events/audit_logs/jobs/job_dependencies/provider_generations/provider_connections/provider_configs/renders/publications/usage_ledger/credit_ledger/storage_usage/component_definitions/custom_components/notifications/webhook_events/outbox_events）；裁决：按实际阶段建表，不为未来功能提前建空系统（DEC-12） | MUST | V1 | P02/P03 各任务迁移 | 迁移录入仓库；DEC-12 | TODO |
 | REQ-34-02 | §34 | 后期表：analytics_events/video_performance/scene_performance/creator_learnings/experiments | MAY | 后续 | P14（P14） | P14 验收 | DEFERRED |
-| REQ-35-01 | §35 | 统一 "Video Credits" 用户概念（内部=Provider 成本+渲染+存储+平台毛利）；UI 不暴露混乱的 Provider Credits | MUST | V1 | P03-05/P09-03（P03/P09） | P09-03 验收 | TODO |
+| REQ-35-01 | §35 | 统一 "Video Credits" 用户概念（内部=Provider 成本+渲染+存储+平台毛利）；UI 不暴露混乱的 Provider Credits | MUST | V1 | P03-05/P09-03（P03/P09） | P09-03 验收 | TODO（进度：Credits 账本（整数、只追加）与预算/预留/结算已就位（P03-05）；毛利/套餐/UI 展示随 P09-03） |
 | REQ-35-02 | §35.1 | 必须用 ledger 而非可变 balance（credit_ledger：type CREDIT/DEBIT/REFUND/ADJUSTMENT + reference + metadata） | MUST | V1 | P03-05（P03） | AC-11/AC-21；回调重放只结算一次 | TODO |
 | REQ-35-03 | §35.2 | BYOK 计费策略（扣 Workflow/Render Credits 或含订阅）不得硬编码在 generation service | SHOULD | 后续 | P09-01（P09） | P09-01 验收 | DEFERRED |
 | REQ-36-01 | §36 | 套餐必须考虑存储配额；UI 显示用量；Storage usage 由后台周期任务核算；不永久保留所有 Draft | SHOULD | 后续 | P09-01（P09）；TTL 侧 P02-05 | P09-01 验收 | DEFERRED |
@@ -332,9 +332,9 @@
 |---|---|---|---|---|---|---|---|
 | REQ-67-01 | §67 | 最小 Admin：Users/Workspaces/Projects/Queue/Failed Jobs/Provider status/Provider spend/Usage/Credits/Storage/Abuse flag/Manual retry | MUST | V1 | P08-02（P08） | P08-02 验收 | TODO |
 | REQ-67-02 | §67 | Admin 权限严格分离，不复用普通用户角色（PLATFORM_ADMIN） | MUST | V1 | P01-03/P08-02（P01/P08） | 普通用户不能访问（P08-02） | TODO |
-| REQ-68-01 | §68 | 成本保护实现：per-job max cost/per-project budget/workspace daily cap/provider daily cap/circuit breaker/retry max/idempotency/"Final Render 需显式动作"默认 | MUST | V1 | P03-05（P03） | AC-11；并发抢预算不超额 | TODO |
+| REQ-68-01 | §68 | 成本保护实现：per-job max cost/per-project budget/workspace daily cap/provider daily cap/circuit breaker/retry max/idempotency/"Final Render 需显式动作"默认 | MUST | V1 | P03-05（P03） | AC-11；并发抢预算不超额 | **per-job max cost + workspace 周期预算（DAILY/MONTHLY）+ 原子预留（AC-11 并发不超额）+ 账本结算幂等 + retry max（P03-02）已实现（P03-05）**；provider daily cap 与 circuit breaker 待 P06（需真实失败率/延迟数据）；"Final Render 需显式动作"随 P07-05 | VERIFIED（provider 级限额与熔断→P06；显式 Final Render→P07-05） |
 | REQ-68-02 | §68 | 超预算时 Router：降级模型/提示用户/不允许无限重试 | MUST | V1 | P03-05（P03） | P03-05 验收；计划 §6.1 | TODO |
-| REQ-69-01 | §69 | 昂贵操作必须带 deterministic generation key（scene revision+provider config+prompt+source checksums+output profile）；重复请求先查 succeeded；双击 Generate 不得两个付费任务 | MUST | V1 | P03-05（P03） | AC-02；计划 §5.6 指纹 | TODO |
+| REQ-69-01 | §69 | 昂贵操作必须带 deterministic generation key（scene revision+provider config+prompt+source checksums+output profile）；重复请求先查 succeeded；双击 Generate 不得两个付费任务 | MUST | V1 | P03-05（P03） | AC-02；计划 §5.6 指纹 | TODO（进度：provider_generations 的 input_hash 字段与唯一键（重放不重复记账）+ 预留幂等（同 job 不重复占额）已就位（P03-05）；**生成指纹的构造与"先查 succeeded"**（AC-02 双击 Generate）随 P03-06/P06 的生成入口落地） |
 | REQ-70-01 | §70 | 性能目标：API p95＜500ms/Scene patch optimistic＜150ms/项目首屏＜3s/预览修改＜500ms/上传直传/大列表分页虚拟化 | SHOULD | V1 | P08-04（P08） | 记录测试环境与结果或列明阻塞（P08-04） | TODO |
 | REQ-70-02 | §70 | 外部生成任务只提供进度状态，不阻塞 UI | MUST | V1 | P03-01（P03） | 202+jobId；进度事件（P02-06） | jobs REST（详情/列表/取消/重试）+ job.queued/started/progress/completed/failed 事件经 SSE 推送（P03-01）；UI 侧随 P05 | VERIFIED |
 | REQ-71-01 | §71 | 可靠性 MUST：Worker crash 后 Job 可恢复/webhook 重放不重复扣费或重复生成/API 幂等/Render 失败可重试/Asset 生成成功立即持久化/Provider 临时 URL 到期不影响已完成项目 | MUST | V1 | P03-02（P03） | AC-05/06/07/08/09/10；杀 Worker 恢复（P03-02） | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-04，REQ-17-02 / REQ-45-01 落地、REQ-51-06 **4/4 收尾**；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-05，REQ-25-01 / REQ-68-01 → VERIFIED（REQ-35-01 / REQ-69-01 记录进度）；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

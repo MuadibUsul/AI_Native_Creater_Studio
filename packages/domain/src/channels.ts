@@ -15,6 +15,7 @@ import {
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
 import type { CredentialCipher, JobQueueAdapter, PlatformCredentialRegistry, ProviderTestHook } from '@ancs/contracts';
+import type { BillingPolicy } from './billing.js';
 import type { RetryPolicy } from './jobs.js';
 import type { RetentionConfig } from './retention.js';
 
@@ -48,6 +49,8 @@ export interface DomainDeps {
   platformCredentials?: PlatformCredentialRegistry;
   /** Provider 连接测试钩子（P03-04/P03-07：真实适配器或 Mock） */
   providerTestHooks?: readonly ProviderTestHook[];
+  /** 计费策略（P03-05；§35.2：BYOK 计费不得硬编码在 generation service） */
+  billingPolicy?: BillingPolicy;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

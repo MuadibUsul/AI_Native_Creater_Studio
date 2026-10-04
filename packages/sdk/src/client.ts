@@ -6,8 +6,15 @@ import {
   createCreatorIdentityRequestSchema,
   assetDetailSchema,
   assetSchema,
+  billingStatusSchema,
   catalogResponseSchema,
   capabilitySelectionSchema,
+  creditHoldSchema,
+  ledgerEntrySchema,
+  providerGenerationSchema,
+  topUpRequestSchema,
+  upsertBudgetRequestSchema,
+  workspaceBudgetSchema,
   createConnectionRequestSchema,
   providerConnectionSchema,
   providerRouteDecisionSchema,
@@ -72,8 +79,13 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type BillingStatus,
   type CatalogResponse,
   type CapabilitySelection,
+  type CreditHold,
+  type LedgerEntry,
+  type ProviderGeneration,
+  type WorkspaceBudget,
   type ProviderConnection,
   type ProviderRouteDecision,
   type TestConnectionResponse,
@@ -331,6 +343,27 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  billing: {
+    /** 计费状态（余额/预算/周期消耗与预留） */
+    status(workspaceId: string): Promise<BillingStatus>;
+    /** 账本条目（只追加） */
+    ledger(workspaceId: string, query?: { limit?: number }): Promise<LedgerEntry[]>;
+    /** 设置预算（周期上限 + per-job 上限） */
+    setBudget(
+      workspaceId: string,
+      input: { period?: 'DAILY' | 'MONTHLY'; limitCredits: number; perJobMaxCredits?: number },
+      options?: MutationOptions,
+    ): Promise<WorkspaceBudget>;
+    /** 充值（CREDIT 条目） */
+    topUp(
+      workspaceId: string,
+      input: { amountCredits: number; note?: string },
+      options?: MutationOptions,
+    ): Promise<{ entry: LedgerEntry; balanceCredits: number }>;
+    /** 预留（原子；超限 402 BUDGET_EXCEEDED） */
+    reserve(workspaceId: string, input: { jobId: string; estimatedCredits: number }, options?: MutationOptions): Promise<CreditHold>;
+    generations(workspaceId: string, query?: { jobId?: string; limit?: number }): Promise<ProviderGeneration[]>;
   };
   providerConnections: {
     /** 创建 BYOK 连接（secret 只进不出；响应只含掩码） */
@@ -835,6 +868,40 @@ export function createClient(options: ClientOptions): AncsClient {
         } finally {
           await reader.cancel().catch(() => undefined);
         }
+      },
+    },
+
+    billing: {
+      status: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/billing/status`, billingStatusSchema),
+      ledger: async (workspaceId, query) => {
+        const suffix = query?.limit !== undefined ? `?limit=${String(query.limit)}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/billing/ledger${suffix}`, listOf(ledgerEntrySchema))).items;
+      },
+      setBudget: (workspaceId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/billing/budget`, workspaceBudgetSchema, {
+          body: input,
+          bodySchema: upsertBudgetRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      topUp: (workspaceId, input, mutation) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/billing/credits`,
+          z.object({ entry: ledgerEntrySchema, balanceCredits: z.number().int() }),
+          { body: input, bodySchema: topUpRequestSchema, idempotencyKey: mutation?.idempotencyKey },
+        ),
+      reserve: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/billing/reservations`, creditHoldSchema, {
+          body: input,
+          bodySchema: z.object({ jobId: z.string().min(1), estimatedCredits: z.number().int().nonnegative() }),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      generations: async (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.jobId !== undefined) search.set('jobId', query.jobId);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/provider-generations${suffix}`, listOf(providerGenerationSchema))).items;
       },
     },
 

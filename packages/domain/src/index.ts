@@ -40,6 +40,23 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  completeProviderGeneration,
+  getBalanceCredits,
+  getBillingStatus,
+  getBudget,
+  ledgerEffect,
+  listLedger,
+  listProviderGenerations,
+  periodKey,
+  recordProviderGeneration,
+  releaseHold,
+  reserveCredits,
+  settleHold,
+  topUpCredits,
+  upsertBudget,
+} from './billing.js';
+export type { BillingPolicy } from './billing.js';
+export {
   createConnection,
   getConnection,
   listConnections,

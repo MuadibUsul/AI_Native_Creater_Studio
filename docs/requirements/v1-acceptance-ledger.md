@@ -32,7 +32,7 @@
 | LED-77-18 | 能输出 1080p 完整 MP4 | REQ-4-04 | P07-04（P07） | TODO |
 | LED-77-19 | 能输出字幕（SRT/VTT） | REQ-58-01 | P06-06（P06） | TODO |
 | LED-77-20 | 能生成 Project Manifest | REQ-28-01 | P07-04（P07） | TODO |
-| LED-77-21 | 有 per-generation cost 记录 | REQ-25-01 | P03-05（P03） | TODO |
+| LED-77-21 | 有 per-generation cost 记录 | REQ-25-01 | P03-05（P03） | TODO（进度：provider_generations 表（含估算/实际成本、延迟、重试、凭证模式）+ 幂等记录原语已就位（P03-05）；真实成本数值待 P06 实测写入） |
 | LED-77-22 | 有 Workspace 数据隔离测试 | REQ-43-01/REQ-51-06 | P01-03（P01） | TODO（进度：跨 workspace 读/写拒绝 + Signed URL scope + 资产侧凭据隔离（P02-04，security 19 项）；Provider 凭据隔离待 P03-04） |
 | LED-77-23 | 后端 API 可独立于 Web 被调用 | REQ-29-02 | P01-05（P01） | VERIFIED（2026-10-04：示例与 CI 均在不启动 Web 下完成授权读写） |
 | LED-77-24 | Shared SDK 可以被未来 Native Client 使用 | REQ-29-04/REQ-63-01 | P01-05（P01） | TODO |
@@ -81,7 +81,7 @@
 | LED-C-DOM-07 | Version | REQ-23-03 | P02-03（P02） | TODO |
 | LED-C-DOM-08 | Edit Event | REQ-23-02 | P02-02（P02） | VERIFIED（2026-10-04：edit_events 全字段 + base/result revision + 同事务 Outbox；证据：docs/verification/P02-02.md） |
 | LED-C-DOM-09 | Job | REQ-19-01 | P03-01（P03） | TODO |
-| LED-C-DOM-10 | Provider Generation | REQ-25-01 | P03-05（P03） | TODO |
+| LED-C-DOM-10 | Provider Generation | REQ-25-01 | P03-05（P03） | TODO（进度：模型就位（provider_generations，P03-05）；生成链路写入随 P03-06/P06） |
 
 ### 3.3 AI（6）
 
@@ -110,12 +110,12 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO（进度：API/编辑协议幂等已锁定（AC-03，P02-02）；幂等键 TTL 清理已实现（P02-05）；Provider 凭据与连接操作幂等（P03-04）；账本结算幂等待 P03-05） |
+| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO（进度：API/编辑协议幂等（AC-03，P02-02）；幂等键 TTL 清理（P02-05）；Provider 凭据操作幂等（P03-04）；**账本结算幂等（回调重放只结算一次）+ 用量记录唯一键重放（P03-05）**；生成指纹与"先查 succeeded"随 P03-06/P06） |
 | LED-C-REL-02 | retry policy | REQ-19-03/REQ-71-01 | P03-02（P03） | TODO |
 | LED-C-REL-03 | provider concurrency limiter | REQ-19-03/REQ-19-04 | P03-01/P03-03（P03） | TODO |
 | LED-C-REL-04 | result persistence | REQ-45-02/REQ-71-01 | P03-06（P03） | TODO |
 | LED-C-REL-05 | failure fallback | REQ-55-01 | P04-05/P03-02（P04/P03） | TODO |
-| LED-C-REL-06 | cost ledger | REQ-25-01/REQ-35-02 | P03-05（P03） | TODO |
+| LED-C-REL-06 | cost ledger | REQ-25-01/REQ-35-02 | P03-05（P03） | VERIFIED（2026-10-04：credit_ledger 只追加（余额为条目效果推论）+ 预算/原子预留/结算幂等/退款（HOLD_RELEASE 释放）全链路测试；Provider 成本数值随 P06 实测写入） |
 
 ### 3.6 Security（6）
 
