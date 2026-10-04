@@ -173,6 +173,21 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 任务契约（P03-01 / 计划 §5.5）
+export {
+  JOB_STATUSES,
+  jobStatusSchema,
+  JOB_TERMINAL_STATUSES,
+  JOB_SUBMIT_STATES,
+  jobSubmitStateSchema,
+  jobStageSchema,
+  jobSchema,
+  jobQueueMessageSchema,
+  DEFAULT_QUEUE,
+  MAINTENANCE_QUEUE,
+} from './jobs.js';
+export type { JobStatus, JobSubmitState, Job, JobQueueMessage, JobQueueAdapter } from './jobs.js';
+
 // 事件与通知契约（P02-06 / §34）
 export {
   NOTIFICATION_TYPES,

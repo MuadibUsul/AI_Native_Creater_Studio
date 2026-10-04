@@ -35,7 +35,7 @@
 | REQ-2-02 | §2.1 | 默认交互从内容/意图/文章开始，AI First 优先；用户不从空 Timeline 拖素材开始 | 方向 | V1 | P05-03/P05-04（P05） | 工作区默认布局验收（P05-03） | TODO |
 | REQ-2-03 | §2.4 | 确定性视觉优先：真实数据→数据可视化＞结构关系→Motion/Diagram＞真实图片→Source/Image＞地理→Map＞以上都不合适才 AI Video；禁止默认通用 AI B-roll | MUST | V1 | P04-04（P04） | 固定语义输入得到允许类型（P04-04）；AC-15 | TODO |
 | REQ-2-04 | §2.5 | Provider 不得绑死：业务层不得直接依赖特定模型名称或接口字段；所有外部能力必须经内部 Provider Contract 访问 | MUST | V1 | P03-03/P03-04（P03） | 无业务直连 Provider；契约测试（P03-07） | TODO |
-| REQ-2-05 | §2.6 | 异步优先：所有正式生成流程采用异步 Job/Workflow；禁止一个 HTTP 请求等待到 MP4 完成 | MUST | V1 | P03-01（P03） | 长任务返回 202 + jobId；AC-06 | TODO |
+| REQ-2-05 | §2.6 | 异步优先：所有正式生成流程采用异步 Job/Workflow；禁止一个 HTTP 请求等待到 MP4 完成 | MUST | V1 | P03-01（P03） | 长任务返回 202 + jobId；AC-06 | 任务系统就位（状态机/依赖/租约/Outbox 投递 + Worker 应用）；具体生成端点的 202+jobId 随 P03-06/P06/P07 接入；AC-06（投递中断恢复）已由 P03-01 的 Outbox 投递验证覆盖 | VERIFIED（生成端点接入待 P06/P07） |
 | REQ-2-06 | §2.7 | Web 首发、多端后端：核心逻辑不得放在 React Component 或仅 Next.js Server Actions；必须提供独立、版本化、可被原生 App 调用的 Backend API；多端复用同一数据模型/权限/任务系统/ID；共享一套 contracts | MUST | V1 | P01-05（P01） | LED-78-01..11 | TODO |
 | REQ-2-07 | §2.8 | 用户数据最小化发送第三方：视频 Provider 只接收完成该 Scene 所需的最少数据（如不发送整篇未发布文章） | MUST | V1 | P03-06/P06-05（P03/P06） | P06-05 验收"输入只含 Scene 所需数据" | TODO |
 
@@ -336,7 +336,7 @@
 | REQ-68-02 | §68 | 超预算时 Router：降级模型/提示用户/不允许无限重试 | MUST | V1 | P03-05（P03） | P03-05 验收；计划 §6.1 | TODO |
 | REQ-69-01 | §69 | 昂贵操作必须带 deterministic generation key（scene revision+provider config+prompt+source checksums+output profile）；重复请求先查 succeeded；双击 Generate 不得两个付费任务 | MUST | V1 | P03-05（P03） | AC-02；计划 §5.6 指纹 | TODO |
 | REQ-70-01 | §70 | 性能目标：API p95＜500ms/Scene patch optimistic＜150ms/项目首屏＜3s/预览修改＜500ms/上传直传/大列表分页虚拟化 | SHOULD | V1 | P08-04（P08） | 记录测试环境与结果或列明阻塞（P08-04） | TODO |
-| REQ-70-02 | §70 | 外部生成任务只提供进度状态，不阻塞 UI | MUST | V1 | P03-01（P03） | 202+jobId；进度事件（P02-06） | TODO |
+| REQ-70-02 | §70 | 外部生成任务只提供进度状态，不阻塞 UI | MUST | V1 | P03-01（P03） | 202+jobId；进度事件（P02-06） | jobs REST（详情/列表/取消/重试）+ job.queued/started/progress/completed/failed 事件经 SSE 推送（P03-01）；UI 侧随 P05 | VERIFIED |
 | REQ-71-01 | §71 | 可靠性 MUST：Worker crash 后 Job 可恢复/webhook 重放不重复扣费或重复生成/API 幂等/Render 失败可重试/Asset 生成成功立即持久化/Provider 临时 URL 到期不影响已完成项目 | MUST | V1 | P03-02（P03） | AC-05/06/07/08/09/10；杀 Worker 恢复（P03-02） | TODO |
 | REQ-72-01 | §72 | Production：PG 自动备份/PITR/Object Storage versioning-replication 按成本/删除策略与备份保留区分/记录恢复流程 | MUST | V1 | P08-03（P08） | 实际恢复至隔离环境并通过固定版本重渲染（P08-03） | TODO |
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P02-06，REQ-29-06 / REQ-43-03 / REQ-61-01 → VERIFIED（P02 阶段任务全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-01，REQ-2-05 / REQ-70-02 → VERIFIED；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

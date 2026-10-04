@@ -114,9 +114,10 @@ describe('事件契约', () => {
     expect(eventEnvelopeSchema.safeParse({ ...event, resourceRevision: null }).success).toBe(true);
   });
 
-  it('V1 已知事件类型覆盖 §29.6 列表', () => {
-    expect(EVENT_TYPES).toHaveLength(8);
+  it('V1 已知事件类型覆盖 §29.6 列表（含 P03-01 增补的 job.queued 派发提示）', () => {
+    expect(EVENT_TYPES).toHaveLength(9);
     expect(EVENT_TYPES).toContain('render.progress');
     expect(EVENT_TYPES).toContain('asset.ready');
+    expect(EVENT_TYPES).toContain('job.queued');
   });
 });

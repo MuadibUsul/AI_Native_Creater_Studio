@@ -1,0 +1,25 @@
+{
+  "name": "@ancs/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "node --experimental-strip-types src/main.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@ancs/contracts": "workspace:*",
+    "@ancs/db": "workspace:*",
+    "@ancs/domain": "workspace:*",
+    "@ancs/providers-queue-bullmq": "workspace:*",
+    "@ancs/providers-storage-local": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "6.0.3"
+  }
+}

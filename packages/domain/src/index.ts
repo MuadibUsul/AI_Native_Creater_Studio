@@ -40,6 +40,28 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  cancelJob,
+  claimJob,
+  completeJob,
+  createJob,
+  DbPollQueue,
+  DEFAULT_LEASE_SECONDS,
+  failJob,
+  getJob,
+  heartbeatJob,
+  listJobs,
+  MAINTENANCE_DISPATCH_JOB_TYPE,
+  MAINTENANCE_RETENTION_JOB_TYPE,
+  NOOP_JOB_TYPE,
+  requeueExpiredLeases,
+  requireQueue,
+  retryJob,
+  runJobDispatch,
+  runMaintenanceTick,
+  transitionJob,
+} from './jobs.js';
+export type { CreateJobInput, JobDispatchReport, TransitionInput } from './jobs.js';
+export {
   getEventCursor,
   getUnreadNotificationCount,
   listEventsAfter,

@@ -12,6 +12,7 @@ import { isoDateTimeSchema } from './time.js';
 export const EVENT_TYPES = [
   'project.updated',
   'scene.updated',
+  'job.queued',
   'job.started',
   'job.progress',
   'job.completed',

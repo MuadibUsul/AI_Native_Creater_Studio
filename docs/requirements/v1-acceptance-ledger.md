@@ -27,7 +27,7 @@
 | LED-77-13 | 有至少一个真实 Avatar Provider | REQ-64-04/REQ-14-02 | P06-04（P06） | TODO |
 | LED-77-14 | 有至少一个真实 Voice Provider | REQ-6-07/REQ-14-03 | P06-02（P06） | TODO |
 | LED-77-15 | 有至少一个真实 AI Video Provider（默认 Veo，DEC-05） | REQ-64-04/DEC-05 | P06-05（P06） | TODO |
-| LED-77-16 | 外部任务异步执行并显示状态 | REQ-2-05/REQ-29-06 | P03-01/P02-06（P03/P02） | TODO（进度：SSE 事件通道与断线续传已就位（P02-06）；任务执行/状态机与 job.* 事件随 P03-01） |
+| LED-77-16 | 外部任务异步执行并显示状态 | REQ-2-05/REQ-29-06 | P03-01/P02-06（P03/P02） | TODO（进度：任务系统（状态机/依赖/租约/Worker）与 job.* 事件已就位（P03-01）；真实外部生成任务的端到端执行随 P03-06/P06/P07） |
 | LED-77-17 | Provider 结果会回收到自己的 Storage | REQ-45-02/REQ-26-01 | P03-06（P03） | TODO |
 | LED-77-18 | 能输出 1080p 完整 MP4 | REQ-4-04 | P07-04（P07） | TODO |
 | LED-77-19 | 能输出字幕（SRT/VTT） | REQ-58-01 | P06-06（P06） | TODO |

@@ -7,6 +7,7 @@ import {
   assetDetailSchema,
   assetSchema,
   eventCursorSchema,
+  jobSchema,
   notificationSchema,
   unreadCountResponseSchema,
   workspaceEventSchema,
@@ -63,6 +64,7 @@ import {
   type Asset,
   type AssetDetail,
   type EventCursor,
+  type Job,
   type Notification,
   type WorkspaceEvent,
   type ConfirmUploadRequest,
@@ -314,6 +316,14 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  jobs: {
+    list(workspaceId: string, query?: { projectId?: string; status?: Job['status']; limit?: number }): Promise<Job[]>;
+    get(workspaceId: string, jobId: string): Promise<Job>;
+    /** 取消（QUEUED/等待依赖 → CANCELLED；执行中 → CANCEL_REQUESTED） */
+    cancel(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
+    /** 人工重试（FAILED_* / CANCELLED → QUEUED） */
+    retry(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
   };
   notifications: {
     list(options?: { workspaceId?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]>;
@@ -774,6 +784,26 @@ export function createClient(options: ClientOptions): AncsClient {
           await reader.cancel().catch(() => undefined);
         }
       },
+    },
+
+    jobs: {
+      list: async (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.projectId !== undefined) search.set('projectId', query.projectId);
+        if (query?.status !== undefined) search.set('status', query.status);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size > 0 ? `?${search.toString()}` : '';
+        return (await request('GET', `/api/v1/workspaces/${workspaceId}/jobs${suffix}`, listOf(jobSchema))).items;
+      },
+      get: (workspaceId, jobId) => request('GET', `/api/v1/workspaces/${workspaceId}/jobs/${jobId}`, jobSchema),
+      cancel: (workspaceId, jobId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/jobs/${jobId}/cancel`, jobSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      retry: (workspaceId, jobId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/jobs/${jobId}/retry`, jobSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     notifications: {

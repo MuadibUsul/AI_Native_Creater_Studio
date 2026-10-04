@@ -78,6 +78,13 @@
       "when": 1791097015172,
       "tag": "0010_magical_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791097723841,
+      "tag": "0011_lush_microchip",
+      "breakpoints": true
     }
   ]
 }

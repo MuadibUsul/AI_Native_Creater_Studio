@@ -15,6 +15,7 @@ import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerJobRoutes } from './routes/jobs.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerStorageRoutes } from './routes/storage.js';
@@ -86,6 +87,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerSpeechProfileRoutes(instance, authDeps);
         registerProjectRoutes(instance, authDeps);
         registerEventRoutes(instance, authDeps);
+        registerJobRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

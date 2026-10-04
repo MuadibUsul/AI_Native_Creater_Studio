@@ -14,6 +14,7 @@ import {
   type UpdateChannelRequest,
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
+import type { JobQueueAdapter } from '@ancs/contracts';
 import type { RetentionConfig } from './retention.js';
 
 /**
@@ -36,6 +37,8 @@ export interface DomainDeps {
   uploadIntentTtlSeconds?: number;
   /** 保留策略配置（P02-05）：Trash 天数与幂等键 TTL；默认 30 天 / 24 小时 */
   retention?: RetentionConfig;
+  /** 任务队列适配器（P03-01）：缺省为 DB 轮询（权威状态即队列）；Redis/BullMQ 见 providers/queue-bullmq */
+  queue?: JobQueueAdapter;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

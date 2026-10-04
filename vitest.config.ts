@@ -20,6 +20,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/domain': srcAlias('./packages/domain/src/index.ts'),
   '@ancs/extensions': srcAlias('./packages/extensions/src/index.ts'),
   '@ancs/providers-storage-local': srcAlias('./packages/providers/storage-local/src/index.ts'),
+  '@ancs/providers-queue-bullmq': srcAlias('./packages/providers/queue-bullmq/src/index.ts'),
 };
 
 export default defineConfig({
@@ -29,7 +30,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['packages/**/*.test.ts', 'apps/api/src/**/*.test.ts'],
+          include: ['packages/**/*.test.ts', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts'],
           exclude: [
             '**/node_modules/**',
             'packages/db/**',
@@ -52,6 +53,7 @@ export default defineConfig({
             'packages/auth/**/*.integration.test.ts',
             'packages/domain/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
+            'apps/worker/src/**/*.integration.test.ts',
           ],
           exclude: ['**/node_modules/**'],
           alias: workspaceAliases,
