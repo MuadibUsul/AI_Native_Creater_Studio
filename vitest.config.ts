@@ -21,6 +21,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/extensions': srcAlias('./packages/extensions/src/index.ts'),
   '@ancs/providers-storage-local': srcAlias('./packages/providers/storage-local/src/index.ts'),
   '@ancs/providers-queue-bullmq': srcAlias('./packages/providers/queue-bullmq/src/index.ts'),
+  '@ancs/providers-credential-vault-local': srcAlias('./packages/providers/credential-vault-local/src/index.ts'),
 };
 
 export default defineConfig({

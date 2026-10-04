@@ -110,7 +110,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO（进度：API/编辑协议幂等已锁定（AC-03，P02-02）；幂等键 TTL 清理已实现（P02-05）；账本结算幂等待 P03-05） |
+| LED-C-REL-01 | idempotency | REQ-33-01/REQ-69-01 | P02-02/P03-05（P02/P03） | TODO（进度：API/编辑协议幂等已锁定（AC-03，P02-02）；幂等键 TTL 清理已实现（P02-05）；Provider 凭据与连接操作幂等（P03-04）；账本结算幂等待 P03-05） |
 | LED-C-REL-02 | retry policy | REQ-19-03/REQ-71-01 | P03-02（P03） | TODO |
 | LED-C-REL-03 | provider concurrency limiter | REQ-19-03/REQ-19-04 | P03-01/P03-03（P03） | TODO |
 | LED-C-REL-04 | result persistence | REQ-45-02/REQ-71-01 | P03-06（P03） | TODO |

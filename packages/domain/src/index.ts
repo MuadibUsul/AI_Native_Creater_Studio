@@ -40,6 +40,18 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  createConnection,
+  getConnection,
+  listConnections,
+  listWorkspaceProviderSettings,
+  resolveCredentialForExecution,
+  resolveProviderRoute,
+  revokeConnection,
+  rotateConnection,
+  testConnection,
+  upsertWorkspaceProviderSetting,
+} from './credentials.js';
+export {
   buildSeedCatalogEntries,
   createCatalogVersion,
   evaluateModelAvailability,

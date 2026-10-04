@@ -8,6 +8,13 @@ import {
   assetSchema,
   catalogResponseSchema,
   capabilitySelectionSchema,
+  createConnectionRequestSchema,
+  providerConnectionSchema,
+  providerRouteDecisionSchema,
+  rotateConnectionRequestSchema,
+  testConnectionResponseSchema,
+  upsertWorkspaceProviderSettingRequestSchema,
+  workspaceProviderSettingSchema,
   eventCursorSchema,
   jobSchema,
   notificationSchema,
@@ -67,6 +74,10 @@ import {
   type AssetDetail,
   type CatalogResponse,
   type CapabilitySelection,
+  type ProviderConnection,
+  type ProviderRouteDecision,
+  type TestConnectionResponse,
+  type WorkspaceProviderSetting,
   type EventCursor,
   type Job,
   type Notification,
@@ -321,9 +332,36 @@ export interface AncsClient {
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
   };
+  providerConnections: {
+    /** 创建 BYOK 连接（secret 只进不出；响应只含掩码） */
+    create(
+      workspaceId: string,
+      input: { providerId: string; kind: string; label: string; secret: string },
+      options?: MutationOptions,
+    ): Promise<ProviderConnection>;
+    list(workspaceId: string): Promise<ProviderConnection[]>;
+    get(workspaceId: string, connectionId: string): Promise<ProviderConnection>;
+    /** 连接测试（离线校验；注册钩子时执行真实测试） */
+    test(workspaceId: string, connectionId: string, options?: MutationOptions): Promise<TestConnectionResponse>;
+    /** 轮换凭据（新密文 + 新密钥版本） */
+    rotate(workspaceId: string, connectionId: string, secret: string, options?: MutationOptions): Promise<ProviderConnection>;
+    /** 撤销（立即从 Router 候选中消失） */
+    revoke(workspaceId: string, connectionId: string, options?: MutationOptions): Promise<ProviderConnection>;
+  };
+  providerSettings: {
+    list(workspaceId: string): Promise<WorkspaceProviderSetting[]>;
+    set(
+      workspaceId: string,
+      kind: string,
+      input: { selectionMode: 'AUTOMATIC' | 'PLATFORM_MANAGED' | 'BYOK'; connectionId?: string | null },
+      options?: MutationOptions,
+    ): Promise<WorkspaceProviderSetting>;
+  };
   providerCatalog: {
     /** 当前 Provider Catalog（版本化配置 + 核验时间） */
     get(workspaceId: string): Promise<CatalogResponse>;
+    /** Router 决策预览（能力 → Provider/模型/凭据模式；被拒原因可审计；无候选 → 501） */
+    route(workspaceId: string, capability: string, query?: { region?: string }): Promise<ProviderRouteDecision>;
     /** Router 按能力筛选候选（含可用性判定；默认仅可调用） */
     capabilities(
       workspaceId: string,
@@ -408,7 +446,7 @@ export function createClient(options: ClientOptions): AncsClient {
   };
 
   async function request<T>(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     schema: ZodType<T>,
     init?: { body?: unknown; bodySchema?: ZodType; idempotencyKey?: string },
@@ -800,8 +838,51 @@ export function createClient(options: ClientOptions): AncsClient {
       },
     },
 
+    providerConnections: {
+      create: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/provider-connections`, providerConnectionSchema, {
+          body: input,
+          bodySchema: createConnectionRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/provider-connections`, listOf(providerConnectionSchema))).items,
+      get: (workspaceId, connectionId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/provider-connections/${connectionId}`, providerConnectionSchema),
+      test: (workspaceId, connectionId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/provider-connections/${connectionId}/test`, testConnectionResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      rotate: (workspaceId, connectionId, secret, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/provider-connections/${connectionId}/rotate`, providerConnectionSchema, {
+          body: { secret },
+          bodySchema: rotateConnectionRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revoke: (workspaceId, connectionId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/provider-connections/${connectionId}`, providerConnectionSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    providerSettings: {
+      list: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/provider-settings`, listOf(workspaceProviderSettingSchema))).items,
+      set: (workspaceId, kind, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/provider-settings/${kind}`, workspaceProviderSettingSchema, {
+          body: input,
+          bodySchema: upsertWorkspaceProviderSettingRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
     providerCatalog: {
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/provider-catalog`, catalogResponseSchema),
+      route: (workspaceId, capability, query) => {
+        const search = new URLSearchParams({ capability });
+        if (query?.region !== undefined) search.set('region', query.region);
+        return request('GET', `/api/v1/workspaces/${workspaceId}/provider-route?${search.toString()}`, providerRouteDecisionSchema);
+      },
       capabilities: (workspaceId, capability, query) => {
         const search = new URLSearchParams();
         if (query?.region !== undefined) search.set('region', query.region);

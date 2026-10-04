@@ -99,6 +99,13 @@
       "when": 1791099256077,
       "tag": "0013_lame_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791100256309,
+      "tag": "0014_wild_valkyrie",
+      "breakpoints": true
     }
   ]
 }

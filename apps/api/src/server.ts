@@ -14,6 +14,7 @@ import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
+import { registerCredentialRoutes } from './routes/credentials.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
@@ -22,6 +23,7 @@ import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerStorageRoutes } from './routes/storage.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import type { StorageDeps } from './plugins/storage.js';
+import type { CredentialDeps } from './plugins/credentials.js';
 
 export interface BuildServerOptions {
   logger?: boolean;
@@ -39,6 +41,10 @@ export interface BuildServerOptions {
    * 对象存储（P02-04）。未提供时资产路由不注册（无存储能力的进程）；集成测试注入本地驱动。
    */
   storage?: StorageDeps;
+  /**
+   * 凭据保险库（P03-04）。未提供时连接/路由端点不注册（无凭据能力的进程，fail-closed）。
+   */
+  credentials?: CredentialDeps;
 }
 
 /**
@@ -76,6 +82,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   const authDeps = options.auth;
   const storageDeps = options.storage;
+  const credentialDeps = options.credentials;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
     await app.register(
@@ -90,6 +97,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerEventRoutes(instance, authDeps);
         registerJobRoutes(instance, authDeps);
         registerCatalogRoutes(instance, authDeps);
+        if (credentialDeps !== undefined) {
+          registerCredentialRoutes(instance, authDeps, credentialDeps);
+        }
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

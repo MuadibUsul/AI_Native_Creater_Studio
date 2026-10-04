@@ -14,7 +14,7 @@ import {
   type UpdateChannelRequest,
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
-import type { JobQueueAdapter } from '@ancs/contracts';
+import type { CredentialCipher, JobQueueAdapter, PlatformCredentialRegistry, ProviderTestHook } from '@ancs/contracts';
 import type { RetryPolicy } from './jobs.js';
 import type { RetentionConfig } from './retention.js';
 
@@ -42,6 +42,12 @@ export interface DomainDeps {
   queue?: JobQueueAdapter;
   /** 重试退避策略（P03-02）：base/cap/jitter + 可注入随机源（测试确定性） */
   retryPolicy?: RetryPolicy;
+  /** 凭据密文服务（P03-04；接口在 contracts，实现由 API/Worker 注入，domain 不依赖 providers/*） */
+  credentials?: CredentialCipher;
+  /** 平台托管凭据来源（P03-04；运行时环境/KMS） */
+  platformCredentials?: PlatformCredentialRegistry;
+  /** Provider 连接测试钩子（P03-04/P03-07：真实适配器或 Mock） */
+  providerTestHooks?: readonly ProviderTestHook[];
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;

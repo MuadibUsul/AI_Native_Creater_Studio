@@ -5,6 +5,7 @@ import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
+import { credentialDepsFromEnv } from './plugins/credentials.js';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -61,8 +62,11 @@ if (storageDriver === 'local') {
   process.exit(1);
 }
 
+const credentialDeps = credentialDepsFromEnv();
+
 const app = await buildServer({
   logger: true,
+  credentials: credentialDeps,
   auth: {
     auth,
     db: handle.db,

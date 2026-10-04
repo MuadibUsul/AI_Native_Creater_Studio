@@ -173,6 +173,47 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// Provider 凭据与路由契约（P03-04 / 规范 §17.2、§17.3）
+export {
+  CREDENTIAL_MODES,
+  credentialModeSchema,
+  CREDENTIAL_SELECTION_MODES,
+  credentialSelectionModeSchema,
+  CONNECTION_STATUSES,
+  connectionStatusSchema,
+  CONNECTION_TEST_MODES,
+  connectionTestModeSchema,
+  CONNECTION_TEST_STATUSES,
+  connectionTestStatusSchema,
+  providerConnectionSchema,
+  createConnectionRequestSchema,
+  rotateConnectionRequestSchema,
+  testConnectionResponseSchema,
+  workspaceProviderSettingSchema,
+  upsertWorkspaceProviderSettingRequestSchema,
+  routeRejectionSchema,
+  providerRouteDecisionSchema,
+  encryptedSecretSchema,
+} from './credentials.js';
+export type {
+  CredentialMode,
+  CredentialSelectionMode,
+  ConnectionStatus,
+  ConnectionTestMode,
+  ConnectionTestStatus,
+  ProviderConnection,
+  CreateConnectionRequest,
+  RotateConnectionRequest,
+  TestConnectionResponse,
+  WorkspaceProviderSetting,
+  UpsertWorkspaceProviderSettingRequest,
+  ProviderRouteDecision,
+  EncryptedSecret,
+  CredentialCipher,
+  ProviderTestHook,
+  PlatformCredentialRegistry,
+} from './credentials.js';
+
 // Provider Catalog 契约（P03-03）
 export {
   PROVIDER_KINDS,

@@ -73,7 +73,7 @@
 | REQ-6-04 | §6.1 | VoiceIdentity 字段集；MUST：不绑死 ElevenLabs/HeyGen；历史项目/终版记录所用 VoiceIdentity 版本与 provider voice 引用；删除/退休后旧项目保留可审计引用；UI 区分平台托管与自带 Provider 声音 | MUST | V1 | P06-02（P06） | 身份版本固定；两种凭据模式可生成（P06-02） | TODO |
 | REQ-6-05 | §6.2 | V1 SHOULD 支持创建 Creator Voice；若节奏受限，至少完成 VoiceProvider 抽象、数据模型与 BYOK 连接能力；推荐 onboarding 流程（授权声明→录音/上传→音质检测→Consent→验证→克隆→试听→默认 Speech Profile） | SHOULD | V1-契约 | P06-02/P10-02（P06/P10） | P06-02 验收；P10-02 完整验收 | TODO |
 | REQ-6-06 | §6.2 | 禁止"上传任意名人 MP3 克隆"作为产品能力；必须明示仅本人/合法授权声音 | MUST | 全期 | P10-02（P06/P10） | 未授权不提交（P10-02） | TODO |
-| REQ-6-07 | §6.3 | 必须同时支持 Managed Voice 与 BYOK Voice 两条路径（BYOK 只保存 provider_voice_id + 加密凭据引用） | MUST | V1 | P06-02（P06） | 两种凭据模式可生成（P06-02） | TODO |
+| REQ-6-07 | §6.3 | 必须同时支持 Managed Voice 与 BYOK Voice 两条路径（BYOK 只保存 provider_voice_id + 加密凭据引用） | MUST | V1 | P06-02（P06） | 两种凭据模式可生成（P06-02） | TODO（进度：BYOK 加密凭据引用模型（provider_connections + AES-256-GCM 封套）与 Managed/BYOK 决策已就位（P03-04）；Voice 侧的 provider_voice_id 与两种模式实际生成待 P06-02） |
 | REQ-6-08 | §6.4 | SpeechProfile 字段集；未来自动学习 Creator Style 必须可查看、可关闭、可恢复 | SHOULD | 后续 | P06-02（基础）/P14-03（学习） | P14-03 验收 | DEFERRED |
 
 ## D. 内容、叙事、导演与视觉规则（§7—§10）
@@ -121,11 +121,11 @@
 | REQ-15-01 | §15 | 业务层只依赖内部接口：VideoGenerationProvider / AvatarProvider / VoiceProvider 契约形状（含可选能力方法的判空） | MUST | V1 | P03-03/P01-06（P03） | 契约测试（P03-07） | TODO |
 | REQ-15-02 | §15 | Adapter 必须处理：auth/retries/rate limits/webhooks/polling/Provider 错误/成本元数据/保留元数据/版本变化 | MUST | V1 | P03-04/P03-06（P03） | P03-06 验收；Mock 故障矩阵（P03-07） | TODO |
 | REQ-15-03 | §15 | 禁止业务代码直接调用特定 Provider（反例：`if sceneType==='AI_VIDEO' → callVeoDirectly()`） | MUST | V1 | P03-03（P03） | 代码审计 + 契约测试 | TODO |
-| REQ-16-01 | §16 | Director 输出能力需求、Router 决定 Provider；Router 维度含 capability/quality/cost/latency/可用性/队列/失败率/Workspace 策略/地区/隐私/BYOK | MUST | V1 | P03-03（P03） | 按能力筛选（P03-03） | TODO |
+| REQ-16-01 | §16 | Director 输出能力需求、Router 决定 Provider；Router 维度含 capability/quality/cost/latency/可用性/队列/失败率/Workspace 策略/地区/隐私/BYOK | MUST | V1 | P03-03/P03-04（P03） | 按能力筛选（P03-03）；BYOK/Workspace 策略/地区（P03-04） | TODO（进度：capability + 核验时效 + 地区 + Workspace 策略 + **BYOK/Managed** 已实现（P03-03/P03-04 的 resolveProviderRoute：决策可审计、全被拒 501）；quality/cost/latency/失败率/队列/隐私维度待 P03-05（成本）与 P06（真实质量/延迟数据）） |
 | REQ-16-02 | §16 | Router 模式：AUTO/QUALITY/BALANCED/FAST/LOW_COST/PRIVATE/PINNED_PROVIDER | SHOULD | V1 | P03-03（P03） | P03-03 验收 | TODO |
 | REQ-16-03 | §16 | 模型名称与价格不得硬编码在业务逻辑；存 Provider Catalog/配置 | MUST | V1 | P03-03（P03） | 无有效配置时明确阻止真实调用（P03-03） | TODO |
 | REQ-17-01 | §17.1 | 默认 Platform Managed：用户注册→导入→Generate，无需自备 API | MUST | V1 | P03-04（P03） | P03-04 验收 | TODO |
-| REQ-17-02 | §17.2 | BYOK：有该 Provider BYOK 用 BYOK 否则 Platform Managed；允许 Workspace 级与身份级分别选择托管模式（Avatar/Voice/AI Video 可不同） | MUST | V1 | P03-04（P03） | 两种凭据模式可生成（P06-02）；跨租户连接不可用（P03-04） | TODO |
+| REQ-17-02 | §17.2 | BYOK：有该 Provider BYOK 用 BYOK 否则 Platform Managed；允许 Workspace 级与身份级分别选择托管模式（Avatar/Voice/AI Video 可不同） | MUST | V1 | P03-04（P03） | 两种凭据模式可生成（P06-02）；跨租户连接不可用（P03-04） | **跨租户连接不可用已验证**（全 404 且不泄漏资源 id）；§17.2 决策树 + Workspace 级按类别覆盖已实现（AUTOMATIC/BYOK/PLATFORM_MANAGED，显式 BYOK 缺连接即拒绝不回落）；身份级覆盖位已预留（P06-02）；「两种凭据模式可生成」待 P06-02 | TODO（进度：决策与隔离完成（P03-04）；身份级与真实生成待 P06-02） |
 | REQ-17-03 | §17.3 | Secret 存储 MUST：仅后端使用、KMS/信封加密、UI 只显示 masked、日志绝不打印、created/last_used/revoked 时间戳、可 rotate；绝不下发完整 Key 到客户端 | MUST | V1 | P03-04（P03） | 密钥不进前端及日志（P03-04） | TODO |
 
 ## G. 生成模式、异步与任务系统（§18—§19）
@@ -259,7 +259,7 @@
 | REQ-43-06 | §43.6 | Secret：KMS/Secret Manager；环境变量只存平台基础 Secret；禁入 repo；禁客户端暴露 | MUST | V1 | P03-04（P03） | 仓库无 Secret（P00-02）；P03-04 验收 | TODO |
 | REQ-44-01 | §44 | MUST 监控集：API 错误率/延迟 p50-p95/队列深度/Job 年龄/Provider 429/失败率/延迟/成本/Render 时长/失败/存储用量/DB 性能/每 Workspace 支出；推荐 OTel/结构化日志/Sentry/指标后端 | MUST | V1 | P08-03（P08） | P08-03 验收 | TODO |
 | REQ-44-02 | §44 | 每请求贯穿 request_id/project_id/job_id/provider_job_id；日志严禁 Secret 与默认完整未发布正文 | MUST | V1 | P08-03（P08） | 日志脱敏验收（P08-03） | TODO |
-| REQ-45-01 | §45 | Provider capability/limit/price/retention 全部视为运行时/配置数据，不是产品常量 | MUST | V1 | P03-03（P03） | 版本化目录配置（P03-03）；DEC-14 | TODO |
+| REQ-45-01 | §45 | Provider capability/limit/price/retention 全部视为运行时/配置数据，不是产品常量 | MUST | V1 | P03-03（P03） | 版本化目录配置（P03-03）；DEC-14 | 能力/模型/价格/限额/地区/保留均为版本化 Catalog 数据（provider_catalog_versions，P03-03）；无有效配置阻止真实调用（P03-03/P03-04）；模型 ID 以字符串承载、不做核心枚举（§75 第 10 条） | VERIFIED |
 | REQ-45-02 | §45 | 各 Provider 工程处理：HeyGen concurrency 配置化 + capability detection + 不假定普通账号全功能；Veo 生成完立即拉回存储、不依赖 Provider URL；Runway ephemeral URI 有时效、Adapter 吸收版本变化；ElevenLabs "不用于训练"与"零保留"分别展示、本人验证不得绕过；Remotion Player/Lambda 定位 | MUST | V1 | P06-01（P06）；配置侧 P03-03 | 账号实际能力与 Catalog 一致（P06-01） | TODO |
 | REQ-46-01 | §46 | Provider Capability Registry 字段集（provider/model/modality/supports_*/max_duration/aspect_ratios/resolutions/concurrency_limit/rate_limit/cost_formula/retention/regions/privacy_tier/updated_at）；可先手工维护后期自动同步 | MUST | V1 | P03-03（P03） | P03-03 验收 | TODO |
 | REQ-47-01 | §47 | 正式对外收费前 MUST：重核所有 Provider Terms；确认 API 嵌入/白标允许；需 Enterprise 协议的签订；数字人/声音克隆授权与 Consent；Content/Abuse Policy；Privacy/Terms/DPA；不得假定"有 Key=可转售" | MUST | 后续 | P09-06（P09） | P09-06 商业上线门 | DEFERRED |
@@ -277,7 +277,7 @@
 | REQ-51-03 | §51 Integration | Integration：DB+Queue+Worker、upload intents、render pipeline、webhook 幂等 | MUST | V1 | P00-02 + P02/P03/P07 | pnpm test:integration | TODO |
 | REQ-51-04 | §51 E2E | E2E：创建项目→导入→Narrative→Storyboard→编辑→预览→mock Provider 终渲染→历史恢复 | MUST | V1 | P05/P08（P05—P08） | pnpm test:e2e；计划 AC 系列 | TODO |
 | REQ-51-05 | §51 | Production Provider smoke test 单独运行，不作为普通 CI 必须项 | MUST | V1 | P00-02/P08（P00/P08） | verify 默认零真实费用（计划 §11.1） | TODO |
-| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | 读/写拒绝已覆盖；Signed URL scope/凭据隔离随对应任务补充——进度：3/4 | TODO（进度：跨 workspace 读/写拒绝 + **Signed URL scope**（用途/键/TTL 绑定与篡改拒绝）与**资产侧凭据隔离**（响应/错误信封不含签名材料；客户端无存储配置）已覆盖（assets.security.test.ts，P02-04）；Provider 凭据隔离待 P03-04） |
+| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | 四要素全量覆盖（读/写拒绝 P01-03；Signed URL scope P02-04；**Provider 凭据隔离 P03-04**） | 跨 workspace 读/写拒绝 + Signed URL scope（assets.security.test.ts）+ **Provider 凭据隔离**（credentials.security.test.ts：连接与设置全 404、不泄漏资源 id/Secret/密文，客户端永不持有 Provider Key）——**4/4 完成** | VERIFIED |
 
 ## R. AI 输出、可解释性与锁定（§52—§54）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-03，REQ-19-03 的并发信号量配置模型落地（Provider Catalog 版本化 + 调用门控）；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-04，REQ-17-02 / REQ-45-01 落地、REQ-51-06 **4/4 收尾**；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 
