@@ -7,7 +7,7 @@
  *  R3 平台中立包（packages/domain、packages/contracts、packages/extensions）不得依赖
  *     next / react / react-dom / @remotion/*（全部依赖）；packages/domain 额外不得依赖 packages/providers/*
  *  R4 packages/providers/* 的【生产】workspace 依赖仅允许 @ancs/contracts、@ancs/domain
- *  R5 apps/web|desktop|mobile 的【生产】workspace 依赖仅允许 @ancs/sdk、@ancs/contracts、@ancs/ui
+ *  R5 apps/web|desktop|mobile 的【生产】workspace 依赖仅允许 @ancs/sdk、@ancs/contracts、@ancs/ui、@ancs/scene-components（裁决 0005）
  *  R6 workspace 依赖必须指向真实存在的 workspace 包（全部依赖）
  *  R7 apps/api|worker 的【生产】workspace 依赖仅允许 domain/contracts/db 与 packages/providers/*（计划 §3.4）
  *  R8 apps/render-worker|motion-worker 的【生产】workspace 依赖仅允许 contracts/scene-schema/scene-components/remotion-core
@@ -37,10 +37,15 @@ export interface Violation {
 
 export const WEB_APP_DIRS: readonly string[] = ['apps/web', 'apps/desktop', 'apps/mobile'];
 
+/**
+ * 裁决 0005（P05-03）：Web 客户端可依赖 @ancs/scene-components（组件协议/注册表/渲染的单一来源，
+ * 只依赖 react/zod/contracts；预览与编辑共用，规范 §11.1/§12）。
+ */
 export const WEB_APP_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([
   '@ancs/sdk',
   '@ancs/contracts',
   '@ancs/ui',
+  '@ancs/scene-components',
 ]);
 
 export const PROVIDER_ALLOWED_WORKSPACE_DEPS: ReadonlySet<string> = new Set([

@@ -1,0 +1,86 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import DashboardPage from './page.js';
+import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
+
+/**
+ * Dashboard 状态矩阵（P05-03）：加载（由 pending 覆盖于其他用例）/
+ * 未登录（可去登录）/ 失败（可重试）/ 空工作区（可创建）/ 空项目（可创建）/ 正常列表。
+ */
+
+const session = () => ({ user: { id: 'usr_1', email: 'a@test.local' } });
+const workspace = (id: string, name: string) => ({ id, name, role: 'OWNER' });
+
+describe('Dashboard', () => {
+  it('未登录：明确提示并可前往登录', async () => {
+    const client = mockClient({
+      auth: { session: vi.fn().mockRejectedValue(apiError(401, 'UNAUTHENTICATED')) },
+      workspaces: { list: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('需要登录')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '前往登录' })).toBeTruthy();
+  });
+
+  it('工作区为空：创建入口可用（调用 SDK）', async () => {
+    const create = vi.fn().mockResolvedValue(workspace('ws_new', '财经观察'));
+    const list = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([workspace('ws_new', '财经观察')]);
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list, create },
+      projects: { list: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('还没有工作区')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('工作区名称'), '财经观察');
+    await userEvent.click(screen.getByRole('button', { name: '创建工作区' }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: '财经观察' }));
+  });
+
+  it('项目为空：创建项目（自动复用/创建默认栏目）', async () => {
+    const channel = { id: 'ch_1', name: '默认栏目' };
+    const createProject = vi.fn().mockResolvedValue({ id: 'prj_new', title: '利率周报视频' });
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list: vi.fn().mockResolvedValue([workspace('ws_1', '财经观察')]) },
+      channels: { list: vi.fn().mockResolvedValue([channel]), create: vi.fn() },
+      projects: { list: vi.fn().mockResolvedValue([]), create: createProject },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('该工作区还没有项目')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('项目标题'), '利率周报视频');
+    await userEvent.click(screen.getByRole('button', { name: '创建项目' }));
+    await waitFor(() =>
+      expect(createProject).toHaveBeenCalledWith('ws_1', { title: '利率周报视频', channelId: 'ch_1' }),
+    );
+  });
+
+  it('正常：项目列表可见并带状态信息', async () => {
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list: vi.fn().mockResolvedValue([workspace('ws_1', '财经观察')]) },
+      projects: {
+        list: vi.fn().mockResolvedValue([
+          { id: 'prj_1', title: '利率周报视频', status: 'DRAFT', revision: 3, aspectRatio: '16:9', fps: 30 },
+        ]),
+      },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('利率周报视频')).toBeTruthy();
+    expect(screen.getByText(/revision 3/)).toBeTruthy();
+  });
+
+  it('失败：错误块可重试（重新调用 SDK）', async () => {
+    const list = vi.fn().mockRejectedValueOnce(apiError(500, 'INTERNAL', 'boom')).mockResolvedValue([]);
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('加载工作区失败')).toBeTruthy();
+    expect(screen.getByTestId('state-diagnostics').textContent).toBe('INTERNAL');
+    await userEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+});

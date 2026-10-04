@@ -23,7 +23,8 @@
     "test:golden": "vitest run --project golden",
     "test:provider-smoke": "node scripts/provider-smoke.mjs",
     "verify": "node scripts/verify.mjs",
-    "clean": "pnpm -r run clean"
+    "clean": "pnpm -r run clean",
+    "test:web": "vitest run --project web"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

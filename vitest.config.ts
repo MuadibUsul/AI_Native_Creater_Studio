@@ -52,6 +52,23 @@ export default defineConfig({
         },
       },
       {
+        // Web 客户端（P05-03）：jsdom + Testing Library；Next 固定 tsconfig jsx=preserve，测试侧用 oxc 显式 automatic
+        oxc: { jsx: 'automatic' },
+        resolve: {
+          alias: [{ find: /^@\//, replacement: `${srcAlias('./apps/web/src')}/` }],
+        },
+        test: {
+          name: 'web',
+          environment: 'jsdom',
+          include: ['apps/web/src/**/*.test.tsx'],
+          exclude: ['**/node_modules/**'],
+          alias: workspaceAliases,
+          setupFiles: ['./apps/web/src/test-setup.ts'],
+          testTimeout: 20000,
+          passWithNoTests: false,
+        },
+      },
+      {
         test: {
           name: 'integration',
           environment: 'node',

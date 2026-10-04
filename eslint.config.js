@@ -21,6 +21,9 @@ export default tseslint.config(
       '**/coverage/**',
       '**/*.tsbuildinfo',
       '.github/**',
+      // Next.js 生成物（P05-03：apps/web 的构建缓存与自动生成声明）
+      '**/.next/**',
+      '**/next-env.d.ts',
     ],
   },
   js.configs.recommended,

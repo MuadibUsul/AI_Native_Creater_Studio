@@ -15,6 +15,7 @@ const steps = [
   'build',
   'arch:check',
   'test:unit',
+  'test:web',
   'test:contract',
   'test:integration',
   'test:e2e',

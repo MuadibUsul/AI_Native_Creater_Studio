@@ -929,10 +929,12 @@ export function createClient(options: ClientOptions): AncsClient {
         if (intent.upload === null) {
           throw new Error('上传意图缺少直传目标（协议不一致）');
         }
+        // body 用 ArrayBuffer：跨 node/DOM 类型的 BodyInit 均兼容（Uint8Array<ArrayBufferLike> 在 DOM 类型下不被接受）
+        const uploadBody = new Uint8Array(input.data).buffer;
         const uploadResponse = await doFetch(intent.upload.url, {
           method: intent.upload.method,
           headers: intent.upload.headers,
-          body: input.data,
+          body: uploadBody,
         });
         if (!uploadResponse.ok) {
           throw new Error(`直传失败：HTTP ${String(uploadResponse.status)}`);
