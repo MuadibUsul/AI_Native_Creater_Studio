@@ -10,6 +10,12 @@ import { isoDateTimeSchema } from './common/time.js';
  * 队列消息只携带任务 ID（规则见计划 §5.5）。
  */
 
+/**
+ * 生成任务类型（P06-05；API 侧"显式生成动作"与 Worker 生成处理器共用同一常量，
+ * 避免跨应用复制字符串——跨包字符串漂移会导致任务永不执行）。
+ */
+export const GENERATE_JOB_TYPE = 'GENERATE';
+
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',
   'QUEUED',

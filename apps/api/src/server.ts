@@ -25,6 +25,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
 import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
+import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -139,6 +140,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerMixdownRoutes(instance, authDeps);
         registerNativeFallbackRoutes(instance, authDeps);
+        registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
         registerNarrationAudioRoutes(instance, authDeps, {
           ...(audioDeps ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),

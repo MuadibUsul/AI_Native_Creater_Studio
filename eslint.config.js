@@ -9,6 +9,9 @@ const nodeGlobals = {
   URLSearchParams: 'readonly',
   setTimeout: 'readonly',
   clearTimeout: 'readonly',
+  // Node 18+ 全局（脚本使用 fetch/AbortController；P06-01 能力核验工具）
+  fetch: 'readonly',
+  AbortController: 'readonly',
   setInterval: 'readonly',
   clearInterval: 'readonly',
 };

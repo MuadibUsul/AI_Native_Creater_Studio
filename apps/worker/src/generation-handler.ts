@@ -26,7 +26,9 @@ import type { JobHandler } from './handlers.js';
  * - **取消失败（cancel_fails）** → 取消钩子返回失败 → 任务保持 CANCEL_REQUESTED 供人工介入。
  */
 
-export const GENERATE_JOB_TYPE = 'GENERATE';
+export { GENERATE_JOB_TYPE } from '@ancs/contracts';
+import { GENERATE_JOB_TYPE as GENERATE_JOB_TYPE_CONST } from '@ancs/contracts';
+const GENERATE_JOB_TYPE = GENERATE_JOB_TYPE_CONST;
 
 export interface GenerationHandlerDeps {
   /** Provider 适配器注册表（Mock 见 packages/providers/mock-provider；真实见 P06） */

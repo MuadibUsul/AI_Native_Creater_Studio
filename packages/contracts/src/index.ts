@@ -575,6 +575,7 @@ export type {
 
 // 任务契约（P03-01 / 计划 §5.5）
 export {
+  GENERATE_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,

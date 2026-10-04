@@ -1,3 +1,4 @@
+import { aiVideoComponent } from './components/ai-video.js';
 import { bigNumberComponent } from './components/big-number.js';
 import {
   barChartComponent,
@@ -35,6 +36,8 @@ let registered = false;
 export function registerBuiltInComponents(): void {
   if (registered) return;
   for (const component of [
+    // 扩展场景类型（DEC-04：AI_VIDEO 属 P06 交付，不计入 20 类标准清单）
+    aiVideoComponent,
     // Host
     hostFullComponent,
     hostSideComponent,

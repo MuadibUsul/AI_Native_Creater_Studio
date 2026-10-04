@@ -5,7 +5,7 @@
       "id": "elevenlabs",
       "displayName": "ElevenLabs（TTS）",
       "baseUrl": "https://api.elevenlabs.io",
-      "apiKeyEnv": "ELEVENLABS_API_KEY",
+      "keyEnv": "ELEVENLABS_API_KEY",
       "probes": [
         {
           "id": "voices.list",
@@ -28,7 +28,7 @@
       "id": "heygen",
       "displayName": "HeyGen（Avatar）",
       "baseUrl": "https://api.heygen.com",
-      "apiKeyEnv": "HEYGEN_API_KEY",
+      "keyEnv": "HEYGEN_API_KEY",
       "probes": [
         {
           "id": "avatars.list",
@@ -51,7 +51,7 @@
       "id": "veo",
       "displayName": "Veo（AI Video，DEC-05 默认）",
       "baseUrl": "https://generativelanguage.googleapis.com",
-      "apiKeyEnv": "VEO_API_KEY",
+      "keyEnv": "VEO_API_KEY",
       "probes": [
         {
           "id": "models.list",

@@ -1,4 +1,13 @@
 import { z, type ZodType } from 'zod';
+import { jobSchema as jobSchemaForGeneration } from '@ancs/contracts';
+
+/** 显式生成动作响应（P06-05；SDK 侧组合，避免为组合结构新增契约） */
+const sceneGenerationResponseSchema = z.object({
+  job: jobSchemaForGeneration,
+  deduped: z.boolean(),
+  providerRoute: z.object({ providerId: z.string(), modelId: z.string(), credentialMode: z.string(), reason: z.string() }),
+});
+
 import {
   channelStyleVersionSchema,
   channelWithStyleSchema,
@@ -324,6 +333,13 @@ export interface AncsClient {
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
+    /** 显式生成场景素材（P06-05）：去重键防双击；输入最小化；越界/能力缺失明确阻止 */
+    generateScene(
+      projectId: string,
+      sceneId: string,
+      input?: { capability?: string },
+      options?: MutationOptions,
+    ): Promise<{ job: Job; deduped: boolean; providerRoute: { providerId: string; modelId: string; credentialMode: string; reason: string } }>;
     /** 统一编辑协议（§4.6）：条件更新 + EditEvent/Outbox；冲突返回 409 VERSION_CONFLICT */
     edit(projectId: string, editRequest: EditRequest, options?: MutationOptions): Promise<EditResponse>;
     versions: {
@@ -893,6 +909,14 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createSceneRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      generateScene: (projectId, sceneId, input, mutation) => {
+        // 注意：项目级路径（与既有 projects.* 方法一致，workspace 由服务端从项目反查鉴权）
+        return request('POST', `/api/v1/projects/${projectId}/scenes/${sceneId}/generate`, sceneGenerationResponseSchema, {
+          body: { capability: input?.capability ?? 'video.generate' },
+          bodySchema: z.object({ capability: z.string().min(1).max(64) }),
+          idempotencyKey: mutation?.idempotencyKey,
+        });
+      },
       edit: (projectId, editRequest, mutation) =>
         request('POST', `/api/v1/projects/${projectId}/edits`, editResponseSchema, {
           body: editRequest,

@@ -123,7 +123,7 @@ const main = async () => {
   if (dryRun) {
     for (const provider of providers) {
       console.log(`
-== ${provider.displayName}（${provider.id}） 凭据环境变量：${provider.apiKeyEnv}`);
+== ${provider.displayName}（${provider.id}） 凭据环境变量：${provider.keyEnv}`);
       for (const probe of provider.probes) {
         console.log(`  [dry] ${probe.id} → ${probe.method ?? 'GET'} ${provider.baseUrl}${probe.path}（能力：${probe.capability}）`);
       }
@@ -135,8 +135,8 @@ const main = async () => {
   // 凭据检查（未配置 → 退出码 2；不伪造通过）
   const missingEnv = [];
   for (const provider of providers) {
-    const value = process.env[provider.apiKeyEnv];
-    if (value === undefined || value === '') missingEnv.push(provider.apiKeyEnv);
+    const value = process.env[provider.keyEnv];
+    if (value === undefined || value === '') missingEnv.push(provider.keyEnv);
   }
   if (missingEnv.length > 0) {
     console.error('[provider-verify] 未配置凭据，无法核验（这不代表通过）：');
@@ -154,7 +154,7 @@ const main = async () => {
   const report = { generatedAt: new Date().toISOString(), providers: [] };
 
   for (const provider of providers) {
-    const apiKey = process.env[provider.apiKeyEnv];
+    const apiKey = process.env[provider.keyEnv];
     console.log(`\n== ${provider.displayName}（${provider.id}）凭据 ${redact(apiKey)}`);
     const providerReport = { id: provider.id, displayName: provider.displayName, baseUrl: provider.baseUrl, probes: [] };
     for (const probe of provider.probes) {

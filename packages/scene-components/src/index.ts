@@ -14,6 +14,8 @@ export type {
 } from './protocol.js';
 export { SceneThemeProvider, stageStyle, useSceneTheme } from './theme.js';
 export type { SceneThemeProviderProps } from './theme.js';
+export { aiVideoComponent, aiVideoPropsSchema, AiVideoScene } from './components/ai-video.js';
+export type { AiVideoProps } from './components/ai-video.js';
 export { bigNumberComponent, bigNumberPropsSchema, BigNumberScene } from './components/big-number.js';
 export type { BigNumberProps } from './components/big-number.js';
 export {

@@ -85,7 +85,7 @@ export function requireQueue(deps: DomainDeps): JobQueueAdapter {
   return deps.queue ?? new DbPollQueue();
 }
 
-const toJobDto = (row: typeof jobs.$inferSelect): Job =>
+export const toJobDto = (row: typeof jobs.$inferSelect): Job =>
   jobSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
