@@ -8,6 +8,7 @@ import { registerErrorHandler } from './error-handler.js';
 import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
+import { registerAiEditRoutes } from './routes/ai-edit.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerBillingRoutes } from './routes/billing.js';
@@ -129,6 +130,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
         registerVisualGrammarRoutes(instance, authDeps);
         registerDirectorRoutes(instance, authDeps);
+        registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

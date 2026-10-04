@@ -273,6 +273,17 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// AI Edit 契约（P05-06 / §37、§52）
+export {
+  EDIT_PLAN_VERSION,
+  AI_EDIT_ERROR_REASONS,
+  editPlanOperationSchema,
+  editPlanImpactSchema,
+  editPlanSchema,
+  createEditPlanRequestSchema,
+} from './ai-edit.js';
+export type { AiEditErrorReason, EditPlanOperation, EditPlanImpact, EditPlan, CreateEditPlanRequest } from './ai-edit.js';
+
 // 组件协议契约（P05-01 / §11.1、§57）
 export {
   COMPONENT_PROTOCOL_VERSION,

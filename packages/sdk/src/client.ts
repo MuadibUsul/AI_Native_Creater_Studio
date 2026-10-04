@@ -19,7 +19,9 @@ import {
   factVisualDecisionSchema,
   narrationBlockSchema,
   directorApplyRequestSchema,
+  createEditPlanRequestSchema,
   directorPlanSchema,
+  editPlanSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
   speechPlanSchema,
@@ -112,6 +114,7 @@ import {
   type NarrationBlock,
   type NarrativeGenerationResult,
   type DirectorPlan,
+  type EditPlan,
   type DirectorPolicyInput,
   type NarrativePlan,
   type SpeechPlan,
@@ -423,6 +426,13 @@ export interface AncsClient {
       planId: string,
       options?: { identityId?: string; speechProfileId?: string },
     ): Promise<SpeechPlan>;
+    /** AI Edit 计划（P05-06）：自然语言 → 结构化 operation（不落库；Apply 走编辑协议） */
+    aiEditPlan(
+      workspaceId: string,
+      projectId: string,
+      input: { prompt: string },
+      options?: MutationOptions,
+    ): Promise<EditPlan>;
     /** Director 计划（§9：场景/资产/任务/成本/告警/决策摘要；不落库、需验证后应用） */
     directorPlan(workspaceId: string, projectId: string, planId: string, policy?: DirectorPolicyInput): Promise<DirectorPlan>;
     /** 应用 Director 计划（Schema/来源/Lock/预算验证 + 原子编辑；仅空项目）。
@@ -1050,6 +1060,12 @@ export function createClient(options: ClientOptions): AncsClient {
         const suffix = query.size > 0 ? `?${query.toString()}` : '';
         return request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/speech-plan${suffix}`, speechPlanSchema);
       },
+      aiEditPlan: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/ai-edit/plan`, editPlanSchema, {
+          body: input,
+          bodySchema: createEditPlanRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
       directorPlan: (workspaceId, projectId, planId, policy) =>
         request(
           'GET',

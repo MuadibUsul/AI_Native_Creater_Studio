@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys, useNarrative, useSceneGraph } from '@/lib/queries';
+import type { EditPlan } from '@ancs/contracts';
+import { AiEditPanel } from '@/ui/AiEditPanel';
 import { LiteTimeline, type TimelineEditRequest } from '@/ui/LiteTimeline';
 import { PreviewPlayer } from '@/ui/PreviewPlayer';
 import { ScenePreview } from '@/ui/ScenePreview';
@@ -26,6 +29,7 @@ export default function StoryboardPage() {
 
   const graph = useSceneGraph(workspaceId, projectId);
   const narrative = useNarrative(workspaceId, projectId);
+  const [editPlan, setEditPlan] = useState<EditPlan | null>(null);
 
   /**
    * 素材解析（预览用）：assetId → 预览 URL（Signed URL）。
@@ -65,6 +69,36 @@ export default function StoryboardPage() {
       });
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.graph(workspaceId, projectId) });
+    },
+  });
+
+  /** AI Edit（P05-06）：生成计划（不落库）→ 用户确认后经编辑协议 Apply。 */
+  const planEdit = useMutation({
+    mutationFn: (prompt: string) => client.narrative.aiEditPlan(workspaceId, projectId, { prompt }),
+    onSuccess: (plan) => setEditPlan(plan),
+  });
+  const applyEditPlan = useMutation({
+    mutationFn: async (plan: EditPlan) => {
+      const current = graph.data;
+      if (current === undefined) throw new Error('场景图尚未加载');
+      const expectedSceneRevisions: Record<string, number> = {};
+      for (const entry of plan.operations) {
+        if (entry.sceneId !== null) {
+          const scene = current.scenes.find((candidate) => candidate.id === entry.sceneId);
+          if (scene !== undefined) expectedSceneRevisions[scene.id] = scene.revision;
+        }
+      }
+      return client.projects.edit(projectId, {
+        baseProjectRevision: plan.baseProjectRevision,
+        expectedSceneRevisions,
+        operations: plan.operations.map((entry) => entry.operation),
+        idempotencyKey: `idem_web_aiedit_${plan.planId}`,
+        intent: `AI Edit：${plan.prompt.slice(0, 80)}`,
+      });
+    },
+    onSuccess: () => {
+      setEditPlan(null);
       void queryClient.invalidateQueries({ queryKey: queryKeys.graph(workspaceId, projectId) });
     },
   });
@@ -130,6 +164,18 @@ export default function StoryboardPage() {
         <h2 className="mb-2 text-sm font-semibold text-slate-300">Preview</h2>
         <PreviewPlayer graph={graph.data} resolveAssetUrl={resolveAssetUrl} width={720} />
       </section>
+
+      {/* AI Edit（P05-06）：生成计划不落库；Apply 才走编辑协议（整批同一事务） */}
+      <AiEditPanel
+        plan={editPlan}
+        planPending={planEdit.isPending}
+        planError={planEdit.isError ? (() => { const d = describeError(planEdit.error); return { kind: d.kind, message: d.message, code: d.code }; })() : null}
+        onPlan={(prompt) => planEdit.mutate(prompt)}
+        onApply={(plan) => applyEditPlan.mutate(plan)}
+        onReject={() => setEditPlan(null)}
+        applyPending={applyEditPlan.isPending}
+        applyError={applyEditPlan.isError ? (() => { const d = describeError(applyEditPlan.error); return { kind: d.kind, message: d.message, code: d.code }; })() : null}
+      />
 
       {/* Lite Timeline（P05-05）：默认折叠（REQ-5-03 不默认展示复杂时间线） */}
       <details data-testid="timeline-panel" className="rounded border border-slate-800 bg-slate-900/40">

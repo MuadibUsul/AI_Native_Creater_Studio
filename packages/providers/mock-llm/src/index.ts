@@ -13,7 +13,21 @@ import type { LlmAdapter, LlmCompletion, NarrativeGenerationRequest } from '@anc
  * 因此测试可断言（如"旁白必须引用事实 id""锁定旁白逐字保留"）。
  */
 
-export const MOCK_LLM_MODES = ['valid', 'fenced', 'repairable', 'invalid_then_valid', 'unrepairable', 'verbatim', 'timeout', 'error'] as const;
+export const MOCK_LLM_MODES = [
+  'valid',
+  'fenced',
+  'repairable',
+  'invalid_then_valid',
+  'unrepairable',
+  'verbatim',
+  'timeout',
+  'error',
+  // P05-06 AI Edit（completePrompt）：合法计划 / 引用不存在场景 / 修改锁定场景 / 不可解析后重试行
+  'ai_edit_valid',
+  'ai_edit_bad_scene',
+  'ai_edit_locked',
+  'ai_edit_invalid_then_valid',
+] as const;
 export type MockLlmMode = (typeof MOCK_LLM_MODES)[number];
 
 export interface MockLlmOptions {
@@ -57,6 +71,79 @@ export class MockLlmAdapter implements LlmAdapter {
   scriptNext(mode: MockLlmMode): this {
     this.modes.push(mode);
     return this;
+  }
+
+  /**
+   * 结构化补全（P05-06 AI Edit）：从 userPrompt 的场景清单中确定性派生编辑计划。
+   * 场景清单行格式：`- id=scn_x position=0 type=LINE_CHART duration=6000ms locked=false narration="…"`
+   */
+  async completePrompt(input: { purpose: string; systemPrompt: string; userPrompt: string }): Promise<LlmCompletion> {
+    this.callCount += 1;
+    this.lastSystemPrompt = input.systemPrompt;
+    const mode = this.modes.shift() ?? this.options.defaultMode;
+    const promptVersion = /promptVersion:\s*(\S+)/.exec(input.systemPrompt)?.[1] ?? 'ai-edit-v1';
+    if (mode === 'timeout') throw new Error('Mock LLM：上游超时（模拟）');
+    if (mode === 'error') throw new Error('Mock LLM：上游 500（模拟）');
+    if (mode === 'unrepairable') {
+      return { content: JSON.stringify({ rationale: [] }), modelVersion: this.options.modelVersion, promptVersion, usage: {} };
+    }
+    if (mode === 'ai_edit_invalid_then_valid') {
+      return { content: '这不是 JSON（Mock：首次损坏）', modelVersion: this.options.modelVersion, promptVersion, usage: {} };
+    }
+
+    const scenes = [...input.userPrompt.matchAll(/- id=(\S+) position=(\d+) type=(\S+) duration=(\d+)ms locked=(true|false)/g)].map((match) => ({
+      id: match[1] ?? '',
+      position: Number(match[2] ?? '0'),
+      type: match[3] ?? '',
+      durationMs: Number(match[4] ?? '0'),
+      locked: match[5] === 'true',
+    }));
+    const first = scenes[0];
+
+    if (mode === 'ai_edit_locked') {
+      const lockedScene = scenes.find((scene) => scene.locked) ?? first;
+      return {
+        content: JSON.stringify({
+          rationale: ['尝试修改场景（含锁定场景，应被系统剔除）'],
+          operations: lockedScene === undefined ? [] : [{ op: 'update_scene', sceneId: lockedScene.id, changes: { durationMs: lockedScene.durationMs + 500 } }],
+        }),
+        modelVersion: this.options.modelVersion,
+        promptVersion,
+        usage: {},
+      };
+    }
+    if (mode === 'ai_edit_bad_scene') {
+      return {
+        content: JSON.stringify({
+          rationale: ['引用不存在的场景（应被服务端拒绝）'],
+          operations: [{ op: 'delete_scene', sceneId: 'scn_does_not_exist' }],
+        }),
+        modelVersion: this.options.modelVersion,
+        promptVersion,
+        usage: {},
+      };
+    }
+
+    // ai_edit_valid（默认）：把 prompt 里的毫秒数应用到第一个场景；并给非锁定场景各加一个 +200ms 的中性操作
+    const deltaMatch = /(\d+)\s*ms/.exec(input.userPrompt);
+    const delta = deltaMatch === null ? 500 : Number(deltaMatch[1]);
+    const operations = scenes
+      .filter((scene) => !scene.locked)
+      .slice(0, 2)
+      .map((scene, index) => ({
+        op: 'update_scene',
+        sceneId: scene.id,
+        changes: index === 0 ? { durationMs: Math.max(scene.durationMs + delta, 500) } : { narration: '（AI Edit：段落微调）' },
+      }));
+    return {
+      content: JSON.stringify({
+        rationale: operations.map(() => '按用户意图微调场景参数（确定性 Mock）'),
+        operations,
+      }),
+      modelVersion: this.options.modelVersion,
+      promptVersion,
+      usage: {},
+    };
   }
 
   async complete(input: { request: NarrativeGenerationRequest; systemPrompt: string; userPrompt: string }): Promise<LlmCompletion> {

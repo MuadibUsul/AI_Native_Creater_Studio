@@ -121,6 +121,11 @@ export type LlmCompletion = z.infer<typeof llmCompletionSchema>;
 export interface LlmAdapter {
   readonly providerId: string;
   complete(input: { request: NarrativeGenerationRequest; systemPrompt: string; userPrompt: string }): Promise<LlmCompletion>;
+  /**
+   * 结构化补全（P05-06 AI Edit 等）：仅依赖提示词（不携带叙事上下文对象）。
+   * 未实现该方法的适配器 → 调用方 fail-closed（明确 501，不静默降级）。
+   */
+  completePrompt?(input: { purpose: string; systemPrompt: string; userPrompt: string }): Promise<LlmCompletion>;
 }
 
 export const NARRATIVE_ERROR_REASONS = {

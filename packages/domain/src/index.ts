@@ -47,6 +47,17 @@ export {
   updateNarrationBlock,
 } from './narrative.js';
 export { planVisual } from './visual-plan.js';
+export {
+  AI_EDIT_PROMPT_VERSION,
+  assertSceneReferences,
+  buildEditPlanPrompts,
+  computeImpact,
+  filterLockedOperations,
+  planAiEdit,
+  scenesDigestOf,
+  summarizeOperation,
+} from './ai-edit.js';
+
 export { buildSpeechSegments, planSpeech, resolveSceneRole } from './speech-plan.js';
 
 export {
