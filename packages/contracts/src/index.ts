@@ -173,6 +173,29 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// Provider 结果回收与 Webhook 契约（P03-06 / §30、§31、§33.4）
+export {
+  WEBHOOK_VERIFICATION_STATUSES,
+  webhookVerificationStatusSchema,
+  webhookEventSchema,
+  providerCallbackSchema,
+  resultCollectionSchema,
+  collectRequestSchema,
+  WEBHOOK_SIGNATURE_HEADER,
+  WEBHOOK_TIMESTAMP_HEADER,
+  WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+  WEBHOOK_REJECTION_REASONS,
+} from './results.js';
+export type {
+  WebhookVerificationStatus,
+  WebhookEvent,
+  ProviderCallback,
+  ResultCollection,
+  CollectRequest,
+  ResultFetcher,
+  WebhookVerifier,
+} from './results.js';
+
 // 账本与预算契约（P03-05 / 规范 §35.1、§68）
 export {
   LEDGER_ENTRY_TYPES,

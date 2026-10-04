@@ -5,6 +5,7 @@ import type { DomainDeps } from '@ancs/domain';
 import { MAINTENANCE_DISPATCH_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, NOOP_JOB_TYPE } from '@ancs/domain';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { BullMqJobQueue } from '@ancs/providers-queue-bullmq';
+import { createHttpResultFetcher } from './fetcher.js';
 
 /**
  * Worker 进程（P03-01 / 计划 §5.5）。
@@ -36,7 +37,7 @@ export function createDomainDeps(handle: ReturnType<typeof createDb>): DomainDep
     (process.env['BETTER_AUTH_SECRET'] !== undefined
       ? createHmac('sha256', process.env['BETTER_AUTH_SECRET']).update('storage-local-v1').digest('hex')
       : undefined);
-  const deps: DomainDeps = { db: handle.db, retention: {} };
+  const deps: DomainDeps = { db: handle.db, retention: {}, resultFetcher: createHttpResultFetcher() };
   if (storageSecret !== undefined && storageSecret.length >= 16) {
     deps.storage = new LocalObjectStorage({
       rootDir: resolve(process.env['ANCS_STORAGE_LOCAL_DIR'] ?? '.storage'),

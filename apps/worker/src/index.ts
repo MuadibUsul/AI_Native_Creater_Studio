@@ -2,3 +2,4 @@ export { createDefaultRegistry, JobHandlerRegistry, noopHandler, retentionSweepH
 export type { JobHandler } from './handlers.js';
 export { createDomainDeps, workerHandlerTypes } from './domain.js';
 export { executeJob } from './runner.js';
+export { createHttpResultFetcher } from './fetcher.js';

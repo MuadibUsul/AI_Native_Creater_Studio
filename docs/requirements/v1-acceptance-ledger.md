@@ -28,7 +28,7 @@
 | LED-77-14 | 有至少一个真实 Voice Provider | REQ-6-07/REQ-14-03 | P06-02（P06） | TODO |
 | LED-77-15 | 有至少一个真实 AI Video Provider（默认 Veo，DEC-05） | REQ-64-04/DEC-05 | P06-05（P06） | TODO |
 | LED-77-16 | 外部任务异步执行并显示状态 | REQ-2-05/REQ-29-06 | P03-01/P02-06（P03/P02） | TODO（进度：任务系统（状态机/依赖/租约/Worker）与 job.* 事件已就位（P03-01）；真实外部生成任务的端到端执行随 P03-06/P06/P07） |
-| LED-77-17 | Provider 结果会回收到自己的 Storage | REQ-45-02/REQ-26-01 | P03-06（P03） | TODO |
+| LED-77-17 | Provider 结果会回收到自己的 Storage | REQ-45-02/REQ-26-01 | P03-06（P03） | VERIFIED（2026-10-04：通用回收链路——下载（大小上限/超时）→ 校验（大小/魔术字节嗅探/校验和）→ 写入自有存储 → 落 Asset；测试含「Provider URL 失效后已完成资产仍可用」（AC-10）与「下载失败不重生成、只重试回收」（AC-09）） |
 | LED-77-18 | 能输出 1080p 完整 MP4 | REQ-4-04 | P07-04（P07） | TODO |
 | LED-77-19 | 能输出字幕（SRT/VTT） | REQ-58-01 | P06-06（P06） | TODO |
 | LED-77-20 | 能生成 Project Manifest | REQ-28-01 | P07-04（P07） | TODO |

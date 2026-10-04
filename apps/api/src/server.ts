@@ -20,11 +20,13 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
 import { registerProjectRoutes } from './routes/projects.js';
+import { registerWebhookRoutes } from './routes/results.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerStorageRoutes } from './routes/storage.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import type { StorageDeps } from './plugins/storage.js';
 import type { CredentialDeps } from './plugins/credentials.js';
+import type { WebhookRouteDeps } from './routes/results.js';
 
 export interface BuildServerOptions {
   logger?: boolean;
@@ -46,6 +48,10 @@ export interface BuildServerOptions {
    * 凭据保险库（P03-04）。未提供时连接/路由端点不注册（无凭据能力的进程，fail-closed）。
    */
   credentials?: CredentialDeps;
+  /**
+   * Webhook 验签与回收依赖（P03-06）。未提供时 Webhook 端点不注册（无验签能力即不可信，fail-closed）。
+   */
+  webhooks?: WebhookRouteDeps;
 }
 
 /**
@@ -84,6 +90,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const authDeps = options.auth;
   const storageDeps = options.storage;
   const credentialDeps = options.credentials;
+  const webhookDeps = options.webhooks;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
     await app.register(
@@ -101,6 +108,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerBillingRoutes(instance, authDeps);
         if (credentialDeps !== undefined) {
           registerCredentialRoutes(instance, authDeps, credentialDeps);
+        }
+        if (webhookDeps !== undefined) {
+          registerWebhookRoutes(instance, authDeps, webhookDeps);
         }
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

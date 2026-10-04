@@ -20,3 +20,4 @@ export { jobDependencies, jobs } from './jobs.js';
 export { providerCatalogVersions } from './providers.js';
 export { providerConnections, workspaceProviderSettings } from './credentials.js';
 export { budgetCounters, creditHolds, creditLedger, providerGenerations, workspaceBudgets } from './billing.js';
+export { providerResultStates, webhookEvents } from './results.js';

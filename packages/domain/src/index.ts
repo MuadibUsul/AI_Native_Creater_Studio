@@ -40,6 +40,17 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  collectProviderResult,
+  createHmacWebhookVerifier,
+  ingestProviderWebhook,
+  processProviderCallback,
+  registerProviderResultDescriptors,
+  registerProviderResultPending,
+  runResultExpirySweep,
+  RESULT_EXPIRY_WARNING_MINUTES,
+} from './results.js';
+export type { WebhookIngestResult } from './results.js';
+export {
   completeProviderGeneration,
   getBalanceCredits,
   getBillingStatus,

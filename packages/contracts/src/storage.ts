@@ -64,6 +64,11 @@ export interface ObjectStorageAdapter {
   readObjectPrefix(key: string, maxBytes: number): Promise<Uint8Array | null>;
   /** 对象 SHA-256（十六进制小写）；对象不存在返回 null */
   computeObjectSha256(key: string): Promise<string | null>;
+  /**
+   * 服务端写入对象（结果回收 / 渲染产物落库；§75 第 5 条：结果必须落在自有存储）。
+   * 客户端上传走 Signed URL（createUploadTarget），不使用本方法。
+   */
+  putObject(key: string, data: Uint8Array): Promise<void>;
   deleteObject(key: string): Promise<void>;
 }
 

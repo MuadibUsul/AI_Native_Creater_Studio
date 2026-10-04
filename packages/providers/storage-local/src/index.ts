@@ -214,13 +214,18 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     await rm(this.resolveKeyPath(key), { force: true });
   }
 
-  /** 端点写入（先写 .partial 再原子改名：未完成的写入不会被探测为完整对象）。 */
-  async writeObject(key: string, data: Uint8Array): Promise<void> {
+  /** 服务端写入（先写 .partial 再原子改名：未完成的写入不会被探测为完整对象）。 */
+  async putObject(key: string, data: Uint8Array): Promise<void> {
     const path = this.resolveKeyPath(key);
     await mkdir(dirname(path), { recursive: true });
     const partialPath = `${path}.partial`;
     await writeFile(partialPath, data);
     await rename(partialPath, path);
+  }
+
+  /** 端点写入别名（路由层使用；语义同 putObject） */
+  async writeObject(key: string, data: Uint8Array): Promise<void> {
+    await this.putObject(key, data);
   }
 
   async readObject(key: string): Promise<Uint8Array | null> {

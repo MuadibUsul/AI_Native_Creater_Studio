@@ -6,6 +6,8 @@ import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
+import { parseWebhookVerifiers } from './plugins/webhooks.js';
+import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -64,9 +66,16 @@ if (storageDriver === 'local') {
 
 const credentialDeps = credentialDepsFromEnv();
 
+const webhookDeps = {
+  verifiers: parseWebhookVerifiers(process.env['ANCS_WEBHOOK_SECRETS']),
+  resultFetcher: createHttpResultFetcher(),
+  ...(storageDeps.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
+};
+
 const app = await buildServer({
   logger: true,
   credentials: credentialDeps,
+  webhooks: webhookDeps,
   auth: {
     auth,
     db: handle.db,

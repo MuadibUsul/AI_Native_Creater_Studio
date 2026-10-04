@@ -203,7 +203,7 @@
 | REQ-33-01 | §33 | 每个写请求 SHOULD 支持 Idempotency-Key 与 X-Request-Id | SHOULD | V1 | P01-05/P02-02（P01/P02） | 基线机制被测试锁定：X-Request-Id 透传/回显、幂等键回放原结果、同键不同请求 409（AC-03 的 API 层形态）（P01-05）；编辑协议复用同一机制（P02-02） | VERIFIED |
 | REQ-33-02 | §33 | 统一错误格式（error.code/message/requestId/details），含 VERSION_CONFLICT 示例 | MUST | V1 | P01-01（P01） | 错误信封 + 10 项错误码表 + VERSION_CONFLICT details 契约化并被 api/测试使用（P01-01；证据 docs/verification/P01-01.md） | VERIFIED |
 | REQ-33-03 | §33 | API 必须支持分页/过滤/排序/请求追踪/向后兼容 JSON | MUST | V1 | P01-05（P01） | 分页（游标）与请求追踪已就绪并被测试；过滤/排序随 P02+ 列表规模需要实现（进度：3/5）（P01-05） | TODO |
-| REQ-33-04 | §33 | Webhook 必须：校验签名/防 replay/幂等处理 | MUST | V1 | P03-06（P03） | AC-08；伪造事件被拒（P03-06） | TODO |
+| REQ-33-04 | §33 | Webhook 必须：校验签名/防 replay/幂等处理 | MUST | V1 | P03-06（P03） | AC-08；伪造事件被拒（P03-06） | HMAC-SHA256 + 时间窗（±5 分钟）验签（伪造/超窗/缺头 → 401 且**不落事件行、不改状态**）；replay 防护 = 唯一键 (provider, eventId)（重复 → 幂等 ack DUPLICATE）；迟到 attempt 只登记不应用（P03-06） | VERIFIED |
 ## L. 数据库、用量与配额（§34—§36）
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
@@ -260,7 +260,7 @@
 | REQ-44-01 | §44 | MUST 监控集：API 错误率/延迟 p50-p95/队列深度/Job 年龄/Provider 429/失败率/延迟/成本/Render 时长/失败/存储用量/DB 性能/每 Workspace 支出；推荐 OTel/结构化日志/Sentry/指标后端 | MUST | V1 | P08-03（P08） | P08-03 验收 | TODO |
 | REQ-44-02 | §44 | 每请求贯穿 request_id/project_id/job_id/provider_job_id；日志严禁 Secret 与默认完整未发布正文 | MUST | V1 | P08-03（P08） | 日志脱敏验收（P08-03） | TODO |
 | REQ-45-01 | §45 | Provider capability/limit/price/retention 全部视为运行时/配置数据，不是产品常量 | MUST | V1 | P03-03（P03） | 版本化目录配置（P03-03）；DEC-14 | 能力/模型/价格/限额/地区/保留均为版本化 Catalog 数据（provider_catalog_versions，P03-03）；无有效配置阻止真实调用（P03-03/P03-04）；模型 ID 以字符串承载、不做核心枚举（§75 第 10 条） | VERIFIED |
-| REQ-45-02 | §45 | 各 Provider 工程处理：HeyGen concurrency 配置化 + capability detection + 不假定普通账号全功能；Veo 生成完立即拉回存储、不依赖 Provider URL；Runway ephemeral URI 有时效、Adapter 吸收版本变化；ElevenLabs "不用于训练"与"零保留"分别展示、本人验证不得绕过；Remotion Player/Lambda 定位 | MUST | V1 | P06-01（P06）；配置侧 P03-03 | 账号实际能力与 Catalog 一致（P06-01） | TODO |
+| REQ-45-02 | §45 | 各 Provider 工程处理：HeyGen concurrency 配置化 + capability detection + 不假定普通账号全功能；Veo 生成完立即拉回存储、不依赖 Provider URL；Runway ephemeral URI 有时效、Adapter 吸收版本变化；ElevenLabs "不用于训练"与"零保留"分别展示、本人验证不得绕过；Remotion Player/Lambda 定位 | MUST | V1 | P06-01（P06）；配置侧 P03-03；回收侧 P03-06 | 账号实际能力与 Catalog 一致（P06-01） | TODO（进度：**结果立即拉回自有存储**的通用回收链路（下载→校验→自有存储→Asset→临时 URL 过期预警/EXPIRED+对账标记）已就位（P03-06）；HeyGen 并发配置化/Veo/Runway/ElevenLabs 的账号级细节待 P06-01） |
 | REQ-46-01 | §46 | Provider Capability Registry 字段集（provider/model/modality/supports_*/max_duration/aspect_ratios/resolutions/concurrency_limit/rate_limit/cost_formula/retention/regions/privacy_tier/updated_at）；可先手工维护后期自动同步 | MUST | V1 | P03-03（P03） | P03-03 验收 | TODO |
 | REQ-47-01 | §47 | 正式对外收费前 MUST：重核所有 Provider Terms；确认 API 嵌入/白标允许；需 Enterprise 协议的签订；数字人/声音克隆授权与 Consent；Content/Abuse Policy；Privacy/Terms/DPA；不得假定"有 Key=可转售" | MUST | 后续 | P09-06（P09） | P09-06 商业上线门 | DEFERRED |
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-05，REQ-25-01 / REQ-68-01 → VERIFIED（REQ-35-01 / REQ-69-01 记录进度）；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P03-06，REQ-33-04 → VERIFIED（REQ-45-02 记录进度）；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 
