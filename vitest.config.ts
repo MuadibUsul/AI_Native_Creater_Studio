@@ -48,6 +48,7 @@ export default defineConfig({
           environment: 'node',
           include: ['packages/testing/src/**/*.test.ts'],
           exclude: ['**/node_modules/**'],
+          alias: workspaceAliases,
           passWithNoTests: false,
         },
       },

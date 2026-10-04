@@ -1,4 +1,5 @@
 {
+  "schemaVersion": "0.1",
   "id": "doc_fr_govt_debt_2024",
   "title": "为什么法国国债风险突然升温？",
   "language": "zh-CN",
@@ -289,5 +290,37 @@
     { "id": "tbl_fiscal", "blockId": "blk_015", "caption": "法国财政指标（2021—2023）", "datasetId": "ds_fiscal_fr" }
   ],
   "figures": [],
-  "attachments": []
+  "attachments": [],
+  "extractions": {
+    "entities": [
+      { "id": "ent_france", "name": "法国", "kind": "COUNTRY" },
+      { "id": "ent_germany", "name": "德国", "kind": "COUNTRY" },
+      { "id": "ent_ecb", "name": "欧洲央行（ECB）", "kind": "ORG" },
+      { "id": "ent_sp", "name": "标普全球评级", "kind": "ORG" },
+      { "id": "ent_fitch", "name": "惠誉评级", "kind": "ORG" },
+      { "id": "ent_ec", "name": "欧盟委员会", "kind": "ORG" }
+    ],
+    "causalRelations": [
+      { "id": "rel_pricing", "cause": "政治不确定性上升", "effect": "财政路径无法被市场定价", "claimIds": ["clm_010"] },
+      { "id": "rel_premium", "cause": "财政路径不可定价", "effect": "风险溢价上行、利差走阔", "claimIds": ["clm_002", "clm_010"] },
+      { "id": "rel_feedback", "cause": "财政压力预期加深", "effect": "政治共识更难形成", "claimIds": ["clm_012"] }
+    ],
+    "timelineEvents": [
+      { "id": "tev_1", "date": "2024-06-06", "description": "欧洲央行开启降息周期（存款利率降至 3.75%）", "claimIds": ["clm_009"] },
+      { "id": "tev_2", "date": "2024-06-09", "description": "宣布解散国民议会", "claimIds": ["clm_001"] },
+      { "id": "tev_3", "date": "2024-06-14", "description": "法德利差触及阶段峰值（约 82bp）", "claimIds": ["clm_002"] },
+      { "id": "tev_4", "date": "2024-06-19", "description": "欧盟委员会建议对法国启动过度赤字程序", "claimIds": ["clm_008"] }
+    ],
+    "geography": [
+      { "id": "geo_fr", "countryCodes": ["FRA"], "description": "风险溢价重估的对象" },
+      { "id": "geo_de", "countryCodes": ["DEU"], "description": "避险资金流入、收益率微降的对照国" }
+    ],
+    "numericFacts": [
+      { "id": "nf_spread_pre", "value": 48, "unit": "bp", "timeRange": { "from": "2024-06-07", "to": "2024-06-07" }, "claimIds": ["clm_002"] },
+      { "id": "nf_spread_peak", "value": 82, "unit": "bp", "timeRange": { "from": "2024-06-14", "to": "2024-06-14" }, "claimIds": ["clm_002"] },
+      { "id": "nf_deficit", "value": 5.5, "unit": "% of GDP", "timeRange": { "from": "2023", "to": "2023" }, "claimIds": ["clm_005"] },
+      { "id": "nf_debt", "value": 110.6, "unit": "% of GDP", "timeRange": { "from": "2023", "to": "2023" }, "claimIds": ["clm_005"] },
+      { "id": "nf_cac_week", "value": -6.2, "unit": "%（首周）", "timeRange": { "from": "2024-06-07", "to": "2024-06-14" }, "claimIds": ["clm_004"] }
+    ]
+  }
 }

@@ -7,6 +7,7 @@
   ],
   "bundle": {
     "content": {
+      "schemaVersion": "0.1",
       "id": "neg_long_text",
       "title": "合成负面用例：超长文本",
       "language": "zh-CN",

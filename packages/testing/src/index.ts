@@ -1,10 +1,7 @@
 export {
   contentDocumentSchema,
-  contentBlockSchema,
-  claimSchema,
-  citationSchema,
   sourceSnapshotSchema,
-  datasetSchema,
+  structuredDatasetSchema,
   fixtureExpectedSchema,
   sourcesFileSchema,
   datasetsFileSchema,
@@ -12,8 +9,6 @@ export {
 } from './fixture-schema.js';
 export type {
   ContentDocument,
-  ContentBlock,
-  Claim,
   SourceSnapshot,
   StructuredDataset,
   FixtureExpected,

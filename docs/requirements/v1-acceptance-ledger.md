@@ -61,7 +61,7 @@
 |---|---|---|---|---|
 | LED-C-ARCH-01 | Monorepo exists | REQ-49-01 | P00-02（P00） | VERIFIED（2026-10-04，证据：docs/verification/P00-02.md） |
 | LED-C-ARCH-02 | Web and API are separate apps | REQ-29-02 | P00-02/P01-05（P00/P01） | TODO |
-| LED-C-ARCH-03 | Shared contracts package exists | REQ-29-04 | P01-01（P01） | TODO |
+| LED-C-ARCH-03 | Shared contracts package exists | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-04：@ancs/contracts 正式化，被 api/sdk/testing 共用；证据：docs/verification/P01-01.md） |
 | LED-C-ARCH-04 | OpenAPI generated | REQ-29-04/REQ-33-02 | P01-01（P01） | VERIFIED（2026-10-04 机制已核：/openapi.json 由同一份 Zod 契约生成并被测试断言；内容随 P01 扩展。证据：docs/verification/P00-03.md） |
 | LED-C-ARCH-05 | SDK usable independently | REQ-29-02 | P01-05（P01） | TODO |
 | LED-C-ARCH-06 | PostgreSQL migration system works | REQ-34-01 | P00-02 起（P00/P02） | TODO |

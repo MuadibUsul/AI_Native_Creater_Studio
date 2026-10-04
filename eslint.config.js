@@ -38,5 +38,12 @@ export default tseslint.config(
     languageOptions: {
       globals: nodeGlobals,
     },
+    rules: {
+      // 项目约定：下划线前缀 = 有意未使用（含 rest 解构中省略的属性）
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
   },
 );

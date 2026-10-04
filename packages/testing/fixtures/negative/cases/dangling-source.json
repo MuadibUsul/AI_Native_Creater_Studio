@@ -7,6 +7,7 @@
   ],
   "bundle": {
     "content": {
+      "schemaVersion": "0.1",
       "id": "neg_dangling_source",
       "title": "合成负面用例：悬空来源",
       "language": "zh-CN",

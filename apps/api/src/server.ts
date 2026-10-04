@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
-import { API_PREFIX } from './constants.js';
+import { API_PREFIX } from '@ancs/contracts';
 import { registerErrorHandler } from './error-handler.js';
 import { registerEchoRoutes } from './routes/echo.js';
 import { registerHealthRoutes } from './routes/health.js';

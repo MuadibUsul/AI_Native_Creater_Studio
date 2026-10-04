@@ -1,0 +1,26 @@
+{
+  "baseProjectRevision": 42,
+  "expectedSceneRevisions": { "scn_002": 5 },
+  "operations": [
+    { "op": "update_scene", "sceneId": "scn_002", "changes": { "durationMs": 15000 } },
+    {
+      "op": "insert_scene",
+      "afterSceneId": "scn_002",
+      "sceneDraft": {
+        "sceneType": "LINE_CHART",
+        "semanticType": "TREND",
+        "narration": "把时间拉长看，这次冲击并不是孤例。",
+        "visualIntent": "以十年维度展示利差的历史区间",
+        "durationMs": 20000,
+        "componentId": "line-chart",
+        "componentVersion": "0.1.0",
+        "props": { "showSourceLabel": true },
+        "providerRequirement": null,
+        "sourceBindings": [],
+        "dataBindings": []
+      }
+    },
+    { "op": "set_scene_lock", "sceneId": "scn_001", "locked": true }
+  ],
+  "idempotencyKey": "idem_p01_01_sample_0001"
+}

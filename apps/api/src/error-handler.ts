@@ -5,6 +5,25 @@ interface ValidationIssue {
   message?: string;
 }
 
+/** HTTP 状态码 → 契约错误码（P01-01 错误码表；其余 4xx 归为 VALIDATION_FAILED） */
+function codeForStatus(status: number, isValidation: boolean): ErrorCode {
+  if (isValidation) return ERROR_CODES.VALIDATION_FAILED;
+  switch (status) {
+    case 401:
+      return ERROR_CODES.UNAUTHENTICATED;
+    case 403:
+      return ERROR_CODES.FORBIDDEN;
+    case 404:
+      return ERROR_CODES.NOT_FOUND;
+    case 409:
+      return ERROR_CODES.VERSION_CONFLICT;
+    case 429:
+      return ERROR_CODES.RATE_LIMITED;
+    default:
+      return status < 500 ? ERROR_CODES.VALIDATION_FAILED : ERROR_CODES.INTERNAL;
+  }
+}
+
 function envelope(
   code: ErrorCode,
   message: string,
@@ -29,13 +48,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     const validation = Array.isArray(error.validation) ? error.validation : null;
     const status = typeof error.statusCode === 'number' && error.statusCode >= 400 ? error.statusCode : 500;
 
-    const code: ErrorCode = validation
-      ? ERROR_CODES.VALIDATION_FAILED
-      : status === 404
-        ? ERROR_CODES.NOT_FOUND
-        : status < 500
-          ? ERROR_CODES.VALIDATION_FAILED
-          : ERROR_CODES.INTERNAL;
+    const code: ErrorCode = codeForStatus(status, validation !== null);
 
     if (status >= 500) {
       request.log.error({ err: error }, 'unhandled error');

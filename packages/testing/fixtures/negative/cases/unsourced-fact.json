@@ -7,6 +7,7 @@
   ],
   "bundle": {
     "content": {
+      "schemaVersion": "0.1",
       "id": "neg_unsourced_fact",
       "title": "合成负面用例：无来源事实",
       "language": "zh-CN",

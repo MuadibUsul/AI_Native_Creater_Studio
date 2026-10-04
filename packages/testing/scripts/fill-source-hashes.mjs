@@ -34,8 +34,8 @@ const stripNulls = (value) => {
 const fillHashes = (sources) => {
   let filled = 0;
   for (const source of sources) {
-    if (source.content_hash === '') {
-      source.content_hash = createHash('sha256').update(source.excerpt, 'utf8').digest('hex');
+    if (source.contentHash === '') {
+      source.contentHash = createHash('sha256').update(source.excerpt, 'utf8').digest('hex');
       filled += 1;
     }
   }

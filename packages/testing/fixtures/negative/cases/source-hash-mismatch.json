@@ -7,6 +7,7 @@
   ],
   "bundle": {
     "content": {
+      "schemaVersion": "0.1",
       "id": "neg_hash_mismatch",
       "title": "合成负面用例：快照哈希不匹配",
       "language": "zh-CN",
@@ -25,14 +26,14 @@
     },
     "sources": [
       {
-        "source_id": "src_neg_corrupted",
+        "sourceId": "src_neg_corrupted",
         "url": "https://example.invalid/negative-fixture",
         "title": "合成来源占位（哈希损坏）",
         "publisher": "SYNTHETIC",
-        "retrieved_at": "2026-10-04",
-        "content_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "retrievedAt": "2026-10-04",
+        "contentHash": "0000000000000000000000000000000000000000000000000000000000000000",
         "excerpt": "合成负面用例的占位摘录（非真实内容）。",
-        "snapshot_kind": "fixture_reconstruction"
+        "snapshotKind": "fixture_reconstruction"
       }
     ],
     "datasets": [],

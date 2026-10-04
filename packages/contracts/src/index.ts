@@ -1,5 +1,106 @@
-export { errorEnvelopeSchema, ERROR_CODES } from './common/error.js';
-export type { ErrorEnvelope, ErrorCode } from './common/error.js';
+// 常量
+export { API_PREFIX, V1_DEFAULT_FORMAT, STANDARD_SCENE_TYPES } from './constants.js';
+
+// 公共基础
+export { opaqueIdSchema } from './common/ids.js';
+export type { OpaqueId } from './common/ids.js';
+export { isoDateTimeSchema, isoDateOrDateTimeSchema, videoMsSchema, durationMsSchema } from './common/time.js';
+export type { IsoDateTime, VideoMs } from './common/time.js';
+export { revisionSchema } from './common/revision.js';
+export type { Revision } from './common/revision.js';
+export { moneySchema, creditsSchema } from './common/money.js';
+export type { Money, Credits } from './common/money.js';
+export { pageRequestSchema, pageResponseSchema } from './common/pagination.js';
+export type { PageRequest } from './common/pagination.js';
+export { eventEnvelopeSchema, EVENT_TYPES } from './common/events.js';
+export type { EventEnvelope } from './common/events.js';
+export { errorEnvelopeSchema, ERROR_CODES, versionConflictDetailsSchema } from './common/error.js';
+export type { ErrorEnvelope, ErrorCode, VersionConflictDetails } from './common/error.js';
+
+// 领域契约
+export {
+  sceneGraphSchema,
+  sceneSchema,
+  sceneStatusSchema,
+  sceneFormatSchema,
+  sceneTransitionSchema,
+  providerRequirementSchema,
+  sourceBindingSchema,
+  dataBindingSchema,
+  assetBindingSchema,
+  captionSchema,
+  captionWordSchema,
+  audioTrackSchema,
+  AUDIO_TRACK_KINDS,
+  overlaySchema,
+  sourceReferenceSchema,
+  channelSnapshotSchema,
+  identitySnapshotSchema,
+  sceneTimelineSchema,
+} from './scene-graph.js';
+export type {
+  SceneGraph,
+  Scene,
+  SceneStatus,
+  Caption,
+  AudioTrack,
+  ProviderRequirement,
+} from './scene-graph.js';
+
+export {
+  contentDocumentSchema,
+  contentBlockSchema,
+  claimSchema,
+  citationSchema,
+  contentTableSchema,
+  contentFigureSchema,
+  contentAttachmentSchema,
+  contentExtractionsSchema,
+  extractedEntitySchema,
+  causalRelationSchema,
+  timelineEventSchema,
+  geoRelationSchema,
+  numericFactSchema,
+  CONTENT_BLOCK_TYPES,
+  CLAIM_FACTUALITIES,
+  ENTITY_KINDS,
+} from './content.js';
+export type { ContentDocument, ContentBlock, Claim, ContentExtractions } from './content.js';
+
+export { sourceSnapshotSchema, SNAPSHOT_KINDS } from './sources.js';
+export type { SourceSnapshot } from './sources.js';
+
+export {
+  structuredDatasetSchema,
+  datasetSeriesSchema,
+  datasetPointSchema,
+  DATASET_POINT_ACCURACIES,
+} from './datasets.js';
+export type { StructuredDataset, DatasetSeries } from './datasets.js';
+
+export {
+  editRequestSchema,
+  editOperationSchema,
+  EDIT_OPERATION_TYPES,
+  sceneDraftSchema,
+  updateProjectOperationSchema,
+  updateScriptOperationSchema,
+  insertSceneOperationSchema,
+  updateSceneOperationSchema,
+  deleteSceneOperationSchema,
+  duplicateSceneOperationSchema,
+  splitSceneOperationSchema,
+  reorderScenesOperationSchema,
+  replaceAssetOperationSchema,
+  updateCaptionOperationSchema,
+  updateAudioTrackOperationSchema,
+  setSceneLockOperationSchema,
+  restoreSceneOperationSchema,
+  restoreProjectVersionOperationSchema,
+} from './edits.js';
+export type { EditRequest, EditOperation, EditOperationType } from './edits.js';
+
+// 既有接口
 export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
 export { echoRequestSchema, echoResponseSchema } from './echo.js';

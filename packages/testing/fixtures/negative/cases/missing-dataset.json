@@ -7,6 +7,7 @@
   ],
   "bundle": {
     "content": {
+      "schemaVersion": "0.1",
       "id": "neg_missing_dataset",
       "title": "合成负面用例：缺失数据集",
       "language": "zh-CN",
@@ -25,14 +26,14 @@
     },
     "sources": [
       {
-        "source_id": "src_neg_ok",
+        "sourceId": "src_neg_ok",
         "url": "https://example.invalid/negative-fixture",
         "title": "合成来源占位",
         "publisher": "SYNTHETIC",
-        "retrieved_at": "2026-10-04",
-        "content_hash": "7cb20e5ce050d9ac344683d1d808beca5ef02e97301b207be8137a9e070cf57d",
+        "retrievedAt": "2026-10-04",
+        "contentHash": "7cb20e5ce050d9ac344683d1d808beca5ef02e97301b207be8137a9e070cf57d",
         "excerpt": "合成负面用例的占位摘录（非真实内容）。",
-        "snapshot_kind": "fixture_reconstruction"
+        "snapshotKind": "fixture_reconstruction"
       }
     ],
     "datasets": [],

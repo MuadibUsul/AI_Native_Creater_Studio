@@ -25,7 +25,7 @@ export const sha256Hex = (text: string): string => createHash('sha256').update(t
 
 /**
  * 审计一份 fixture bundle（golden 与负面用例共用）：
- * - 来源快照的 content_hash 必须等于存储摘录的 sha256；
+ * - 来源快照的 contentHash 必须等于存储摘录的 sha256；
  * - 所有 source/dataset 引用必须可解析；
  * - fact 级 Claim 必须有来源（§56：AI 不得伪造来源）；
  * - 合成数据（synthetic）不得被事实图表引用（§10.3 / AC-15）；
@@ -33,18 +33,18 @@ export const sha256Hex = (text: string): string => createHash('sha256').update(t
  */
 export function auditFixture(bundle: FixtureBundle): AuditIssue[] {
   const issues: AuditIssue[] = [];
-  const sourceIds = new Set(bundle.sources.map((s) => s.source_id));
+  const sourceIds = new Set(bundle.sources.map((s) => s.sourceId));
   const datasetIds = new Set(bundle.datasets.map((d) => d.id));
 
   // 1. 来源快照哈希完整性
   for (const source of bundle.sources) {
     const actual = sha256Hex(source.excerpt);
-    if (actual !== source.content_hash) {
+    if (actual !== source.contentHash) {
       issues.push({
         code: 'SOURCE_HASH_MISMATCH',
         severity: 'error',
-        path: `sources.${source.source_id}`,
-        message: `content_hash 与摘录内容不一致（期望 ${actual.slice(0, 12)}…）`,
+        path: `sources.${source.sourceId}`,
+        message: `contentHash 与摘录内容不一致（期望 ${actual.slice(0, 12)}…）`,
       });
     }
   }
@@ -61,7 +61,7 @@ export function auditFixture(bundle: FixtureBundle): AuditIssue[] {
         });
       }
     }
-    for (const reference of claim.structuredData ?? []) {
+    for (const reference of claim.structuredData) {
       if (!datasetIds.has(reference.datasetId)) {
         issues.push({
           code: 'UNRESOLVED_DATASET',

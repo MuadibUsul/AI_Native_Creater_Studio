@@ -201,7 +201,7 @@
 | REQ-32-01 | §32 | 资源接口集：Auth/Workspace/Channels/Sources/Narrative-Director/Scenes/Assets/History/Jobs/Render/Providers/Usage/Events；统一挂载 /api/v1（DEC-01） | MUST | V1 | P01-05（P01）+各阶段 | P01-05 验收；计划 §10 增补清单 | TODO |
 | REQ-32-02 | §32 | director/edit 请求形状（instruction/selection/baseRevision/mode: plan_then_apply）；SHOULD 先返回 change plan，Apply 后 commit | MUST | V1 | P05-06（P05） | 计划未 Apply 不改数据库（P05-06） | TODO |
 | REQ-33-01 | §33 | 每个写请求 SHOULD 支持 Idempotency-Key 与 X-Request-Id | SHOULD | V1 | P01-05/P02-02（P01/P02） | AC-03；同键重放原结果（P02-02） | TODO |
-| REQ-33-02 | §33 | 统一错误格式（error.code/message/requestId/details），含 VERSION_CONFLICT 示例 | MUST | V1 | P01-01（P01） | 非法值被拒（P01-01） | TODO |
+| REQ-33-02 | §33 | 统一错误格式（error.code/message/requestId/details），含 VERSION_CONFLICT 示例 | MUST | V1 | P01-01（P01） | 错误信封 + 10 项错误码表 + VERSION_CONFLICT details 契约化并被 api/测试使用（P01-01；证据 docs/verification/P01-01.md） | VERIFIED |
 | REQ-33-03 | §33 | API 必须支持分页/过滤/排序/请求追踪/向后兼容 JSON | MUST | V1 | P01-05（P01） | P01-05 验收 | TODO |
 | REQ-33-04 | §33 | Webhook 必须：校验签名/防 replay/幂等处理 | MUST | V1 | P03-06（P03） | AC-08；伪造事件被拒（P03-06） | TODO |
 ## L. 数据库、用量与配额（§34—§36）
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P00-04，REQ-80-02 → VERIFIED；此前 P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-01，REQ-33-02 → VERIFIED；此前 P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 
