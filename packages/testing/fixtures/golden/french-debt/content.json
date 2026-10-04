@@ -1,0 +1,293 @@
+{
+  "id": "doc_fr_govt_debt_2024",
+  "title": "为什么法国国债风险突然升温？",
+  "language": "zh-CN",
+  "author": "ANCS Golden Fixture（场景重构）",
+  "publishedAt": "2024-07-15",
+  "blocks": [
+    {
+      "id": "blk_001",
+      "type": "heading",
+      "level": 1,
+      "text": "为什么法国国债风险突然升温？"
+    },
+    {
+      "id": "blk_002",
+      "type": "paragraph",
+      "text": "2024 年 6 月上旬之前，法国与德国十年期国债利差还稳定在 50 个基点以内；6 月 9 日之后的两周，这条曲线几乎被垂直拉起。利差衡量的是市场为“持有法国国债而不是德国国债”所要求的额外补偿——它突然变陡，意味着投资者正在重新给法国的政治与财政风险定价。"
+    },
+    {
+      "id": "blk_003",
+      "type": "paragraph",
+      "text": "本文是一次场景重构：先复盘市场中发生了什么，再看基本面为什么脆弱，最后讨论哪些变量决定这次“升温”是短期扰动还是中期重估。"
+    },
+    {
+      "id": "blk_004",
+      "type": "heading",
+      "level": 2,
+      "text": "一、两周之内发生了什么"
+    },
+    {
+      "id": "blk_005",
+      "type": "paragraph",
+      "text": "第一张图是利差。6 月 7 日，法国 10 年期国债（OAT）对德国 10 年期国债（Bund）的利差约为 48 个基点；6 月 14 日升至约 82 个基点，回到多年高位区间。"
+    },
+    {
+      "id": "blk_006",
+      "type": "table",
+      "table": {
+        "columns": ["日期", "法德 10 年期利差（bp）", "阶段说明"],
+        "rows": [
+          ["2024-06-07", "48", "冲击前（锚点）"],
+          ["2024-06-14", "82", "阶段峰值（锚点）"],
+          ["2024-06-28", "77", "首轮选举后（重构）"],
+          ["2024-07-12", "72", "二轮选举后（重构）"]
+        ]
+      }
+    },
+    {
+      "id": "blk_007",
+      "type": "paragraph",
+      "text": "第二张图是两国收益率本身：法国收益率上行，德国收益率因避险资金流入反而微降——“一个往上、一个往下”，利差的走阔因此被进一步放大。"
+    },
+    {
+      "id": "blk_008",
+      "type": "paragraph",
+      "text": "第三张图是股市。CAC 40 指数在冲击首周下跌约 6.2%，其中银行股跌幅居前。这符合“主权风险 → 银行风险 → 信用条件”的经典传导顺序。"
+    },
+    {
+      "id": "blk_009",
+      "type": "heading",
+      "level": 2,
+      "text": "二、触发点：一次解散议会的决定"
+    },
+    {
+      "id": "blk_010",
+      "type": "paragraph",
+      "text": "6 月 9 日晚，在欧洲议会选举结果出炉后，法国总统宣布解散国民议会、提前举行立法选举。市场担心的不是选举本身，而是选举之后：无论哪一方占优，“财政整顿”这一原本就艰难的议程都变得更难推进。"
+    },
+    {
+      "id": "blk_011",
+      "type": "quote",
+      "text": "“政治不确定性本身不等于财政危机，但它让市场暂时无法为法国的财政路径定价。”——当时市场评论的概括（转述，非直接引语）"
+    },
+    {
+      "id": "blk_012",
+      "type": "paragraph",
+      "text": "值得注意的是，重新定价发生在“没有违约事件、没有评级意外”的第一时间——这说明利差里长期存在着一个等待被激活的风险溢价：一旦定价所需的政治共识消失，溢价就迅速重估。"
+    },
+    {
+      "id": "blk_013",
+      "type": "heading",
+      "level": 2,
+      "text": "三、基本面：脆弱之处在哪里"
+    },
+    {
+      "id": "blk_014",
+      "type": "paragraph",
+      "text": "法国的问题不在于债务规模失控，而在于“赤字关不上”与“政治共识缺失”同时出现。2023 年法国公共赤字占 GDP 的 5.5%，公共债务占 GDP 的 110.6%——两大指标都显著高于欧元区核心国家。"
+    },
+    {
+      "id": "blk_015",
+      "type": "table",
+      "table": {
+        "columns": ["指标", "2021", "2022", "2023"],
+        "rows": [
+          ["公共赤字 / GDP", "6.5%", "4.7%", "5.5%"],
+          ["公共债务 / GDP", "112.9%", "111.6%", "110.6%"]
+        ]
+      }
+    },
+    {
+      "id": "blk_016",
+      "type": "paragraph",
+      "text": "与 2011—2012 年欧元危机时期相比，法国这次面临的制度环境不同：欧元区有更完整的危机工具与银行业联盟框架，欧洲央行也有更明确的政策工具。这并不意味着利差不会走阔，而是意味着走阔的“刹车距离”比上一个周期更短。"
+    },
+    {
+      "id": "blk_017",
+      "type": "paragraph",
+      "text": "信用评级方面：标普（S&P）于 5 月 31 日将法国主权评级由 AA 下调至 AA-；惠誉（Fitch）早在 2023 年 4 月就已下调至 AA-。评级本身不是市场下跌的原因，但它压缩了政策犯错的余地。"
+    },
+    {
+      "id": "blk_018",
+      "type": "paragraph",
+      "text": "6 月 19 日，欧盟委员会建议对法国启动过度赤字程序（EDP）。程序本身是技术性的，但它把“财政路径”从国内政治议题变成了一张有截止日期的外部时间表。"
+    },
+    {
+      "id": "blk_019",
+      "type": "paragraph",
+      "text": "一个容易被忽略的背景：欧洲央行 6 月 6 日刚刚开启降息周期，将存款机制利率下调至 3.75%。货币环境转松本该利好边缘国家，但政治风险溢价把这份利好对冲掉了——“央行降息救不了财政赤字”成为当时的一句流行概括。"
+    },
+    {
+      "id": "blk_020",
+      "type": "heading",
+      "level": 2,
+      "text": "四、为什么是“突然”：机制，而不是事件"
+    },
+    {
+      "id": "blk_021",
+      "type": "paragraph",
+      "text": "利差走阔不是一个单向事件，而是一个自我强化的反馈环：政治不确定性抬升风险溢价，融资成本上行加剧财政压力预期，财政压力反过来加深政治分歧——每一环都在给下一环提供燃料。"
+    },
+    {
+      "id": "blk_022",
+      "type": "list",
+      "items": [
+        "政治不确定性 → 财政路径不可定价",
+        "风险溢价上行 → 融资成本预期抬升",
+        "财政压力预期 → 政治共识更难形成",
+        "反馈环的刹车来自：选举结果落地、评级动作、欧盟程序的确定性"
+      ]
+    },
+    {
+      "id": "blk_023",
+      "type": "paragraph",
+      "text": "反方观点同样需要记录：一部分市场参与者认为这次是典型的“事件型”利差——随着选举结果落地、政治格局明朗，利差会像 2017 年那样自然回落；财政基本面虽然疲弱，但并未出现流动性或偿付能力冲击。"
+    },
+    {
+      "id": "blk_024",
+      "type": "heading",
+      "level": 2,
+      "text": "五、接下来看什么"
+    },
+    {
+      "id": "blk_025",
+      "type": "list",
+      "items": [
+        "预算与财政路径：新政府能否在秋季预算中给出可信的整顿时间表",
+        "评级动作：评级机构对政治僵局与赤字路径的再评估",
+        "欧盟程序：过度赤字程序的具体要求与法国的回应节奏"
+      ]
+    },
+    {
+      "id": "blk_026",
+      "type": "paragraph",
+      "text": "有两个方向上的不确定性需要诚实标注：一是若 2024 年赤字结果高于预期、或评级展望再度调整，利差可能重新承压；二是欧盟程序与国内政治如何互动，历史样本很少，路径尚不清晰。"
+    },
+    {
+      "id": "blk_027",
+      "type": "paragraph",
+      "text": "总结：这次“升温”的本质，是市场把一个长期存在、但被政治稳定掩盖的财政风险溢价重新激活。它会回落，还是要持续更久，取决于三个变量——财政路径的可信度、评级的再定价、以及欧盟程序给出的外部约束——而不是取决于某一次选举当天的结果。"
+    },
+    {
+      "id": "blk_028",
+      "type": "paragraph",
+      "text": "说明：本文为 ANCS 工程的测试用场景重构，基于公开历史报道与统计编制，用于视频生成管线的确定性测试；数值的锚点/重构属性在数据集中逐一标注，不构成对现实市场的陈述，也不构成投资建议。"
+    }
+  ],
+  "claims": [
+    {
+      "id": "clm_001",
+      "text": "2024 年 6 月 9 日，法国总统宣布解散国民议会并提前举行立法选举。",
+      "factuality": "fact",
+      "sourceIds": ["src_elysee_2024"]
+    },
+    {
+      "id": "clm_002",
+      "text": "法国 10 年期国债对德国 10 年期国债利差由 6 月 7 日的约 48bp 升至 6 月 14 日的约 82bp，回到多年高位区间。",
+      "factuality": "fact",
+      "sourceIds": ["src_ecb_data_portal", "src_market_coverage_2024"],
+      "structuredData": [{ "datasetId": "ds_spread_2024", "seriesId": "fr_de_10y_spread" }]
+    },
+    {
+      "id": "clm_003",
+      "text": "冲击期间法国 10 年期收益率上行、德国 10 年期收益率微降，利差走阔被收益率分化放大。",
+      "factuality": "fact",
+      "sourceIds": ["src_ecb_data_portal"],
+      "structuredData": [
+        { "datasetId": "ds_yields_2024", "seriesId": "oat_10y" },
+        { "datasetId": "ds_yields_2024", "seriesId": "bund_10y" }
+      ]
+    },
+    {
+      "id": "clm_004",
+      "text": "CAC 40 指数在冲击首周下跌约 6.2%。",
+      "factuality": "fact",
+      "sourceIds": ["src_euronext_2024", "src_market_coverage_2024"],
+      "structuredData": [{ "datasetId": "ds_cac40_2024", "seriesId": "cac40" }]
+    },
+    {
+      "id": "clm_005",
+      "text": "2023 年法国公共赤字占 GDP 5.5%，公共债务占 GDP 110.6%。",
+      "factuality": "fact",
+      "sourceIds": ["src_insee_2023_deficit"],
+      "structuredData": [
+        { "datasetId": "ds_fiscal_fr", "seriesId": "deficit_pct_gdp" },
+        { "datasetId": "ds_fiscal_fr", "seriesId": "debt_pct_gdp" }
+      ]
+    },
+    {
+      "id": "clm_006",
+      "text": "标普于 2024 年 5 月 31 日将法国长期主权评级由 AA 下调至 AA-。",
+      "factuality": "fact",
+      "sourceIds": ["src_sp_france_2024"]
+    },
+    {
+      "id": "clm_007",
+      "text": "惠誉于 2023 年 4 月将法国主权评级下调至 AA-。",
+      "factuality": "fact",
+      "sourceIds": ["src_fitch_france_2023"]
+    },
+    {
+      "id": "clm_008",
+      "text": "2024 年 6 月 19 日，欧盟委员会建议对法国启动过度赤字程序（EDP）。",
+      "factuality": "fact",
+      "sourceIds": ["src_ec_edp_2024"]
+    },
+    {
+      "id": "clm_009",
+      "text": "欧洲央行于 2024 年 6 月 6 日下调关键利率 25 个基点，存款机制利率降至 3.75%。",
+      "factuality": "fact",
+      "sourceIds": ["src_ecb_rates_2024"]
+    },
+    {
+      "id": "clm_010",
+      "text": "市场下跌的核心机制是：政治不确定性使财政路径无法定价，风险溢价被迅速重估。",
+      "factuality": "analysis",
+      "sourceIds": ["src_market_coverage_2024"]
+    },
+    {
+      "id": "clm_011",
+      "text": "与 2011—2012 年相比，欧元区制度框架与政策工具更完整，但利差重估的幅度仍取决于政治路径本身。",
+      "factuality": "analysis",
+      "sourceIds": ["src_market_coverage_2024", "src_ecb_data_portal"]
+    },
+    {
+      "id": "clm_012",
+      "text": "若 2024 年赤字结果高于预期或评级展望再度调整，利差可能重新承压。",
+      "factuality": "uncertain",
+      "sourceIds": []
+    },
+    {
+      "id": "clm_013",
+      "text": "欧盟过度赤字程序与法国国内政治的互动路径历史样本很少，演进方向尚不清晰。",
+      "factuality": "uncertain",
+      "sourceIds": []
+    },
+    {
+      "id": "clm_014",
+      "text": "对长期投资者而言，重要的是财政路径的可信度，而不是选举当天的结果。",
+      "factuality": "opinion",
+      "sourceIds": []
+    }
+  ],
+  "citations": [
+    { "id": "cit_001", "claimId": "clm_001", "sourceId": "src_elysee_2024", "locator": "公报标题" },
+    { "id": "cit_002", "claimId": "clm_002", "sourceId": "src_ecb_data_portal", "locator": "利差序列锚点" },
+    { "id": "cit_003", "claimId": "clm_003", "sourceId": "src_ecb_data_portal", "locator": "两国收益率序列" },
+    { "id": "cit_004", "claimId": "clm_004", "sourceId": "src_euronext_2024", "locator": "指数收盘锚点" },
+    { "id": "cit_005", "claimId": "clm_005", "sourceId": "src_insee_2023_deficit", "locator": "2023 年度结果" },
+    { "id": "cit_006", "claimId": "clm_006", "sourceId": "src_sp_france_2024", "locator": "评级动作" },
+    { "id": "cit_007", "claimId": "clm_007", "sourceId": "src_fitch_france_2023", "locator": "评级动作" },
+    { "id": "cit_008", "claimId": "clm_008", "sourceId": "src_ec_edp_2024", "locator": "建议文本" },
+    { "id": "cit_009", "claimId": "clm_009", "sourceId": "src_ecb_rates_2024", "locator": "决议摘要" },
+    { "id": "cit_010", "claimId": "clm_010", "sourceId": "src_market_coverage_2024", "locator": "评论汇总" },
+    { "id": "cit_011", "claimId": "clm_011", "sourceId": "src_market_coverage_2024", "locator": "评论汇总" }
+  ],
+  "tables": [
+    { "id": "tbl_spread", "blockId": "blk_006", "caption": "法德 10 年期利差阶段快照", "datasetId": "ds_spread_2024" },
+    { "id": "tbl_fiscal", "blockId": "blk_015", "caption": "法国财政指标（2021—2023）", "datasetId": "ds_fiscal_fr" }
+  ],
+  "figures": [],
+  "attachments": []
+}

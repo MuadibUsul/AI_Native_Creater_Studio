@@ -1,0 +1,73 @@
+{
+  "caseId": "dangling-source",
+  "label": "SYNTHETIC NEGATIVE TEST DATA — 非真实数据，仅用于校验/降级路径测试",
+  "purpose": "Claim 引用了不存在的来源：管线必须拒绝悬空引用（§56）",
+  "expectedIssueCodes": [
+    "UNRESOLVED_SOURCE"
+  ],
+  "bundle": {
+    "content": {
+      "id": "neg_dangling_source",
+      "title": "合成负面用例：悬空来源",
+      "language": "zh-CN",
+      "blocks": [
+        {
+          "id": "blk_neg_1",
+          "type": "paragraph",
+          "text": "该用例引用了一个不存在的来源。"
+        }
+      ],
+      "claims": [
+        {
+          "id": "clm_neg_analysis",
+          "text": "（合成）分析性陈述引用了不存在的来源。",
+          "factuality": "analysis",
+          "sourceIds": [
+            "src_ghost"
+          ]
+        }
+      ],
+      "citations": [
+        {
+          "id": "cit_neg",
+          "claimId": "clm_neg_analysis",
+          "sourceId": "src_ghost"
+        }
+      ],
+      "tables": [],
+      "figures": [],
+      "attachments": []
+    },
+    "sources": [],
+    "datasets": [],
+    "expected": {
+      "scenario": "negative:dangling-source",
+      "language": "zh-CN",
+      "targetDurationSeconds": {
+        "min": 1,
+        "max": 2
+      },
+      "format": {
+        "aspectRatio": "16:9",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "chapters": [
+        {
+          "id": "ch_neg",
+          "title": "用例",
+          "intent": "触发悬空来源"
+        }
+      ],
+      "requiredScenes": [
+        {
+          "sceneType": "SOURCE_CARD",
+          "semanticType": "SOURCE",
+          "role": "source"
+        }
+      ],
+      "qaExpectations": {}
+    }
+  }
+}

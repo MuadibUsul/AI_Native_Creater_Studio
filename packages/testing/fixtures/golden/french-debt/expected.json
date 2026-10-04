@@ -1,0 +1,130 @@
+{
+  "scenario": "french_debt_risk_2024",
+  "language": "zh-CN",
+  "targetDurationSeconds": { "min": 480, "max": 600 },
+  "format": { "aspectRatio": "16:9", "width": 1920, "height": 1080, "fps": 30 },
+  "chapters": [
+    { "id": "ch_01", "title": "开场", "intent": "用一个具体的市场事实抓住注意力：两周之内利差从 48bp 拉到 82bp" },
+    { "id": "ch_02", "title": "市场复盘", "intent": "三张图：利差、两国收益率分化、股市传导" },
+    { "id": "ch_03", "title": "触发点与基本面", "intent": "解散议会 → 赤字与债务 → 评级 → 欧盟程序 → 央行降息背景" },
+    { "id": "ch_04", "title": "机制", "intent": "反馈环解释“为什么突然”；记录反方观点" },
+    { "id": "ch_05", "title": "展望与总结", "intent": "三个观察变量、两个不确定项、结论" }
+  ],
+  "requiredScenes": [
+    {
+      "sceneType": "HOST_FULL",
+      "semanticType": "HOST_STATEMENT",
+      "role": "hook",
+      "narrationLine": "两周之内，一条曲线把法国推回了市场的聚光灯下。",
+      "constraints": { "maxDurationSeconds": 30 }
+    },
+    {
+      "sceneType": "BIG_NUMBER",
+      "semanticType": "NUMBER",
+      "role": "key-number",
+      "datasetId": "ds_spread_2024",
+      "seriesIds": ["fr_de_10y_spread"],
+      "narrationLine": "法德十年期利差，从 48 个基点，升到 82 个基点。",
+      "constraints": { "value": "82", "unit": "bp", "compareFrom": 48 }
+    },
+    {
+      "sceneType": "DUAL_LINE_CHART",
+      "semanticType": "COMPARISON",
+      "role": "yields-compare",
+      "datasetId": "ds_yields_2024",
+      "seriesIds": ["oat_10y", "bund_10y"],
+      "narrationLine": "法国收益率向上，德国收益率向下——利差被两头放大。",
+      "constraints": { "sourceLabelRequired": true }
+    },
+    {
+      "sceneType": "SPREAD_AREA_CHART",
+      "semanticType": "YIELD_SPREAD",
+      "role": "spread-series",
+      "datasetId": "ds_spread_2024",
+      "seriesIds": ["fr_de_10y_spread"],
+      "narrationLine": "利差本身，则完全走出了另一种形状。",
+      "constraints": { "highlightPeakAt": "2024-06-14", "sourceLabelRequired": true }
+    },
+    {
+      "sceneType": "TIMELINE",
+      "semanticType": "TIMELINE",
+      "role": "events",
+      "narrationLine": "把关键节点排在一起，因果关系就清楚了一半。",
+      "constraints": {
+        "events": [
+          "2024-06-06 欧洲央行降息 25bp",
+          "2024-06-09 宣布解散国民议会",
+          "2024-06-14 利差阶段峰值",
+          "2024-06-19 欧盟建议启动过度赤字程序",
+          "2024-07-07 立法选举第二轮"
+        ]
+      }
+    },
+    {
+      "sceneType": "CAUSAL_LOOP",
+      "semanticType": "FEEDBACK_LOOP",
+      "role": "mechanism",
+      "narrationLine": "这不是一次单向冲击，而是一个自我强化的反馈环。",
+      "constraints": { "nodes": ["政治不确定性", "财政路径不可定价", "风险溢价上行", "财政压力预期"] }
+    },
+    {
+      "sceneType": "MAP_STATIC",
+      "semanticType": "GEOGRAPHY",
+      "role": "geography",
+      "narrationLine": "同样的欧元，同样的债券市场，市场只对其中一个国家提高了要价。",
+      "constraints": { "countries": ["FRA", "DEU"], "highlight": "FRA" }
+    },
+    {
+      "sceneType": "NEWS_HEADLINE",
+      "semanticType": "SOURCE",
+      "role": "rating-headline",
+      "sourceId": "src_sp_france_2024",
+      "narrationLine": "评级的下调，比市场更早发出过信号。",
+      "constraints": { "showSourceLabel": true }
+    },
+    {
+      "sceneType": "SOURCE_CARD",
+      "semanticType": "SOURCE",
+      "role": "sources",
+      "narrationLine": "本文涉及的关键数字，都可以回溯到公开来源。",
+      "constraints": { "sourceIds": ["src_insee_2023_deficit", "src_ec_edp_2024", "src_ecb_rates_2024"] }
+    },
+    {
+      "sceneType": "QUOTE_CARD",
+      "semanticType": "QUOTE",
+      "role": "quote",
+      "narrationLine": "政治不确定性本身不等于财政危机，但它让市场无法定价。",
+      "constraints": { "quoteStyle": "paraphrase", "attribution": "市场评论概括（转述）" }
+    },
+    {
+      "sceneType": "CUSTOM_MOTION",
+      "semanticType": "CONCEPT",
+      "role": "mechanism-motion",
+      "narrationLine": "把这条反馈环拆开看，每一环都在给下一环提供燃料。",
+      "constraints": { "purpose": "冲击传导与反馈环的可视化动画", "maxDurationSeconds": 20 }
+    },
+    {
+      "sceneType": "AI_VIDEO",
+      "semanticType": "VIDEO_EVIDENCE",
+      "role": "atmosphere-broll",
+      "narrationLine": "市场情绪，往往先于数据变化。",
+      "constraints": { "maxCount": 1, "maxRatioOfDuration": 0.2, "note": "仅少量氛围镜头，不承载事实信息" }
+    },
+    {
+      "sceneType": "SUMMARY",
+      "semanticType": "SUMMARY",
+      "role": "summary",
+      "narrationLine": "决定这条曲线去向的，是财政路径、评级与欧盟程序，而不是选举当天的结果。",
+      "constraints": { "includeKeyClaims": ["clm_002", "clm_005", "clm_008"] }
+    }
+  ],
+  "qaExpectations": {
+    "noPlaceholderInFinal": true,
+    "chartSourceLabelsRequired": true,
+    "maxConsecutiveHostSeconds": 25,
+    "avatarRatioRange": [0.15, 0.3],
+    "aiVideoRatioMax": 0.2,
+    "visualChangeEverySeconds": [4, 12],
+    "durationDriftToleranceMs": 50
+  }
+}

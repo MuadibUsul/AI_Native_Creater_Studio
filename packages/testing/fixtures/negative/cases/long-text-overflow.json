@@ -1,0 +1,59 @@
+{
+  "caseId": "long-text-overflow",
+  "label": "SYNTHETIC NEGATIVE TEST DATA — 非真实数据，仅用于校验/降级路径测试",
+  "purpose": "超长旁白文本（中文长标题/人名/英文缩写不溢出的启发式先行检查；组件级安全区检测自 P05 起接管）",
+  "expectedIssueCodes": [
+    "OVERFLOW_RISK"
+  ],
+  "bundle": {
+    "content": {
+      "id": "neg_long_text",
+      "title": "合成负面用例：超长文本",
+      "language": "zh-CN",
+      "blocks": [
+        {
+          "id": "blk_neg_1",
+          "type": "paragraph",
+          "text": "该用例包含一段刻意超长的旁白文本。"
+        }
+      ],
+      "claims": [],
+      "citations": [],
+      "tables": [],
+      "figures": [],
+      "attachments": []
+    },
+    "sources": [],
+    "datasets": [],
+    "expected": {
+      "scenario": "negative:long-text-overflow",
+      "language": "zh-CN",
+      "targetDurationSeconds": {
+        "min": 1,
+        "max": 2
+      },
+      "format": {
+        "aspectRatio": "16:9",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "chapters": [
+        {
+          "id": "ch_neg",
+          "title": "用例",
+          "intent": "触发文本溢出启发式"
+        }
+      ],
+      "requiredScenes": [
+        {
+          "sceneType": "HOST_FULL",
+          "semanticType": "HOST_STATEMENT",
+          "role": "hook",
+          "narrationLine": "这是一段刻意超长的旁白文本，用于触发溢出启发式检查；这是一段刻意超长的旁白文本，用于触发溢出启发式检查；这是一段刻意超长的旁白文本，用于触发溢出启发式检查；这是一段刻意超长的旁白文本，用于触发溢出启发式检查；这是一段刻意超长的旁白文本，用于触发溢出启发式检查；这是一段刻意超长的旁白文本，用于触发溢出启发式检查。"
+        }
+      ],
+      "qaExpectations": {}
+    }
+  }
+}

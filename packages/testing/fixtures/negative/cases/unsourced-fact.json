@@ -1,0 +1,65 @@
+{
+  "caseId": "unsourced-fact",
+  "label": "SYNTHETIC NEGATIVE TEST DATA — 非真实数据，仅用于校验/降级路径测试",
+  "purpose": "fact 级 Claim 没有来源绑定：管线必须拒绝无法追溯的事实陈述（§56）",
+  "expectedIssueCodes": [
+    "MISSING_PROVENANCE"
+  ],
+  "bundle": {
+    "content": {
+      "id": "neg_unsourced_fact",
+      "title": "合成负面用例：无来源事实",
+      "language": "zh-CN",
+      "blocks": [
+        {
+          "id": "blk_neg_1",
+          "type": "paragraph",
+          "text": "该用例包含一条没有来源的事实型 Claim。"
+        }
+      ],
+      "claims": [
+        {
+          "id": "clm_neg_fact",
+          "text": "（合成）某利率于某日达到某数值。",
+          "factuality": "fact",
+          "sourceIds": []
+        }
+      ],
+      "citations": [],
+      "tables": [],
+      "figures": [],
+      "attachments": []
+    },
+    "sources": [],
+    "datasets": [],
+    "expected": {
+      "scenario": "negative:unsourced-fact",
+      "language": "zh-CN",
+      "targetDurationSeconds": {
+        "min": 1,
+        "max": 2
+      },
+      "format": {
+        "aspectRatio": "16:9",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "chapters": [
+        {
+          "id": "ch_neg",
+          "title": "用例",
+          "intent": "触发无来源事实"
+        }
+      ],
+      "requiredScenes": [
+        {
+          "sceneType": "BIG_NUMBER",
+          "semanticType": "NUMBER",
+          "role": "number"
+        }
+      ],
+      "qaExpectations": {}
+    }
+  }
+}

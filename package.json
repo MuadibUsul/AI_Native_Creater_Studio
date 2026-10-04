@@ -20,7 +20,7 @@
     "test:e2e": "node scripts/planned-suite.mjs test:e2e P05-P08 \"创建项目→导入→叙事→分镜→编辑→预览→mock 终渲染→历史恢复\"",
     "test:security": "node scripts/planned-suite.mjs test:security P01-03 \"跨租户读写拒绝、Signed URL scope、凭据隔离\"",
     "test:render": "vitest run --project render",
-    "test:golden": "node scripts/planned-suite.mjs test:golden P00-04 \"法国国债主题 Golden Fixture 回归\"",
+    "test:golden": "vitest run --project golden",
     "test:provider-smoke": "node scripts/provider-smoke.mjs",
     "verify": "node scripts/verify.mjs",
     "clean": "pnpm -r run clean"

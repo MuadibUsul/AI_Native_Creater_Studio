@@ -37,7 +37,8 @@ pnpm test:provider-smoke     # 真实 Provider smoke（默认关闭，需显式�
 | `pnpm test:unit` | 单元测试（Vitest；含 Fastify inject 路由测试与 SDK↔API 往返） |
 | `pnpm test:integration` | 真实 PostgreSQL 集成测试（事务/回滚/乐观并发原语） |
 | `pnpm test:render` | 真实 Remotion 渲染（预览静帧 PNG + MP4 元数据校验；本机 Chrome 复用或自动下载 Headless Shell） |
-| `pnpm test:contract` / `test:e2e` / `test:security` / `test:golden` | 尚未实现的套件以 `[PLANNED]` 显式占位，不伪造通过 |
+| `pnpm test:golden` | 金样完整性：结构 / 来源哈希 / 可追溯性 / §80 场景覆盖 / 合成负面用例（Director 与组件回归自 P04/P05 加入） |
+| `pnpm test:contract` / `test:e2e` / `test:security` | 尚未实现的套件以 `[PLANNED]` 显式占位，不伪造通过 |
 | `pnpm test:provider-smoke` | 真实 Provider smoke，单独开启 |
 | `pnpm verify` | 默认验证入口，不产生真实 Provider 费用 |
 

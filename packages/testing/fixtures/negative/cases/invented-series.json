@@ -1,0 +1,99 @@
+{
+  "caseId": "invented-series",
+  "label": "SYNTHETIC NEGATIVE TEST DATA — 非真实数据，仅用于校验/降级路径测试",
+  "purpose": "合成数据集被当作事实图表绑定：管线必须拒绝（§10.3：不得由 AI 编造图形数据）",
+  "expectedIssueCodes": [
+    "SYNTHETIC_AS_FACTUAL"
+  ],
+  "bundle": {
+    "content": {
+      "id": "neg_invented_series",
+      "title": "合成负面用例：编造数列",
+      "language": "zh-CN",
+      "blocks": [
+        {
+          "id": "blk_neg_1",
+          "type": "paragraph",
+          "text": "该用例把一个完全合成的数列绑定到事实图表。"
+        }
+      ],
+      "claims": [],
+      "citations": [],
+      "tables": [],
+      "figures": [],
+      "attachments": []
+    },
+    "sources": [
+      {
+        "source_id": "src_neg_ok",
+        "url": "https://example.invalid/negative-fixture",
+        "title": "合成来源占位",
+        "publisher": "SYNTHETIC",
+        "retrieved_at": "2026-10-04",
+        "content_hash": "7cb20e5ce050d9ac344683d1d808beca5ef02e97301b207be8137a9e070cf57d",
+        "excerpt": "合成负面用例的占位摘录（非真实内容）。",
+        "snapshot_kind": "fixture_reconstruction"
+      }
+    ],
+    "datasets": [
+      {
+        "id": "ds_invented",
+        "title": "（合成）编造序列",
+        "unit": "%",
+        "sourceIds": [
+          "src_neg_ok"
+        ],
+        "synthetic": true,
+        "note": "完全合成，禁止用于事实图表。",
+        "series": [
+          {
+            "id": "series_invented",
+            "name": "编造序列",
+            "points": [
+              {
+                "t": "2026-01",
+                "v": 1.1,
+                "accuracy": "reconstructed"
+              },
+              {
+                "t": "2026-02",
+                "v": 9.9,
+                "accuracy": "reconstructed"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "expected": {
+      "scenario": "negative:invented-series",
+      "language": "zh-CN",
+      "targetDurationSeconds": {
+        "min": 1,
+        "max": 2
+      },
+      "format": {
+        "aspectRatio": "16:9",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "chapters": [
+        {
+          "id": "ch_neg",
+          "title": "用例",
+          "intent": "触发合成数列绑定"
+        }
+      ],
+      "requiredScenes": [
+        {
+          "sceneType": "LINE_CHART",
+          "semanticType": "TREND",
+          "role": "chart",
+          "datasetId": "ds_invented"
+        }
+      ],
+      "qaExpectations": {}
+    }
+  }
+}

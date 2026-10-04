@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "fixture": "golden/french-debt",
+    "accuracySemantics": "anchor=公开报道/统计中的关键点位；reconstructed=为保持序列连续而做的平滑重构。图表回归测试只依赖本文件的取值，不做任何网络访问。"
+  },
+  "datasets": [
+    {
+      "id": "ds_spread_2024",
+      "title": "法国—德国 10 年期国债利差",
+      "unit": "bp",
+      "sourceIds": ["src_ecb_data_portal"],
+      "synthetic": false,
+      "note": "锚点：2024-06-07 约 48bp；2024-06-14 约 82bp。中间点位为重构。",
+      "series": [
+        {
+          "id": "fr_de_10y_spread",
+          "name": "OAT − Bund 利差",
+          "points": [
+            { "t": "2024-06-07", "v": 48, "accuracy": "anchor" },
+            { "t": "2024-06-10", "v": 58, "accuracy": "reconstructed" },
+            { "t": "2024-06-11", "v": 66, "accuracy": "reconstructed" },
+            { "t": "2024-06-12", "v": 72, "accuracy": "reconstructed" },
+            { "t": "2024-06-13", "v": 78, "accuracy": "reconstructed" },
+            { "t": "2024-06-14", "v": 82, "accuracy": "anchor" },
+            { "t": "2024-06-21", "v": 79, "accuracy": "reconstructed" },
+            { "t": "2024-06-28", "v": 77, "accuracy": "reconstructed" },
+            { "t": "2024-07-12", "v": 72, "accuracy": "reconstructed" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ds_yields_2024",
+      "title": "法国与德国 10 年期国债收益率",
+      "unit": "%",
+      "sourceIds": ["src_ecb_data_portal"],
+      "synthetic": false,
+      "note": "两条序列与 ds_spread_2024 在同一时间点自洽（差值=利差，±1bp 容差由金样不变量测试校验）。",
+      "series": [
+        {
+          "id": "oat_10y",
+          "name": "法国 OAT 10Y",
+          "points": [
+            { "t": "2024-06-07", "v": 3.02, "accuracy": "reconstructed" },
+            { "t": "2024-06-10", "v": 3.11, "accuracy": "reconstructed" },
+            { "t": "2024-06-11", "v": 3.16, "accuracy": "reconstructed" },
+            { "t": "2024-06-12", "v": 3.19, "accuracy": "reconstructed" },
+            { "t": "2024-06-13", "v": 3.21, "accuracy": "reconstructed" },
+            { "t": "2024-06-14", "v": 3.22, "accuracy": "reconstructed" },
+            { "t": "2024-06-21", "v": 3.18, "accuracy": "reconstructed" },
+            { "t": "2024-06-28", "v": 3.16, "accuracy": "reconstructed" },
+            { "t": "2024-07-12", "v": 3.12, "accuracy": "reconstructed" }
+          ]
+        },
+        {
+          "id": "bund_10y",
+          "name": "德国 Bund 10Y",
+          "points": [
+            { "t": "2024-06-07", "v": 2.54, "accuracy": "reconstructed" },
+            { "t": "2024-06-10", "v": 2.53, "accuracy": "reconstructed" },
+            { "t": "2024-06-11", "v": 2.5, "accuracy": "reconstructed" },
+            { "t": "2024-06-12", "v": 2.47, "accuracy": "reconstructed" },
+            { "t": "2024-06-13", "v": 2.43, "accuracy": "reconstructed" },
+            { "t": "2024-06-14", "v": 2.4, "accuracy": "reconstructed" },
+            { "t": "2024-06-21", "v": 2.39, "accuracy": "reconstructed" },
+            { "t": "2024-06-28", "v": 2.39, "accuracy": "reconstructed" },
+            { "t": "2024-07-12", "v": 2.4, "accuracy": "reconstructed" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ds_fiscal_fr",
+      "title": "法国公共财政指标",
+      "unit": "% of GDP",
+      "sourceIds": ["src_insee_2023_deficit"],
+      "synthetic": false,
+      "note": "2023 年为锚点（5.5% / 110.6%）；2021—2022 年点位为重构。",
+      "series": [
+        {
+          "id": "deficit_pct_gdp",
+          "name": "公共赤字 / GDP",
+          "points": [
+            { "t": "2021", "v": 6.5, "accuracy": "reconstructed" },
+            { "t": "2022", "v": 4.7, "accuracy": "reconstructed" },
+            { "t": "2023", "v": 5.5, "accuracy": "anchor" }
+          ]
+        },
+        {
+          "id": "debt_pct_gdp",
+          "name": "公共债务 / GDP",
+          "points": [
+            { "t": "2021", "v": 112.9, "accuracy": "reconstructed" },
+            { "t": "2022", "v": 111.6, "accuracy": "reconstructed" },
+            { "t": "2023", "v": 110.6, "accuracy": "anchor" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ds_cac40_2024",
+      "title": "CAC 40 指数点位",
+      "unit": "index points",
+      "sourceIds": ["src_euronext_2024"],
+      "synthetic": false,
+      "note": "锚点：冲击前约 8001.8 点；首周收盘约 7503.3 点（约 -6.2%）。",
+      "series": [
+        {
+          "id": "cac40",
+          "name": "CAC 40 收盘",
+          "points": [
+            { "t": "2024-06-07", "v": 8001.8, "accuracy": "anchor" },
+            { "t": "2024-06-14", "v": 7503.3, "accuracy": "anchor" },
+            { "t": "2024-07-12", "v": 7724.6, "accuracy": "reconstructed" }
+          ]
+        }
+      ]
+    }
+  ]
+}

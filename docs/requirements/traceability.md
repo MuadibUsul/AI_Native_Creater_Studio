@@ -363,7 +363,7 @@
 | REQ-78-01 | §78 | Multi-Client Readiness DoD 11 条 → 见验收账本 LED-78-01..11；任一项不满足不得宣称"可以直接做 App" | MUST | V1 | P01/P08-06（P01/P08） | LED-78-* | TODO |
 | REQ-79-01 | §79 | 推荐开发顺序（contracts→Auth/Workspace→DB schema→Scene Graph schema→revision/history→存储→Workflow→Provider 接口→Content/Narrative/Visual/Director→组件→编辑器→预览→Provider 集成→Final→Credits/BYOK）；不得先接一堆 Provider 再补 Graph | MUST | V1 | 计划 P00—P08 任务序 | 任务依赖表（计划 §8）；§13.5 启动步骤 | TODO |
 | REQ-80-01 | §80 | Golden Fixture = 财经文章《为什么法国国债风险突然升温？》，约 8～10 分钟，含 Host Hook/Big Number/收益率对比/Spread/Timeline/Causal Loop/Map/News Headline/Source Card/Quote/Custom Motion/少量 AI Video/Summary | MUST | V1 | P00-04（建库）；P08-05（成片） | P00-04 可追溯数据；P08-05 真实金样 | TODO |
-| REQ-80-02 | §80 | 每次 Director/Component 变更用此 Fixture 做回归测试 | MUST | V1 | P00-04（P00） | pnpm test:golden；计划 §11.3 | TODO |
+| REQ-80-02 | §80 | 每次 Director/Component 变更用此 Fixture 做回归测试 | MUST | V1 | P00-04（P00） | 金样与 test:golden 门禁就位（15 项，P00-04；证据 docs/verification/P00-04.md）；Director/组件回归用例随 P04/P05 持续加入本套件 | VERIFIED |
 | REQ-81-01 | §81 | 长期护城河清单（Narrative/Director/Visual Grammar/组件库/Custom Motion 库/Creator Profile/Edit-Intent 数据/性能数据集/Provider Router） | 方向 | 后续 | 不设任务（方向对齐） | — | DEFERRED |
 | REQ-82-01 | §82 | 最终体验目标叙事（Paste URL→建议时长→多类型 Scene 混合→自然语言修改→16:9 长视频+Shorts+封面+文案+章节+来源） | 方向 | 后续 | 不设任务（方向对齐，P08-05 为 V1 当前形态） | — | DEFERRED |
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P00-02，REQ-49-01 / REQ-49-02 / REQ-B-01 → VERIFIED）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P00-04，REQ-80-02 → VERIFIED；此前 P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

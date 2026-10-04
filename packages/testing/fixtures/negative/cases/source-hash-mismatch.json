@@ -1,0 +1,69 @@
+{
+  "caseId": "source-hash-mismatch",
+  "label": "SYNTHETIC NEGATIVE TEST DATA — 非真实数据，仅用于校验/降级路径测试",
+  "purpose": "来源快照的 content_hash 与摘录不一致（快照被篡改或损坏）：必须被诊断为哈希不匹配",
+  "expectedIssueCodes": [
+    "SOURCE_HASH_MISMATCH"
+  ],
+  "bundle": {
+    "content": {
+      "id": "neg_hash_mismatch",
+      "title": "合成负面用例：快照哈希不匹配",
+      "language": "zh-CN",
+      "blocks": [
+        {
+          "id": "blk_neg_1",
+          "type": "paragraph",
+          "text": "该用例的来源快照哈希与摘录内容不一致。"
+        }
+      ],
+      "claims": [],
+      "citations": [],
+      "tables": [],
+      "figures": [],
+      "attachments": []
+    },
+    "sources": [
+      {
+        "source_id": "src_neg_corrupted",
+        "url": "https://example.invalid/negative-fixture",
+        "title": "合成来源占位（哈希损坏）",
+        "publisher": "SYNTHETIC",
+        "retrieved_at": "2026-10-04",
+        "content_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "excerpt": "合成负面用例的占位摘录（非真实内容）。",
+        "snapshot_kind": "fixture_reconstruction"
+      }
+    ],
+    "datasets": [],
+    "expected": {
+      "scenario": "negative:source-hash-mismatch",
+      "language": "zh-CN",
+      "targetDurationSeconds": {
+        "min": 1,
+        "max": 2
+      },
+      "format": {
+        "aspectRatio": "16:9",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30
+      },
+      "chapters": [
+        {
+          "id": "ch_neg",
+          "title": "用例",
+          "intent": "触发快照哈希不匹配"
+        }
+      ],
+      "requiredScenes": [
+        {
+          "sceneType": "SOURCE_CARD",
+          "semanticType": "SOURCE",
+          "role": "source"
+        }
+      ],
+      "qaExpectations": {}
+    }
+  }
+}
