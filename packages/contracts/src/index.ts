@@ -273,6 +273,33 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// SpeechPlan 契约（P04-06 / §94、§6.4）
+export {
+  SPEECH_PLAN_VERSION,
+  SPEECH_SCENE_ROLES,
+  speechSceneRoleSchema,
+  SPEECH_WARNING_CODES,
+  speechWarningSchema,
+  speechPauseSchema,
+  speechEmphasisSpanSchema,
+  speechSegmentSchema,
+  speechPlanSchema,
+  speechStyleRuleSchema,
+  SPEECH_ROLE_STYLE_DEFAULTS,
+  speechStyleOverridesSchema,
+} from './speech-plan.js';
+export type {
+  SpeechSceneRole,
+  SpeechWarningCode,
+  SpeechWarning,
+  SpeechPause,
+  SpeechEmphasisSpan,
+  SpeechSegment,
+  SpeechPlan,
+  SpeechStyleRule,
+  SpeechStyleOverrides,
+} from './speech-plan.js';
+
 // Director 契约（P04-05 / §9）
 export {
   DIRECTOR_PLAN_VERSION,

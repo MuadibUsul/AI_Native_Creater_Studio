@@ -47,6 +47,8 @@ export {
   updateNarrationBlock,
 } from './narrative.js';
 export { planVisual } from './visual-plan.js';
+export { buildSpeechSegments, planSpeech, resolveSceneRole } from './speech-plan.js';
+
 export {
   applyDirectorPlan,
   buildAssetPlan,

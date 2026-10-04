@@ -158,7 +158,7 @@
 | LED-96-VOICE-02 | VoiceProvider 不绑死 ElevenLabs/HeyGen | REQ-6-04/REQ-14-03 | P06-02（P06） | TODO |
 | LED-96-VOICE-03 | 支持 Platform Managed 与 BYOK Voice 路由 | REQ-6-07/REQ-17-02 | P06-02（P06） | TODO |
 | LED-96-VOICE-04 | 保存 Voice ownership / verification metadata | REQ-95-01 | P06-02（P06） | TODO |
-| LED-96-VOICE-05 | SpeechProfile / Speech Director schema 已定义 | REQ-6-08/REQ-94-01 | P04-06（P04） | TODO |
+| LED-96-VOICE-05 | SpeechProfile / Speech Director schema 已定义 | REQ-6-08/REQ-94-01 | P04-06（P04） | VERIFIED（2026-10-04：SpeechPlan 契约（§94 输出字段全集）+ 确定性生成 + 供应商无关（私有参数零泄漏，字符串级断言）+ 可解释降级；SpeechProfile 契约自 P01-04；证据：docs/verification/P04-06.md） |
 | LED-96-VOICE-06 | Master Narration timestamp 仍是最终 Timeline timing 基础 | REQ-13-01/REQ-94-02 | P06-03（P06） | TODO |
 
 ### 4.3 Commercial（4）

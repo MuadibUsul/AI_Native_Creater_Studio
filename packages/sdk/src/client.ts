@@ -22,6 +22,7 @@ import {
   directorPlanSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
+  speechPlanSchema,
   visualPlanSchema,
   updateNarrationBlockRequestSchema,
   createContentRequestSchema,
@@ -113,6 +114,7 @@ import {
   type DirectorPlan,
   type DirectorPolicyInput,
   type NarrativePlan,
+  type SpeechPlan,
   type VisualPlan,
   type CreateContentRequest,
   type UpdateSourceRequest,
@@ -296,7 +298,7 @@ export interface AncsClient {
   projects: {
     create(
       workspaceId: string,
-      input: { title: string; channelId: string; sourceType?: string; aspectRatio?: string },
+      input: { title: string; channelId: string; sourceType?: string; aspectRatio?: string; targetDurationMs?: number },
       options?: MutationOptions,
     ): Promise<ProjectDetail>;
     list(workspaceId: string, query?: { trashed?: boolean }): Promise<Project[]>;
@@ -414,6 +416,13 @@ export interface AncsClient {
     plans(workspaceId: string, projectId: string): Promise<NarrativePlan[]>;
     /** 视觉计划（§10 语义识别 + 场景映射 + §10.3 降级；纯投影可重复） */
     visualPlan(workspaceId: string, projectId: string, planId: string): Promise<VisualPlan>;
+    /** SpeechPlan（§94：供应商无关的角色/语速/能量/停顿/强调/发音覆盖） */
+    speechPlan(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      options?: { identityId?: string; speechProfileId?: string },
+    ): Promise<SpeechPlan>;
     /** Director 计划（§9：场景/资产/任务/成本/告警/决策摘要；不落库、需验证后应用） */
     directorPlan(workspaceId: string, projectId: string, planId: string, policy?: DirectorPolicyInput): Promise<DirectorPlan>;
     /** 应用 Director 计划（Schema/来源/Lock/预算验证 + 原子编辑；仅空项目）。
@@ -1032,6 +1041,13 @@ export function createClient(options: ClientOptions): AncsClient {
           `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/visual-plan`,
           visualPlanSchema,
         ),
+      speechPlan: (workspaceId, projectId, planId, options) => {
+        const query = new URLSearchParams();
+        if (options?.identityId !== undefined) query.set('identityId', options.identityId);
+        if (options?.speechProfileId !== undefined) query.set('speechProfileId', options.speechProfileId);
+        const suffix = query.size > 0 ? `?${query.toString()}` : '';
+        return request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/speech-plan${suffix}`, speechPlanSchema);
+      },
       directorPlan: (workspaceId, projectId, planId, policy) =>
         request(
           'GET',
