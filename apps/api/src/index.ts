@@ -10,6 +10,7 @@ import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
+import { MockTtsAdapter } from '@ancs/providers-mock-tts';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -82,6 +83,20 @@ if (llmDriver === 'mock') {
   process.exit(1);
 }
 
+/**
+ * TTS 适配器（P06-03）：无真实凭据时使用**明确 Mock**（§76-03）。
+ * ANCS_TTS_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
+ */
+const ttsDriver = process.env['ANCS_TTS_DRIVER'] ?? 'mock';
+let audioDeps: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider };
+if (ttsDriver === 'mock') {
+  console.warn('[api] TTS 驱动 = mock（无真实凭据）：Master Narration 为确定性 Mock 音频（带词级时间戳），不得视为真实语音。');
+  audioDeps = { tts: new MockTtsAdapter() };
+} else {
+  console.error(`启动失败：未知的 ANCS_TTS_DRIVER=${ttsDriver}（当前仅支持 mock；真实适配器随 P06-02 接入）。`);
+  process.exit(1);
+}
+
 const webhookDeps = {
   verifiers: parseWebhookVerifiers(process.env['ANCS_WEBHOOK_SECRETS']),
   resultFetcher: createHttpResultFetcher(),
@@ -93,6 +108,7 @@ const app = await buildServer({
   credentials: credentialDeps,
   webhooks: webhookDeps,
   content: { articleFetcher: createHttpArticleFetcher(), ...llmDeps },
+  audio: audioDeps,
   auth: {
     auth,
     db: handle.db,

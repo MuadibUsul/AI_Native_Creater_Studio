@@ -47,6 +47,9 @@ export {
   updateNarrationBlock,
 } from './narrative.js';
 export { planVisual } from './visual-plan.js';
+export { buildAlignment, cueForBlock, concatWavSegments, getCurrentMasterNarration, resolveSynthesisVoice, segmentCacheKey, segmentStorageKey, synthesizeMasterNarration } from './alignment.js';
+export { encodeWavPcm16, parseWavPcm16 } from './wav.js';
+
 export {
   AI_EDIT_PROMPT_VERSION,
   assertSceneReferences,

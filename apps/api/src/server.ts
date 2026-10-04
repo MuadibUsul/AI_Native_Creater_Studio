@@ -23,6 +23,7 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
+import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
@@ -64,6 +65,8 @@ export interface BuildServerOptions {
    * articleFetcher（URL 归一化）、llm（结构化生成；无凭据时可注入 Mock，§76-03）。
    */
   content?: { articleFetcher?: import('@ancs/contracts').ArticleFetcher; llm?: import('@ancs/contracts').LlmAdapter };
+  /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
+  audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
 }
 
 /**
@@ -104,6 +107,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const credentialDeps = options.credentials;
   const webhookDeps = options.webhooks;
   const contentDeps = options.content;
+  const audioDeps = options.audio;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
     await app.register(
@@ -131,6 +135,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerVisualGrammarRoutes(instance, authDeps);
         registerDirectorRoutes(instance, authDeps);
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
+        registerNarrationAudioRoutes(instance, authDeps, {
+          ...(audioDeps ?? {}),
+          ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
+        });
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

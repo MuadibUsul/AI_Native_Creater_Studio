@@ -69,6 +69,8 @@ export interface ObjectStorageAdapter {
    * 客户端上传走 Signed URL（createUploadTarget），不使用本方法。
    */
   putObject(key: string, data: Uint8Array): Promise<void>;
+  /** 读取完整对象（P06-03：分段音频复用/拼接）；不存在返回 null */
+  getObject(key: string): Promise<Uint8Array | null>;
   deleteObject(key: string): Promise<void>;
 }
 

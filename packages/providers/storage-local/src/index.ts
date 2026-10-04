@@ -228,6 +228,11 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     await this.putObject(key, data);
   }
 
+  /** 契约方法（P06-03）：读取完整对象；不存在返回 null */
+  async getObject(key: string): Promise<Uint8Array | null> {
+    return this.readObject(key);
+  }
+
   async readObject(key: string): Promise<Uint8Array | null> {
     try {
       const handle = await open(this.resolveKeyPath(key), 'r');

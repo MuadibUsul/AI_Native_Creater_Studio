@@ -102,8 +102,8 @@
 | LED-C-VID-01 | Remotion Player | REQ-38-01 | P05-04（P05） | TODO |
 | LED-C-VID-02 | Standard Scene library | REQ-11-01/REQ-65-01 | P05-02（P05） | TODO |
 | LED-C-VID-03 | Draft preview | REQ-38-01/REQ-18-01 | P05-04（P05） | TODO |
-| LED-C-VID-04 | Master narration | REQ-13-01 | P06-03（P06） | TODO |
-| LED-C-VID-05 | Subtitle timing | REQ-13-02/REQ-58-01 | P06-03/P06-06（P06） | TODO |
+| LED-C-VID-04 | Master narration | REQ-13-01 | P06-03（P06） | VERIFIED（2026-10-04：逐段合成→拼接→Master 资产（自有存储/校验和）；真实 TTS 音质与语言覆盖待 P06-02 凭据；证据：docs/verification/P06-03.md） |
+| LED-C-VID-05 | Subtitle timing | REQ-13-02/REQ-58-01 | P06-03/P06-06（P06） | TODO（进度：P06-03 已完成 Alignment（词级时间戳 + cues）与局部重建；SRT/VTT 输出随 P06-06） |
 | LED-C-VID-06 | Final render | REQ-39-01/REQ-64-05 | P07-04（P07） | TODO |
 | LED-C-VID-07 | Manifest | REQ-28-01 | P07-04（P07） | TODO |
 
@@ -159,7 +159,7 @@
 | LED-96-VOICE-03 | 支持 Platform Managed 与 BYOK Voice 路由 | REQ-6-07/REQ-17-02 | P06-02（P06） | TODO |
 | LED-96-VOICE-04 | 保存 Voice ownership / verification metadata | REQ-95-01 | P06-02（P06） | TODO |
 | LED-96-VOICE-05 | SpeechProfile / Speech Director schema 已定义 | REQ-6-08/REQ-94-01 | P04-06（P04） | VERIFIED（2026-10-04：SpeechPlan 契约（§94 输出字段全集）+ 确定性生成 + 供应商无关（私有参数零泄漏，字符串级断言）+ 可解释降级；SpeechProfile 契约自 P01-04；证据：docs/verification/P04-06.md） |
-| LED-96-VOICE-06 | Master Narration timestamp 仍是最终 Timeline timing 基础 | REQ-13-01/REQ-94-02 | P06-03（P06） | TODO |
+| LED-96-VOICE-06 | Master Narration timestamp 仍是最终 Timeline timing 基础 | REQ-13-01/REQ-94-02 | P06-03（P06） | VERIFIED（2026-10-04：Alignment/cues 为唯一 timing 来源（驱动画面/字幕/Avatar/Motion 的接入随 P06-04/06/P07）；证据：docs/verification/P06-03.md） |
 
 ### 4.3 Commercial（4）
 

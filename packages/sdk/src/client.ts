@@ -22,6 +22,7 @@ import {
   createEditPlanRequestSchema,
   directorPlanSchema,
   editPlanSchema,
+  masterNarrationSchema,
   narrativeGenerationResultSchema,
   narrativePlanSchema,
   speechPlanSchema,
@@ -116,6 +117,7 @@ import {
   type DirectorPlan,
   type EditPlan,
   type DirectorPolicyInput,
+  type MasterNarration,
   type NarrativePlan,
   type SpeechPlan,
   type VisualPlan,
@@ -426,6 +428,16 @@ export interface AncsClient {
       planId: string,
       options?: { identityId?: string; speechProfileId?: string },
     ): Promise<SpeechPlan>;
+    /** 合成 Master Narration（P06-03）：逐段 TTS + 时间戳 → 拼接 + Alignment/cues；onlyBlockId = 局部重建 */
+    synthesizeMasterNarration(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      input?: { onlyBlockId?: string },
+      options?: MutationOptions,
+    ): Promise<MasterNarration>;
+    /** 当前 Master Narration（含 Alignment；无则 null） */
+    masterNarration(workspaceId: string, projectId: string, planId: string): Promise<MasterNarration | null>;
     /** AI Edit 计划（P05-06）：自然语言 → 结构化 operation（不落库；Apply 走编辑协议） */
     aiEditPlan(
       workspaceId: string,
@@ -1060,6 +1072,13 @@ export function createClient(options: ClientOptions): AncsClient {
         const suffix = query.size > 0 ? `?${query.toString()}` : '';
         return request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/speech-plan${suffix}`, speechPlanSchema);
       },
+      synthesizeMasterNarration: (workspaceId, projectId, planId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/master-narration`, masterNarrationSchema, {
+          body: { ...(input?.onlyBlockId !== undefined ? { onlyBlockId: input.onlyBlockId } : {}) },
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      masterNarration: (workspaceId, projectId, planId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/master-narration`, masterNarrationSchema.nullable()),
       aiEditPlan: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/ai-edit/plan`, editPlanSchema, {
           body: input,

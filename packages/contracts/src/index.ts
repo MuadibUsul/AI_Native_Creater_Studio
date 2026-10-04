@@ -273,6 +273,30 @@ export type {
   VisualGrammarErrorReason,
 } from './visual-grammar.js';
 
+// Master Narration 与 Alignment 契约（P06-03 / §5.1、§58）
+export {
+  ALIGNMENT_METHODS,
+  alignmentMethodSchema,
+  ALIGNMENT_ERROR_REASONS,
+  alignmentWordSchema,
+  alignmentSegmentSchema,
+  narrationCueSchema,
+  masterNarrationSchema,
+  synthesisVoiceRefSchema,
+} from './alignment.js';
+export type {
+  AlignmentMethod,
+  AlignmentErrorReason,
+  AlignmentWord,
+  AlignmentSegment,
+  NarrationCue,
+  MasterNarration,
+  SynthesisVoiceRef,
+  SynthesizedAudio,
+  AudioSynthesisAdapter,
+  AlignmentProvider,
+} from './alignment.js';
+
 // AI Edit 契约（P05-06 / §37、§52）
 export {
   EDIT_PLAN_VERSION,

@@ -15,7 +15,9 @@ import {
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
 import type {
+  AlignmentProvider,
   ArticleFetcher,
+  AudioSynthesisAdapter,
   CredentialCipher,
   JobQueueAdapter,
   LlmAdapter,
@@ -65,6 +67,10 @@ export interface DomainDeps {
   articleFetcher?: ArticleFetcher;
   /** LLM 适配器（P04-03）：叙事/导演等结构化生成（真实适配器 P06-01；Mock 见 providers/mock-llm） */
   llm?: LlmAdapter;
+  /** TTS 适配器（P06-03）：逐段语音合成（必须带词级时间戳或配置 aligner；Mock 见 providers/mock-tts） */
+  tts?: AudioSynthesisAdapter;
+  /** 强制对齐器（P06-03）：Provider 无时间戳时使用；首期不接受按字数估计（§5.1） */
+  aligner?: AlignmentProvider;
 }
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
