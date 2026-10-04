@@ -1,0 +1,25 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+.next/
+
+# 环境与凭据（禁止提交任何真实 Secret）
+.env
+.env.*
+!.env.example
+
+# 编辑器与系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# 测试与临时产物
+*.tmp
+tmp/
