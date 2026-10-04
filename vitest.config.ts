@@ -53,6 +53,18 @@ export default defineConfig({
         },
       },
       {
+        // Motion 沙箱（P07-01）：隔离子进程 spawn 测试（超时用例需要较长窗口）
+        test: {
+          name: 'motion',
+          environment: 'node',
+          include: ['apps/motion-worker/src/**/*.test.ts'],
+          exclude: ['**/node_modules/**'],
+          testTimeout: 30000,
+          hookTimeout: 30000,
+          passWithNoTests: false,
+        },
+      },
+      {
         // Web 客户端（P05-03）：jsdom + Testing Library；Next 固定 tsconfig jsx=preserve，测试侧用 oxc 显式 automatic
         oxc: { jsx: 'automatic' },
         resolve: {

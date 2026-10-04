@@ -127,7 +127,7 @@
 | LED-C-SEC-03 | signed upload | REQ-26-02 | P02-04（P02） | TODO |
 | LED-C-SEC-04 | SSRF protection | REQ-43-02 | P04-01（P04） | TODO |
 | LED-C-SEC-05 | no secrets in logs | REQ-17-03/REQ-44-02 | P03-04/P08-03（P03/P08） | TODO |
-| LED-C-SEC-06 | custom motion sandbox design | REQ-11-03/REQ-43-05 | P07-01（P07） | TODO |
+| LED-C-SEC-06 | custom motion sandbox design | REQ-11-03/REQ-43-05 | P07-01（P07） | VERIFIED（2026-10-04：apps/motion-worker——隔离子进程（vm 白名单上下文）+ 双重静态分析 + 攻击 fixture 矩阵（网络/文件/依赖/Secret/eval/原型污染）全拒 + 无限循环硬超时 kill + RAM 上限 + 渲染 smoke；证据：docs/verification/P07-01.md） |
 
 ### 3.7 Multi-client readiness（6）
 
