@@ -13,7 +13,7 @@ import {
 } from '@ancs/db';
 import {
   assertRegisteredClient,
-  AuthFailure,
+  ApiFailure,
   base64UrlSha256,
   createAuth,
   createAuthorizationCode,
@@ -204,7 +204,7 @@ describe('原生 PKCE 与令牌生命周期', () => {
     const rejected = results.filter((r) => r.status === 'rejected');
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(AuthFailure);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ApiFailure);
   });
 
   it('授权码过期被拒', async () => {
@@ -300,8 +300,8 @@ describe('原生 PKCE 与令牌生命周期', () => {
 
   it('客户端注册校验：未注册 client 与不允许的 redirectUri 均为 INVALID_CLIENT', () => {
     const deps = makeTokenDeps();
-    expect(() => assertRegisteredClient(deps.config, 'unknown-client', REDIRECT_URI)).toThrowError(AuthFailure);
-    expect(() => assertRegisteredClient(deps.config, CLIENT_ID, 'ancs://evil/callback')).toThrowError(AuthFailure);
+    expect(() => assertRegisteredClient(deps.config, 'unknown-client', REDIRECT_URI)).toThrowError(ApiFailure);
+    expect(() => assertRegisteredClient(deps.config, CLIENT_ID, 'ancs://evil/callback')).toThrowError(ApiFailure);
     expect(() => assertRegisteredClient(deps.config, CLIENT_ID, REDIRECT_URI)).not.toThrowError();
   });
 

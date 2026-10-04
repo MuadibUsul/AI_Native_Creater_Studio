@@ -12,7 +12,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-77-01 | 用户可以登录并进入 Workspace | REQ-30-01/REQ-22-01 | P01-02/P01-03（P01） | TODO |
+| LED-77-01 | 用户可以登录并进入 Workspace | REQ-30-01/REQ-22-01 | P01-02/P01-03（P01） | VERIFIED（2026-10-04：登录 → 创建/列出/进入 Workspace（含 OWNER 自动成员）全链路测试） |
 | LED-77-02 | 可以创建 Channel / Creator Profile | REQ-6-01/REQ-6-02 | P01-04（P01） | TODO |
 | LED-77-03 | 可以从 URL 或粘贴文本创建 Project | REQ-4-01 | P04-01（P04） | TODO |
 | LED-77-04 | 系统生成 Narrative Script | REQ-8-01 | P04-03（P04） | TODO |
@@ -72,7 +72,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-DOM-01 | Workspace | REQ-22-01 | P01-03（P01） | TODO |
+| LED-C-DOM-01 | Workspace | REQ-22-01 | P01-03（P01） | VERIFIED（2026-10-04：workspaces/workspace_members + 迁移 0001 + 服务与授权；证据：docs/verification/P01-03.md） |
 | LED-C-DOM-02 | Channel | REQ-6-01/REQ-22-02 | P01-04（P01） | TODO |
 | LED-C-DOM-03 | Creator Profile | REQ-6-02 | P01-04（P01） | TODO |
 | LED-C-DOM-04 | Project | REQ-22-02 | P02-01（P02） | TODO |
@@ -121,7 +121,7 @@
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-C-SEC-01 | tenant isolation tests | REQ-43-01/REQ-51-06 | P01-03（P01） | TODO |
+| LED-C-SEC-01 | tenant isolation tests | REQ-43-01/REQ-51-06 | P01-03（P01） | VERIFIED（2026-10-04：test:security 真实套件 14 项含跨租户全拒绝；资源维度随 P02 扩充） |
 | LED-C-SEC-02 | KMS secret encryption | REQ-17-03/REQ-43-06 | P03-04（P03） | TODO |
 | LED-C-SEC-03 | signed upload | REQ-26-02 | P02-04（P02） | TODO |
 | LED-C-SEC-04 | SSRF protection | REQ-43-02 | P04-01（P04） | TODO |

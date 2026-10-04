@@ -8,6 +8,7 @@ import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerEchoRoutes } from './routes/echo.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
 export interface BuildServerOptions {
   logger?: boolean;
@@ -51,6 +52,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     await app.register(
       async (instance) => {
         registerAuthRoutes(instance, authDeps);
+        registerWorkspaceRoutes(instance, authDeps);
       },
       { prefix: API_PREFIX },
     );

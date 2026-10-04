@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { ERROR_CODES, type ErrorCode, type TokenResponse } from '@ancs/contracts';
+import { ApiFailure, ERROR_CODES, type TokenResponse } from '@ancs/contracts';
 import { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from '@ancs/db';
 
 /**
@@ -16,19 +16,11 @@ import { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from '@an
  * - 撤销以数据库为权威（服务端可即时失效）。
  */
 
-/** 当前所有认证失败的 HTTP 状态均为 400（OAuth 授权类错误惯例）；扩展时同步路由的 response 声明。 */
-export type AuthFailureStatus = 400;
-
-export class AuthFailure extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message: string,
-    readonly httpStatus: AuthFailureStatus = 400,
-  ) {
-    super(message);
-    this.name = 'AuthFailure';
-  }
-}
+/**
+ * 认证失败统一抛 ApiFailure（@ancs/contracts），由 API 层转换为错误信封（REQ-33-02）。
+ * 授权码/令牌类错误的 HTTP 状态均为 400（OAuth 授权类错误惯例）。
+ */
+const grantFailure = (message: string): ApiFailure => new ApiFailure(ERROR_CODES.INVALID_GRANT, message, 400);
 
 export const nativeClientSchema = z.object({
   clientId: z.string().min(1).max(100),
@@ -87,10 +79,10 @@ export function findRegisteredClient(config: NativeTokenConfig, clientId: string
 export function assertRegisteredClient(config: NativeTokenConfig, clientId: string, redirectUri: string): NativeClient {
   const client = findRegisteredClient(config, clientId);
   if (!client) {
-    throw new AuthFailure(ERROR_CODES.INVALID_CLIENT, `client "${clientId}" is not registered`);
+    throw new ApiFailure(ERROR_CODES.INVALID_CLIENT, `client "${clientId}" is not registered`);
   }
   if (!client.redirectUris.includes(redirectUri)) {
-    throw new AuthFailure(ERROR_CODES.INVALID_CLIENT, `redirectUri is not allowed for client "${clientId}"`);
+    throw new ApiFailure(ERROR_CODES.INVALID_CLIENT, `redirectUri is not allowed for client "${clientId}"`);
   }
   return client;
 }
@@ -180,19 +172,19 @@ export async function exchangeAuthorizationCode(
     .limit(1);
   const row = rows[0];
 
-  if (!row) throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'authorization code is invalid');
-  if (row.usedAt !== null) throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'authorization code is already used');
+  if (!row) throw grantFailure('authorization code is invalid');
+  if (row.usedAt !== null) throw grantFailure('authorization code is already used');
   if (row.expiresAt.getTime() <= Date.now()) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'authorization code has expired');
+    throw grantFailure('authorization code has expired');
   }
   if (row.clientId !== input.clientId) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'authorization code was issued to a different client');
+    throw grantFailure('authorization code was issued to a different client');
   }
   if (input.redirectUri !== undefined && input.redirectUri !== row.redirectUri) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'redirectUri does not match the authorization request');
+    throw grantFailure('redirectUri does not match the authorization request');
   }
   if (base64UrlSha256(input.codeVerifier) !== row.codeChallenge) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'PKCE verification failed');
+    throw grantFailure('PKCE verification failed');
   }
 
   // 单次使用：条件更新（并发双花时只有一个事务能命中未使用行）
@@ -202,7 +194,7 @@ export async function exchangeAuthorizationCode(
     .where(and(eq(authAuthorizationCodes.id, row.id), isNull(authAuthorizationCodes.usedAt)))
     .returning({ id: authAuthorizationCodes.id });
   if (claimed.length === 0) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'authorization code is already used');
+    throw grantFailure('authorization code is already used');
   }
 
   return issueTokenPair(deps, {
@@ -225,13 +217,13 @@ export async function refreshTokenPair(
   const row = rows[0];
 
   if (!row || row.revokedAt !== null || row.expiresAt.getTime() <= Date.now() || row.clientId !== input.clientId) {
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'refresh token is invalid');
+    throw grantFailure('refresh token is invalid');
   }
 
   if (row.usedAt !== null) {
     // 重放检测：已使用的 refresh 再次出现 → 家族整体撤销（可能已泄露）
     await revokeFamily(deps, row.familyId);
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'refresh token replay detected; token family revoked');
+    throw grantFailure('refresh token replay detected; token family revoked');
   }
 
   const claimed = await deps.db
@@ -241,7 +233,7 @@ export async function refreshTokenPair(
     .returning({ id: authRefreshTokens.id });
   if (claimed.length === 0) {
     await revokeFamily(deps, row.familyId);
-    throw new AuthFailure(ERROR_CODES.INVALID_GRANT, 'refresh token replay detected; token family revoked');
+    throw grantFailure('refresh token replay detected; token family revoked');
   }
 
   return issueTokenPair(deps, { userId: row.userId, clientId: row.clientId, familyId: row.familyId });

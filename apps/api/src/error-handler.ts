@@ -1,5 +1,5 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { ERROR_CODES, type ErrorCode } from '@ancs/contracts';
+import { ApiFailure, errorEnvelope, ERROR_CODES, type ErrorCode } from '@ancs/contracts';
 
 interface ValidationIssue {
   message?: string;
@@ -45,6 +45,14 @@ export function registerErrorHandler(app: FastifyInstance): void {
   });
 
   app.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+    // 服务层显式失败（ApiFailure，P01-03 起统一）：按其 code/status 直接转换为错误信封
+    if (error instanceof ApiFailure) {
+      const status = Math.min(Math.max(error.httpStatus, 400), 599);
+      if (status >= 500) request.log.error({ err: error }, 'service failure');
+      void reply.status(status).send(errorEnvelope(error.code, error.message, String(request.id), error.details));
+      return;
+    }
+
     const validation = Array.isArray(error.validation) ? error.validation : null;
     const status = typeof error.statusCode === 'number' && error.statusCode >= 400 ? error.statusCode : 500;
 

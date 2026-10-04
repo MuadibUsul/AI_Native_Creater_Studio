@@ -16,6 +16,7 @@ export { eventEnvelopeSchema, EVENT_TYPES } from './common/events.js';
 export type { EventEnvelope } from './common/events.js';
 export { errorEnvelopeSchema, ERROR_CODES, versionConflictDetailsSchema, errorEnvelope } from './common/error.js';
 export type { ErrorEnvelope, ErrorCode, VersionConflictDetails } from './common/error.js';
+export { ApiFailure } from './common/failure.js';
 
 // 领域契约
 export {
@@ -121,6 +122,20 @@ export type {
   TokenResponse,
   RevokeTokenRequest,
 } from './auth.js';
+
+// Workspace / 成员契约（P01-03）
+export {
+  WORKSPACE_ROLES,
+  workspaceRoleSchema,
+  workspaceSchema,
+  workspaceWithRoleSchema,
+  workspaceMemberSchema,
+  createWorkspaceRequestSchema,
+  updateWorkspaceRequestSchema,
+  addWorkspaceMemberRequestSchema,
+  updateWorkspaceMemberRoleRequestSchema,
+} from './workspaces.js';
+export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember } from './workspaces.js';
 
 // 既有接口
 export { healthResponseSchema } from './health.js';

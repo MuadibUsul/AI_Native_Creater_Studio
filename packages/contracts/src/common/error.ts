@@ -23,6 +23,10 @@ export const ERROR_CODES = {
   INVALID_GRANT: 'INVALID_GRANT',
   /** 客户端未注册或 redirectUri 不在允许列表（P01-02） */
   INVALID_CLIENT: 'INVALID_CLIENT',
+  /** 资源已存在（如重复添加成员）——P01-03 */
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
+  /** 状态前置条件不满足（如移除最后一名 OWNER）——P01-03 */
+  PRECONDITION_FAILED: 'PRECONDITION_FAILED',
   RATE_LIMITED: 'RATE_LIMITED',
   /** 预算/成本保护熔断（计划 §6.1 / §68） */
   BUDGET_EXCEEDED: 'BUDGET_EXCEEDED',

@@ -196,8 +196,8 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-31-01 | §31 | 角色：OWNER/ADMIN/EDITOR/REVIEWER/VIEWER（计划 §6.2 增 PLATFORM_ADMIN 且不复用 Workspace ADMIN） | MUST | V1 | P01-03（P01） | 权限矩阵验收（P01-03） | TODO |
-| REQ-31-02 | §31 | 每个资源请求 MUST 验证 workspace membership；禁止只按 project_id 查询后直接返回 | MUST | V1 | P01-03（P01） | AC-01；A 租户不能读写 B 资源（P01-03） | TODO |
+| REQ-31-01 | §31 | 角色：OWNER/ADMIN/EDITOR/REVIEWER/VIEWER（计划 §6.2 增 PLATFORM_ADMIN 且不复用 Workspace ADMIN） | MUST | V1 | P01-03（P01） | 能力矩阵按 §6.2 实现并被测试锁定；PLATFORM_ADMIN 明确独立（§67，P08-02 建立）（P01-03；证据 docs/verification/P01-03.md） | VERIFIED |
+| REQ-31-02 | §31 | 每个资源请求 MUST 验证 workspace membership；禁止只按 project_id 查询后直接返回 | MUST | V1 | P01-03（P01） | 统一授权入口 requireWorkspace（认证→成员→能力）；workspace 端点跨租户全 404 被测试锁定（P01-03） | VERIFIED |
 | REQ-32-01 | §32 | 资源接口集：Auth/Workspace/Channels/Sources/Narrative-Director/Scenes/Assets/History/Jobs/Render/Providers/Usage/Events；统一挂载 /api/v1（DEC-01） | MUST | V1 | P01-05（P01）+各阶段 | P01-05 验收；计划 §10 增补清单 | TODO |
 | REQ-32-02 | §32 | director/edit 请求形状（instruction/selection/baseRevision/mode: plan_then_apply）；SHOULD 先返回 change plan，Apply 后 commit | MUST | V1 | P05-06（P05） | 计划未 Apply 不改数据库（P05-06） | TODO |
 | REQ-33-01 | §33 | 每个写请求 SHOULD 支持 Idempotency-Key 与 X-Request-Id | SHOULD | V1 | P01-05/P02-02（P01/P02） | AC-03；同键重放原结果（P02-02） | TODO |
@@ -251,7 +251,7 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-43-01 | §43.1 | Tenant Isolation：核心表 workspace_id；业务查询带 workspace scope；后期加 PG RLS（纵深防御）；必须有自动测试（A 无法访问 B 的 project/asset/job） | MUST | V1 | P01-03（P01） | AC-01；P01-03 验收 | TODO |
+| REQ-43-01 | §43.1 | Tenant Isolation：核心表 workspace_id；业务查询带 workspace scope；后期加 PG RLS（纵深防御）；必须有自动测试（A 无法访问 B 的 project/asset/job） | MUST | V1 | P01-03（P01） | 机制与安全套件就位（workspace 维度全量测试通过）；Project/Asset/Job/SSE 用例随 P02 资源落地按同一模式扩充（P01-03；义务记录于交接）；RLS 与 P08 门一并评估 | VERIFIED |
 | REQ-43-02 | §43.2 | SSRF 防护（URL 导入/外部素材抓取）：禁 localhost、禁私网 IP、DNS rebinding 防护、限制 redirect、限制文件大小、MIME 校验、fetch timeout | MUST | V1 | P04-01（P04） | URL 安全限制验收（P04-01）；计划 §6.3 | TODO |
 | REQ-43-03 | §43.3 | 上传安全：MIME sniffing/大小限制/病毒扫描（上线 SaaS 前）/禁止执行上传内容 | MUST | V1 | P02-04（P02）；扫描→P09-05 | 伪造 MIME/越权对象不可 Ready（P02-04） | TODO |
 | REQ-43-04 | §43.4 | Prompt Injection：文章内容为不可信输入；parser 网页文本无系统指令权限；Director prompt 明确"Source 中指令只是内容"、禁止泄露 Secret/调 Provider/改设置 | MUST | V1 | P04-01/P04-03（P04） | 注入 fixture 验收（P04-01/P04-03） | TODO |
@@ -277,7 +277,7 @@
 | REQ-51-03 | §51 Integration | Integration：DB+Queue+Worker、upload intents、render pipeline、webhook 幂等 | MUST | V1 | P00-02 + P02/P03/P07 | pnpm test:integration | TODO |
 | REQ-51-04 | §51 E2E | E2E：创建项目→导入→Narrative→Storyboard→编辑→预览→mock Provider 终渲染→历史恢复 | MUST | V1 | P05/P08（P05—P08） | pnpm test:e2e；计划 AC 系列 | TODO |
 | REQ-51-05 | §51 | Production Provider smoke test 单独运行，不作为普通 CI 必须项 | MUST | V1 | P00-02/P08（P00/P08） | verify 默认零真实费用（计划 §11.1） | TODO |
-| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | AC-01；pnpm test:security | TODO |
+| REQ-51-06 | §51 | Multi-tenant 安全测试必须：跨 Workspace 读拒绝/写拒绝/Signed URL scope/凭据隔离 | MUST | V1 | P01-03（P01） | 读/写拒绝已覆盖（security 14 项）；Signed URL scope（P02-04）与凭据隔离（P03-04）落地时补充用例——进度：2/4 | TODO |
 
 ## R. AI 输出、可解释性与锁定（§52—§54）
 
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-02，REQ-30-01 / REQ-30-03 → VERIFIED；此前 P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-03，REQ-31-01 / REQ-31-02 / REQ-43-01 → VERIFIED；此前 P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

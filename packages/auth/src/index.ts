@@ -1,7 +1,6 @@
 export { createAuth } from './auth-core.js';
 export type { AuthInstance, AuthCoreOptions } from './auth-core.js';
 export {
-  AuthFailure,
   assertRegisteredClient,
   base64UrlSha256,
   createAuthorizationCode,
@@ -25,5 +24,25 @@ export type {
 } from './native-tokens.js';
 export { findUserById, resolveAuthContext } from './session.js';
 export type { AuthContext, RequestAuthHeaders, SessionDeps } from './session.js';
+export {
+  authorizeWorkspace,
+  getMembership,
+  roleHasCapability,
+  ROLE_CAPABILITIES,
+  WORKSPACE_CAPABILITIES,
+} from './authorization.js';
+export type { Membership, WorkspaceCapability } from './authorization.js';
+export {
+  addMember,
+  createWorkspace,
+  getWorkspace,
+  listMembers,
+  listWorkspaces,
+  removeMember,
+  updateMemberRole,
+  updateWorkspace,
+} from './workspaces.js';
+export type { WorkspaceServiceDeps } from './workspaces.js';
+export { ApiFailure } from '@ancs/contracts';
 export { createInternalUser } from './internal-users.js';
 export type { CreateInternalUserInput, CreatedInternalUser } from './internal-users.js';

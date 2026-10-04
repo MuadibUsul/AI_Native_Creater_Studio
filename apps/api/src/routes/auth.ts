@@ -14,7 +14,6 @@ import {
   type AuthUser,
 } from '@ancs/contracts';
 import {
-  AuthFailure,
   assertRegisteredClient,
   createAuthorizationCode,
   exchangeAuthorizationCode,
@@ -122,16 +121,8 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthDeps): void {
     async (request, reply) => {
       const query = request.query;
 
-      try {
-        assertRegisteredClient(deps.tokens.config, query.clientId, query.redirectUri);
-      } catch (error) {
-        if (error instanceof AuthFailure) {
-          return reply
-            .status(error.httpStatus)
-            .send(errorEnvelope(error.code, error.message, String(request.id)));
-        }
-        throw error;
-      }
+      // ApiFailure 由全局错误处理器统一转换（apps/api/src/error-handler.ts）
+      assertRegisteredClient(deps.tokens.config, query.clientId, query.redirectUri);
 
       const redirect = new URL(query.redirectUri);
       redirect.searchParams.set('state', query.state);
@@ -163,29 +154,21 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthDeps): void {
         response: { 200: tokenResponseSchema, 400: errorEnvelopeSchema },
       },
     },
-    async (request, reply) => {
+    async (request) => {
       const body = request.body;
-      try {
-        if (body.grantType === 'authorization_code') {
-          return await exchangeAuthorizationCode(deps.tokens, {
-            code: body.code,
-            codeVerifier: body.codeVerifier,
-            clientId: body.clientId,
-            redirectUri: body.redirectUri,
-          });
-        }
-        return await refreshTokenPair(deps.tokens, {
-          refreshToken: body.refreshToken,
+      // ApiFailure 由全局错误处理器统一转换（apps/api/src/error-handler.ts）
+      if (body.grantType === 'authorization_code') {
+        return exchangeAuthorizationCode(deps.tokens, {
+          code: body.code,
+          codeVerifier: body.codeVerifier,
           clientId: body.clientId,
+          redirectUri: body.redirectUri,
         });
-      } catch (error) {
-        if (error instanceof AuthFailure) {
-          return reply
-            .status(error.httpStatus)
-            .send(errorEnvelope(error.code, error.message, String(request.id)));
-        }
-        throw error;
       }
+      return refreshTokenPair(deps.tokens, {
+        refreshToken: body.refreshToken,
+        clientId: body.clientId,
+      });
     },
   );
 

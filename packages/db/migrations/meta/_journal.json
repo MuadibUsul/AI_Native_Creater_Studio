@@ -8,6 +8,13 @@
       "when": 1791088121968,
       "tag": "0000_fixed_peter_quill",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791088983025,
+      "tag": "0001_conscious_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

@@ -33,6 +33,7 @@ export default defineConfig({
             'packages/testing/**',
             'packages/auth/**',
             'apps/api/src/**/*.integration.test.ts',
+            '**/*.security.test.ts',
           ],
           alias: workspaceAliases,
           passWithNoTests: false,
@@ -44,12 +45,27 @@ export default defineConfig({
           environment: 'node',
           include: [
             'packages/db/**/*.test.ts',
-            'packages/auth/**/*.test.ts',
+            'packages/auth/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
           ],
           exclude: ['**/node_modules/**'],
           alias: workspaceAliases,
           testTimeout: 30000,
+          // 这些套件共享同一个测试数据库（含清理与迁移），必须按文件串行，避免互相清表/并发迁移
+          fileParallelism: false,
+          passWithNoTests: false,
+        },
+      },
+      {
+        test: {
+          name: 'security',
+          environment: 'node',
+          include: ['apps/api/src/*.security.test.ts', 'packages/auth/src/*.security.test.ts'],
+          exclude: ['**/node_modules/**'],
+          alias: workspaceAliases,
+          testTimeout: 30000,
+          // 与 integration 相同：共享测试数据库，按文件串行
+          fileParallelism: false,
           passWithNoTests: false,
         },
       },
