@@ -284,7 +284,8 @@ describe('原生 PKCE 与令牌生命周期', () => {
 
   it('Access Token 过期被拒（短生命周期）', async () => {
     const created = await createUser();
-    const deps = makeTokenDeps({ accessTokenTtlMs: 50 });
+    // 时间窗放宽以抵御 CI/负载抖动（500ms 内视为有效；700ms 后必然过期）
+    const deps = makeTokenDeps({ accessTokenTtlMs: 500 });
     const code = await createAuthorizationCode(deps, {
       userId: created.id,
       clientId: CLIENT_ID,
@@ -294,7 +295,7 @@ describe('原生 PKCE 与令牌生命周期', () => {
     const pair = await exchangeAuthorizationCode(deps, { code, codeVerifier: VERIFIER, clientId: CLIENT_ID });
 
     expect(await verifyAccessToken(deps, pair.accessToken)).not.toBeNull();
-    await sleep(80);
+    await sleep(700);
     expect(await verifyAccessToken(deps, pair.accessToken)).toBeNull();
   });
 

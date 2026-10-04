@@ -6,8 +6,11 @@ import { API_PREFIX } from '@ancs/contracts';
 import { registerErrorHandler } from './error-handler.js';
 import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerChannelRoutes } from './routes/channels.js';
+import { registerCreatorIdentityRoutes } from './routes/creator-identities.js';
 import { registerEchoRoutes } from './routes/echo.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 
 export interface BuildServerOptions {
@@ -53,6 +56,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       async (instance) => {
         registerAuthRoutes(instance, authDeps);
         registerWorkspaceRoutes(instance, authDeps);
+        registerChannelRoutes(instance, authDeps);
+        registerCreatorIdentityRoutes(instance, authDeps);
+        registerSpeechProfileRoutes(instance, authDeps);
       },
       { prefix: API_PREFIX },
     );

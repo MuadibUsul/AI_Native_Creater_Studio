@@ -123,6 +123,67 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
+// 主题 / Channel / 身份 / SpeechProfile 契约（P01-04）
+export { themeTokensSchema, DEFAULT_THEME_TOKENS } from './theme.js';
+export type { ThemeTokens } from './theme.js';
+export {
+  ASPECT_RATIOS,
+  SOURCE_DISPLAY_POLICIES,
+  AI_BROLL_POLICIES,
+  channelStyleDefaultsSchema,
+  channelStyleOverrideSchema,
+  DEFAULT_CHANNEL_STYLE,
+  mergeChannelStyle,
+  channelSchema,
+  channelStyleVersionSchema,
+  channelWithStyleSchema,
+  createChannelRequestSchema,
+  updateChannelRequestSchema,
+} from './channels.js';
+export type {
+  ChannelStyleDefaults,
+  ChannelStyleOverride,
+  Channel,
+  ChannelStyleVersion,
+  ChannelWithStyle,
+  CreateChannelRequest,
+  UpdateChannelRequest,
+} from './channels.js';
+export {
+  IDENTITY_STATUSES,
+  VOICE_CLONE_TYPES,
+  VOICE_OWNERSHIP_TYPES,
+  VOICE_MANAGED_MODES,
+  avatarIdentitySchema,
+  voiceIdentitySchema,
+  brandIdentitySchema,
+  creatorIdentitySchema,
+  createCreatorIdentityRequestSchema,
+  avatarIdentityUpsertSchema,
+  voiceIdentityUpsertSchema,
+  brandIdentityUpsertSchema,
+  updateCreatorIdentityRequestSchema,
+} from './identities.js';
+export type {
+  AvatarIdentity,
+  VoiceIdentity,
+  BrandIdentity,
+  CreatorIdentity,
+  CreateCreatorIdentityRequest,
+  UpdateCreatorIdentityRequest,
+} from './identities.js';
+export {
+  speechProfileFieldsSchema,
+  speechProfileFieldsOverrideSchema,
+  DEFAULT_SPEECH_PROFILE,
+  mergeSpeechProfileFields,
+  speechProfileVersionSchema,
+  speechProfileSchema,
+  createSpeechProfileRequestSchema,
+  updateSpeechProfileRequestSchema,
+} from './speech.js';
+export type { SpeechProfileFields, SpeechProfileFieldsOverride, SpeechProfile, SpeechProfileVersion } from './speech.js';
+
 // Workspace / 成员契约（P01-03）
 export {
   WORKSPACE_ROLES,

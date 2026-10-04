@@ -15,6 +15,13 @@
       "when": 1791088983025,
       "tag": "0001_conscious_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791089711712,
+      "tag": "0002_slimy_stryfe",
+      "breakpoints": true
     }
   ]
 }

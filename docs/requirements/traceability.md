@@ -45,7 +45,7 @@
 |---|---|---|---|---|---|---|---|
 | REQ-3-01 | §3.2A | 故事 A（文章→长视频九步：读取→推荐时长→口语化脚本→章节→Scene Graph→预览→自然语言修改→Final→16:9 输出）为 V1 必须打通的主流程 | MUST | V1 | P04—P08 | P08-05 真实金样 | TODO |
 | REQ-3-02 | §3.2B | 故事 B（长视频切 Shorts：3～10 片段、独立 Hook、9:16 派生 Graph）Post-MVP / Shorts Pack | MAY | 后续 | P12-01（P12） | P12-01 验收 | DEFERRED |
-| REQ-3-03 | §3.2C | 故事 C 栏目化：Creator Profile（Twin/Voice/Logo/字体/色彩/图表/字幕样式/Avatar 占比/时长/Hook/结尾/B-roll 强度）保存并被后续文章继承 | SHOULD | V1 | P01-04（P01） | 修改 Channel 后旧项目不变（P01-04） | TODO |
+| REQ-3-03 | §3.2C | 故事 C 栏目化：Creator Profile（Twin/Voice/Logo/字体/色彩/图表/字幕样式/Avatar 占比/时长/Hook/结尾/B-roll 强度）保存并被后续文章继承 | SHOULD | V1 | P01-04（P01） | Profile 全字段落库（Channel 样式 + 身份 + 主题 tokens）；继承语义由快照版本机制保证（P01-04）；"后续文章继承"随 P02-01 项目创建补用例 | VERIFIED |
 | REQ-3-04 | §3.2D | 故事 D AI 修改：分析→缩短/增加变化→重写必要旁白→变更计划→用户 Apply 后形成新版本 | MUST | V1 | P05-06（P05） | 计划未 Apply 不改数据库（P05-06）；AC-14 | TODO |
 | REQ-3-05 | §3.2E | 故事 E 精确手动修正：拖动排序/Trim/Split/Replace/音量/字幕/图表字段/Transition 均可用 | MUST | V1 | P05-05（P05） | 操作全部回写统一协议（P05-05） | TODO |
 | REQ-4-01 | §4.1 | MVP 输入 MUST：文章 URL、粘贴正文、手写脚本、上传图片/视频/音频、Sources 编辑 | MUST | V1 | P04-01（P04） | URL 异常/安全限制/空正文/错误编码有明确结果（P04-01） | TODO |
@@ -67,7 +67,7 @@
 | REQ-5-06 | §5.5 | Scene Editor 属性面板：类型/时长/旁白/视觉意图/数据绑定/Source/组件/动画/布局/背景/Transition/Avatar/资产引用/Provider 策略/AI 编辑框 | MUST | V1 | P05-03（P05） | 同上 | TODO |
 | REQ-5-07 | §5.6 | Lite Timeline MUST 存在（非默认首页）：Narration/Scenes/Music/Captions/Overlays 轨道；支持 reorder/Trim/Split/Duplicate/Delete/Move/Replace/Transition/音量/字幕修正/简单 Crop-Scale；不做复杂 Track 嵌套与高级曲线 | MUST | V1 | P05-05（P05） | 全部操作回写统一协议；刷新后状态一致（P05-05） | TODO |
 | REQ-5-08 | §5.7 | History：人类可读 Intent History；支持 Undo/Redo/Restore 项目版本/Restore 单 Scene；Compare 后续 | MUST | V1 | P02-03/P05-03（P02/P05） | 恢复产生新 revision（P02-03）；AC-19 | TODO |
-| REQ-6-01 | §6 | Channel 长期默认值字段集；修改 Profile 后新项目用新值、旧项目不被静默覆盖、Project 可覆盖 Channel 默认值 | MUST | V1 | P01-04（P01） | 修改 Channel 后旧项目不变（P01-04） | TODO |
+| REQ-6-01 | §6 | Channel 长期默认值字段集；修改 Profile 后新项目用新值、旧项目不被静默覆盖、Project 可覆盖 Channel 默认值 | MUST | V1 | P01-04（P01） | 字段集 + 不可变样式版本 + 快照语义被测试锁定（旧快照逐字段不变、新读取继承新值）（P01-04；证据 docs/verification/P01-04.md）；Project 级用例随 P02-01 补入 | VERIFIED |
 | REQ-6-02 | §6 | Creator Identity 拆分为 AvatarIdentity / VoiceIdentity / BrandIdentity / PresenterStyle；Creator Identity 与 Channel Style 可分别版本化，支持同创作者多风格 Channel | MUST | V1 | P01-04/P06-02（P01/P06） | P01-04 验收；身份版本固定（P06-02） | TODO |
 | REQ-6-03 | §6.1 | AvatarIdentity 字段（provider/provider_avatar_id/凭据引用/display_name/status/consent/default look/时间戳）；原则：原始训练素材优先 Provider 托管，平台只存 provider 引用 | MUST | V1 | P06-04（P06） | 校验时长与口型资产（P06-04）；§20.3 | TODO |
 | REQ-6-04 | §6.1 | VoiceIdentity 字段集；MUST：不绑死 ElevenLabs/HeyGen；历史项目/终版记录所用 VoiceIdentity 版本与 provider voice 引用；删除/退休后旧项目保留可审计引用；UI 区分平台托管与自带 Provider 声音 | MUST | V1 | P06-02（P06） | 身份版本固定；两种凭据模式可生成（P06-02） | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-03，REQ-31-01 / REQ-31-02 / REQ-43-01 → VERIFIED；此前 P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P01-04，REQ-6-01 / REQ-3-03 → VERIFIED；此前 P01-03：REQ-31-01 / REQ-31-02 / REQ-43-01；P01-02：REQ-30-01 / REQ-30-03；P01-01：REQ-33-02；P00-04：REQ-80-02；P00-02：REQ-49-01 / REQ-49-02 / REQ-B-01）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

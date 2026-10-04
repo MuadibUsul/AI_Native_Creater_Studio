@@ -187,6 +187,70 @@ describe('租户隔离（AC-01：跨租户一律拒绝）', () => {
     expect(afterRevoke.statusCode).toBe(404);
   });
 
+  it('业务资源同样受租户隔离：Channel / CreatorIdentity / SpeechProfile 跨租户全 404', async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const workspaceA = await createWorkspaceFor(a.cookie, 'A 的业务租户');
+
+    // A 建立业务资源
+    const channel = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceA}/channels`,
+      payload: { name: 'A 的栏目' },
+      headers: { cookie: a.cookie },
+    });
+    expect(channel.statusCode).toBe(201);
+    const channelId = (channel.json() as { id: string }).id;
+
+    const identity = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceA}/creator-identities`,
+      payload: { displayName: 'A 的主持人' },
+      headers: { cookie: a.cookie },
+    });
+    expect(identity.statusCode).toBe(201);
+    const identityId = (identity.json() as { id: string }).id;
+
+    const speech = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workspaces/${workspaceA}/speech-profiles`,
+      payload: { name: 'A 的风格' },
+      headers: { cookie: a.cookie },
+    });
+    expect(speech.statusCode).toBe(201);
+    const speechId = (speech.json() as { id: string }).id;
+
+    // B 以自己身份访问 A 的资源：全部 404（与不存在不可区分）
+    const attempts: Array<{ method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; payload?: unknown }> = [
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/channels` },
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/channels/${channelId}` },
+      { method: 'PATCH', url: `/api/v1/workspaces/${workspaceA}/channels/${channelId}`, payload: { name: '篡改' } },
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/channels/${channelId}/style-versions` },
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/creator-identities/${identityId}` },
+      { method: 'PATCH', url: `/api/v1/workspaces/${workspaceA}/creator-identities/${identityId}`, payload: { displayName: '篡改' } },
+      { method: 'GET', url: `/api/v1/workspaces/${workspaceA}/speech-profiles/${speechId}` },
+      { method: 'PATCH', url: `/api/v1/workspaces/${workspaceA}/speech-profiles/${speechId}`, payload: { name: '篡改' } },
+    ];
+    for (const attempt of attempts) {
+      const response = await app.inject({
+        method: attempt.method,
+        url: attempt.url,
+        payload: attempt.payload as object | undefined,
+        headers: { cookie: b.cookie },
+      });
+      expect(response.statusCode, `${attempt.method} ${attempt.url}`).toBe(404);
+      expect(errorEnvelopeSchema.parse(response.json()).error.code).toBe('NOT_FOUND');
+    }
+
+    // 资源未被篡改
+    const verify = await app.inject({
+      method: 'GET',
+      url: `/api/v1/workspaces/${workspaceA}/channels/${channelId}`,
+      headers: { cookie: a.cookie },
+    });
+    expect((verify.json() as { name: string }).name).toBe('A 的栏目');
+  });
+
   it('成员管理规则（HTTP）：重复添加 409；最后 OWNER 降级 409；ADMIN 不能授予 OWNER 403', async () => {
     const owner = await newUser();
     const admin = await newUser();

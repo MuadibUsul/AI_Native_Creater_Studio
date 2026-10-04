@@ -17,6 +17,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/sdk': srcAlias('./packages/sdk/src/index.ts'),
   '@ancs/db': srcAlias('./packages/db/src/index.ts'),
   '@ancs/auth': srcAlias('./packages/auth/src/index.ts'),
+  '@ancs/domain': srcAlias('./packages/domain/src/index.ts'),
 };
 
 export default defineConfig({
@@ -32,6 +33,7 @@ export default defineConfig({
             'packages/db/**',
             'packages/testing/**',
             'packages/auth/**',
+            'packages/domain/**',
             'apps/api/src/**/*.integration.test.ts',
             '**/*.security.test.ts',
           ],
@@ -46,6 +48,7 @@ export default defineConfig({
           include: [
             'packages/db/**/*.test.ts',
             'packages/auth/**/*.integration.test.ts',
+            'packages/domain/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
           ],
           exclude: ['**/node_modules/**'],

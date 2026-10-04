@@ -73,8 +73,8 @@
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
 | LED-C-DOM-01 | Workspace | REQ-22-01 | P01-03（P01） | VERIFIED（2026-10-04：workspaces/workspace_members + 迁移 0001 + 服务与授权；证据：docs/verification/P01-03.md） |
-| LED-C-DOM-02 | Channel | REQ-6-01/REQ-22-02 | P01-04（P01） | TODO |
-| LED-C-DOM-03 | Creator Profile | REQ-6-02 | P01-04（P01） | TODO |
+| LED-C-DOM-02 | Channel | REQ-6-01/REQ-22-02 | P01-04（P01） | VERIFIED（2026-10-04：channels + 不可变样式版本 + 快照语义测试；证据：docs/verification/P01-04.md） |
+| LED-C-DOM-03 | Creator Profile | REQ-6-02 | P01-04（P01） | VERIFIED（2026-10-04：CreatorIdentity + 独立版本化子身份（Avatar/Voice/Brand）+ SpeechProfile；证据：docs/verification/P01-04.md） |
 | LED-C-DOM-04 | Project | REQ-22-02 | P02-01（P02） | TODO |
 | LED-C-DOM-05 | Scene | REQ-22-03 | P02-01（P02） | TODO |
 | LED-C-DOM-06 | Asset | REQ-22-04 | P02-04（P02） | TODO |
