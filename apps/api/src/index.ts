@@ -9,6 +9,7 @@ import { credentialDepsFromEnv } from './plugins/credentials.js';
 import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
+import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -67,6 +68,20 @@ if (storageDriver === 'local') {
 
 const credentialDeps = credentialDepsFromEnv();
 
+/**
+ * LLM 适配器（P04-03）：无真实凭据时使用**明确 Mock**（§76-03：不得伪造"真实生成成功"）。
+ * ANCS_LLM_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
+ */
+const llmDriver = process.env['ANCS_LLM_DRIVER'] ?? 'mock';
+let llmDeps: { llm?: import('@ancs/contracts').LlmAdapter };
+if (llmDriver === 'mock') {
+  console.warn('[api] LLM 驱动 = mock（无真实凭据）：叙事生成为 Mock 输出，不得视为真实模型结果。');
+  llmDeps = { llm: new MockLlmAdapter() };
+} else {
+  console.error(`启动失败：未知的 ANCS_LLM_DRIVER=${llmDriver}（当前仅支持 mock；真实适配器随 P06-01 接入）。`);
+  process.exit(1);
+}
+
 const webhookDeps = {
   verifiers: parseWebhookVerifiers(process.env['ANCS_WEBHOOK_SECRETS']),
   resultFetcher: createHttpResultFetcher(),
@@ -77,7 +92,7 @@ const app = await buildServer({
   logger: true,
   credentials: credentialDeps,
   webhooks: webhookDeps,
-  content: { articleFetcher: createHttpArticleFetcher() },
+  content: { articleFetcher: createHttpArticleFetcher(), ...llmDeps },
   auth: {
     auth,
     db: handle.db,

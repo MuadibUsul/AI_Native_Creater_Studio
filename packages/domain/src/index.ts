@@ -40,6 +40,21 @@ export {
 } from './versions.js';
 export { redoProject, undoProject } from './undo-redo.js';
 export {
+  generateNarrative,
+  getCurrentPlan,
+  listPlans,
+  updateNarrationBlock,
+} from './narrative.js';
+export {
+  buildNarrativePrompts,
+  estimateDurationMs,
+  extractJsonPayload,
+  maxNgramOverlap,
+  repairNarrativePlan,
+  NARRATIVE_PROMPT_VERSION,
+} from './narrative-repair.js';
+export type { RepairOutcome } from './narrative-repair.js';
+export {
   assertDatasetBindableForChart,
   createClaim,
   createDataset,

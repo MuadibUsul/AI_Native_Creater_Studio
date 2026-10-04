@@ -21,6 +21,7 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
+import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
 import { registerSpeechProfileRoutes } from './routes/speech-profiles.js';
@@ -54,8 +55,11 @@ export interface BuildServerOptions {
    * Webhook 验签与回收依赖（P03-06）。未提供时 Webhook 端点不注册（无验签能力即不可信，fail-closed）。
    */
   webhooks?: WebhookRouteDeps;
-  /** 内容输入依赖（P04-01）：文章抓取器（URL 归一化所需） */
-  content?: { articleFetcher?: import('@ancs/contracts').ArticleFetcher };
+  /**
+   * 内容输入依赖（P04-01）与叙事生成依赖（P04-03）：
+   * articleFetcher（URL 归一化）、llm（结构化生成；无凭据时可注入 Mock，§76-03）。
+   */
+  content?: { articleFetcher?: import('@ancs/contracts').ArticleFetcher; llm?: import('@ancs/contracts').LlmAdapter };
 }
 
 /**
@@ -119,6 +123,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         }
         registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher);
         registerEvidenceRoutes(instance, authDeps);
+        registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);
         }

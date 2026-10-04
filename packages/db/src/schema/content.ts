@@ -196,3 +196,78 @@ export const structuredDatasets = pgTable(
     index('structured_datasets_workspace_idx').on(table.workspaceId),
   ],
 );
+
+/**
+ * 叙事计划（P04-03 / 规范 §8、§22.2）。
+ *
+ * - `narrative_plans`：**版本化**（revision 单调；再生成产生新版本，旧版本只读）；
+ * - `narration_blocks`：**规范化**旁白块（不把整篇塞进一个大 JSON）：位置、章节、事实引用、
+ *   估计时长、**锁定**（§8.2：锁定文字不得被后续生成静默修改）与状态。
+ */
+
+export const narrativePlans = pgTable(
+  'narrative_plans',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    documentId: text('document_id'),
+    /** 单调版本（同项目内递增；再生成/人工修订产生新版本） */
+    revision: integer('revision').notNull(),
+    title: text('title').notNull(),
+    thesis: text('thesis').notNull(),
+    hook: text('hook').notNull(),
+    ending: text('ending').notNull(),
+    chapters: jsonb('chapters').notNull().default([]),
+    keyClaims: jsonb('key_claims').notNull().default([]),
+    requiredVisualFacts: jsonb('required_visual_facts').notNull().default([]),
+    estimatedDurationMs: integer('estimated_duration_ms').notNull(),
+    targetDurationMs: integer('target_duration_ms'),
+    /** generation{method,providerId,modelVersion,promptVersion,repairs,warnings} */
+    generation: jsonb('generation').notNull().default({}),
+    createdBy: text('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('narrative_plans_project_revision_uq').on(table.projectId, table.revision),
+    index('narrative_plans_project_idx').on(table.projectId, table.createdAt),
+  ],
+);
+
+export const narrationBlocks = pgTable(
+  'narration_blocks',
+  {
+    id: text('id').primaryKey(),
+    planId: text('plan_id')
+      .notNull()
+      .references(() => narrativePlans.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    /**
+     * 跨版本稳定的逻辑 ID（对外暴露的 `id`）：
+     * 锁定旁白在再生成后逻辑 ID 不变（作者引用稳定）；行 id 按计划作用域（全局唯一主键）。
+     */
+    logicalId: text('logical_id').notNull(),
+    text: text('text').notNull(),
+    chapterId: text('chapter_id'),
+    claimIds: jsonb('claim_ids').notNull().default([]),
+    estimatedDurationMs: integer('estimated_duration_ms').notNull(),
+    /** 作者锁定（§8.2） */
+    locked: boolean('locked').notNull().default(false),
+    status: text('status').notNull().default('DRAFT'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('narration_blocks_plan_position_uq').on(table.planId, table.position),
+    uniqueIndex('narration_blocks_plan_logical_uq').on(table.planId, table.logicalId),
+    index('narration_blocks_plan_idx').on(table.planId, table.position),
+    index('narration_blocks_workspace_idx').on(table.workspaceId),
+  ],
+);

@@ -88,7 +88,7 @@
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
 | LED-C-AI-01 | ContentDocument schema | REQ-7-01 | P04-01（P04） | VERIFIED（2026-10-04：三种文本输入 → 统一 ContentDocument（块规范化落库）；证据：docs/verification/P04-01.md） |
-| LED-C-AI-02 | NarrativePlan schema | REQ-8-01 | P04-03（P04） | TODO |
+| LED-C-AI-02 | NarrativePlan schema | REQ-8-01 | P04-03（P04） | VERIFIED（2026-10-04：NarrativePlan 全字段 + 版本化落库 + 有限修复/锁定保留/逐字门控；证据：docs/verification/P04-03.md） |
 | LED-C-AI-03 | SceneGraph schema | REQ-12-01 | P01-01/P02-01（P01/P02） | VERIFIED（2026-10-04：契约就绪（P01-01）+ DB 状态组装为合法 Graph（P02-01）） |
 | LED-C-AI-04 | Visual Grammar mapping | REQ-10-01 | P04-04（P04） | TODO |
 | LED-C-AI-05 | Director structured output | REQ-9-02/REQ-52-01 | P04-05（P04） | TODO |

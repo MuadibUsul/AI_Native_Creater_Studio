@@ -17,6 +17,10 @@ import {
   datasetRecordSchema,
   extractionResultSchema,
   factVisualDecisionSchema,
+  narrationBlockSchema,
+  narrativeGenerationResultSchema,
+  narrativePlanSchema,
+  updateNarrationBlockRequestSchema,
   createContentRequestSchema,
   updateSourceRequestSchema,
   capabilitySelectionSchema,
@@ -101,6 +105,9 @@ import {
   type DatasetRecord,
   type ExtractionResult,
   type FactVisualDecision,
+  type NarrationBlock,
+  type NarrativeGenerationResult,
+  type NarrativePlan,
   type CreateContentRequest,
   type UpdateSourceRequest,
   type CapabilitySelection,
@@ -385,6 +392,29 @@ export interface AncsClient {
       input: UpdateSourceRequest,
       options?: MutationOptions,
     ): Promise<ContentSource>;
+  };
+  narrative: {
+    /** 生成叙事计划（结构化 + 有限修复 + 锁定保留 + 口语化门控） */
+    generate(
+      workspaceId: string,
+      projectId: string,
+      documentId: string,
+      input: { targetDurationMs: number; tone?: string | null; audience?: string | null; platform?: string | null },
+      options?: MutationOptions,
+    ): Promise<NarrativeGenerationResult>;
+    /** 当前计划（无则 null） */
+    current(workspaceId: string, projectId: string): Promise<NarrativePlan | null>;
+    /** 版本列表（revision 降序） */
+    plans(workspaceId: string, projectId: string): Promise<NarrativePlan[]>;
+    /** 修订旁白块（锁定后改文本 → 409） */
+    updateBlock(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      blockId: string,
+      input: { text?: string; locked?: boolean; status?: 'DRAFT' | 'NEEDS_REVIEW' | 'APPROVED' },
+      options?: MutationOptions,
+    ): Promise<NarrationBlock>;
   };
   evidence: {
     /** 确定性抽取（Claim/Citation/数值提及/时间线；可重入） */
@@ -959,6 +989,36 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: updateSourceRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+
+    narrative: {
+      generate: (workspaceId, projectId, documentId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/generate`, narrativeGenerationResultSchema, {
+          body: { documentId, ...input },
+          bodySchema: z.object({
+            documentId: z.string().min(1),
+            targetDurationMs: z.number().int().positive(),
+            tone: z.string().nullable().optional(),
+            audience: z.string().nullable().optional(),
+            platform: z.string().nullable().optional(),
+          }),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      current: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative`, narrativePlanSchema.nullable()),
+      plans: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/plans`, listOf(narrativePlanSchema))).items,
+      updateBlock: (workspaceId, projectId, planId, blockId, input, mutation) =>
+        request(
+          'PATCH',
+          `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/blocks/${blockId}`,
+          narrationBlockSchema,
+          {
+            body: input,
+            bodySchema: updateNarrationBlockRequestSchema,
+            idempotencyKey: mutation?.idempotencyKey,
+          },
+        ),
     },
 
     evidence: {

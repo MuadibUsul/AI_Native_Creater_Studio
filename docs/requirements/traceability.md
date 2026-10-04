@@ -82,8 +82,8 @@
 |---|---|---|---|---|---|---|---|
 | REQ-7-01 | §7 | 任何输入必须先转统一 ContentDocument（id/title/language/author/sourceUrl/publishedAt/blocks/claims/citations/tables/figures/attachments），不得直接发 LLM | MUST | V1 | P04-01（P04） | 抽取验收（P04-01） | 三种文本输入均产出统一 ContentDocument（块规范化落库、稳定块 ID、tables/figures 由块派生）；claims/citations **结构就位但留空**——抽取填充属 P04-02（分任务边界）；归一化不调用 LLM（确定性） | VERIFIED（claims/citations 填充→P04-02） |
 | REQ-7-02 | §7 | Block 类型（heading/paragraph/quote/list/table/image/chart/embed）与 Claim（factuality: fact/analysis/opinion/uncertain + sourceIds + structuredData）建模 | MUST | V1 | P04-02（P04） | 每个事实图表可追溯（P04-02） | Block 类型（P04-01）与 Claim 全字段建模（claims/source_citations 表；factuality 四类；sourceIds/structuredData；锁定标记）；确定性抽取产出 Claim + **Citation（块 ID + 字符区间 + 引文）**；fact 类必须 ≥1 来源（无来源降级 uncertain 并提示）（P04-02） | VERIFIED |
-| REQ-8-01 | §8 | NarrativePlan 输出结构（title/thesis/hook/chapters/narrationBlocks/keyClaims/requiredVisualFacts/ending/estimatedDuration）；推荐叙事模式但不强制统一模板 | MUST | V1 | P04-03（P04） | Schema 校验与有限修复（P04-03） | TODO |
-| REQ-8-02 | §8.2 | 叙事约束：不逐字朗读文章；语言口语化；保留核心事实与逻辑；锁定文字不得静默修改；事实与分析保留类型信息 | MUST | V1 | P04-03（P04） | 锁定文字与事实类型保留（P04-03）；AC-14 | TODO |
+| REQ-8-01 | §8 | NarrativePlan 输出结构（title/thesis/hook/chapters/narrationBlocks/keyClaims/requiredVisualFacts/ending/estimatedDuration）；推荐叙事模式但不强制统一模板 | MUST | V1 | P04-03（P04） | Schema 校验与有限修复（P04-03） | NarrativePlan 契约全字段 + 版本化落库（narrative_plans 不可变版本 + narration_blocks 规范化行：章节/事实引用/估计时长/锁定/状态）；**Schema 校验 + 有限修复**（剥围栏/剔未知字段/折算/缺省派生，逐条记录；超限即 422）（P04-03）；不强制统一模板 | VERIFIED |
+| REQ-8-02 | §8.2 | 叙事约束：不逐字朗读文章；语言口语化；保留核心事实与逻辑；锁定文字不得静默修改；事实与分析保留类型信息 | MUST | V1 | P04-03（P04） | 锁定文字与事实类型保留（P04-03）；AC-14 | **不得逐字朗读**：8-gram 重叠门控（全部生成旁白抄袭 → 422 VERBATIM_NARRATION_REJECTED；单块抄袭 → 告警记录）；**锁定文字不得静默修改**：再生成时锁定旁白逐字保留（模型改写 → 回滚+修复记录；模型丢失 → 补回），编辑锁定块文本 → 409；**事实类型保留**：旁白只能引用已登记事实 id（未登记引用被剔除；keyClaims 全非法 → 422 UNKNOWN_CLAIM_REFERENCE），claims 表本身不被生成触碰；AC-14（Lock 与 AI 改写冲突明确提示）在旁白/Claim 两层均以 409/回滚实现（P04-03） | VERIFIED |
 | REQ-9-01 | §9.1 | Director 输入：NarrativePlan/ContentDocument/CreatorProfile/组件库/资产库/Provider 能力/预算模式/隐私模式/目标平台（历史表现后续） | MUST | V1 | P04-05（P04） | P04-05 验收 | TODO |
 | REQ-9-02 | §9.2 | Director 输出：Scene Graph、资产计划、Provider 任务计划、估算成本、估算时长、风险/warning 列表 | MUST | V1 | P04-05（P04） | 输出经 Schema/来源/Lock/预算验证后才能应用（P04-05） | TODO |
 | REQ-9-03 | §9.3 | 逐 Narration Block 判断清单（信息类型/是否真人/是否数据/地理/时间/因果/A-B 对比/是否显示 Source/真实图片是否更优/标准组件能否表达/是否值得 Custom Motion/是否值得昂贵 AI Video） | MUST | V1 | P04-05（P04） | P04-04/P04-05 验收 | TODO |
@@ -283,8 +283,8 @@
 
 | ID | 出处 | 要求摘要 | 级别 | V1 归属 | 任务（阶段） | 验收 | 状态 |
 |---|---|---|---|---|---|---|---|
-| REQ-52-01 | §52 | Narrative/Director/AI Edit 默认输出 JSON Schema（非自由文本后解析）；必须 schema validation + retry/repair + 模型输出与 prompt 版本 | MUST | V1 | P04-03/P04-05（P04） | 非法 Schema 有限修复（P04-03） | TODO |
-| REQ-52-02 | §52 | 保存 prompt_template_version/schema_version/model_id 以复现问题 | MUST | V1 | P03-05（P03） | P03-05 验收 | TODO |
+| REQ-52-01 | §52 | Narrative/Director/AI Edit 默认输出 JSON Schema（非自由文本后解析）；必须 schema validation + retry/repair + 模型输出与 prompt 版本 | MUST | V1 | P04-03/P04-05（P04） | 非法 Schema 有限修复（P04-03） | Narrative 侧已实现：结构化 JSON 输出（Mock 与真实同契约）+ **schema validation + 有界 retry/repair（至多 2 次调用、至多 12 条修复）** + prompt/model 版本记录（generation.promptVersion/modelVersion）（P04-03）；Director/AI Edit 侧随 P04-05/P05-06 沿用同一范式 | VERIFIED（Director/AI Edit→P04-05/P05-06） |
+| REQ-52-02 | §52 | 保存 prompt_template_version/schema_version/model_id 以复现问题 | MUST | V1 | P03-05/P04-03（P03/P04） | P04-03 验收 | provider_generations 记录模型/版本/输入指纹（P03-05）；**NarrativePlan.generation 记录 promptVersion/modelVersion/providerId + repairs/warnings**、文档 schemaVersion 一并持久化（P04-03） | VERIFIED |
 | REQ-53-01 | §53 | 不保存/暴露私密 Chain of Thought；可保存短决策摘要（如"时间序列+双资产比较→DUAL_LINE_CHART，数据来自 source_12"）用于 Debug/解释/QA | MUST | V1 | P04-05（P04） | 简短决策摘要输出（P04-05） | TODO |
 | REQ-54-01 | §54 | Scene 状态 locked_by_user/approved/needs_review；Lock 后 AI 重生成不得修改；冲突返回 warning（不自动解锁） | MUST | V1 | P02-02/P04-05（P02/P04） | AC-14；锁定场景不被改写（P02-02） | TODO |
 | REQ-54-02 | §54 | 团队 Reviewer approval 与 Final approval gate（计划 §4.7：绑定 projectVersionId+renderId+manifestHash） | SHOULD | V1 | P07-06（P07） | 新编辑需重新审批（P07-06） | TODO |
@@ -446,7 +446,7 @@
 
 ## P00-01 建账自检（机器校验结果，2026-10-04）
 
-> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-02，REQ-7-02 / REQ-10-03 / REQ-56-01 → VERIFIED（REQ-85-01 记录进度）；此前 P04-01：REQ-4-01 / REQ-7-01（REQ-22-04 补登）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
+> 本表为 P00-01 建账时点的快照；"状态"列为活列，随任务推进更新（最近一次变更：P04-03，REQ-8-01 / REQ-8-02 / REQ-52-01 / REQ-52-02 → VERIFIED；此前 P04-02：REQ-7-02 / REQ-10-03 / REQ-56-01（REQ-85-01 记录进度）；此前 P04-01：REQ-4-01 / REQ-7-01（REQ-22-04 补登）；此前 P03-07：REQ-15-02 / REQ-51-02 / REQ-76-03（P03 阶段全部完成）；此前 P03-06：REQ-33-04；此前 P03-05：REQ-25-01 / REQ-68-01；此前 P03-04：REQ-17-02 / REQ-45-01、REQ-51-06 4/4；REQ-6-07 / REQ-16-01 记录进度；此前 P03-03：REQ-19-03 的并发信号量配置模型；此前 P03-02：REQ-19-01 / REQ-19-03 / REQ-19-05；此前 P03-01：REQ-2-05 / REQ-70-02；此前 P02-06：REQ-29-06 / REQ-43-03 / REQ-61-01（P02 阶段全部完成）；此前 P02-05：REQ-27-01 / REQ-27-02；此前 P02-04：REQ-26-01/02/03/04，REQ-51-06 进度 3/4；此前 P02-03：REQ-23-01 / REQ-23-03 → VERIFIED；REQ-5-08 / REQ-24-01 记录阶段进度；此前 P02-02：REQ-2-01 / REQ-23-02 / REQ-23-04；P02-01：REQ-22-01 / REQ-22-02 / REQ-22-03 / REQ-12-01 / REQ-12-02 / REQ-19-02；P01-06：REQ-42-02 / REQ-42-03 / REQ-92-01 / REQ-92-04；更早见 git 历史）。
 
 校验命令：对本文档全部 `| REQ-` 行做结构化解析（脚本见 `docs/verification/P00-01.md`）。
 

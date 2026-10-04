@@ -21,4 +21,13 @@ export { providerCatalogVersions } from './providers.js';
 export { providerConnections, workspaceProviderSettings } from './credentials.js';
 export { budgetCounters, creditHolds, creditLedger, providerGenerations, workspaceBudgets } from './billing.js';
 export { providerResultStates, webhookEvents } from './results.js';
-export { claims, contentBlocks, contentDocuments, projectSources, sourceCitations, structuredDatasets } from './content.js';
+export {
+  claims,
+  contentBlocks,
+  contentDocuments,
+  narrationBlocks,
+  narrativePlans,
+  projectSources,
+  sourceCitations,
+  structuredDatasets,
+} from './content.js';

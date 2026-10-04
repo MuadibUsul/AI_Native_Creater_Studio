@@ -192,6 +192,37 @@ export type {
   EditResponse,
 } from './projects.js';
 
+// 叙事契约（P04-03 / §8、§52）
+export {
+  NARRATION_BLOCK_STATUSES,
+  narrationBlockStatusSchema,
+  narrativeChapterSchema,
+  narrationBlockSchema,
+  requiredVisualFactSchema,
+  narrativePlanSchema,
+  narrativeGenerationRequestSchema,
+  llmCompletionSchema,
+  NARRATIVE_ERROR_REASONS,
+  narrativeGenerationResultSchema,
+  updateNarrationBlockRequestSchema,
+  VERBATIM_OVERLAP_THRESHOLD,
+  VERBATIM_NGRAM,
+  MAX_REPAIRS,
+  MAX_LLM_ATTEMPTS,
+} from './narrative.js';
+export type {
+  NarrativeChapter,
+  NarrationBlock,
+  RequiredVisualFact,
+  NarrativePlan,
+  NarrativeGenerationRequest,
+  LlmCompletion,
+  LlmAdapter,
+  NarrativeErrorReason,
+  NarrativeGenerationResult,
+  UpdateNarrationBlockRequest,
+} from './narrative.js';
+
 // 证据与数据契约（P04-02 / §10.3、§85）
 export {
   EVIDENCE_ERROR_REASONS,

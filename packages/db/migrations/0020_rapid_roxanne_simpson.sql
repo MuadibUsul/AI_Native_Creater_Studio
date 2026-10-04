@@ -1,0 +1,2 @@
+ALTER TABLE "narration_blocks" ADD COLUMN "logical_id" text NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "narration_blocks_plan_logical_uq" ON "narration_blocks" USING btree ("plan_id","logical_id");
