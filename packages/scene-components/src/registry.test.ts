@@ -56,10 +56,9 @@ describe('组件注册表', () => {
     reRegisterBuiltins();
   });
 
-  it('missingStandardComponents 暴露 20 类进展（P05-01 尚缺 19；P05-02 必须为空）', () => {
+  it('missingStandardComponents 为空（P05-02：V1 标准 20 类全覆盖）', () => {
     reRegisterBuiltins();
-    const missing = missingStandardComponents();
-    expect(missing.length).toBe(STANDARD_SCENE_TYPES.length - 1);
-    expect(missing).not.toContain('BIG_NUMBER');
+    expect(missingStandardComponents()).toEqual([]);
+    expect(listComponents().length).toBeGreaterThanOrEqual(STANDARD_SCENE_TYPES.length);
   });
 });

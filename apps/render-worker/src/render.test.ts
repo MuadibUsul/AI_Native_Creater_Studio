@@ -85,6 +85,31 @@ describe('Remotion 服务端渲染（标准 Scene：BigNumberScene）', () => {
     expect(darkBytes.equals(magentaBytes), '不同主题必须产生不同像素（主题 tokens 生效）').toBe(false);
   }, 900_000);
 
+  it('组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG', async () => {
+    const composition = await selectComposition({ serveUrl, id: 'ComponentGallery', browserExecutable });
+    const variants: { variant: string; file: string }[] = [
+      { variant: 'normal', file: 'gallery-normal.png' },
+      { variant: 'longText', file: 'gallery-longtext.png' },
+      { variant: 'empty', file: 'gallery-empty.png' },
+      { variant: 'extreme', file: 'gallery-extreme.png' },
+      { variant: 'boundary', file: 'gallery-boundary.png' },
+    ];
+    for (const { variant, file } of variants) {
+      const output = path.join(outDir, file);
+      await renderStill({
+        composition: { ...composition, props: { ...composition.props, variant } },
+        serveUrl,
+        output,
+        frame: 15,
+        imageFormat: 'png',
+        browserExecutable,
+      });
+      const info = await stat(output);
+      expect(info.size, `画廊 ${variant} 应大于 30KB（含 20 个组件格）`).toBeGreaterThan(30_000);
+      console.log(`[render] 组件画廊（${variant}）：${output}（${String(info.size)} bytes）`);
+    }
+  }, 900_000);
+
   it('渲染 MP4 并通过元数据校验（1920×1080 / 3s / 30fps）', async () => {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, browserExecutable });
     const output = path.join(outDir, 'big-number-scene.mp4');

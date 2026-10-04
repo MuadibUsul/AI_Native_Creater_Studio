@@ -1,8 +1,32 @@
 import { bigNumberComponent } from './components/big-number.js';
+import {
+  barChartComponent,
+  dualLineChartComponent,
+  kpiGridComponent,
+  lineChartComponent,
+  spreadAreaChartComponent,
+} from './components/charts.js';
+import { causalFlowComponent, causalLoopComponent, mapStaticComponent } from './components/diagrams.js';
+import {
+  hostFullComponent,
+  hostSideComponent,
+  imageFullComponent,
+  realBrollComponent,
+} from './components/media.js';
+import {
+  chapterTitleComponent,
+  documentHighlightComponent,
+  newsHeadlineComponent,
+  quoteCardComponent,
+  sourceCardComponent,
+  summaryComponent,
+  timelineComponent,
+} from './components/panels.js';
 import { registerComponent } from './registry.js';
+import type { ComponentDefinition } from './protocol.js';
 
 /**
- * 内置标准组件注册（P05-01：参考组件 BIG_NUMBER；P05-02 扩容至 V1 标准 20 类）。
+ * 内置标准组件注册（P05-02：V1 标准 20 类，DEC-04 全覆盖）。
  * 幂等：重复调用不会重复注册。
  */
 
@@ -10,7 +34,38 @@ let registered = false;
 
 export function registerBuiltInComponents(): void {
   if (registered) return;
-  registerComponent(bigNumberComponent);
+  for (const component of [
+    // Host
+    hostFullComponent,
+    hostSideComponent,
+    // Numbers / KPI
+    bigNumberComponent,
+    kpiGridComponent,
+    // Charts
+    lineChartComponent,
+    dualLineChartComponent,
+    barChartComponent,
+    spreadAreaChartComponent,
+    // Time / Diagrams
+    timelineComponent,
+    causalFlowComponent,
+    causalLoopComponent,
+    mapStaticComponent,
+    // Evidence
+    newsHeadlineComponent,
+    sourceCardComponent,
+    quoteCardComponent,
+    documentHighlightComponent,
+    // Media
+    imageFullComponent,
+    realBrollComponent,
+    // Structure
+    chapterTitleComponent,
+    summaryComponent,
+  ]) {
+    // 注册表为类型擦除视图（见 registry.ts 注释）：props 类型由各组件 schema 在渲染边界保证
+    registerComponent(component as unknown as ComponentDefinition<unknown>);
+  }
   registered = true;
 }
 

@@ -17,7 +17,7 @@
 | LED-77-03 | 可以从 URL 或粘贴文本创建 Project | REQ-4-01 | P04-01（P04） | TODO |
 | LED-77-04 | 系统生成 Narrative Script | REQ-8-01 | P04-03（P04） | TODO |
 | LED-77-05 | 系统生成结构化 Scene Graph | REQ-12-01/REQ-12-02 | P02-01/P04-05（P02/P04） | TODO |
-| LED-77-06 | 至少 15 个高质量 Standard Scene Components 可工作（本计划交付 20 个，DEC-04） | REQ-65-01/REQ-64-02 | P05-02（P05） | TODO |
+| LED-77-06 | 至少 15 个高质量 Standard Scene Components 可工作（本计划交付 20 个，DEC-04） | REQ-65-01/REQ-64-02 | P05-02（P05） | VERIFIED（2026-10-04：20 类实现并注册；五类输入变体（正常/长文本/空值/极值/边界时长）单元断言 + 成片级画廊 PNG（5 张）+ 视觉复核修复全部溢出；证据：docs/verification/P05-02.md） |
 | LED-77-07 | Remotion Player 可实时 Preview | REQ-38-01 | P05-04（P05） | TODO |
 | LED-77-08 | 用户可自然语言要求修改 Scene/Storyboard | REQ-37-01 | P05-06（P05） | TODO |
 | LED-77-09 | 用户可手动 reorder/trim/delete/replace Scene | REQ-3-05/REQ-5-07 | P05-05（P05） | TODO |

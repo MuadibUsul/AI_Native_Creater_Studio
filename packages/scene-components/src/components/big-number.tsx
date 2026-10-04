@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { z } from 'zod';
 import { defineComponent, type ComponentRenderInput } from '../protocol.js';
+import { fitFontSize, Placeholder } from '../primitives.js';
 import { stageStyle, useSceneTheme } from '../theme.js';
 
 /**
@@ -34,23 +35,31 @@ export function BigNumberScene({ props }: ComponentRenderInput<BigNumberProps>):
 
   return (
     <div style={stageStyle(theme)} data-component="BIG_NUMBER">
-      <div style={{ fontFamily: theme.font.heading, fontSize: 28, opacity: 0.72, letterSpacing: 2 }} data-role="label">
+      <div
+        style={{ fontFamily: theme.font.heading, fontSize: fitFontSize(props.label, { max: 28, min: 16, comfortableChars: 30 }), opacity: 0.72, letterSpacing: 2 }}
+        data-role="label"
+      >
         {props.label}
       </div>
-      <div
-        data-role="value"
-        style={{
-          fontFamily: theme.font.heading,
-          fontSize: props.value === null ? 96 : 168,
-          fontWeight: 700,
-          lineHeight: 1.05,
-          color: props.value === null ? theme.color.foreground : valueColor,
-          opacity: props.value === null ? 0.5 : 1,
-          marginTop: theme.spacing.md,
-        }}
-      >
-        {props.value ?? props.placeholder}
-      </div>
+      {props.value === null ? (
+        <div style={{ marginTop: theme.spacing.md }}>
+          <Placeholder text={props.placeholder} detail="数值必须来自可追溯事实；缺失时不得编造" />
+        </div>
+      ) : (
+        <div
+          data-role="value"
+          style={{
+            fontFamily: theme.font.heading,
+            fontSize: 168,
+            fontWeight: 700,
+            lineHeight: 1.05,
+            color: valueColor,
+            marginTop: theme.spacing.md,
+          }}
+        >
+          {props.value}
+        </div>
+      )}
       {props.sourceLabel !== null ? (
         <div
           data-role="source"
