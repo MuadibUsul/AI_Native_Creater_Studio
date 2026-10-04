@@ -119,6 +119,7 @@
 | LED-C-REL-06 | cost ledger | REQ-25-01/REQ-35-02 | P03-05（P03） | VERIFIED（2026-10-04：credit_ledger 只追加（余额为条目效果推论）+ 预算/原子预留/结算幂等/退款（HOLD_RELEASE 释放）全链路测试；Provider 成本数值随 P06 实测写入） |
 | LED-C-REL-07 | pre-publish QA pipeline | REQ-86-01/REQ-86-02 | P07-05（P07） | VERIFIED（2026-10-05：渲染完成后**自动**入队 QA（§86）；同一检查引擎服务渲染前预检与 Final QA；技术核验为**独立复核**（校验和重算/MP4 元数据探测/字幕边界）；内容核验（占位/needs_review/图表数据/来源/缺素材/未完成 Provider 任务）；阻止项失败 → Render FAILED；响度/AI 视觉 QA 显式 SKIP 记录（未交付，不静默）；证据：docs/verification/P07-05.md） |
 | LED-C-REL-08 | human approval gate | REQ-54-02/REQ-87-01 | P07-06（P07） | VERIFIED（2026-10-05：批准绑定 renderId+manifestHash+projectVersionId+projectRevision（append-only）；**未批准/驳回/批准失效不能导出**（409 守卫）；批准 → 受控导出（MP4/SRT/VTT/Manifest 签名 URL，TTL 15 分钟），集成测试真实下载字节与 Manifest sha256 一致；证据：docs/verification/P07-06.md） |
+| LED-C-REL-09 | reproducible deployment（Runbook + fail-closed 配置） | REQ-50-01 | P08-01（P08） | VERIFIED（2026-10-05：环境配置契约一次收集全部问题（含未实现驱动的显式拒绝）；docs/ops/deployment-runbook.md（安装/构建/数据库/存储/启动/队列/验证/边界）；**可执行演练**（pnpm run deploy:rehearsal）在全新库上 0—7 步 + 反向校验 10/10 PASS（构建→建库→迁移 54 表→API /health→Worker 单轮→存储卷校验和→错误配置必须失败→清理）；CI 在 verify 后运行该演练；证据：docs/verification/P08-01.md） |
 
 ### 3.6 Security（6）
 

@@ -26,7 +26,8 @@
     "clean": "pnpm -r run clean",
     "test:web": "vitest run --project web",
     "provider:verify": "node scripts/provider-verify.mjs",
-    "test:motion": "vitest run --project motion"
+    "test:motion": "vitest run --project motion",
+    "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

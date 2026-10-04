@@ -56,3 +56,9 @@ jobs:
 
       - name: Verify（secrets → lint → typecheck → build → arch:check → 测试套件）
         run: pnpm verify
+
+      # P08-01：全新库部署演练（复用 verify 的构建产物；含错误配置 fail-closed 反向校验）
+      - name: 部署演练（P08-01）
+        run: pnpm run deploy:rehearsal
+        env:
+          ANCS_REHEARSAL_SKIP_BUILD: "1"

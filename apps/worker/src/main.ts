@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { claimJob, runMaintenanceTick } from '@ancs/domain';
+import { crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -11,15 +13,43 @@ import { createDomainDeps } from './domain.js';
 /**
  * Worker 主循环（P03-01）。见 domain.ts 的说明。
  * 退出码：0 = 正常结束（once/信号停止）；1 = 配置错误或致命失败。
+ *
+ * P08-01：启动前一次性校验全部环境配置（fail-closed；未实现的驱动/缺失的渲染执行器
+ * 明确失败并说明原因，绝不静默降级）。
  */
 
-const databaseUrl = process.env['DATABASE_URL'] ?? '';
-if (databaseUrl === '') {
-  console.error('Worker 启动失败：DATABASE_URL 未配置。');
+const envResult = validateEnv(workerEnvSchema, process.env);
+const envIssues: EnvIssue[] = envResult.ok ? [] : envResult.issues;
+if (envResult.ok && envResult.value !== null) {
+  envIssues.push(...crossCheckWorkerEnv(envResult.value));
+  // 渲染执行器/验证器/媒体探测：默认命令解析失败或脚本文件不存在 → 启动即失败（错误配置不等到任务时才暴露）
+  const disableRender = envResult.value.ANCS_DISABLE_RENDER === '1';
+  const customRenderCmd = envResult.value.ANCS_RENDER_EXECUTOR_CMD !== undefined;
+  const customMotionCmd = envResult.value.ANCS_MOTION_VALIDATOR_CMD !== undefined;
+  if (!disableRender && !customRenderCmd) {
+    const repoRootCandidates = ['./apps/render-worker/src/run-render.ts'];
+    if (!repoRootCandidates.some((candidate) => existsSync(candidate))) {
+      envIssues.push({
+        variable: 'ANCS_RENDER_EXECUTOR_CMD',
+        message: `渲染执行器脚本不存在（${repoRootCandidates.join(' / ')}）：请在仓库根启动，或用 ANCS_RENDER_EXECUTOR_CMD 显式配置命令（部署形态见 docs/ops/deployment-runbook.md）`,
+      });
+    }
+  }
+  if (!customMotionCmd && !existsSync('./apps/motion-worker/src/run-validate.ts')) {
+    envIssues.push({
+      variable: 'ANCS_MOTION_VALIDATOR_CMD',
+      message: 'Motion 验证器脚本不存在（./apps/motion-worker/src/run-validate.ts）：请在仓库根启动，或显式配置命令',
+    });
+  }
+}
+if (envIssues.length > 0 || envResult.value === null) {
+  console.error(formatEnvFailure('worker', envIssues));
   process.exit(1);
 }
+const config = envResult.value;
+const databaseUrl = config.DATABASE_URL;
 
-const once = process.env['ANCS_WORKER_ONCE'] === '1' || process.argv.includes('--once');
+const once = config.ANCS_WORKER_ONCE === '1' || process.argv.includes('--once');
 /** 故障注入（P03-02）：在关键阶段退出进程，用于演练"杀 Worker 后可继续" */
 const crashAt = process.env['ANCS_WORKER_CRASH_AT'] ?? '';
 const workerId = process.env['ANCS_WORKER_ID'] ?? `${hostname()}-${String(process.pid)}`;

@@ -314,6 +314,17 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 部署环境配置契约（P08-01 / §50）
+export {
+  validateEnv,
+  formatEnvFailure,
+  baseEnvShape,
+  apiEnvSchema,
+  workerEnvSchema,
+  crossCheckWorkerEnv,
+} from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv } from './env.js';
+
 // 审批与受控导出契约（P07-06 / §87、§54）
 export {
   APPROVAL_DECISIONS,
