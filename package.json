@@ -1,0 +1,35 @@
+{
+  "name": "ancs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint .",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "arch:check": "pnpm --filter @ancs/arch-check run check",
+    "test:unit": "vitest run",
+    "test:contract": "node scripts/planned-suite.mjs test:contract P03-07 \"Provider Adapter 契约测试与 Mock 故障矩阵\"",
+    "test:integration": "node scripts/planned-suite.mjs test:integration P02/P03 \"DB+Queue+Worker、上传、渲染管线、Webhook 幂等\"",
+    "test:e2e": "node scripts/planned-suite.mjs test:e2e P05-P08 \"创建项目→导入→叙事→分镜→编辑→预览→mock 终渲染→历史恢复\"",
+    "test:security": "node scripts/planned-suite.mjs test:security P01-03 \"跨租户读写拒绝、Signed URL scope、凭据隔离\"",
+    "test:render": "node scripts/planned-suite.mjs test:render P00-03 \"Remotion 服务端渲染与 FFmpeg 产物校验\"",
+    "test:golden": "node scripts/planned-suite.mjs test:golden P00-04 \"法国国债主题 Golden Fixture 回归\"",
+    "test:provider-smoke": "node scripts/provider-smoke.mjs",
+    "verify": "node scripts/verify.mjs",
+    "clean": "pnpm -r run clean"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}

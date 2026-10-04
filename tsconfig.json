@@ -1,0 +1,5 @@
+{
+  "$comment": "根 tsconfig 仅作为编辑器基准；各包使用 packages/*/tsconfig.json（typecheck/build 经 pnpm -r 执行）",
+  "extends": "./tsconfig.base.json",
+  "files": []
+}
