@@ -20,6 +20,7 @@ const overview = {
   approvals: { approved: 1, rejected: 1 },
   providerGenerations: { byStatus: { SUCCEEDED: 4 } },
   spend: { debitsTotal: 120, workspacesWithLedger: 2 },
+  alerts: [{ id: 'JOBS_FAILED_FINAL', severity: 'CRITICAL', summary: '存在终态失败任务（1 个）', value: 1, threshold: 0 }],
 };
 
 describe('运营界面（P08-02）', () => {

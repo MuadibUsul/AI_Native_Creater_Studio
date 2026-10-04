@@ -27,7 +27,8 @@
     "test:web": "vitest run --project web",
     "provider:verify": "node scripts/provider-verify.mjs",
     "test:motion": "vitest run --project motion",
-    "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs"
+    "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs",
+    "recovery:rehearsal": "node scripts/recovery-rehearsal.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -17,6 +17,27 @@ const testPack: PackManifest = {
 };
 
 describe('API 路由（Fastify inject；无数据库模式）', () => {
+  it('日志脱敏（P08-03 / §75）：Authorization/Cookie 一律 REDACTED 且原文不落日志', async () => {
+    // 采集 pino 输出；并显式序列化请求头（验证 redact 对"会带上请求头"的部署配置同样生效）
+    const captured: string[] = [];
+    const stream = { write: (line: string) => { captured.push(line); } };
+    const app = await buildServer({
+      logger: {
+        stream: stream as never,
+        level: 'info',
+        serializers: { req: (request: { method: string; url: string; headers: Record<string, unknown> }) => ({ method: request.method, url: request.url, headers: request.headers }) },
+      },
+    });
+    const secretToken = 'Bearer super-secret-token-value';
+    await app.inject({ method: 'GET', url: '/api/v1/health', headers: { authorization: secretToken, cookie: 'ancs_session=session-secret-cookie' } });
+    await app.close();
+    const output = captured.join('\n');
+    expect(output).toContain('/api/v1/health');
+    expect(output).not.toContain('super-secret-token-value');
+    expect(output).not.toContain('session-secret-cookie');
+    expect(output).toContain('[REDACTED]');
+  });
+
   it('GET /api/v1/health 返回契约合法响应', async () => {
     const app = await buildServer();
     const response = await app.inject({ method: 'GET', url: '/api/v1/health' });

@@ -52,7 +52,7 @@ export async function getOpsOverview(deps: DomainDeps): Promise<OpsOverview> {
 
   const reconciliationRows = await deps.db.select({ total: count() }).from(jobs).where(eq(jobs.needsReconciliation, true));
 
-  return opsOverviewSchema.parse({
+  const overview = opsOverviewSchema.parse({
     generatedAt: new Date().toISOString(),
     jobs: {
       byStatus: jobsByStatus,
@@ -66,7 +66,10 @@ export async function getOpsOverview(deps: DomainDeps): Promise<OpsOverview> {
     approvals: { approved, rejected },
     providerGenerations: { byStatus: generationsByStatus },
     spend: { debitsTotal, workspacesWithLedger },
+    alerts: [],
   });
+  // 告警为同一份总览的纯派生（阈值见 OPS_ALERT_THRESHOLDS；运行手册同步列出）
+  return opsOverviewSchema.parse({ ...overview, alerts: evaluateOpsAlerts(overview) });
 }
 
 /** 跨 workspace 任务列表（admin 面；按创建时间新→旧）。 */
@@ -186,4 +189,50 @@ export async function listOpsAudit(deps: DomainDeps, input: { limit?: number } =
 
   entries.sort((left, right) => right.at.localeCompare(left.at));
   return entries.slice(0, limit);
+}
+
+/* ---------- 告警条件（P08-03 / §44：可检查的阈值清单——无外部 Alertmanager 时以计算条件 + 运行手册为证据） ---------- */
+
+export interface OpsAlert {
+  id: string;
+  severity: 'CRITICAL' | 'WARNING';
+  summary: string;
+  /** 当前值/阈值（可审计） */
+  value: number;
+  threshold: number;
+}
+
+/** 默认阈值（可按部署配置覆盖——V1 常量集中于此，运行手册同步列出）。 */
+export const OPS_ALERT_THRESHOLDS = {
+  /** 终态失败任务数（> 阈值告警） */
+  failedFinal: 0,
+  /** 待重试失败任务数 */
+  failedRetryable: 10,
+  /** 需对账任务数 */
+  needsReconciliation: 0,
+  /** 最老在途任务年龄（秒） */
+  oldestActiveAgeSeconds: 600,
+  /** QA 24h 失败数 */
+  qaFailed24h: 5,
+} as const;
+
+/** 由总览派生告警（纯函数；GET /admin/overview 附带返回）。 */
+export function evaluateOpsAlerts(overview: OpsOverview, thresholds: typeof OPS_ALERT_THRESHOLDS = OPS_ALERT_THRESHOLDS): OpsAlert[] {
+  const alerts: OpsAlert[] = [];
+  if (overview.jobs.failedFinal > thresholds.failedFinal) {
+    alerts.push({ id: 'JOBS_FAILED_FINAL', severity: 'CRITICAL', summary: `存在终态失败任务（${String(overview.jobs.failedFinal)} 个）：需人工恢复或重渲决策`, value: overview.jobs.failedFinal, threshold: thresholds.failedFinal });
+  }
+  if (overview.jobs.failedRetryable > thresholds.failedRetryable) {
+    alerts.push({ id: 'JOBS_FAILED_RETRYABLE_HIGH', severity: 'WARNING', summary: `待重试失败任务偏多（${String(overview.jobs.failedRetryable)} 个）`, value: overview.jobs.failedRetryable, threshold: thresholds.failedRetryable });
+  }
+  if (overview.jobs.needsReconciliation > thresholds.needsReconciliation) {
+    alerts.push({ id: 'JOBS_NEEDS_RECONCILIATION', severity: 'CRITICAL', summary: `存在需对账任务（${String(overview.jobs.needsReconciliation)} 个）：绝不自动重复付费提交（§5.6）`, value: overview.jobs.needsReconciliation, threshold: thresholds.needsReconciliation });
+  }
+  if (overview.jobs.oldestActiveAgeSeconds !== null && overview.jobs.oldestActiveAgeSeconds > thresholds.oldestActiveAgeSeconds) {
+    alerts.push({ id: 'QUEUE_BACKLOG', severity: 'WARNING', summary: `在途任务年龄超过阈值（${String(overview.jobs.oldestActiveAgeSeconds)}s）：队列积压或任务卡死`, value: overview.jobs.oldestActiveAgeSeconds, threshold: thresholds.oldestActiveAgeSeconds });
+  }
+  if (overview.qa.last24hFail > thresholds.qaFailed24h) {
+    alerts.push({ id: 'QA_FAIL_RATE_24H', severity: 'WARNING', summary: `24h 内 QA 未通过 ${String(overview.qa.last24hFail)} 次：检查上游素材/字幕质量`, value: overview.qa.last24hFail, threshold: thresholds.qaFailed24h });
+  }
+  return alerts;
 }

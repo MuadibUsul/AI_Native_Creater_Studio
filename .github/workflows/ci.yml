@@ -62,3 +62,7 @@ jobs:
         run: pnpm run deploy:rehearsal
         env:
           ANCS_REHEARSAL_SKIP_BUILD: "1"
+
+      # P08-03：备份/恢复演练（恢复到隔离库 → 读取并重渲染固定版本 → 密钥轮换断言）
+      - name: 备份/恢复演练（P08-03）
+        run: pnpm run recovery:rehearsal

@@ -84,7 +84,8 @@ export {
 } from './qa.js';
 export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
 export { buildRenderExportPackage, decideRenderApproval, getLatestRenderApproval } from './approval.js';
-export { getOpsOverview, listOpsAudit, listOpsJobs, retryOpsJob } from './ops.js';
+export { evaluateOpsAlerts, getOpsOverview, listOpsAudit, listOpsJobs, OPS_ALERT_THRESHOLDS, retryOpsJob } from './ops.js';
+export type { OpsAlert } from './ops.js';
 export { createJobInTx } from './jobs.js';
 export {
   assertDependenciesAllowed,

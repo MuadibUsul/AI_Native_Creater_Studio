@@ -95,6 +95,15 @@ export default function AdminPage() {
             </div>
             <StatusGrid title="Provider 生成" counts={overview.data.providerGenerations.byStatus} testId="ops-provider" />
           </div>
+          {overview.data.alerts.length > 0 ? (
+            <ul data-testid="ops-alerts" className="flex flex-col gap-1">
+              {overview.data.alerts.map((alert) => (
+                <li key={alert.id} className={alert.severity === 'CRITICAL' ? 'text-xs text-rose-300' : 'text-xs text-amber-300'}>
+                  [{alert.severity}] {alert.summary}（值 {alert.value} / 阈值 {alert.threshold}）
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <StatusGrid title="任务状态" counts={overview.data.jobs.byStatus} testId="ops-jobs" />
             <StatusGrid title="渲染状态" counts={overview.data.renders.byStatus} testId="ops-renders" />

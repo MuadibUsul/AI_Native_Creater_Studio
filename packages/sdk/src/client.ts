@@ -654,6 +654,8 @@ export interface AncsClient {
     /** 人工重试（复用任务服务：预算/幂等/版本规则不变） */
     retryJob(jobId: string, input?: { reason?: string }, options?: MutationOptions): Promise<Job>;
     audit(query?: { limit?: number }): Promise<OpsAuditEntry[]>;
+    /** 指标导出（P08-03；Prometheus 文本） */
+    metricsText(): Promise<string>;
   };
   notifications: {
     list(options?: { workspaceId?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]>;
@@ -749,6 +751,23 @@ export function createClient(options: ClientOptions): AncsClient {
     if (!response.ok) throw parseError(response.status, payload);
     if (response.status === 204) return schema.parse(null);
     return schema.parse(payload);
+  }
+
+  /** 纯文本请求（指标导出等非 JSON 端点；会话/令牌与 JSON 请求同一路径） */
+  async function requestText(method: 'GET' | 'POST', path: string): Promise<string> {
+    const response = await doFetch(`${baseUrl}${path}`, { method, headers: await buildHeaders(false), credentials });
+    captureCookies(response);
+    const text = await response.text();
+    if (!response.ok) {
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = undefined;
+      }
+      throw parseError(response.status, payload);
+    }
+    return text;
   }
 
   /** 204 响应的空 schema（delete/sign-out） */
@@ -1495,6 +1514,7 @@ export function createClient(options: ClientOptions): AncsClient {
         const suffix = query?.limit === undefined ? '' : `?limit=${String(query.limit)}`;
         return (await request('GET', `/api/v1/admin/audit${suffix}`, z.object({ items: z.array(opsAuditEntrySchema) }))).items;
       },
+      metricsText: () => requestText('GET', '/api/v1/admin/metrics'),
     },
     notifications: {
       list: async (options) => {

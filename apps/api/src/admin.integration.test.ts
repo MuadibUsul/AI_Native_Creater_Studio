@@ -103,6 +103,18 @@ describe('最小运营（P08-02）', () => {
     expect(typeof overview.jobs.failedFinal).toBe('number');
   }, 120_000);
 
+  it('指标导出（P08-03）：管理员可读 Prometheus 文本（API 请求/队列/渲染/QA/告警）', async () => {
+    // 制造一次请求（让进程内指标非空）后读取导出
+    const admin = await newAdminClient();
+    await admin.admin.overview();
+    const body = await admin.admin.metricsText();
+    expect(body).toContain('ancs_api_requests_total');
+    expect(body).toContain('# TYPE ancs_jobs gauge');
+    expect(body).toContain('ancs_ops_alerts');
+    expect(body).toContain('ancs_api_request_duration_seconds_bucket');
+    expect(body).toContain('ancs_qa_reports_total');
+  }, 120_000);
+
   it('总览聚合 + 人工重试（FAILED_FINAL → QUEUED；审计含 job 事件）', async () => {
     const workspaceId = `ws_${randomUUID()}`;
     await handle.db.insert(workspaces).values({ id: workspaceId, name: '运营租户' });

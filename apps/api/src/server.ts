@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { API_PREFIX, requestIdSchema } from '@ancs/contracts';
@@ -30,6 +30,8 @@ import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerApprovalRoutes } from './routes/approval.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
+import { registerMetrics } from './plugins/metrics.js';
+import { registerAdminMetricsRoutes } from './routes/admin-metrics.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
@@ -45,7 +47,8 @@ import type { CredentialDeps } from './plugins/credentials.js';
 import type { WebhookRouteDeps } from './routes/results.js';
 
 export interface BuildServerOptions {
-  logger?: boolean;
+  /** 日志开关或 Fastify/pino 日志选项（对象形式会强制并入 Secret 脱敏 redact——§75） */
+  logger?: FastifyServerOptions['logger'];
   /**
    * 认证依赖（P01-02）。未提供时不注册认证路由（用于无数据库的单元测试）；
    * 生产与集成测试必须提供。
@@ -84,8 +87,17 @@ export interface BuildServerOptions {
  * OpenAPI 文档由同一份 Zod 契约生成（REQ-29-04），暴露于 GET /openapi.json。
  */
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  // P08-03：请求级指标（onRequest/onResponse 钩子；导出面 /api/v1/admin/metrics）
+
   const app = Fastify({
-    logger: options.logger ?? false,
+    // P08-03：结构化日志 + **Secret 脱敏**（§75/§44：日志严禁记录 Secret；请求头凭据一律 redact）
+    logger:
+      options.logger === true || (typeof options.logger === 'object' && options.logger !== null)
+        ? {
+            ...(typeof options.logger === 'object' && options.logger !== null ? options.logger : {}),
+            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], censor: '[REDACTED]' },
+          }
+        : (options.logger ?? false),
     // 请求追踪（§33）：客户端可提供合法 X-Request-Id，否则服务端生成
     genReqId: (raw) => {
       const provided = raw.headers['x-request-id'];
@@ -93,6 +105,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       return `req_${randomUUID()}`;
     },
   });
+  registerMetrics(app);
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -161,6 +174,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         }
         registerAdminGuard(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
         registerAdminRoutes(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
+        registerAdminMetricsRoutes(instance, authDeps);
       },
       { prefix: API_PREFIX },
     );

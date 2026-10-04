@@ -5,6 +5,8 @@ const nodeGlobals = {
   console: 'readonly',
   process: 'readonly',
   Buffer: 'readonly',
+  TextEncoder: 'readonly',
+  TextDecoder: 'readonly',
   URL: 'readonly',
   URLSearchParams: 'readonly',
   setTimeout: 'readonly',

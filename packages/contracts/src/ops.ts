@@ -12,6 +12,16 @@ import { isoDateTimeSchema } from './common/time.js';
  * - 运营面为**只读聚合 + 人工重试**：重试走既有任务服务（天然遵守预算/幂等/版本规则，§67 验收）。
  */
 
+export const opsAlertSchema = z.object({
+  id: z.string().min(1),
+  severity: z.enum(['CRITICAL', 'WARNING']),
+  summary: z.string().min(1).max(300),
+  value: z.number(),
+  threshold: z.number(),
+});
+
+export type OpsAlert = z.infer<typeof opsAlertSchema>;
+
 export const opsOverviewSchema = z.object({
   generatedAt: isoDateTimeSchema,
   jobs: z.object({
@@ -36,6 +46,8 @@ export const opsOverviewSchema = z.object({
   providerGenerations: z.object({
     byStatus: z.record(z.string(), z.number().int().nonnegative()).default({}),
   }),
+  /** 告警条件（P08-03：可检查阈值——无外部 Alertmanager 时的证据面） */
+  alerts: z.array(opsAlertSchema).default([]),
   spend: z.object({
     /** 全平台 DEBIT 合计（整数 Credits；账本只追加，余额=效果之和） */
     debitsTotal: z.number().int().nonnegative(),
