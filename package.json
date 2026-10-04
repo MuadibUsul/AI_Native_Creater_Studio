@@ -24,7 +24,8 @@
     "test:provider-smoke": "node scripts/provider-smoke.mjs",
     "verify": "node scripts/verify.mjs",
     "clean": "pnpm -r run clean",
-    "test:web": "vitest run --project web"
+    "test:web": "vitest run --project web",
+    "provider:verify": "node scripts/provider-verify.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,0 +1,74 @@
+{
+  "$comment": "Provider 能力核验探测计划（P06-01）。只读/最小调用；endpoint 与字段可随真实账号核验更新——未核验细节不进入业务代码。authHeaderTemplate 为代码注入（见 scripts/provider-verify.mjs 的 provider.authHeaderTemplate）之外的默认放法见 'authHeader'。",
+  "providers": [
+    {
+      "id": "elevenlabs",
+      "displayName": "ElevenLabs（TTS）",
+      "baseUrl": "https://api.elevenlabs.io",
+      "apiKeyEnv": "ELEVENLABS_API_KEY",
+      "probes": [
+        {
+          "id": "voices.list",
+          "capability": "speech.synthesize",
+          "path": "/v1/voices",
+          "method": "GET",
+          "expectStatus": [
+            200
+          ],
+          "expectKeys": [
+            "voices"
+          ],
+          "extract": [],
+          "note": "语音列表（只读）：核验账号与可用声音；时间戳能力以 convert-with-timestamps 接口的字段为准（真实核验时按官方文档补充探测）"
+        }
+      ],
+      "authFlavor": "x-api-key"
+    },
+    {
+      "id": "heygen",
+      "displayName": "HeyGen（Avatar）",
+      "baseUrl": "https://api.heygen.com",
+      "apiKeyEnv": "HEYGEN_API_KEY",
+      "probes": [
+        {
+          "id": "avatars.list",
+          "capability": "avatar.generate",
+          "path": "/v2/avatars",
+          "method": "GET",
+          "expectStatus": [
+            200
+          ],
+          "expectKeys": [
+            "data"
+          ],
+          "extract": [],
+          "note": "Avatar 列表（只读）：核验账号可用性与授权形象；真实核验时补充配额/价格字段"
+        }
+      ],
+      "authFlavor": "x-api-key"
+    },
+    {
+      "id": "veo",
+      "displayName": "Veo（AI Video，DEC-05 默认）",
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "apiKeyEnv": "VEO_API_KEY",
+      "probes": [
+        {
+          "id": "models.list",
+          "capability": "video.generate",
+          "path": "/v1beta/models",
+          "method": "GET",
+          "expectStatus": [
+            200
+          ],
+          "expectKeys": [
+            "models"
+          ],
+          "extract": [],
+          "note": "模型列表（只读）：核验可用模型与地区（价格与保留策略按官方文档核验后在 Catalog 中记录）"
+        }
+      ],
+      "authFlavor": "google-key"
+    }
+  ]
+}

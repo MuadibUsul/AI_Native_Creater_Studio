@@ -1,24 +1,22 @@
 #!/usr/bin/env node
 /**
- * 真实 Provider smoke test（单独开启；计划 §11.1）。
+ * 真实 Provider smoke（单独开启；计划 §11.1 / P06-01）。
  *
- * 约定：
- * - `pnpm verify` 默认不产生真实 Provider 费用，不包含本脚本；
- * - 真实 smoke 需要显式开启，并要求凭据与非零批准预算：
- *     ANCS_REAL_PROVIDER_SMOKE=1
- *     PLATFORM_PROVIDER_KEYS=<JSON>
- * - 在 P06-01（真实 Provider 能力核验）之前，本脚本只会明确失败——不得伪造"真实生成成功"。
+ * 本脚本委托 `scripts/provider-verify.mjs`（P06-01 能力核验工具）：
+ * - 未配置凭据 → 退出码 2 并列出缺失的环境变量（**"未配置" ≠ "通过"**，绝不伪造成功）；
+ * - 需要 `ANCS_PROVIDER_VERIFY=1` 显式开启（真实调用会产生费用/配额消耗）；
+ * - `pnpm verify` 不包含本脚本（默认零真实费用，§11.1）。
+ *
+ * 用法：ANCS_PROVIDER_VERIFY=1 ELEVENLABS_API_KEY=... node scripts/provider-smoke.mjs
+ *      预览（不需要凭据）：node scripts/provider-verify.mjs --dry
  */
-const enabled = process.env.ANCS_REAL_PROVIDER_SMOKE === '1';
-const hasKeys = Boolean(process.env.PLATFORM_PROVIDER_KEYS);
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 
-if (!enabled || !hasKeys) {
-  console.error('[provider-smoke] 未开启：真实 Provider smoke 默认关闭。');
-  console.error('  开启条件：ANCS_REAL_PROVIDER_SMOKE=1，且配置 PLATFORM_PROVIDER_KEYS 与非零批准预算。');
-  console.error('  依据：ANCS_Plan261004.md §11.1（verify 默认不产生真实 Provider 费用）。');
-  process.exit(1);
+const result = spawnSync(process.execPath, [path.resolve(import.meta.dirname, 'provider-verify.mjs'), ...process.argv.slice(2)], {
+  stdio: 'inherit',
+});
+if (result.status === 2) {
+  console.error('[provider-smoke] 未执行真实调用（凭据缺失或未显式开启）——这是刻意的 fail-closed，不代表通过。');
 }
-
-console.error('[provider-smoke] NOT_IMPLEMENTED：真实 smoke 用例计划在 P06-01 阶段实现。');
-console.error('  在此之前，本脚本拒绝以任何形式返回"成功"。');
-process.exit(1);
+process.exit(result.status ?? 1);
