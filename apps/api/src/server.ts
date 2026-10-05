@@ -29,6 +29,7 @@ import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerApprovalRoutes } from './routes/approval.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerPlanRoutes } from './routes/plans.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
 import { registerMetrics } from './plugins/metrics.js';
 import { registerAdminMetricsRoutes } from './routes/admin-metrics.js';
@@ -175,6 +176,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAdminGuard(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
         registerAdminRoutes(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
         registerAdminMetricsRoutes(instance, authDeps);
+        registerPlanRoutes(instance, authDeps);
       },
       { prefix: API_PREFIX },
     );

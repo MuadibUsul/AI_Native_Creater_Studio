@@ -26,6 +26,7 @@ import { customMotionComponentVersions, customMotionComponents, jobs, scenes } f
 import type { DomainDeps } from './channels.js';
 import { getProjectDetail } from './projects.js';
 import { createJob, getJob } from './jobs.js';
+import { assertCustomMotionBudget } from './plans.js';
 
 /**
  * Custom Motion 生成服务（P07-02 / 规范 §11.2；计划 §8 P07-02）。
@@ -139,6 +140,9 @@ export async function startCustomMotionGeneration(
       sceneType: scene.sceneType,
     });
   }
+  // P09-01：Custom Motion 月度预算强制执行（生成入口）
+  await assertCustomMotionBudget(deps, { workspaceId: input.workspaceId });
+
   const brief = input.brief ?? null;
   const dedupeKey = `motion:${input.projectId}:${input.sceneId}:${sha256Hex(brief ?? '').slice(0, 16)}`;
 

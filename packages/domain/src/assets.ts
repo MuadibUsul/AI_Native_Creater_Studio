@@ -30,6 +30,7 @@ import {
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, scenes, uploadIntents } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { assertStorageQuota } from './plans.js';
 
 /**
  * 资产服务（P02-04 / 规范 §22.5、§26、§27；计划 P02-04）。
@@ -175,6 +176,9 @@ export async function createUploadIntent(
   const storage = requireStorage(deps);
   const { workspaceId, userId } = input;
   const request = createUploadIntentRequestSchema.parse(input.input);
+
+  // P09-01：存储额度强制执行（用量核算含未删除资产版本）
+  await assertStorageQuota(deps, { workspaceId, additionalBytes: request.sizeBytes });
 
   if (!DIRECT_UPLOAD_ASSET_TYPES.includes(request.assetType)) {
     throw new ApiFailure(

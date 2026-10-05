@@ -106,6 +106,10 @@ import {
   addWorkspaceMemberRequestSchema,
   workspaceMemberSchema,
   workspaceWithRoleSchema,
+  workspaceEntitlementSchema,
+  planSchema,
+  assignPlanRequestSchema,
+  workspaceSubscriptionSchema,
   type ClientType,
   type HealthResponse,
   type SessionInfo,
@@ -140,6 +144,10 @@ import {
   type RenderRecord,
   type CustomMotionComponent,
   type QaReport,
+  type Plan,
+  type PlanKey,
+  type WorkspaceEntitlement,
+  type WorkspaceSubscription,
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
@@ -284,6 +292,8 @@ export interface AncsClient {
     create(input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     list(): Promise<WorkspaceWithRole[]>;
     get(workspaceId: string): Promise<WorkspaceWithRole>;
+    /** 当前权益 + 实时用量（P09-01；成员可读） */
+    entitlements(workspaceId: string): Promise<WorkspaceEntitlement>;
     update(workspaceId: string, input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     members: {
       list(workspaceId: string): Promise<WorkspaceMember[]>;
@@ -656,6 +666,12 @@ export interface AncsClient {
     audit(query?: { limit?: number }): Promise<OpsAuditEntry[]>;
     /** 指标导出（P08-03；Prometheus 文本） */
     metricsText(): Promise<string>;
+    /** 指派套餐（P09-01；append-only 订阅——修改套餐不篡改历史账单） */
+    assignPlan(workspaceId: string, input: { planKey: PlanKey; note?: string }, options?: MutationOptions): Promise<WorkspaceSubscription>;
+  };
+  /** 套餐目录（P09-01；版本化、价格为数据） */
+  plans: {
+    list(query?: { planKey?: PlanKey }): Promise<Plan[]>;
   };
   notifications: {
     list(options?: { workspaceId?: string; unreadOnly?: boolean; limit?: number }): Promise<Notification[]>;
@@ -863,6 +879,7 @@ export function createClient(options: ClientOptions): AncsClient {
       list: async () =>
         (await request('GET', '/api/v1/workspaces', listOf(workspaceWithRoleSchema))).items,
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema),
+      entitlements: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/entitlements`, workspaceEntitlementSchema),
       update: (workspaceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema, {
           body: input, bodySchema: updateWorkspaceRequestSchema,
@@ -1515,6 +1532,18 @@ export function createClient(options: ClientOptions): AncsClient {
         return (await request('GET', `/api/v1/admin/audit${suffix}`, z.object({ items: z.array(opsAuditEntrySchema) }))).items;
       },
       metricsText: () => requestText('GET', '/api/v1/admin/metrics'),
+      assignPlan: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/plan`, workspaceSubscriptionSchema, {
+          body: input,
+          bodySchema: assignPlanRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+    plans: {
+      list: async (query) => {
+        const suffix = query?.planKey === undefined ? '' : `?planKey=${query.planKey}`;
+        return (await request('GET', `/api/v1/plans${suffix}`, z.object({ items: z.array(planSchema) }))).items;
+      },
     },
     notifications: {
       list: async (options) => {

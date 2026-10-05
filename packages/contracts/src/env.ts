@@ -86,6 +86,8 @@ export const apiEnvSchema = z.object({
   PLATFORM_PROVIDER_KEYS: z.string().optional(),
   /** 平台管理员 user_id 列表（逗号分隔；P08-02；与普通用户角色严格分离 REQ-67-02） */
   ANCS_PLATFORM_ADMINS: z.string().optional(),
+  /** 未订阅 workspace 的默认套餐（P09-01；预上线默认 ENTERPRISE；**SaaS 上线门（P09-06）要求 FREE**） */
+  ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

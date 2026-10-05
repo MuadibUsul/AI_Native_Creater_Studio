@@ -314,6 +314,38 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 套餐与权益契约（P09-01 / §73、§35—36、§31）
+export {
+  PLAN_KEYS,
+  planKeySchema,
+  planEntitlementsSchema,
+  PLAN_STATUSES,
+  planStatusSchema,
+  planPriceSchema,
+  planSchema,
+  SUBSCRIPTION_STATUSES,
+  subscriptionStatusSchema,
+  workspaceSubscriptionSchema,
+  entitlementUsageSchema,
+  workspaceEntitlementSchema,
+  ENTITLEMENT_ERROR_REASONS,
+  assignPlanRequestSchema,
+  createPlanVersionRequestSchema,
+  DEFAULT_PLAN_SEEDS,
+} from './plans.js';
+export type {
+  PlanKey,
+  PlanEntitlements,
+  PlanStatus,
+  Plan,
+  WorkspaceSubscription,
+  EntitlementUsage,
+  WorkspaceEntitlement,
+  EntitlementErrorReason,
+  AssignPlanRequest,
+  CreatePlanVersionRequest,
+} from './plans.js';
+
 // 最小运营契约（P08-02 / §67）
 export {
   opsAlertSchema,

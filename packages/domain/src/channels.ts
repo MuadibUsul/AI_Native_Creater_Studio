@@ -14,6 +14,7 @@ import {
   type UpdateChannelRequest,
 } from '@ancs/contracts';
 import { channelStyleVersions, channels } from '@ancs/db';
+import { assertChannelQuota } from './plans.js';
 import type {
   AlignmentProvider,
   ArticleFetcher,
@@ -153,6 +154,8 @@ export async function createChannel(
   deps: DomainDeps,
   input: { workspaceId: string; createdBy?: string; input: CreateChannelRequest },
 ): Promise<ChannelWithStyle> {
+  // P09-01：栏目额度强制执行
+  await assertChannelQuota(deps, { workspaceId: input.workspaceId });
   const defaults: ChannelStyleDefaults = channelStyleDefaultsSchema.parse(
     mergeChannelStyle(input.input.defaults, { language: input.input.language }),
   );

@@ -20,6 +20,7 @@ import {
 } from '@ancs/contracts';
 import { outboxEvents, providerConnections, workspaceProviderSettings } from '@ancs/db';
 import { evaluateModelAvailability, getCurrentCatalog } from './catalog.js';
+import { assertByokAllowed } from './plans.js';
 import type { DomainDeps } from './channels.js';
 
 /**
@@ -88,6 +89,9 @@ export async function createConnection(
     input: { providerId: string; kind: string; label: string; secret: string };
   },
 ): Promise<ProviderConnection> {
+  // P09-01：BYOK 权益强制执行（自带 Provider 凭据 = BYOK；套餐不允许则 403）
+  await assertByokAllowed(deps, { workspaceId: input.workspaceId });
+
   const cipher = requireCipher(deps);
 
   // 连接必须对应当前 Catalog 中的 Provider（防止拼写错误造成"永不可用"的死配置）

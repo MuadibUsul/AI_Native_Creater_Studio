@@ -11,6 +11,7 @@ import {
   type VoiceIdentity,
 } from '@ancs/contracts';
 import { avatarIdentities, brandIdentities, creatorIdentities, voiceIdentities } from '@ancs/db';
+import { assertIdentityQuota } from './plans.js';
 import type { DomainDeps } from './channels.js';
 
 /**
@@ -108,6 +109,8 @@ export async function createCreatorIdentity(
   deps: DomainDeps,
   input: { workspaceId: string; displayName: string },
 ): Promise<CreatorIdentity> {
+  // P09-01：创作者身份额度强制执行
+  await assertIdentityQuota(deps, { workspaceId: input.workspaceId });
   const now = new Date();
   const id = newId('cid');
   await deps.db.insert(creatorIdentities).values({

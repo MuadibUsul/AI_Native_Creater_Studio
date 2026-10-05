@@ -36,3 +36,4 @@ export {
 export { customMotionComponents, customMotionComponentVersions } from './custom-motion.js';
 export { renderQaReports } from './render-qa.js';
 export { renderApprovals } from './render-approvals.js';
+export { plans, workspaceSubscriptions } from './plans.js';

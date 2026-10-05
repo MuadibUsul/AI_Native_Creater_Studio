@@ -14,6 +14,7 @@ import {
 import { assetVersions, masterNarrations, projectVersions, renderEvents, renders } from '@ancs/db';
 import { loadProjectRow } from './projects.js';
 import { createJobInTx } from './jobs.js';
+import { assertRenderProfileAllowed, resolveRenderPriority } from './plans.js';
 import { createProjectVersionInTx } from './versions.js';
 import type { DomainDeps } from './channels.js';
 
@@ -63,6 +64,9 @@ export async function createRender(
   input: { workspaceId: string; projectId: string; request: CreateRenderRequest; createdBy?: string | null },
 ): Promise<RenderRecord> {
   await loadProjectRow(deps.db, input.workspaceId, input.projectId);
+  // P09-01：渲染档位权益（4K 需 fourK）+ 渲染优先级（映射 jobs.priority）
+  await assertRenderProfileAllowed(deps, { workspaceId: input.workspaceId, profile: input.request.profile });
+  const renderPriority = await resolveRenderPriority(deps, { workspaceId: input.workspaceId });
 
   return deps.db.transaction(async (tx) => {
     // 1) 冻结项目版本（未提供 → 自动建 FINAL_RENDER 快照）
@@ -180,6 +184,7 @@ export async function createRender(
       type: RENDER_FINAL_JOB_TYPE,
       input: { renderId, profile: input.request.profile },
       maxAttempts: 2,
+      priority: renderPriority,
       createdBy: input.createdBy ?? null,
     });
     const row = (await tx.select().from(renders).where(eq(renders.id, renderId)).limit(1))[0];
