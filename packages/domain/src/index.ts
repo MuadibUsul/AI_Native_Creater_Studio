@@ -114,6 +114,7 @@ export {
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
 export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
+export { buildRenderOutputEnhancements } from './output-enhancements.js';
 export {
   addVoiceSample,
   analyzeVoiceSampleQuality,

@@ -161,7 +161,7 @@ describe('Final QA（P07-05 端到端）', () => {
       expect(await executeJob(deps(), fullRegistry(), { workerId: WORKER_ID, leaseSeconds: 600, heartbeatIntervalMs: 60_000 }, finalJob as NonNullable<typeof finalJob>)).toBe('succeeded');
       const afterRender = await getRender(deps(), { workspaceId, renderId: render.id });
       expect(afterRender.status).toBe('QA');
-      expect(afterRender.outputAssetIds).toHaveLength(4);
+      expect(afterRender.outputAssetIds).toHaveLength(5); // VIDEO/SRT/VTT/MANIFEST + THUMBNAIL（P10-05）
       const qaJobRows = await handle.db.select().from(jobs).where(eq(jobs.type, RENDER_QA_JOB_TYPE));
       expect(qaJobRows).toHaveLength(1);
       expect(qaJobRows[0]?.status).toBe('QUEUED');

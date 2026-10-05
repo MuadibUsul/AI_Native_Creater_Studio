@@ -1162,3 +1162,25 @@ export {
   ASSET_SEARCH_MAX_BYTES,
 } from './media-providers.js';
 export type { AssetLicenseType, AssetLicense, StockAssetKind, StockSearchResult, StockAcquisitionResult, StockSearchRequest, AssetSearchProvider } from './media-providers.js';
+
+// 输出增强包契约（P10-05 / §4.2、§84、§85、§87）
+export {
+  RENDER_OUTPUT_ENHANCEMENTS_VERSION,
+  titleSuggestionSchema,
+  descriptionSchema,
+  outputChapterSchema,
+  outputSourceEntrySchema,
+  outputAssetAttributionSchema,
+  outputThumbnailSchema,
+  renderOutputEnhancementsSchema,
+  RENDER_OUTPUTS_ERROR_REASONS,
+} from './output-enhancements.js';
+export type {
+  TitleSuggestion,
+  OutputChapter,
+  OutputSourceEntry,
+  OutputAssetAttribution,
+  OutputThumbnail,
+  RenderOutputEnhancements,
+  RenderOutputsErrorReason,
+} from './output-enhancements.js';

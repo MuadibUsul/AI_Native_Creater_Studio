@@ -125,6 +125,20 @@ export interface BuiltRenderExecution {
  * 构建渲染执行 spec（纯投影：快照 graph + Master Narration + 冻结资产版本清单）。
  * 不变量：不读"当前状态"——所有引用来自 Render.input 冻结的 id。
  */
+/**
+ * 封面帧位选择（P10-05；**纯函数、单一事实来源**——渲染 spec 与输出报告使用同一规则）。
+ * 规则：取第一个非章节/结构类场景的起点 + min(1000ms, 该场景时长/5)；全为结构场景时取时长 10%。
+ * 结果保证在 [0, durationMs - frameMs]（仅夹取到合法区间并记录；不改变场景数据）。
+ */
+export function chooseThumbnailFrameMs(input: { scenes: readonly { sceneType: string; startMs: number; durationMs: number }[]; durationMs: number; fps: number }): number {
+  const structural = new Set(['CHAPTER_TITLE', 'SECTION_BREAK']);
+  const content = input.scenes.find((scene) => !structural.has(scene.sceneType));
+  const frameMs = Math.max(1, Math.round(1000 / input.fps));
+  const candidate = content === undefined ? Math.round(input.durationMs * 0.1) : content.startMs + Math.min(1000, Math.round(content.durationMs / 5));
+  const maxMs = Math.max(0, input.durationMs - frameMs);
+  return Math.min(Math.max(0, candidate), maxMs);
+}
+
 export function buildRenderExecutionSpec(input: BuildRenderExecutionInput): BuiltRenderExecution {
   const snapshot = projectVersionSnapshotSchema.parse(input.snapshot);
   const graph = snapshot.graph;
@@ -296,6 +310,7 @@ export function buildRenderExecutionSpec(input: BuildRenderExecutionInput): Buil
     narration: { fileName: narrationFileName, durationMs: narrationMs },
     musicTracks,
     captions: { burnIn: captions.burnIn, cues: captions.cues },
+    thumbnail: { atMs: chooseThumbnailFrameMs({ scenes, durationMs, fps: format.fps }) },
     assets: staging,
     manifestBase,
     warnings,
@@ -319,6 +334,7 @@ const outputStorageKey = (workspaceId: string, projectId: string, renderId: stri
 const assetTypeFor = (kind: RenderExecutionFileKind, profile: RenderRecord['profile']): string => {
   if (kind === 'VIDEO') return profile === 'DRAFT_720' ? 'DRAFT_RENDER' : profile === 'SHORT_1080x1920' ? 'SHORT_VIDEO' : 'FINAL_VIDEO';
   if (kind === 'MANIFEST') return 'MANIFEST';
+  if (kind === 'THUMBNAIL') return 'THUMBNAIL';
   return 'SUBTITLE';
 };
 

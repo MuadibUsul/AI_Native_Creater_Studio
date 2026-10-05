@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { bundle } from '@remotion/bundler';
-import { renderMedia, selectComposition } from '@remotion/renderer';
+import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 import {
   RENDER_EXECUTION_FILE_MIME_TYPES,
   RENDER_EXECUTION_FILE_NAMES,
@@ -101,6 +101,20 @@ export async function executeRenderSpec(input: ExecuteRenderSpecInput): Promise<
     ...(input.onProgress !== undefined ? { onProgress: input.onProgress } : {}),
   });
 
+  // 4b) 封面静帧（P10-05：真实像素；帧位来自 spec.thumbnail——与输出报告的规则同源）
+  const thumbnailName = RENDER_EXECUTION_FILE_NAMES.THUMBNAIL;
+  if (spec.thumbnail !== null) {
+    const frame = Math.min(Math.max(0, Math.round((spec.thumbnail.atMs / 1000) * composition.fps)), composition.durationInFrames - 1);
+    await renderStill({
+      composition: { ...composition, props: { ...composition.props } },
+      serveUrl,
+      output: path.join(outDir, thumbnailName),
+      frame,
+      imageFormat: 'png',
+      ...(browserExecutable !== undefined ? { browserExecutable } : {}),
+    });
+  }
+
   // 5) 字幕产物（SRT/VTT；时间权威 = Alignment cue；越界仅告警）
   const srt = buildSubtitles({ format: 'SRT', cues: spec.captions.cues, style: spec.captions.style });
   const vtt = buildSubtitles({ format: 'VTT', cues: spec.captions.cues, style: spec.captions.style });
@@ -123,11 +137,12 @@ export async function executeRenderSpec(input: ExecuteRenderSpecInput): Promise<
   const video = await fileFor('VIDEO', videoName);
   const subtitleSrt = await fileFor('SUBTITLE_SRT', srtName);
   const subtitleVtt = await fileFor('SUBTITLE_VTT', vttName);
+  const thumbnail = spec.thumbnail === null ? null : await fileFor('THUMBNAIL', thumbnailName);
 
   // 6) Manifest（§28）：基线 + 产物事实（Manifest 自身不自引用——hash 单独给出）
   const manifest = renderManifestSchema.parse({
     ...spec.manifestBase,
-    outputs: [video.file, subtitleSrt.file, subtitleVtt.file],
+    outputs: [video.file, subtitleSrt.file, subtitleVtt.file, ...(thumbnail === null ? [] : [thumbnail.file])],
     createdAt: new Date().toISOString(),
     warnings,
   });
@@ -151,7 +166,7 @@ export async function executeRenderSpec(input: ExecuteRenderSpecInput): Promise<
     format: { width: composition.width, height: composition.height, fps: composition.fps },
     durationMs,
     durationInFrames: composition.durationInFrames,
-    files: [video.file, subtitleSrt.file, subtitleVtt.file, manifestFile],
+    files: [video.file, subtitleSrt.file, subtitleVtt.file, ...(thumbnail === null ? [] : [thumbnail.file]), manifestFile],
     manifestHash,
     warnings,
   });

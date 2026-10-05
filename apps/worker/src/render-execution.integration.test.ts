@@ -189,7 +189,7 @@ describe('Final 合成（P07-04 端到端）', () => {
       const after = await getRender(deps(), { workspaceId, renderId: render.id });
       expect(after.status).toBe('QA');
       expect(after.manifestHash).not.toBeNull();
-      expect(after.outputAssetIds).toHaveLength(4);
+      expect(after.outputAssetIds).toHaveLength(5); // VIDEO/SRT/VTT/MANIFEST + THUMBNAIL（P10-05）
 
       // 审计事件：QUEUED → RENDERING → QA（单向 + 审计）
       const events = await handle.db.select().from(renderEvents).where(eq(renderEvents.renderId, render.id)).orderBy(renderEvents.seq);
@@ -198,12 +198,12 @@ describe('Final 合成（P07-04 端到端）', () => {
       // 4) 产物全部在自有存储中（逐资产版本探测 + 读取字节）
       const versionRows = await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, workspaceId));
       const outputVersions = versionRows.filter((row) => after.outputAssetIds.includes(row.assetId));
-      expect(outputVersions).toHaveLength(4);
+      expect(outputVersions).toHaveLength(5); // + THUMBNAIL（P10-05）
       const assetRows = await handle.db.select().from(assets).where(eq(assets.workspaceId, workspaceId));
       const outputAssets = assetRows.filter((row) => after.outputAssetIds.includes(row.id));
       expect(outputAssets.every((row) => row.origin === 'SYSTEM_RENDER')).toBe(true);
       expect(outputAssets.every((row) => row.retentionClass === 'KEEP_FINAL')).toBe(true);
-      expect(outputAssets.map((row) => row.assetType).sort()).toEqual(['FINAL_VIDEO', 'MANIFEST', 'SUBTITLE', 'SUBTITLE']);
+      expect(outputAssets.map((row) => row.assetType).sort()).toEqual(['FINAL_VIDEO', 'MANIFEST', 'SUBTITLE', 'SUBTITLE', 'THUMBNAIL']);
       for (const version of outputVersions) {
         const probe = await storage.probeObject(version.storageKey);
         expect(probe.exists, `${version.storageKey} 应在存储中`).toBe(true);
@@ -227,7 +227,7 @@ describe('Final 合成（P07-04 端到端）', () => {
       expect(manifest.renderSettings.profile).toBe('STUDIO_1080');
       expect(manifest.renderSettings.width).toBe(1920);
       expect(manifest.renderSettings.height).toBe(1080);
-      expect(manifest.outputs.map((output) => output.kind).sort()).toEqual(['SUBTITLE_SRT', 'SUBTITLE_VTT', 'VIDEO']);
+      expect(manifest.outputs.map((output) => output.kind).sort()).toEqual(['SUBTITLE_SRT', 'SUBTITLE_VTT', 'THUMBNAIL', 'VIDEO']);
 
       // 6) MP4 元数据（真实解析产物字节）：1920×1080 / 30fps / 音轨存在 / 时长自洽
       const videoVersion = outputVersions.find((row) => row.mimeType === 'video/mp4');

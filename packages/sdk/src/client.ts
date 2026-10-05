@@ -126,6 +126,7 @@ import {
   voiceConsentSchema,
   stockSearchResultSchema,
   stockAcquisitionResultSchema,
+  renderOutputEnhancementsSchema,
   addVoiceSampleRequestSchema,
   confirmVoiceConsentRequestSchema,
   submitVoiceCloneRequestSchema,
@@ -161,6 +162,7 @@ import {
   type VoiceConsent,
   type StockSearchResult,
   type StockAcquisitionResult,
+  type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
   type SupportAccessGrant,
@@ -752,6 +754,8 @@ export interface AncsClient {
     create(workspaceId: string, projectId: string, input: CreateRenderRequest, options?: MutationOptions): Promise<RenderRecord>;
     list(workspaceId: string, projectId?: string): Promise<RenderRecord[]>;
     get(workspaceId: string, renderId: string): Promise<RenderRecord>;
+    /** 输出增强包（P10-05；需已批准未失效；与正式版本一致性校验失败即 422） */
+    outputEnhancements(workspaceId: string, renderId: string): Promise<RenderOutputEnhancements>;
     /** 状态推进（单向状态机；QUEUED→RENDERING→QA→READY/FAILED/CANCELLED） */
     transition(workspaceId: string, renderId: string, input: { to: RenderStatus; note?: string }, options?: MutationOptions): Promise<RenderRecord>;
     /** 触发 Final QA（P07-05；仅 QA 状态——自动入队窗口的恢复入口） */
@@ -1747,6 +1751,8 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       get: (workspaceId, renderId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}`, renderRecordSchema),
+      outputEnhancements: (workspaceId, renderId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/outputs/enhancements`, renderOutputEnhancementsSchema),
       transition: (workspaceId, renderId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/renders/${renderId}/transition`, renderRecordSchema, {
           body: input,

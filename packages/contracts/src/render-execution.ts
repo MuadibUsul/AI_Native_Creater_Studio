@@ -145,7 +145,7 @@ export const renderManifestBaseSchema = z.object({
 
 export type RenderManifestBase = z.infer<typeof renderManifestBaseSchema>;
 
-export const RENDER_EXECUTION_FILE_KINDS = ['VIDEO', 'SUBTITLE_SRT', 'SUBTITLE_VTT', 'MANIFEST'] as const;
+export const RENDER_EXECUTION_FILE_KINDS = ['VIDEO', 'SUBTITLE_SRT', 'SUBTITLE_VTT', 'MANIFEST', 'THUMBNAIL'] as const;
 export const renderExecutionFileKindSchema = z.enum(RENDER_EXECUTION_FILE_KINDS);
 export type RenderExecutionFileKind = z.infer<typeof renderExecutionFileKindSchema>;
 
@@ -201,6 +201,8 @@ export const renderExecutionSpecSchema = z.object({
   narration: z.object({ fileName: z.string().min(1).max(200), durationMs: z.number().int().positive() }).nullable().default(null),
   musicTracks: z.array(renderExecutionMusicTrackSchema).default([]),
   captions: renderExecutionCaptionsSchema.default(() => renderExecutionCaptionsSchema.parse({})),
+  /** P10-05 封面帧位（null = 不生成封面；帧位由快照确定性选择——编排层与产出报告同源） */
+  thumbnail: z.object({ atMs: videoMsSchema }).nullable().default(null),
   assets: z.array(stagedAssetSchema).default([]),
   manifestBase: renderManifestBaseSchema,
   warnings: z.array(z.string().max(300)).default([]),
@@ -230,6 +232,8 @@ export const RENDER_EXECUTION_FILE_NAMES = {
   SUBTITLE_SRT: 'subtitles.srt',
   SUBTITLE_VTT: 'subtitles.vtt',
   MANIFEST: 'manifest.json',
+  /** P10-05：封面静帧（真实像素；帧位由快照确定性选择） */
+  THUMBNAIL: 'thumbnail.png',
 } as const;
 
 export const RENDER_EXECUTION_FILE_MIME_TYPES: Readonly<Record<RenderExecutionFileKind, string>> = {
@@ -237,6 +241,7 @@ export const RENDER_EXECUTION_FILE_MIME_TYPES: Readonly<Record<RenderExecutionFi
   SUBTITLE_SRT: 'application/x-subrip',
   SUBTITLE_VTT: 'text/vtt',
   MANIFEST: 'application/json',
+  THUMBNAIL: 'image/png',
 };
 
 /**

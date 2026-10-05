@@ -193,7 +193,7 @@ describe('executeRenderSpec（真实渲染）', () => {
       const result = await executeRenderSpec({ spec, workDir, browserExecutable: resolveBrowserExecutable() });
       expect(result.format).toEqual({ width: 1280, height: 720, fps: 30 });
       expect(result.durationMs).toBeGreaterThan(0);
-      expect(result.files.map((file) => file.kind).sort()).toEqual(['MANIFEST', 'SUBTITLE_SRT', 'SUBTITLE_VTT', 'VIDEO']);
+      expect(result.files.map((file) => file.kind).sort()).toEqual(['MANIFEST', 'SUBTITLE_SRT', 'SUBTITLE_VTT', 'THUMBNAIL', 'VIDEO']);
 
       // 5) 产物落盘 + 回执一致性
       const outDir = path.join(workDir, 'out');
@@ -211,7 +211,13 @@ describe('executeRenderSpec（真实渲染）', () => {
       const manifestBytes = await readFile(path.join(outDir, 'manifest.json'));
       expect(createHash('sha256').update(manifestBytes).digest('hex')).toBe(result.manifestHash);
       const manifest = renderManifestSchema.parse(JSON.parse(manifestBytes.toString('utf8')));
-      expect(manifest.outputs.map((output) => output.kind).sort()).toEqual(['SUBTITLE_SRT', 'SUBTITLE_VTT', 'VIDEO']);
+      expect(manifest.outputs.map((output) => output.kind).sort()).toEqual(['SUBTITLE_SRT', 'SUBTITLE_VTT', 'THUMBNAIL', 'VIDEO']);
+      // P10-05 封面：真实 PNG（帧位来自 spec.thumbnail——规则同源）
+      expect(spec.thumbnail).not.toBeNull();
+      expect(spec.thumbnail?.atMs).toBeGreaterThanOrEqual(0);
+      const thumbnailFile = result.files.find((file) => file.kind === 'THUMBNAIL');
+      expect(thumbnailFile?.fileName).toBe('thumbnail.png');
+      expect(thumbnailFile?.mimeType).toBe('image/png');
       expect(manifest.projectVersionId).toBe('pv_exec_1');
       expect(manifest.masterAudio?.masterNarrationId).toBe('mna_exec_1');
       expect(manifest.sceneAssets).toEqual([{ sceneId: 'scn_2', assetId: 'ast_img', assetVersionId: 'av_img', role: 'visual' }]);

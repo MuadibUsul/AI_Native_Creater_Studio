@@ -133,6 +133,7 @@ export default defineConfig({
           environment: 'node',
           include: ['apps/render-worker/src/**/*.test.ts'],
           exclude: ['**/node_modules/**'],
+          alias: workspaceAliases,
           testTimeout: 600000,
           hookTimeout: 600000,
           passWithNoTests: false,
