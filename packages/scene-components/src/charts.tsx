@@ -34,12 +34,17 @@ interface Scale {
   maxPoints: number;
 }
 
-const buildScale = (series: readonly ChartSeries[]): Scale | null => {
+const buildScale = (series: readonly ChartSeries[], includeZero = false): Scale | null => {
   const all = series.flatMap((item) => item.points);
   if (all.length === 0) return null;
   const values = all.map((point) => point.v);
   let minValue = Math.min(...values);
   let maxValue = Math.max(...values);
+  if (includeZero) {
+    // 堆叠柱：基线必须落在 0（含 0 于绘制范围，不改变数据）
+    minValue = Math.min(minValue, 0);
+    maxValue = Math.max(maxValue, 0);
+  }
   if (minValue === maxValue) {
     // 全平序列：给一个对称窗口，避免除零（不改变数据，只影响绘制范围）
     minValue -= 1;
@@ -53,6 +58,27 @@ const buildScale = (series: readonly ChartSeries[]): Scale | null => {
     maxValue,
     maxPoints,
   };
+};
+
+/** 堆叠合计（列数与各系列一致、且无负值——否则返回 null：组件显示占位而非绘制错误图形）。 */
+const stackTotals = (series: readonly ChartSeries[]): number[] | null => {
+  const length = series[0]?.points.length ?? 0;
+  if (length === 0) return null;
+  if (series.some((item) => item.points.length !== length)) return null;
+  if (series.some((item) => item.points.some((point) => point.v < 0))) return null;
+  return Array.from({ length }, (_value, index) => series.reduce((sum, item) => sum + (item.points[index]?.v ?? 0), 0));
+};
+
+/** 堆叠可渲染性（供调用方在不可渲染时显示明确占位，而非空白）。 */
+export const stackedSeriesRenderable = (series: readonly ChartSeries[]): boolean => stackTotals(series) !== null;
+
+/** 面积填充路径（折线 + 基线闭合；基线 = 0 或窗口下沿）。 */
+const areaFillPath = (points: readonly ChartPoint[], scale: Scale): string => {
+  const baseline = scale.y(Math.max(0, scale.minValue));
+  const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${scale.x(index).toFixed(2)} ${scale.y(point.v).toFixed(2)}`).join(' ');
+  const lastX = scale.x(points.length - 1).toFixed(2);
+  const firstX = scale.x(0).toFixed(2);
+  return `${line} L ${lastX} ${baseline.toFixed(2)} L ${firstX} ${baseline.toFixed(2)} Z`;
 };
 
 const pathFor = (points: readonly ChartPoint[], scale: Scale): string =>
@@ -71,7 +97,7 @@ const areaPathFor = (upper: readonly ChartPoint[], lower: readonly ChartPoint[],
 export interface ChartFrameProps {
   series: readonly ChartSeries[];
   /** 'line' | 'dual' | 'bar' | 'spread' */
-  mode: 'line' | 'dual' | 'bar' | 'spread';
+  mode: 'line' | 'dual' | 'bar' | 'spread' | 'area' | 'stacked';
   /** 纵轴单位（如 "%"、"bp"），仅用于轴标注 */
   unit: string;
   /** 数据点标签（x 轴） */
@@ -85,7 +111,16 @@ export interface ChartFrameProps {
 /** 图表主体（数据为空 → null，由调用方渲染 Placeholder）。 */
 export function ChartFrame(props: ChartFrameProps): ReactElement | null {
   const theme = useSceneTheme();
-  const scale = buildScale(props.series);
+  const baseScale = buildScale(props.series);
+  if (baseScale === null) return null;
+  // 堆叠模式：以"每列合计"为纵轴（含 0 基线）；列数不一致或含负值 → 占位（不绘制错误图形）
+  const stackedTotals = props.mode === 'stacked' ? stackTotals(props.series) : null;
+  const scale =
+    props.mode === 'stacked'
+      ? stackedTotals === null
+        ? null
+        : buildScale([{ name: 'Σ', points: stackedTotals.map((value, index) => ({ t: `#${String(index)}`, v: value })) }], true)
+      : baseScale;
   if (scale === null) return null;
   const first = props.series[0];
   if (first === undefined) return null;
@@ -156,11 +191,42 @@ export function ChartFrame(props: ChartFrameProps): ReactElement | null {
           })
         : null}
 
+      {props.mode === 'stacked' && stackedTotals !== null
+        ? props.series.flatMap((item, seriesIndex) =>
+            item.points.map((point, index) => {
+              // 累计基线（seriesIndex 之前的各系列在列 index 的合计）——堆叠从 0 向上
+              const before = props.series.slice(0, seriesIndex).reduce((sum, previous) => sum + (previous.points[index]?.v ?? 0), 0);
+              const barWidth = Math.max(12, (plotWidth / Math.max(stackedTotals.length, 1)) * 0.5);
+              const top = scale.y(before + point.v);
+              const bottom = scale.y(before);
+              return (
+                <rect
+                  key={`${item.name}-${String(index)}`}
+                  data-role="stacked-bar"
+                  data-series-index={seriesIndex}
+                  x={scale.x(index) - barWidth / 2}
+                  y={Math.min(top, bottom)}
+                  width={barWidth}
+                  height={Math.max(2, Math.abs(bottom - top))}
+                  fill={colors[seriesIndex % colors.length]}
+                  rx={theme.radius.sm}
+                />
+              );
+            }),
+          )
+        : null}
+
+      {props.mode === 'area'
+        ? props.series.map((item, seriesIndex) => (
+            <path key={`area-${item.name}`} data-role="area-fill" data-series-index={seriesIndex} d={areaFillPath(item.points, scale)} fill={`${colors[seriesIndex % colors.length]}44`} stroke="none" />
+          ))
+        : null}
+
       {props.mode === 'spread' && props.series.length >= 2 && props.series[1] !== undefined
         ? <path data-role="spread-area" d={areaPathFor(first.points, props.series[1].points, scale)} fill={`${colors[0]}55`} stroke="none" />
         : null}
 
-      {props.mode !== 'bar'
+      {props.mode !== 'bar' && props.mode !== 'stacked'
         ? props.series.map((item, seriesIndex) => (
             <path
               key={item.name}
@@ -177,7 +243,7 @@ export function ChartFrame(props: ChartFrameProps): ReactElement | null {
           ))
         : null}
 
-      {props.mode !== 'bar'
+      {props.mode !== 'bar' && props.mode !== 'stacked'
         ? first.points.map((point, index) => (
             <circle key={`${point.t}-${String(index)}`} cx={scale.x(index)} cy={scale.y(point.v)} r={5} fill={colors[0]} />
           ))

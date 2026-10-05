@@ -110,6 +110,22 @@ describe('Remotion 服务端渲染（标准 Scene：BigNumberScene）', () => {
     }
   }, 900_000);
 
+  it('扩展组件画廊（P10-04 渲染证据）：14 类 × 正常变体 → PNG', async () => {
+    const composition = await selectComposition({ serveUrl, id: 'ExtendedComponentGallery', browserExecutable });
+    const output = path.join(outDir, 'gallery-extended.png');
+    await renderStill({
+      composition: { ...composition, props: { ...composition.props, variant: 'normal' } },
+      serveUrl,
+      output,
+      frame: 15,
+      imageFormat: 'png',
+      browserExecutable,
+    });
+    const info = await stat(output);
+    expect(info.size, '扩展画廊 PNG 应大于 25KB（含 14 个组件格）').toBeGreaterThan(25_000);
+    console.log(`[render] 扩展组件画廊（P10-04）：${output}（${String(info.size)} bytes）`);
+  }, 900_000);
+
   it('渲染 MP4 并通过元数据校验（1920×1080 / 3s / 30fps）', async () => {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, browserExecutable });
     const output = path.join(outDir, 'big-number-scene.mp4');

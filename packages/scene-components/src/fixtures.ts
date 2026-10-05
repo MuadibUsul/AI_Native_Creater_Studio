@@ -182,3 +182,112 @@ export function assertVariantCoverage(): void {
     }
   }
 }
+
+/* ---------- P10-04 扩展组件五类变体（正常/长文本/空值/极值/边界时长） ---------- */
+
+const EXT_LONG = '这是一个用于验证超长文本在扩展组件中仍保持可读、不裁切、不吞信息的中英文混排测试内容 Mixed Content，重复出现以模拟极端段落长度。';
+const extLong = (times: number): string => EXT_LONG.repeat(times);
+
+Object.assign(COMPONENT_VARIANTS as Record<string, Record<ComponentVariantName, ComponentVariantFixture>>, {
+  AREA_CHART: {
+    normal: { props: { title: '累计订阅数', unit: '万', series: [{ name: '订阅数', points: [{ t: '2024', v: 12 }, { t: '2025', v: 31 }] }], sourceLabel: '示例数据集' }, durationMs: 8000, note: '正常' },
+    longText: { props: { title: extLong(2).slice(0, 120), unit: '万', series: [{ name: extLong(1).slice(0, 80), points: [{ t: '2024', v: 12 }, { t: '2025', v: 31 }] }], sourceLabel: '示例数据集' }, durationMs: 8000, note: '长文本标题/系列名' },
+    empty: { props: {}, durationMs: 8000, note: '空值：无数据 → 占位' },
+    extreme: { props: { title: '极值', unit: '万', series: [{ name: '订阅数', points: [{ t: '2024', v: 0 }, { t: '2025', v: 999999999 }] }] }, durationMs: 8000, note: '极值：0 与 10 亿级' },
+    boundary: { props: { series: [{ name: '订阅数', points: [{ t: '2024', v: 12 }] }] }, durationMs: 3000, note: '边界：最小时长' },
+  },
+  STACKED_BAR_CHART: {
+    normal: { props: { title: '收入结构', unit: '万', series: [{ name: '订阅', points: [{ t: '2024', v: 60 }, { t: '2025', v: 95 }] }, { name: '广告', points: [{ t: '2024', v: 25 }, { t: '2025', v: 38 }] }], sourceLabel: '示例数据集' }, durationMs: 9000, note: '正常' },
+    longText: { props: { title: extLong(2).slice(0, 120), unit: '万', series: [{ name: extLong(1).slice(0, 80), points: [{ t: '2024', v: 60 }] }, { name: extLong(1).slice(0, 80), points: [{ t: '2024', v: 25 }] }] }, durationMs: 9000, note: '长文本系列名' },
+    empty: { props: {}, durationMs: 9000, note: '空值：无数据 → 占位' },
+    extreme: { props: { title: '极值', unit: '万', series: [{ name: 'A', points: [{ t: '2024', v: 999999 }, { t: '2025', v: 0 }] }, { name: 'B', points: [{ t: '2024', v: 0 }, { t: '2025', v: 999999 }] }] }, durationMs: 9000, note: '极值：百万级与 0' },
+    boundary: { props: { series: [{ name: 'A', points: [{ t: '2024', v: 60 }] }], title: '单列' }, durationMs: 3000, note: '边界：最小时长' },
+  },
+  NUMBER_COMPARE: {
+    normal: { props: { title: '季度收入对比', items: [{ label: 'Q1', value: 120, unit: '万' }, { label: 'Q2', value: 158, unit: '万' }], layout: 'row', highlightIndex: 1, sourceLabel: '示例数据集' }, durationMs: 7000, note: '正常' },
+    longText: { props: { title: extLong(2).slice(0, 120), items: [{ label: extLong(1).slice(0, 60), value: 120, unit: '万' }, { label: 'Q2', value: 158, unit: '万' }], layout: 'column' }, durationMs: 7000, note: '长文本标签 + column 布局' },
+    empty: { props: {}, durationMs: 7000, note: '空值：无对比项 → 占位' },
+    extreme: { props: { title: '极值', items: [{ label: '最大', value: 999999999, unit: '万' }, { label: '最小', value: 0, unit: '万' }, { label: '负值', value: -12345, unit: '万' }, { label: '极小', value: 0.01, unit: '万' }], layout: 'row' }, durationMs: 7000, note: '极值：四项（最大/0/负/小数）' },
+    boundary: { props: { items: [{ label: 'A', value: 1 }, { label: 'B', value: 2 }] }, durationMs: 2500, note: '边界：最小时长' },
+  },
+  PERCENT_DELTA: {
+    normal: { props: { label: '订阅收入', valuePercent: 32.5, comparison: '同比 2025', sourceLabel: '示例数据集' }, durationMs: 5000, note: '正常：+32.5%' },
+    longText: { props: { label: extLong(1).slice(0, 80), valuePercent: 32.5, comparison: extLong(1).slice(0, 60) }, durationMs: 5000, note: '长文本标签/口径' },
+    empty: { props: {}, durationMs: 5000, note: '空值：无指标 → 占位' },
+    extreme: { props: { label: '极端变化', valuePercent: -999.9, comparison: '历史最大回撤' }, durationMs: 5000, note: '极值：-999.9%' },
+    boundary: { props: { label: '持平', valuePercent: 0 }, durationMs: 2000, note: '边界：最小时长 + 持平语义' },
+  },
+  HOST_PIP: {
+    normal: { props: { presenterName: '林主播', position: 'bottom-right', scale: 0.32, stageNote: '主画面（数据看板）' }, durationMs: 8000, note: '正常：右下 PiP 占位' },
+    longText: { props: { presenterName: extLong(1).slice(0, 60), stageNote: extLong(2).slice(0, 120) }, durationMs: 8000, note: '长文本姓名/主画面说明' },
+    empty: { props: {}, durationMs: 8000, note: '空值：未绑定素材 → 占位' },
+    extreme: { props: { presenterName: '名'.repeat(60), position: 'top-left', scale: 0.45, stageNote: '满占比' }, durationMs: 8000, note: '极值：最大占比 + 最长姓名' },
+    boundary: { props: { position: 'bottom-left', scale: 0.2 }, durationMs: 3000, note: '边界：最小时长 + 最小占比' },
+  },
+  HOST_OVERLAY: {
+    normal: { props: { name: '林主播', title: '财经评论员', align: 'left' }, durationMs: 6000, note: '正常' },
+    longText: { props: { name: extLong(1).slice(0, 60), title: extLong(1).slice(0, 80), align: 'left' }, durationMs: 6000, note: '长文本姓名/头衔' },
+    empty: { props: {}, durationMs: 6000, note: '空值：无姓名 → 占位' },
+    extreme: { props: { name: '名'.repeat(60), title: '职'.repeat(80), align: 'center' }, durationMs: 6000, note: '极值：最长文本 + center 对齐' },
+    boundary: { props: { name: '甲' }, durationMs: 2000, note: '边界：最小时长 + 最短姓名' },
+  },
+  PROCESS_FLOW: {
+    normal: { props: { title: '内容生产流程', steps: [{ label: '取材', detail: '导入' }, { label: '叙事' }, { label: '渲染' }], layout: 'horizontal' }, durationMs: 9000, note: '正常：3 步横向' },
+    longText: { props: { title: extLong(2).slice(0, 120), steps: [{ label: extLong(1).slice(0, 40) }, { label: 'B', detail: extLong(1).slice(0, 80) }], layout: 'vertical' }, durationMs: 9000, note: '长文本 + vertical 布局' },
+    empty: { props: {}, durationMs: 9000, note: '空值：无步骤 → 占位' },
+    extreme: { props: { title: '极值', steps: [{ label: '1' }, { label: '2' }, { label: '3' }, { label: '4' }, { label: '5' }, { label: '6' }], layout: 'horizontal' }, durationMs: 9000, note: '极值：6 步（上限）' },
+    boundary: { props: { steps: [{ label: 'A' }, { label: 'B' }], layout: 'vertical' }, durationMs: 3500, note: '边界：最小时长 + 2 步' },
+  },
+  MAP_ZOOM: {
+    normal: { props: { title: '重点区域', region: '华东', zoomLevel: 3, markers: [{ label: '上海', x: 0.6, y: 0.45 }], sourceLabel: '示例标注' }, durationMs: 7000, note: '正常：区域 + 1 标注' },
+    longText: { props: { title: extLong(2).slice(0, 120), region: '区域名'.repeat(8).slice(0, 60), zoomLevel: 2, markers: [{ label: extLong(1).slice(0, 40), x: 0.5, y: 0.5 }] }, durationMs: 7000, note: '长文本区域/标注名' },
+    empty: { props: {}, durationMs: 7000, note: '空值：无区域 → 占位' },
+    extreme: { props: { title: '极值', region: '边界', zoomLevel: 4, markers: [{ label: 'A', x: 0, y: 0 }, { label: 'B', x: 1, y: 1 }, { label: 'C', x: 0.5, y: 0.5 }, { label: 'D', x: 0.25, y: 0.75 }, { label: 'E', x: 0.75, y: 0.25 }, { label: 'F', x: 0.1, y: 0.9 }] }, durationMs: 7000, note: '极值：最大档位 + 6 标注（含四角）' },
+    boundary: { props: { region: '单点', zoomLevel: 1 }, durationMs: 3000, note: '边界：最小时长 + 最小档位' },
+  },
+  MAP_FLOW: {
+    normal: { props: { title: '资金流向', from: { label: '香港', x: 0.68, y: 0.62 }, to: { label: '新加坡', x: 0.42, y: 0.78 }, flowLabel: '净流入', sourceLabel: '示例标注' }, durationMs: 7000, note: '正常：两点流向' },
+    longText: { props: { title: extLong(2).slice(0, 120), from: { label: extLong(1).slice(0, 40), x: 0.7, y: 0.3 }, to: { label: extLong(1).slice(0, 40), x: 0.3, y: 0.7 }, flowLabel: extLong(1).slice(0, 60) }, durationMs: 7000, note: '长文本端点/流向说明' },
+    empty: { props: {}, durationMs: 7000, note: '空值：未命名端点 → 占位' },
+    extreme: { props: { title: '极端坐标', from: { label: '左上', x: 0, y: 0 }, to: { label: '右下', x: 1, y: 1 }, flowLabel: '对角' }, durationMs: 7000, note: '极值：对角（0,0 → 1,1）' },
+    boundary: { props: { from: { label: 'A', x: 0.5, y: 0.4 }, to: { label: 'B', x: 0.5, y: 0.6 } }, durationMs: 3000, note: '边界：最小时长' },
+  },
+  PERSON_PROFILE: {
+    normal: { props: { name: '林述', subtitle: '宏观研究员', facts: [{ label: '机构', value: '示例研究院' }, { label: '领域', value: '利率与汇率' }], sourceLabel: '示例资料' }, durationMs: 8000, note: '正常' },
+    longText: { props: { name: extLong(1).slice(0, 60), subtitle: extLong(1).slice(0, 80), facts: [{ label: extLong(1).slice(0, 40), value: extLong(1).slice(0, 80) }] }, durationMs: 8000, note: '长文本姓名/事实' },
+    empty: { props: {}, durationMs: 8000, note: '空值：无名称 → 占位' },
+    extreme: { props: { name: '名'.repeat(60), facts: [{ label: 'L1', value: 'V1' }, { label: 'L2', value: 'V2' }, { label: 'L3', value: 'V3' }, { label: 'L4', value: 'V4' }, { label: 'L5', value: 'V5' }] }, durationMs: 8000, note: '极值：最长姓名 + 5 条事实（上限）' },
+    boundary: { props: { name: '甲' }, durationMs: 3000, note: '边界：最小时长 + 无事实模板' },
+  },
+  COMPANY_PROFILE: {
+    normal: { props: { name: '示例科技', subtitle: '云计算服务商', ticker: 'EXMPL', facts: [{ label: '成立', value: '2015' }], sourceLabel: '示例资料' }, durationMs: 8000, note: '正常' },
+    longText: { props: { name: extLong(1).slice(0, 60), subtitle: extLong(1).slice(0, 80), ticker: 'LONGTICKER1234567890', facts: [{ label: extLong(1).slice(0, 40), value: extLong(1).slice(0, 80) }] }, durationMs: 8000, note: '长文本 + 最长 ticker' },
+    empty: { props: {}, durationMs: 8000, note: '空值：无名称 → 占位' },
+    extreme: { props: { name: '公'.repeat(60), ticker: 'T'.repeat(20), facts: [{ label: 'L1', value: 'V1' }, { label: 'L2', value: 'V2' }, { label: 'L3', value: 'V3' }, { label: 'L4', value: 'V4' }, { label: 'L5', value: 'V5' }] }, durationMs: 8000, note: '极值：上限字段' },
+    boundary: { props: { name: '甲' }, durationMs: 3000, note: '边界：最小时长' },
+  },
+  COUNTRY_PROFILE: {
+    normal: { props: { name: '示例国', subtitle: '亚太经济体', regionCode: 'EX', facts: [{ label: '货币', value: 'EXD' }], sourceLabel: '示例资料' }, durationMs: 8000, note: '正常' },
+    longText: { props: { name: extLong(1).slice(0, 60), subtitle: extLong(1).slice(0, 80), regionCode: 'EX-LONG-CODE', facts: [{ label: extLong(1).slice(0, 40), value: extLong(1).slice(0, 80) }] }, durationMs: 8000, note: '长文本 + 长区域码' },
+    empty: { props: {}, durationMs: 8000, note: '空值：无名称 → 占位' },
+    extreme: { props: { name: '国'.repeat(60), regionCode: 'CODE-1234567', facts: [{ label: 'L1', value: 'V1' }, { label: 'L2', value: 'V2' }, { label: 'L3', value: 'V3' }, { label: 'L4', value: 'V4' }, { label: 'L5', value: 'V5' }] }, durationMs: 8000, note: '极值：上限字段' },
+    boundary: { props: { name: '甲' }, durationMs: 3000, note: '边界：最小时长' },
+  },
+  LOGO_WALL: {
+    normal: { props: { title: '合作机构', logos: [{ name: '示例银行' }, { name: '示例基金' }, { name: '示例保险' }, { name: '示例证券' }], columns: 4, sourceLabel: '示例名单' }, durationMs: 6000, note: '正常：4 项 × 4 列' },
+    longText: { props: { title: extLong(2).slice(0, 120), logos: [{ name: extLong(1).slice(0, 40) }, { name: extLong(1).slice(0, 40) }], columns: 2 }, durationMs: 6000, note: '长文本名称 + 2 列' },
+    empty: { props: {}, durationMs: 6000, note: '空值：无名称 → 占位' },
+    extreme: { props: { title: '极值', logos: Array.from({ length: 24 }, (_value, index) => ({ name: `机构${String(index + 1)}` })), columns: 6 }, durationMs: 6000, note: '极值：24 项（上限）× 6 列' },
+    boundary: { props: { logos: [{ name: '甲' }, { name: '乙' }], columns: 2 }, durationMs: 2500, note: '边界：最小时长 + 2 项' },
+  },
+});
+
+Object.assign(COMPONENT_VARIANTS as Record<string, Record<ComponentVariantName, ComponentVariantFixture>>, {
+  COMPARE_SPLIT: {
+    normal: { props: { title: '方案对比', left: { label: '方案 A', value: '成本优先', bullets: ['上线快'] }, right: { label: '方案 B', value: '质量优先', bullets: ['覆盖广'] }, sourceLabel: '示例资料' }, durationMs: 8000, note: '正常' },
+    longText: { props: { title: extLong(2).slice(0, 120), left: { label: extLong(1).slice(0, 40), value: extLong(1).slice(0, 40), bullets: [extLong(1).slice(0, 80)] }, right: { label: extLong(1).slice(0, 40), value: '', bullets: [extLong(1).slice(0, 80)] } }, durationMs: 8000, note: '长文本两栏' },
+    empty: { props: {}, durationMs: 8000, note: '空值：两栏为空 → 占位' },
+    extreme: { props: { title: '极值', left: { label: '左'.repeat(40), value: 'V'.repeat(40), bullets: ['1', '2', '3', '4', '5', '6'] }, right: { label: '右'.repeat(40), value: 'W'.repeat(40), bullets: ['1', '2', '3', '4', '5', '6'] } }, durationMs: 8000, note: '极值：上限字段（40 字 + 6 条）' },
+    boundary: { props: { left: { label: 'A' }, right: { label: 'B' } }, durationMs: 3000, note: '边界：最小时长 + 单标签空栏' },
+  },
+});

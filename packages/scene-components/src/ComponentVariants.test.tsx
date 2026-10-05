@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ASPECT_RATIO_SIZES, DEFAULT_THEME_TOKENS, STANDARD_SCENE_TYPES, sceneRenderContextSchema } from '@ancs/contracts';
+import { ASPECT_RATIO_SIZES, BUILTIN_SCENE_TYPES, DEFAULT_THEME_TOKENS, EXTENDED_SCENE_TYPES, STANDARD_SCENE_TYPES, sceneRenderContextSchema } from '@ancs/contracts';
 import { registerBuiltInComponents } from './builtin.js';
 import { assertVariantCoverage, COMPONENT_VARIANT_NAMES, COMPONENT_VARIANTS, type ComponentVariantName } from './fixtures.js';
 import { durationStatus, resolveSceneProps, validateComponentDefinition } from './protocol.js';
@@ -41,10 +41,11 @@ const renderVariant = (type: string, variant: ComponentVariantName): string => {
 
 const fontSizesIn = (markup: string): number[] => [...markup.matchAll(/font-size:(\d+)px/g)].map((match) => Number(match[1]));
 
-describe('V1 标准 20 类组件全集', () => {
+describe('V1 标准 20 类组件全集 + P10-04 扩展 14 类', () => {
   it('全部注册、协议自检通过、无缺口', () => {
     expect(STANDARD_SCENE_TYPES.length).toBe(20);
-    for (const type of STANDARD_SCENE_TYPES) {
+    expect(EXTENDED_SCENE_TYPES.length).toBe(14);
+    for (const type of BUILTIN_SCENE_TYPES) {
       const definition = getComponent(type);
       expect(definition, `${type} 应已注册`).not.toBeNull();
       if (definition === null) continue;
@@ -58,8 +59,8 @@ describe('V1 标准 20 类组件全集', () => {
   });
 });
 
-describe('五类变体 × 20 组件（正常/长文本/空值/极值/边界时长）', () => {
-  for (const type of STANDARD_SCENE_TYPES) {
+describe('五类变体 × 34 组件（标准 20 + 扩展 14；正常/长文本/空值/极值/边界时长）', () => {
+  for (const type of BUILTIN_SCENE_TYPES) {
     it(`${type}：变体可解析、可渲染、无泄漏`, () => {
       const definition = getComponent(type);
       expect(definition).not.toBeNull();
@@ -156,5 +157,65 @@ describe('数据类组件的数据纪律（§10.3）', () => {
       expect(themed, `${type} 应受主题控制`).not.toContain(DEFAULT_THEME_TOKENS.color.background);
       expect(themed, `${type} 应使用主题字体`).toContain('Georgia, serif');
     }
+  });
+});
+
+describe('P10-04 扩展组件行为（数据纪律与语义）', () => {
+  const renderProps = (type: string, rawProps: Record<string, unknown>, durationMs = 6000): string => {
+    const definition = getComponent(type);
+    if (definition === null) throw new Error(`未注册组件：${type}`);
+    const parsed = definition.inputSchema.parse(rawProps);
+    const Renderer = definition.renderer;
+    const renderContext = sceneRenderContextSchema.parse({ frame: 15, fps: 30, durationMs, ...ASPECT_RATIO_SIZES['16:9'], aspectRatio: '16:9' });
+    return renderToStaticMarkup(
+      <SceneThemeProvider>
+        <Renderer props={parsed as never} context={renderContext} />
+      </SceneThemeProvider>,
+    );
+  };
+
+  it('STACKED_BAR_CHART：含负值或列数不一致 → 占位（不绘制错误图形）', () => {
+    const negative = renderProps('STACKED_BAR_CHART', {
+      title: '含负值',
+      series: [
+        { name: 'A', points: [{ t: 'x', v: -5 }] },
+        { name: 'B', points: [{ t: 'x', v: 3 }] },
+      ],
+    });
+    expect(negative).toContain('data-role="placeholder"');
+    expect(negative).not.toContain('data-role="stacked-bar"');
+
+    const mismatch = renderProps('STACKED_BAR_CHART', {
+      title: '列数不一致',
+      series: [
+        { name: 'A', points: [{ t: 'x', v: 1 }, { t: 'y', v: 2 }] },
+        { name: 'B', points: [{ t: 'x', v: 3 }] },
+      ],
+    });
+    expect(mismatch).not.toContain('data-role="stacked-bar"');
+  });
+
+  it('AREA_CHART：有数据时绘制面积填充且保留系列折线', () => {
+    const markup = renderVariant('AREA_CHART', 'normal');
+    expect(markup).toContain('data-role="area-fill"');
+    expect(markup).toContain('data-role="series-line"');
+  });
+
+  it('PERCENT_DELTA：符号语义正确（上升 ▲ / 下降 ▼ / 持平 —），数值原样呈现', () => {
+    expect(renderVariant('PERCENT_DELTA', 'normal')).toContain('▲');
+    expect(renderVariant('PERCENT_DELTA', 'boundary')).toContain('—');
+
+    const down = renderProps('PERCENT_DELTA', { label: '下降', valuePercent: -12.5 });
+    expect(down).toContain('▼');
+    expect(down).toContain('-12.5');
+  });
+
+  it('地图类组件明确标注"非真实地理投影"（不以地图外观冒充真实地理）', () => {
+    expect(renderVariant('MAP_ZOOM', 'normal')).toContain('非真实地理投影');
+    expect(renderVariant('MAP_FLOW', 'normal')).toContain('非真实地理投影');
+  });
+
+  it('实体组件：无事实字段 → 明确占位（不推算）', () => {
+    expect(renderVariant('PERSON_PROFILE', 'boundary')).toContain('data-role="placeholder"');
   });
 });

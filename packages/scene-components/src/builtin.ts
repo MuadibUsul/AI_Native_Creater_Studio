@@ -1,4 +1,20 @@
 import { aiVideoComponent } from './components/ai-video.js';
+import {
+  areaChartComponent,
+  companyProfileComponent,
+  compareSplitComponent,
+  countryProfileComponent,
+  hostOverlayComponent,
+  hostPipComponent,
+  logoWallComponent,
+  mapFlowComponent,
+  mapZoomComponent,
+  numberCompareComponent,
+  percentDeltaComponent,
+  personProfileComponent,
+  processFlowComponent,
+  stackedBarChartComponent,
+} from './components/extended.js';
 import { bigNumberComponent } from './components/big-number.js';
 import {
   barChartComponent,
@@ -38,6 +54,21 @@ export function registerBuiltInComponents(): void {
   for (const component of [
     // 扩展场景类型（DEC-04：AI_VIDEO 属 P06 交付，不计入 20 类标准清单）
     aiVideoComponent,
+    // P10-04 扩展（§10.2）：Host 变体 / 数值对比 / 面积·堆叠图 / 流程 / 地图缩放·流向 / 实体与布局变体
+    hostPipComponent,
+    hostOverlayComponent,
+    numberCompareComponent,
+    percentDeltaComponent,
+    areaChartComponent,
+    stackedBarChartComponent,
+    processFlowComponent,
+    compareSplitComponent,
+    mapZoomComponent,
+    mapFlowComponent,
+    personProfileComponent,
+    companyProfileComponent,
+    countryProfileComponent,
+    logoWallComponent,
     // Host
     hostFullComponent,
     hostSideComponent,

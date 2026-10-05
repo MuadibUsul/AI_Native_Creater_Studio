@@ -1,5 +1,5 @@
 import { AbsoluteFill } from 'remotion';
-import { DEFAULT_THEME_TOKENS, STANDARD_SCENE_TYPES, sceneRenderContextSchema } from '@ancs/contracts';
+import { DEFAULT_THEME_TOKENS, EXTENDED_SCENE_TYPES, STANDARD_SCENE_TYPES, sceneRenderContextSchema } from '@ancs/contracts';
 import {
   COMPONENT_VARIANTS,
   getComponent,
@@ -20,6 +20,8 @@ registerBuiltInComponents();
 
 export type ComponentGalleryProps = {
   variant: ComponentVariantName;
+  /** 画廊分组：standard（V1 20 类基线）/ extended（P10-04 扩展 13 类） */
+  group?: 'standard' | 'extended';
 };
 
 const CELL_WIDTH = 384;
@@ -35,7 +37,9 @@ const VARIANT_LABEL: Record<ComponentVariantName, string> = {
   boundary: '边界时长',
 };
 
-export function ComponentGallery({ variant }: ComponentGalleryProps) {
+export function ComponentGallery({ variant, group = 'standard' }: ComponentGalleryProps) {
+  const types = group === 'standard' ? STANDARD_SCENE_TYPES : EXTENDED_SCENE_TYPES;
+  const groupTitle = group === 'standard' ? '标准组件画廊（V1 20 类）' : '扩展组件画廊（P10-04 · 14 类）';
   return (
     <AbsoluteFill style={{ backgroundColor: '#05070C', color: '#E5ECF8', fontFamily: DEFAULT_THEME_TOKENS.font.body }}>
       <div
@@ -49,19 +53,19 @@ export function ComponentGallery({ variant }: ComponentGalleryProps) {
           fontWeight: 600,
         }}
       >
-        <span>ANCS · 标准组件画廊（V1 20 类）</span>
+        <span>ANCS · {groupTitle}</span>
         <span style={{ color: DEFAULT_THEME_TOKENS.color.accent }}>变体：{VARIANT_LABEL[variant]}</span>
       </div>
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${String(COLUMNS)}, ${String(CELL_WIDTH)}px)`,
-          gridTemplateRows: `repeat(${String(Math.ceil(STANDARD_SCENE_TYPES.length / COLUMNS))}, ${String(CELL_HEIGHT)}px)`,
+          gridTemplateRows: `repeat(${String(Math.ceil(types.length / COLUMNS))}, ${String(CELL_HEIGHT)}px)`,
           gap: 12,
           padding: '0 24px',
         }}
       >
-        {STANDARD_SCENE_TYPES.map((type) => {
+        {types.map((type) => {
           const definition = getComponent(type);
           if (definition === null) {
             throw new Error(`画廊：组件未注册 ${type}`);
@@ -121,4 +125,5 @@ export function ComponentGallery({ variant }: ComponentGalleryProps) {
   );
 }
 
-export const GALLERY_DEFAULT_PROPS: ComponentGalleryProps = { variant: 'normal' };
+export const GALLERY_DEFAULT_PROPS: ComponentGalleryProps = { variant: 'normal', group: 'standard' };
+export const EXTENDED_GALLERY_DEFAULT_PROPS: ComponentGalleryProps = { variant: 'normal', group: 'extended' };

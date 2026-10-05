@@ -3,7 +3,7 @@ import { bigNumberComponent } from '@ancs/scene-components';
 import { timelineOf } from '@ancs/remotion-core';
 import { BigNumberScene, bigNumberSceneDefaultProps } from './scenes/BigNumberScene';
 import { RegistryScene, type RegistrySceneProps } from './scenes/RegistryScene';
-import { ComponentGallery, GALLERY_DEFAULT_PROPS } from './scenes/ComponentGallery';
+import { ComponentGallery, EXTENDED_GALLERY_DEFAULT_PROPS, GALLERY_DEFAULT_PROPS } from './scenes/ComponentGallery';
 import { FinalComposition, type FinalCompositionProps } from './FinalComposition';
 import { FINAL_COMPOSITION_FIXTURE_SPEC } from './final-fixture';
 
@@ -48,6 +48,16 @@ export function RemotionRoot() {
         width={1920}
         height={1000}
         defaultProps={GALLERY_DEFAULT_PROPS}
+      />
+      {/* P10-04 渲染证据：扩展 13 类组件画廊（props.variant/group 切换） */}
+      <Composition
+        id="ExtendedComponentGallery"
+        component={ComponentGallery}
+        durationInFrames={60}
+        fps={30}
+        width={1920}
+        height={1000}
+        defaultProps={EXTENDED_GALLERY_DEFAULT_PROPS}
       />
       {/* P07-04 Final 合成：服务端渲染入口（renderMedia 用 inputProps.spec 覆盖全部默认） */}
       <Composition

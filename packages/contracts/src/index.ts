@@ -1,5 +1,5 @@
 // 常量
-export { API_PREFIX, V1_DEFAULT_FORMAT, STANDARD_SCENE_TYPES } from './constants.js';
+export { API_PREFIX, V1_DEFAULT_FORMAT, STANDARD_SCENE_TYPES, EXTENDED_SCENE_TYPES, BUILTIN_SCENE_TYPES } from './constants.js';
 
 // 公共基础
 export { opaqueIdSchema } from './common/ids.js';

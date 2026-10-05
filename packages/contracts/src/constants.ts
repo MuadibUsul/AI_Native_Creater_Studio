@@ -36,3 +36,27 @@ export const STANDARD_SCENE_TYPES = [
   'CHAPTER_TITLE',
   'SUMMARY',
 ] as const;
+
+/**
+ * P10-04 扩展场景类型（§10.2 补全；不改动 DEC-04 的 V1 20 类基线）：
+ * Host 变体 / 数值对比 / 面积·堆叠图 / 流程 / 地图缩放·流向 / 实体档案与布局变体。
+ */
+export const EXTENDED_SCENE_TYPES = [
+  'HOST_PIP',
+  'HOST_OVERLAY',
+  'NUMBER_COMPARE',
+  'PERCENT_DELTA',
+  'AREA_CHART',
+  'STACKED_BAR_CHART',
+  'PROCESS_FLOW',
+  'COMPARE_SPLIT',
+  'MAP_ZOOM',
+  'MAP_FLOW',
+  'PERSON_PROFILE',
+  'COMPANY_PROFILE',
+  'COUNTRY_PROFILE',
+  'LOGO_WALL',
+] as const;
+
+/** 全部内置组件类型（标准 20 类 + 扩展；注册表应为全集的超集）。 */
+export const BUILTIN_SCENE_TYPES = [...STANDARD_SCENE_TYPES, ...EXTENDED_SCENE_TYPES] as const;
