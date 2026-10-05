@@ -25,6 +25,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-mock-provider': srcAlias('./packages/providers/mock-provider/src/index.ts'),
   '@ancs/providers-mock-llm': srcAlias('./packages/providers/mock-llm/src/index.ts'),
   '@ancs/providers-mock-tts': srcAlias('./packages/providers/mock-tts/src/index.ts'),
+  '@ancs/providers-mock-payments': srcAlias('./packages/providers/mock-payments/src/index.ts'),
   '@ancs/scene-components': srcAlias('./packages/scene-components/src/index.ts'),
 };
 

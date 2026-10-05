@@ -85,6 +85,18 @@ export {
 export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
 export { buildRenderExportPackage, decideRenderApproval, getLatestRenderApproval } from './approval.js';
 export {
+  applyCreditPurchaseInTx,
+  createCreditPackVersion,
+  ensureDefaultCreditPacks,
+  getCreditStatement,
+  grantCredits,
+  grantMonthlyCredits,
+  listCreditPacks,
+  reconcileCredits,
+  refundCreditEntry,
+  startCreditCheckout,
+} from './credits.js';
+export {
   applyBillingEvent,
   getBillingPortal,
   getBillingState,

@@ -19,7 +19,7 @@ export const subscriptionStateSchema = z.enum(SUBSCRIPTION_STATES);
 export type SubscriptionState = z.infer<typeof subscriptionStateSchema>;
 
 /** 收款事件类型（验收六类：成功/失败/续费/取消/重复/乱序——重复与乱序是"处理语义"而非事件类型） */
-export const BILLING_EVENT_TYPES = ['CHECKOUT_COMPLETED', 'SUBSCRIPTION_RENEWED', 'PAYMENT_FAILED', 'SUBSCRIPTION_CANCELED', 'INVOICE_PAID'] as const;
+export const BILLING_EVENT_TYPES = ['CHECKOUT_COMPLETED', 'SUBSCRIPTION_RENEWED', 'PAYMENT_FAILED', 'SUBSCRIPTION_CANCELED', 'INVOICE_PAID', 'CREDIT_PURCHASED'] as const;
 export const billingEventTypeSchema = z.enum(BILLING_EVENT_TYPES);
 export type BillingEventType = z.infer<typeof billingEventTypeSchema>;
 
@@ -30,6 +30,8 @@ export const billingEventSchema = z.object({
   workspaceId: opaqueIdSchema,
   /** 目标套餐（CHECKOUT/RENEWED 携带；用于订阅生效） */
   planKey: planKeySchema.nullable().default(null),
+  /** 目标 Credits 包（CREDIT_PURCHASED 携带；入账金额取自包版本数据，不由事件自述） */
+  packCode: z.string().min(1).max(40).nullable().default(null),
   /** 渠道侧订阅引用（订阅生命周期操作与账单入口使用） */
   providerSubscriptionRef: z.string().min(1).max(200).nullable().default(null),
   /** 事件发生时间（乱序判定水位） */
@@ -81,8 +83,11 @@ export type BillingApplyResult = z.infer<typeof billingApplyResultSchema>;
 /** 收款渠道适配器（实现：Mock/脚本化——无凭据验证事件矩阵；stripe——真实渠道，需测试账号核验） */
 export interface PaymentProvider {
   readonly kind: string;
-  /** 创建结账会话（返回渠道结账页 URL 与订阅引用；**页面返回不作为入账依据**） */
-  createCheckout(input: { workspaceId: string; planKey: string; successUrl: string; cancelUrl: string }): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }>;
+  /**
+   * 创建结账会话（返回渠道结账页 URL 与引用；**页面返回不作为入账依据**）。
+   * 订阅结账携带 planKey；Credits 购买携带 packCode（二者至少其一）。
+   */
+  createCheckout(input: { workspaceId: string; planKey?: string | null; packCode?: string | null; successUrl: string; cancelUrl: string }): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }>;
   /** 账单入口（渠道客户门户；未配置 → null，由调用方 501） */
   createPortal(input: { workspaceId: string }): Promise<{ portalUrl: string } | null>;
   /** 验签并解析事件（签名无效 → 抛 PaymentSignatureError；调用方 401） */

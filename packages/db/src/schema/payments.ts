@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { workspaces } from './workspaces.js';
 
 /**
@@ -19,6 +19,7 @@ export const billingEvents = pgTable(
     providerEventId: text('provider_event_id').notNull(),
     type: text('type').notNull(),
     planKey: text('plan_key'),
+    packCode: text('pack_code'),
     providerSubscriptionRef: text('provider_subscription_ref'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     payload: jsonb('payload').notNull().default({}),
@@ -44,4 +45,21 @@ export const workspaceBillingStates = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('workspace_billing_states_state_idx').on(table.state)],
+);
+
+/** Credits 包（P09-03 / §35：价格是**版本化数据**；同 code 追加新版本，旧行不可变）。 */
+export const creditPacks = pgTable(
+  'credit_packs',
+  {
+    id: text('id').primaryKey(),
+    code: text('code').notNull(),
+    version: integer('version').notNull(),
+    name: text('name').notNull(),
+    credits: integer('credits').notNull(),
+    priceMinor: integer('price_minor').notNull().default(0),
+    currency: text('currency').notNull(),
+    status: text('status').notNull().default('ACTIVE'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('credit_packs_code_version_uq').on(table.code, table.version), index('credit_packs_code_idx').on(table.code, table.version)],
 );

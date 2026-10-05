@@ -8,12 +8,32 @@ import {
   PaymentSignatureError,
   billingStateSchema,
   createCheckoutRequestSchema,
+  buyCreditsRequestSchema,
+  creditPackSchema,
+  creditStatementSchema,
+  creditReconcileSchema,
+  grantCreditsRequestSchema,
+  refundCreditRequestSchema,
   errorEnvelope,
   errorEnvelopeSchema,
   opaqueIdSchema,
   planSchema,
 } from '@ancs/contracts';
-import { applyBillingEvent, getBillingPortal, getBillingState, listBillingEvents, startCheckout, verifyPaymentWebhook, type DomainDeps } from '@ancs/domain';
+import {
+  applyBillingEvent,
+  getBillingPortal,
+  getBillingState,
+  getCreditStatement,
+  grantCredits,
+  listBillingEvents,
+  listCreditPacks,
+  reconcileCredits,
+  refundCreditEntry,
+  startCheckout,
+  startCreditCheckout,
+  verifyPaymentWebhook,
+  type DomainDeps,
+} from '@ancs/domain';
 import { ensureRawBodyParser, rawBodyOf } from '../plugins/raw-body.js';
 import type { AuthDeps } from '../plugins/auth.js';
 
@@ -118,6 +138,86 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: AuthDeps, paym
       return portal;
     },
   );
+
+  /* ---------- P09-03 Credits 商业化 ---------- */
+
+  typed.get(
+    '/workspaces/:id/billing/credit-packs',
+    {
+      schema: { tags: ['billing'], summary: 'Credits 包目录（版本化；价格为数据）', params: wsParamsSchema, response: { 200: z.object({ items: z.array(creditPackSchema) }), ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return { items: await listCreditPacks(domain) };
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/billing/credits/checkout',
+    {
+      schema: {
+        tags: ['billing'],
+        summary: '购买 Credits（返回渠道结账页 URL；**网页跳转不入账**——入账只经 webhook 事件）',
+        params: wsParamsSchema,
+        body: buyCreditsRequestSchema,
+        response: { 200: z.object({ checkoutUrl: z.string().min(1), providerSubscriptionRef: z.string().nullable() }), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:update');
+      const base = paymentDeps.successUrlBase ?? `http://localhost:3001/w/${request.params.id}`;
+      return startCreditCheckout(domain, {
+        workspaceId: request.params.id,
+        request: request.body,
+        provider: paymentDeps.provider,
+        successUrl: `${base}?credits=success`,
+        cancelUrl: `${base}?credits=cancel`,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/billing/credits',
+    {
+      schema: { tags: ['billing'], summary: 'Credits 账单（余额 + 预扣 + 明细）', params: wsParamsSchema, response: { 200: creditStatementSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return getCreditStatement(domain, { workspaceId: request.params.id });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/billing/credits/reconcile',
+    {
+      schema: { tags: ['billing'], summary: 'Credits 对账（收款事件 ↔ 账本条目；不一致 = 明确 false）', params: wsParamsSchema, response: { 200: creditReconcileSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return reconcileCredits(domain, { workspaceId: request.params.id });
+    },
+  );
+
+  /** 管理端赠送/退款（平台管理员；全部经账本，只追加） */
+  app.post('/admin/workspaces/:workspaceId/credits/grant', { schema: { hide: true } }, async (request, reply) => {
+    const { context } = await app.requirePlatformAdmin(request);
+    const params = z.object({ workspaceId: opaqueIdSchema }).safeParse(request.params);
+    if (!params.success) return reply.status(400).send(errorEnvelope('VALIDATION_FAILED', 'workspaceId 非法', request.id));
+    const body = grantCreditsRequestSchema.safeParse(request.body);
+    if (!body.success) return reply.status(422).send(errorEnvelope('VALIDATION_FAILED', '请求体不符合契约', request.id));
+    const result = await grantCredits(domain, { workspaceId: params.data.workspaceId, request: body.data, actorId: context.userId });
+    return reply.status(200).send(result);
+  });
+
+  app.post('/admin/workspaces/:workspaceId/credits/refund', { schema: { hide: true } }, async (request, reply) => {
+    const { context } = await app.requirePlatformAdmin(request);
+    const params = z.object({ workspaceId: opaqueIdSchema }).safeParse(request.params);
+    if (!params.success) return reply.status(400).send(errorEnvelope('VALIDATION_FAILED', 'workspaceId 非法', request.id));
+    const body = refundCreditRequestSchema.safeParse(request.body);
+    if (!body.success) return reply.status(422).send(errorEnvelope('VALIDATION_FAILED', '请求体不符合契约', request.id));
+    const result = await refundCreditEntry(domain, { workspaceId: params.data.workspaceId, request: body.data, actorId: context.userId });
+    return reply.status(200).send(result);
+  });
 
   /** 渠道事件入口（无会话认证：验签即授权；与 P03-06 webhook 同一纪律） */
   app.post('/webhooks/payments', { schema: { hide: true } }, async (request, reply) => {

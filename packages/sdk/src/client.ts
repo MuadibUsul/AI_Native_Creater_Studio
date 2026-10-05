@@ -112,6 +112,12 @@ import {
   workspaceSubscriptionSchema,
   billingStateSchema,
   createCheckoutRequestSchema,
+  creditPackSchema,
+  creditStatementSchema,
+  creditReconcileSchema,
+  buyCreditsRequestSchema,
+  grantCreditsRequestSchema,
+  refundCreditRequestSchema,
   type ClientType,
   type HealthResponse,
   type SessionInfo,
@@ -151,6 +157,10 @@ import {
   type WorkspaceEntitlement,
   type WorkspaceSubscription,
   type BillingState,
+  type CreditPack,
+  type CreditStatement,
+  type CreditReconcile,
+  type LedgerEntry,
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
@@ -170,7 +180,6 @@ import {
   type UpdateSourceRequest,
   type CapabilitySelection,
   type CreditHold,
-  type LedgerEntry,
   type ProviderGeneration,
   type RebindExternalResultRequest,
   type WorkspaceBudget,
@@ -303,6 +312,14 @@ export interface AncsClient {
     billing(workspaceId: string): Promise<{ state: BillingState; plan: Plan | null; events: { id: string; providerEventId: string; type: string; outcome: string; occurredAt: string; receivedAt: string }[] }>;
     /** 账单入口（渠道客户门户；未配置 → 501） */
     billingPortal(workspaceId: string): Promise<{ portalUrl: string }>;
+    /** Credits 包目录（P09-03；版本化，价格为数据） */
+    creditPacks(workspaceId: string): Promise<CreditPack[]>;
+    /** 购买 Credits（返回渠道结账页 URL——**网页跳转不入账**） */
+    buyCredits(workspaceId: string, input: { packCode: string }, options?: MutationOptions): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }>;
+    /** Credits 账单（余额 + 预扣 + 明细） */
+    creditStatement(workspaceId: string): Promise<CreditStatement>;
+    /** Credits 对账（收款事件 ↔ 账本；不一致 = 明确 false） */
+    reconcileCredits(workspaceId: string): Promise<CreditReconcile>;
     update(workspaceId: string, input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     members: {
       list(workspaceId: string): Promise<WorkspaceMember[]>;
@@ -677,6 +694,10 @@ export interface AncsClient {
     metricsText(): Promise<string>;
     /** 指派套餐（P09-01；append-only 订阅——修改套餐不篡改历史账单） */
     assignPlan(workspaceId: string, input: { planKey: PlanKey; note?: string }, options?: MutationOptions): Promise<WorkspaceSubscription>;
+    /** 赠送 Credits（P09-03；admin 面，经账本只追加） */
+    grantCredits(workspaceId: string, input: { amountCredits: number; reason: string }, options?: MutationOptions): Promise<{ entry: LedgerEntry; balanceCredits: number }>;
+    /** 退款（对应原 CREDIT 条目的反向 REFUND；重复退款幂等） */
+    refundCredit(workspaceId: string, input: { entryId: string; note?: string }, options?: MutationOptions): Promise<{ entry: LedgerEntry; balanceCredits: number; idempotent: boolean }>;
   };
   /** 套餐目录（P09-01；版本化、价格为数据） */
   plans: {
@@ -902,6 +923,15 @@ export function createClient(options: ClientOptions): AncsClient {
           events: z.array(z.object({ id: z.string(), providerEventId: z.string(), type: z.string(), outcome: z.string(), occurredAt: z.string(), receivedAt: z.string() })),
         })),
       billingPortal: (workspaceId) => request('POST', `/api/v1/workspaces/${workspaceId}/billing/portal`, z.object({ portalUrl: z.string() })),
+      creditPacks: async (workspaceId) => (await request('GET', `/api/v1/workspaces/${workspaceId}/billing/credit-packs`, z.object({ items: z.array(creditPackSchema) }))).items,
+      buyCredits: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/billing/credits/checkout`, z.object({ checkoutUrl: z.string(), providerSubscriptionRef: z.string().nullable() }), {
+          body: input,
+          bodySchema: buyCreditsRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      creditStatement: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/billing/credits`, creditStatementSchema),
+      reconcileCredits: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/billing/credits/reconcile`, creditReconcileSchema),
       update: (workspaceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema, {
           body: input, bodySchema: updateWorkspaceRequestSchema,
@@ -1558,6 +1588,18 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/admin/workspaces/${workspaceId}/plan`, workspaceSubscriptionSchema, {
           body: input,
           bodySchema: assignPlanRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      grantCredits: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/credits/grant`, z.object({ entry: ledgerEntrySchema, balanceCredits: z.number().int() }), {
+          body: input,
+          bodySchema: grantCreditsRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      refundCredit: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/credits/refund`, z.object({ entry: ledgerEntrySchema, balanceCredits: z.number().int(), idempotent: z.boolean() }), {
+          body: input,
+          bodySchema: refundCreditRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

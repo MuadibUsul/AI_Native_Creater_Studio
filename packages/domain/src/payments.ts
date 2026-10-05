@@ -17,6 +17,7 @@ import {
 import { billingEvents, workspaceBillingStates } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx, getActivePlanVersion } from './plans.js';
+import { applyCreditPurchaseInTx } from './credits.js';
 
 /**
  * 订阅收款服务（P09-02 / 规范 §35、§73.1）。
@@ -84,7 +85,7 @@ export async function verifyPaymentWebhook(
   return resolved.verifyWebhook(input);
 }
 
-const requirePaymentProvider = (provider: PaymentProvider | undefined): PaymentProvider => {
+export const requirePaymentProvider = (provider: PaymentProvider | undefined): PaymentProvider => {
   if (provider === undefined) {
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '未配置收款适配器（PaymentProvider）：订阅收款不可用（fail-closed，无 key 绝不伪成功）', 501, {
       reason: PAYMENT_ERROR_REASONS.PAYMENT_PROVIDER_UNAVAILABLE,
@@ -134,6 +135,7 @@ export async function applyBillingEvent(deps: DomainDeps, rawEvent: BillingEvent
         providerEventId: event.providerEventId,
         type: event.type,
         planKey: event.planKey,
+        packCode: event.packCode,
         providerSubscriptionRef: event.providerSubscriptionRef,
         occurredAt: new Date(event.occurredAt),
         payload: event.payload,
@@ -183,8 +185,9 @@ export async function applyBillingEvent(deps: DomainDeps, rawEvent: BillingEvent
     const row = updated[0];
     if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'billing state upsert failed', 500);
 
-    // 权益效果：ACTIVE 且携带 planKey → 切换订阅（append-only，P09-01；**同事务**：状态与权益不半提交）
-    if (state === 'ACTIVE' && planKey !== null) {
+    // 权益效果：**计划类事件**且 ACTIVE 且套餐确有变化 → 切换订阅（append-only；同事务）
+    const planAffecting = event.type === 'CHECKOUT_COMPLETED' || event.type === 'SUBSCRIPTION_RENEWED' || event.type === 'INVOICE_PAID';
+    if (planAffecting && state === 'ACTIVE' && planKey !== null && planKey !== currentDto.planKey) {
       let plan;
       try {
         plan = await getActivePlanVersion(deps, planKey);
@@ -196,6 +199,11 @@ export async function applyBillingEvent(deps: DomainDeps, rawEvent: BillingEvent
         });
       }
       await assignWorkspacePlanInTx(tx, { workspaceId: event.workspaceId, planKey, assignedBy: 'billing:event', note: `billing:${event.type}`, plan });
+    }
+
+    // 入账：CREDIT_PURCHASED → 账本 CREDIT 条目（**同事务**；入账唯一 = 事件闸门 + 账本 billing_event 唯一索引）
+    if (event.type === 'CREDIT_PURCHASED') {
+      await applyCreditPurchaseInTx(tx, { workspaceId: event.workspaceId, providerEventId: event.providerEventId, packCode: event.packCode });
     }
 
     // 取消事件：终止当前 ACTIVE 订阅（权益回落部署默认套餐；历史保留）

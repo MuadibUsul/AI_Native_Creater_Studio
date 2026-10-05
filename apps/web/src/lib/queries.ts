@@ -121,3 +121,31 @@ export function useAdminAudit() {
   const client = useAncsClient();
   return useQuery({ queryKey: ['admin', 'audit'], queryFn: () => client.admin.audit({ limit: 50 }), retry: false, refetchInterval: 15000 });
 }
+
+/** Credits 账单（P09-03：余额 + 预扣 + 明细；只读） */
+export function useCreditStatement(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'credits'],
+    queryFn: () => client.workspaces.creditStatement(workspaceId),
+    refetchInterval: 15000,
+  });
+}
+
+/** Credits 包目录（P09-03：版本化；价格为数据） */
+export function useCreditPacks(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['workspaces', workspaceId, 'credit-packs'], queryFn: () => client.workspaces.creditPacks(workspaceId) });
+}
+
+/** 收款状态（P09-02：订阅状态 + 事件审计；Credits 页展示套餐上下文） */
+export function useBilling(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['workspaces', workspaceId, 'billing'], queryFn: () => client.workspaces.billing(workspaceId), refetchInterval: 15000 });
+}
+
+/** Plan 权益与用量（P09-01；P09-03 账单页展示存储/席位用量） */
+export function useEntitlements(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['workspaces', workspaceId, 'entitlements'], queryFn: () => client.workspaces.entitlements(workspaceId) });
+}

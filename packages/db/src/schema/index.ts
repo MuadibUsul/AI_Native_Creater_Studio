@@ -37,4 +37,4 @@ export { customMotionComponents, customMotionComponentVersions } from './custom-
 export { renderQaReports } from './render-qa.js';
 export { renderApprovals } from './render-approvals.js';
 export { plans, workspaceSubscriptions } from './plans.js';
-export { billingEvents, workspaceBillingStates } from './payments.js';
+export { billingEvents, creditPacks, workspaceBillingStates } from './payments.js';

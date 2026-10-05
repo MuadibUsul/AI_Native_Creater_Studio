@@ -36,10 +36,13 @@ export class MockPaymentProvider implements PaymentProvider {
     this.checkoutBaseUrl = options.checkoutBaseUrl ?? 'https://payments.mock.local/checkout';
   }
 
-  async createCheckout(input: { workspaceId: string; planKey: string; successUrl: string; cancelUrl: string }): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }> {
+  async createCheckout(input: { workspaceId: string; planKey?: string | null; packCode?: string | null; successUrl: string; cancelUrl: string }): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }> {
+    const query = new URLSearchParams({ workspace: input.workspaceId, success: input.successUrl });
+    if (input.packCode != null) query.set('pack', input.packCode);
+    if (input.planKey != null) query.set('plan', input.planKey);
     return {
-      checkoutUrl: `${this.checkoutBaseUrl}?workspace=${encodeURIComponent(input.workspaceId)}&plan=${encodeURIComponent(input.planKey)}&success=${encodeURIComponent(input.successUrl)}`,
-      providerSubscriptionRef: `sub_mock_${input.workspaceId.slice(-8)}`,
+      checkoutUrl: `${this.checkoutBaseUrl}?${query.toString()}`,
+      providerSubscriptionRef: input.packCode != null ? null : `sub_mock_${input.workspaceId.slice(-8)}`,
     };
   }
 
@@ -54,6 +57,7 @@ export class MockPaymentProvider implements PaymentProvider {
     occurredAt: string;
     providerEventId?: string;
     planKey?: BillingEvent['planKey'];
+    packCode?: BillingEvent['packCode'];
     providerSubscriptionRef?: string | null;
     payload?: Record<string, unknown>;
   }): { headers: Record<string, string>; body: string } {

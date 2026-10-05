@@ -314,6 +314,21 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// Credits 商业化契约（P09-03 / §35、§73.3）
+export {
+  CREDIT_ERROR_REASONS,
+  CREDIT_PACK_STATUSES,
+  creditPackStatusSchema,
+  creditPackSchema,
+  creditStatementSchema,
+  creditReconcileSchema,
+  buyCreditsRequestSchema,
+  grantCreditsRequestSchema,
+  refundCreditRequestSchema,
+  DEFAULT_CREDIT_PACK_SEEDS,
+} from './credits.js';
+export type { CreditErrorReason, CreditPack, CreditStatement, CreditReconcile, BuyCreditsRequest, GrantCreditsRequest, RefundCreditRequest } from './credits.js';
+
 // 订阅收款契约（P09-02 / §35、§73.1）
 export {
   SUBSCRIPTION_STATES,
