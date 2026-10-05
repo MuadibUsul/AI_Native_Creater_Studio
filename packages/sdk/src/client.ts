@@ -110,6 +110,8 @@ import {
   planSchema,
   assignPlanRequestSchema,
   workspaceSubscriptionSchema,
+  billingStateSchema,
+  createCheckoutRequestSchema,
   type ClientType,
   type HealthResponse,
   type SessionInfo,
@@ -148,6 +150,7 @@ import {
   type PlanKey,
   type WorkspaceEntitlement,
   type WorkspaceSubscription,
+  type BillingState,
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
@@ -294,6 +297,12 @@ export interface AncsClient {
     get(workspaceId: string): Promise<WorkspaceWithRole>;
     /** 当前权益 + 实时用量（P09-01；成员可读） */
     entitlements(workspaceId: string): Promise<WorkspaceEntitlement>;
+    /** 发起结账（P09-02；返回渠道结账页 URL——**成功页返回不代表入账**） */
+    checkout(workspaceId: string, input: { planKey: PlanKey; successUrl?: string; cancelUrl?: string }, options?: MutationOptions): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }>;
+    /** 收款状态与事件审计（含 DUPLICATE/OUT_OF_ORDER） */
+    billing(workspaceId: string): Promise<{ state: BillingState; plan: Plan | null; events: { id: string; providerEventId: string; type: string; outcome: string; occurredAt: string; receivedAt: string }[] }>;
+    /** 账单入口（渠道客户门户；未配置 → 501） */
+    billingPortal(workspaceId: string): Promise<{ portalUrl: string }>;
     update(workspaceId: string, input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     members: {
       list(workspaceId: string): Promise<WorkspaceMember[]>;
@@ -880,6 +889,19 @@ export function createClient(options: ClientOptions): AncsClient {
         (await request('GET', '/api/v1/workspaces', listOf(workspaceWithRoleSchema))).items,
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema),
       entitlements: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/entitlements`, workspaceEntitlementSchema),
+      checkout: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/billing/checkout`, z.object({ checkoutUrl: z.string(), providerSubscriptionRef: z.string().nullable() }), {
+          body: input,
+          bodySchema: createCheckoutRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      billing: (workspaceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/billing`, z.object({
+          state: billingStateSchema,
+          plan: planSchema.nullable(),
+          events: z.array(z.object({ id: z.string(), providerEventId: z.string(), type: z.string(), outcome: z.string(), occurredAt: z.string(), receivedAt: z.string() })),
+        })),
+      billingPortal: (workspaceId) => request('POST', `/api/v1/workspaces/${workspaceId}/billing/portal`, z.object({ portalUrl: z.string() })),
       update: (workspaceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema, {
           body: input, bodySchema: updateWorkspaceRequestSchema,

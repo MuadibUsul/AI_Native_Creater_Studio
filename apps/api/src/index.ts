@@ -7,6 +7,7 @@ import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
 import { createAdminDeps } from './plugins/admin.js';
+import { MockPaymentProvider } from '@ancs/providers-mock-payments';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
 import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
@@ -96,6 +97,24 @@ if (ttsDriver === 'mock') {
   process.exit(1);
 }
 
+/**
+ * 收款适配器（P09-02）：缺省 = 未配置（收款端点 501 fail-closed）；
+ * mock = 脚本化（仅开发/测试——**无真实扣款/对账能力**，启动时警告）；stripe = 真实渠道（需凭据，未接入 → 启动失败）。
+ */
+let paymentDeps: { provider?: import('@ancs/contracts').PaymentProvider; successUrlBase?: string } = {};
+const paymentsDriver = config.ANCS_PAYMENTS_DRIVER;
+if (paymentsDriver === 'mock') {
+  if (config.ANCS_PAYMENTS_MOCK_SECRET === undefined) {
+    console.error('启动失败：ANCS_PAYMENTS_DRIVER=mock 时必须配置 ANCS_PAYMENTS_MOCK_SECRET（≥16）。');
+    process.exit(1);
+  }
+  console.warn('[api] 收款驱动 = mock（脚本化，无真实扣款）：仅限开发/测试，不得用于生产收款。');
+  paymentDeps = { provider: new MockPaymentProvider({ signingSecret: config.ANCS_PAYMENTS_MOCK_SECRET }), successUrlBase: config.BETTER_AUTH_URL };
+} else if (paymentsDriver === 'stripe') {
+  console.error('启动失败：ANCS_PAYMENTS_DRIVER=stripe 尚未接入（真实渠道适配器随商业上线阶段；无 key 绝不伪成功）。');
+  process.exit(1);
+}
+
 const webhookDeps = {
   verifiers: parseWebhookVerifiers(config.ANCS_WEBHOOK_SECRETS),
   resultFetcher: createHttpResultFetcher(),
@@ -118,6 +137,7 @@ const app = await buildServer({
   },
   storage: storageDeps,
   admin: createAdminDeps(config.ANCS_PLATFORM_ADMINS),
+  payments: paymentDeps,
 });
 
 try {

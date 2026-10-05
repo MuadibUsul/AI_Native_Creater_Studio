@@ -85,6 +85,15 @@ export {
 export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
 export { buildRenderExportPackage, decideRenderApproval, getLatestRenderApproval } from './approval.js';
 export {
+  applyBillingEvent,
+  getBillingPortal,
+  getBillingState,
+  listBillingEvents,
+  startCheckout,
+  verifyPaymentWebhook,
+} from './payments.js';
+export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
+export {
   assertByokAllowed,
   assertChannelQuota,
   assertCustomMotionBudget,

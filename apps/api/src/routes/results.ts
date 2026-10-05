@@ -12,6 +12,7 @@ import {
 } from '@ancs/contracts';
 import { collectProviderResult, ingestProviderWebhook, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
+import { ensureRawBodyParser, rawBodyOf } from '../plugins/raw-body.js';
 
 /**
  * 结果回收入口（P03-06）。
@@ -23,7 +24,6 @@ import type { AuthDeps } from '../plugins/auth.js';
  *   与回调/轮询**共用同一状态迁移与回收服务**（计划 §5.5）。
  */
 
-const RAW_BODY_KEY = 'ancsRawBody';
 
 const providerParamsSchema = z.object({ providerId: z.string().min(1).max(100) });
 const collectParamsSchema = z.object({ id: opaqueIdSchema, jobId: z.string().min(1).max(128) });
@@ -44,20 +44,12 @@ export function registerWebhookRoutes(app: FastifyInstance, deps: AuthDeps, webh
     ...(webhookDeps.storage !== undefined ? { storage: webhookDeps.storage } : {}),
   };
 
-  // 保留原始请求体（验签需要原始字符串；JSON 解析行为不变）
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
-    (request as unknown as Record<string, string>)[RAW_BODY_KEY] = body as string;
-    try {
-      done(null, JSON.parse(body as string));
-    } catch (error) {
-      done(error as Error, undefined);
-    }
-  });
+  // 保留原始请求体（验签需要原始字符串；JSON 解析行为不变）——共享幂等插件
+  ensureRawBodyParser(app);
 
   app.post('/providers/:providerId/webhooks', { schema: { hide: true } }, async (request, reply) => {
     const params = providerParamsSchema.parse(request.params);
-    const rawBody =
-      (request as unknown as Record<string, string>)[RAW_BODY_KEY] ?? JSON.stringify(request.body ?? {});
+    const rawBody = rawBodyOf(request, request.body);
     const headers: Record<string, string | undefined> = {};
     for (const [key, value] of Object.entries(request.headers)) {
       headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;

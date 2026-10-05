@@ -88,6 +88,10 @@ export const apiEnvSchema = z.object({
   ANCS_PLATFORM_ADMINS: z.string().optional(),
   /** 未订阅 workspace 的默认套餐（P09-01；预上线默认 ENTERPRISE；**SaaS 上线门（P09-06）要求 FREE**） */
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  /** 收款驱动（P09-02）：mock=脚本化（仅开发/测试，警告）；stripe 需凭据（未实现→启动失败）；缺省=未配置（收款端点 501 fail-closed） */
+  ANCS_PAYMENTS_DRIVER: z.enum(['mock', 'stripe'], { message: 'ANCS_PAYMENTS_DRIVER 仅支持 mock | stripe' }).optional(),
+  /** Mock 收款签名密钥（ANCS_PAYMENTS_DRIVER=mock 时必填；≥16） */
+  ANCS_PAYMENTS_MOCK_SECRET: z.string().min(16, 'ANCS_PAYMENTS_MOCK_SECRET 过短（≥16 字符）').optional(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

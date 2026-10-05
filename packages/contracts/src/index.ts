@@ -314,6 +314,21 @@ export {
   RENDER_EXECUTION_FILE_NAMES,
   RENDER_EXECUTION_FILE_MIME_TYPES,
 } from './render-execution.js';
+// 订阅收款契约（P09-02 / §35、§73.1）
+export {
+  SUBSCRIPTION_STATES,
+  subscriptionStateSchema,
+  BILLING_EVENT_TYPES,
+  billingEventTypeSchema,
+  billingEventSchema,
+  billingStateSchema,
+  PAYMENT_ERROR_REASONS,
+  billingApplyResultSchema,
+  PaymentSignatureError,
+  createCheckoutRequestSchema,
+} from './payments.js';
+export type { SubscriptionState, BillingEventType, BillingEvent, BillingState, PaymentErrorReason, BillingApplyResult, PaymentProvider, CreateCheckoutRequest } from './payments.js';
+
 // 套餐与权益契约（P09-01 / §73、§35—36、§31）
 export {
   PLAN_KEYS,

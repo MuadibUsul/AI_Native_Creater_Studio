@@ -30,6 +30,7 @@ import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerApprovalRoutes } from './routes/approval.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerPlanRoutes } from './routes/plans.js';
+import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
 import { registerMetrics } from './plugins/metrics.js';
 import { registerAdminMetricsRoutes } from './routes/admin-metrics.js';
@@ -66,6 +67,8 @@ export interface BuildServerOptions {
   storage?: StorageDeps;
   /** 平台管理员（P08-02；缺省=空名单——admin 面不可用，反枚举 404） */
   admin?: AdminDeps;
+  /** 订阅收款（P09-02；缺省=未配置——相关端点 501 fail-closed） */
+  payments?: PaymentRouteDeps;
   /**
    * 凭据保险库（P03-04）。未提供时连接/路由端点不注册（无凭据能力的进程，fail-closed）。
    */
@@ -177,6 +180,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAdminRoutes(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
         registerAdminMetricsRoutes(instance, authDeps);
         registerPlanRoutes(instance, authDeps);
+        registerPaymentRoutes(instance, authDeps, options.payments ?? {});
       },
       { prefix: API_PREFIX },
     );

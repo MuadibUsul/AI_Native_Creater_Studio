@@ -158,31 +158,50 @@ export async function assignWorkspacePlan(
   const workspaceRows = await deps.db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
   if (workspaceRows[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'workspace not found', 404);
   const plan = await getActivePlanVersion(deps, input.planKey);
-  const now = new Date();
+  return deps.db.transaction(async (tx) => assignWorkspacePlanInTx(tx, { ...input, plan }));
+}
 
-  return deps.db.transaction(async (tx) => {
-    // 旧订阅保留（supersededAt），不删除、不改写内容——"修改套餐不篡改历史账单"
-    await tx
-      .update(workspaceSubscriptions)
-      .set({ status: 'CANCELLED', supersededAt: now, cancelledAt: now })
-      .where(and(eq(workspaceSubscriptions.workspaceId, input.workspaceId), eq(workspaceSubscriptions.status, 'ACTIVE'), isNull(workspaceSubscriptions.supersededAt)));
-    const inserted = await tx
-      .insert(workspaceSubscriptions)
-      .values({
-        id: `sub_${randomUUID()}`,
-        workspaceId: input.workspaceId,
-        planId: plan.id,
-        planKey: plan.planKey,
-        planVersion: plan.version,
-        status: 'ACTIVE',
-        startedAt: now,
-        assignedBy: input.assignedBy ?? null,
-      })
-      .returning();
-    const row = inserted[0];
-    if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'subscription insert failed', 500);
-    return toSubscriptionDto(row);
-  });
+/** 事务内订阅切换（P09-02：收款事件与订阅切换同事务——状态与权益不半提交）。 */
+export async function assignWorkspacePlanInTx(
+  tx: Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0],
+  input: { workspaceId: string; planKey: PlanKey; assignedBy?: string | null; note?: string | null; plan: Plan },
+): Promise<WorkspaceSubscription> {
+  const now = new Date();
+  // 旧订阅保留（supersededAt），不删除、不改写内容——"修改套餐不篡改历史账单"
+  await tx
+    .update(workspaceSubscriptions)
+    .set({ status: 'CANCELLED', supersededAt: now, cancelledAt: now })
+    .where(and(eq(workspaceSubscriptions.workspaceId, input.workspaceId), eq(workspaceSubscriptions.status, 'ACTIVE'), isNull(workspaceSubscriptions.supersededAt)));
+  const inserted = await tx
+    .insert(workspaceSubscriptions)
+    .values({
+      id: `sub_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      planId: input.plan.id,
+      planKey: input.plan.planKey,
+      planVersion: input.plan.version,
+      status: 'ACTIVE',
+      startedAt: now,
+      assignedBy: input.assignedBy ?? null,
+    })
+    .returning();
+  const row = inserted[0];
+  if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'subscription insert failed', 500);
+  return toSubscriptionDto(row);
+}
+
+/** 事务内取消当前 ACTIVE 订阅（P09-02：收款取消事件 → 权益回落；历史保留 supersededAt）。 */
+export async function cancelWorkspaceSubscriptionInTx(
+  tx: Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0],
+  input: { workspaceId: string; note?: string | null },
+): Promise<number> {
+  const now = new Date();
+  const updated = await tx
+    .update(workspaceSubscriptions)
+    .set({ status: 'CANCELLED', supersededAt: now, cancelledAt: now })
+    .where(and(eq(workspaceSubscriptions.workspaceId, input.workspaceId), eq(workspaceSubscriptions.status, 'ACTIVE'), isNull(workspaceSubscriptions.supersededAt)))
+    .returning({ id: workspaceSubscriptions.id });
+  return updated.length;
 }
 
 /** 当前订阅（最新 ACTIVE；无 → null）。 */
