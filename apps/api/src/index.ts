@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { resolve } from 'node:path';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, formatEnvFailure, validateEnv } from '@ancs/contracts';
+import { apiEnvSchema, crossCheckApiEnv, formatEnvFailure, validateEnv, type EnvIssue } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
@@ -26,6 +26,12 @@ import { recordAudit } from '@ancs/domain';
 const envResult = validateEnv(apiEnvSchema, process.env);
 if (!envResult.ok || envResult.value === null) {
   console.error(formatEnvFailure('api', envResult.issues));
+  process.exit(1);
+}
+// P09-06 商业上线门：live 模式的跨字段条件（fail-closed；台账见 docs/ops/launch-gate.md）
+const envIssues: EnvIssue[] = [...crossCheckApiEnv(envResult.value)];
+if (envIssues.length > 0) {
+  console.error(formatEnvFailure('api', envIssues));
   process.exit(1);
 }
 const config = envResult.value;

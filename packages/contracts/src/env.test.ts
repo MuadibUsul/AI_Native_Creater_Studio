@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -73,5 +73,47 @@ describe('validateEnv（Worker）与跨字段校验', () => {
     const result = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_QUEUE_DRIVER: 'sqs' });
     expect(result.ok).toBe(false);
     expect(result.issues.find((issue) => issue.variable === 'ANCS_QUEUE_DRIVER')?.message).toContain('db | bullmq');
+  });
+});
+
+describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
+  const liveEnv = {
+    ...validApiEnv,
+    ANCS_SAAS_MODE: 'live',
+    ANCS_DEFAULT_PLAN: 'FREE',
+    ANCS_PAYMENTS_DRIVER: 'stripe',
+    BETTER_AUTH_URL: 'https://api.example.com',
+    ANCS_PLATFORM_ADMINS: 'usr_admin_1',
+  };
+
+  it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
+    const result = validateEnv(apiEnvSchema, validApiEnv);
+    expect(result.ok).toBe(true);
+    expect(result.value?.ANCS_SAAS_MODE).toBe('internal');
+    expect(crossCheckApiEnv(result.value as NonNullable<typeof result.value>)).toEqual([]);
+  });
+
+  it('live 全条件满足（保留 local 存储例外）→ 无问题', () => {
+    const result = validateEnv(apiEnvSchema, liveEnv);
+    expect(result.ok).toBe(true);
+    const issues = crossCheckApiEnv(result.value as NonNullable<typeof result.value>);
+    // storage 仍为默认 local → 仍会报存储一项；这里先断言其它条件均满足
+    expect(issues.map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_DRIVER']);
+  });
+
+  it('live 缺条件 → 逐项明确（默认套餐非 FREE / mock 收款 / local 存储 / 非 https / 无管理员）', () => {
+    const result = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_SAAS_MODE: 'live', ANCS_PAYMENTS_DRIVER: 'mock', ANCS_PAYMENTS_MOCK_SECRET: 'live-gate-mock-secret-0123' }); // secrets:check-ignore：测试专用假密钥
+    expect(result.ok).toBe(true);
+    const issues = crossCheckApiEnv(result.value as NonNullable<typeof result.value>);
+    const variables = issues.map((issue) => issue.variable).sort();
+    expect(variables).toEqual(['ANCS_DEFAULT_PLAN', 'ANCS_PAYMENTS_DRIVER', 'ANCS_PLATFORM_ADMINS', 'ANCS_STORAGE_DRIVER', 'BETTER_AUTH_URL']);
+    expect(issues.find((issue) => issue.variable === 'ANCS_PAYMENTS_DRIVER')?.message).toContain('mock 无真实扣款能力');
+    expect(issues.find((issue) => issue.variable === 'ANCS_DEFAULT_PLAN')?.message).toContain('必须为 FREE');
+  });
+
+  it('非法 ANCS_SAAS_MODE → 显式失败', () => {
+    const result = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_SAAS_MODE: 'production' });
+    expect(result.ok).toBe(false);
+    expect(result.issues.find((issue) => issue.variable === 'ANCS_SAAS_MODE')?.message).toContain('仅支持 internal | live');
   });
 });

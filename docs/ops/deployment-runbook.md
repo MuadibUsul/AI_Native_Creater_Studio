@@ -119,3 +119,21 @@ pnpm run provider:verify    # Provider 能力核验（无凭据时退出码 2 �
 4. `apps/web` 部署为 Next 15 应用（`pnpm --filter @ancs/web build` 产物 `apps/web/.next`），
    托管方式随目标环境（Node 服务器/容器）选择；本 Runbook 的演练覆盖 API/Worker/DB/存储，
    Web 与反向代理（TLS/域名）属环境特化配置。
+
+## 9. 商业上线门（P09-06 / §47）
+
+对外收款与公开注册是**独立放行**（fail-closed），与内部预上线部署（`ANCS_SAAS_MODE=internal`，默认）分离：
+
+```bash
+pnpm run launch:gate                 # 信息模式（CI 执行）：台账可解析 + 输出机器条件现状
+node scripts/launch-gate-check.mjs --live   # 放行判定：任一人工条件未完成或机器条件不满足 → exit 1
+```
+
+- **机器条件**（`ANCS_SAAS_MODE=live` 时 API 启动强制，见 `crossCheckApiEnv`）：
+  `ANCS_DEFAULT_PLAN=FREE`、`ANCS_PAYMENTS_DRIVER=stripe`、`ANCS_STORAGE_DRIVER≠local`、
+  `BETTER_AUTH_URL=https://…`、`ANCS_PLATFORM_ADMINS` 非空。
+- **人工条件台账**：`docs/ops/launch-gate.md`（LG-01…LG-14：Provider 条款/白标许可/协议/Consent/
+  Content·Abuse·Privacy·ToS·DPA/主体税务/正式支付开通/Remotion 授权/政策上线/保留口径）——
+  现状**全部 BLOCKED**（需人工：法务/商务/财务）；`APPROVED` 必须附可核对证据。
+- **放行顺序**：台账逐条举证 → `--live` 判定通过 → 以 live 配置部署（启动再校验一次）；
+  当前无公开注册端点（账号经内部 CLI 创建），与门禁一致。

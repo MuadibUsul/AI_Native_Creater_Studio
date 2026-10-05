@@ -29,7 +29,8 @@
     "test:motion": "vitest run --project motion",
     "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs",
     "recovery:rehearsal": "node scripts/recovery-rehearsal.mjs",
-    "perf:baseline": "node scripts/perf-baseline.mjs"
+    "perf:baseline": "node scripts/perf-baseline.mjs",
+    "launch:gate": "node scripts/launch-gate-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

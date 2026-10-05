@@ -66,3 +66,7 @@ jobs:
       # P08-03：备份/恢复演练（恢复到隔离库 → 读取并重渲染固定版本 → 密钥轮换断言）
       - name: 备份/恢复演练（P08-03）
         run: pnpm run recovery:rehearsal
+
+      # P09-06：商业上线门校验（信息模式：台账可解析 + 机器条件输出；live 放行判定由运营在部署前执行）
+      - name: 商业上线门（P09-06）
+        run: pnpm run launch:gate

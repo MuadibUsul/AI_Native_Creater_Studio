@@ -398,6 +398,7 @@ export {
   apiEnvSchema,
   workerEnvSchema,
   crossCheckWorkerEnv,
+  crossCheckApiEnv,
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv } from './env.js';
 

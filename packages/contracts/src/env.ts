@@ -92,9 +92,48 @@ export const apiEnvSchema = z.object({
   ANCS_PAYMENTS_DRIVER: z.enum(['mock', 'stripe'], { message: 'ANCS_PAYMENTS_DRIVER 仅支持 mock | stripe' }).optional(),
   /** Mock 收款签名密钥（ANCS_PAYMENTS_DRIVER=mock 时必填；≥16） */
   ANCS_PAYMENTS_MOCK_SECRET: z.string().min(16, 'ANCS_PAYMENTS_MOCK_SECRET 过短（≥16 字符）').optional(),
+  /**
+   * 运行模式（P09-06 商业上线门）：internal（默认；预上线内部用）| live（对外 SaaS）。
+   * **live = fail-closed 门禁**：正式收款/公开注册所需的机器条件必须全部满足（见 crossCheckApiEnv），
+   * 否则启动失败——"所需外部条件完成后才能开启正式收款和公开注册"（计划 §8）。
+   * 人工条件（条款/主体/政策文档）台账见 docs/ops/launch-gate.md（scripts/launch-gate-check.mjs --live 校验）。
+   */
+  ANCS_SAAS_MODE: z.enum(['internal', 'live'], { message: 'ANCS_SAAS_MODE 仅支持 internal | live' }).default('internal'),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
+
+/** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
+export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_SAAS_MODE === 'live') {
+    if (value.ANCS_DEFAULT_PLAN !== 'FREE') {
+      issues.push({
+        variable: 'ANCS_DEFAULT_PLAN',
+        message: `live 模式必须为 FREE（当前 ${value.ANCS_DEFAULT_PLAN ?? '未配置（将按 ENTERPRISE 解析）'}）——未订阅工作区不得获得内部不限额度`,
+      });
+    }
+    if (value.ANCS_PAYMENTS_DRIVER !== 'stripe') {
+      issues.push({
+        variable: 'ANCS_PAYMENTS_DRIVER',
+        message: 'live 模式必须为真实收款驱动（stripe）——mock 无真实扣款能力，不得承载正式收款',
+      });
+    }
+    if (value.ANCS_STORAGE_DRIVER === 'local') {
+      issues.push({
+        variable: 'ANCS_STORAGE_DRIVER',
+        message: 'live 模式不得使用 local 存储（需 S3/R2 等对象存储适配器——未实现前不得开启 SaaS）',
+      });
+    }
+    if (value.BETTER_AUTH_URL === undefined || !value.BETTER_AUTH_URL.startsWith('https://')) {
+      issues.push({ variable: 'BETTER_AUTH_URL', message: 'live 模式的 BETTER_AUTH_URL 必须是 https 完整 URL' });
+    }
+    if (value.ANCS_PLATFORM_ADMINS === undefined || value.ANCS_PLATFORM_ADMINS.trim() === '') {
+      issues.push({ variable: 'ANCS_PLATFORM_ADMINS', message: 'live 模式必须配置平台管理员名单（运营面不可缺席）' });
+    }
+  }
+  return issues;
+}
 
 /** Worker 环境（apps/worker）。 */
 export const workerEnvSchema = z.object({
