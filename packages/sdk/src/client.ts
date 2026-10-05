@@ -126,6 +126,9 @@ import {
   voiceConsentSchema,
   stockSearchResultSchema,
   stockAcquisitionResultSchema,
+  searchResponseSchema,
+  graphExportSchema,
+  assetBundleExportSchema,
   renderOutputEnhancementsSchema,
   addVoiceSampleRequestSchema,
   confirmVoiceConsentRequestSchema,
@@ -162,6 +165,9 @@ import {
   type VoiceConsent,
   type StockSearchResult,
   type StockAcquisitionResult,
+  type SearchResponse,
+  type GraphExport,
+  type AssetBundleExport,
   type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
@@ -348,12 +354,18 @@ export interface AncsClient {
     token(input: import('@ancs/contracts').TokenRequest): Promise<TokenResponse>;
     revoke(input: { clientId: string; refreshToken: string }): Promise<void>;
   };
+  /** 工作区搜索（P10-06；租户内 + 排除软删；kinds 可选过滤） */
+  search(workspaceId: string, input: { q: string; kinds?: string[]; limit?: number }): Promise<SearchResponse>;
   workspaces: {
     create(input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     list(): Promise<WorkspaceWithRole[]>;
     get(workspaceId: string): Promise<WorkspaceWithRole>;
     /** 当前权益 + 实时用量（P09-01；成员可读） */
     entitlements(workspaceId: string): Promise<WorkspaceEntitlement>;
+    /** Scene Graph 导出（P10-06；可移植 JSON，无 URL/Secret） */
+    graphExport(workspaceId: string, projectId: string): Promise<GraphExport>;
+    /** 原素材 Bundle（清单 + 逐件签名 URL；缺权素材明确列出） */
+    assetBundle(workspaceId: string, projectId: string): Promise<AssetBundleExport>;
     /** 发起结账（P09-02；返回渠道结账页 URL——**成功页返回不代表入账**） */
     checkout(workspaceId: string, input: { planKey: PlanKey; successUrl?: string; cancelUrl?: string }, options?: MutationOptions): Promise<{ checkoutUrl: string; providerSubscriptionRef: string | null }>;
     /** 收款状态与事件审计（含 DUPLICATE/OUT_OF_ORDER） */
@@ -1030,6 +1042,12 @@ export function createClient(options: ClientOptions): AncsClient {
       },
     },
 
+    search: async (workspaceId, input) => {
+      const search = new URLSearchParams({ q: input.q });
+      if (input.kinds !== undefined && input.kinds.length > 0) search.set('kinds', input.kinds.join(','));
+      if (input.limit !== undefined) search.set('limit', String(input.limit));
+      return request('GET', `/api/v1/workspaces/${workspaceId}/search?${search.toString()}`, searchResponseSchema);
+    },
     workspaces: {
       create: (input, mutation) =>
         request('POST', '/api/v1/workspaces', workspaceWithRoleSchema, {
@@ -1040,6 +1058,10 @@ export function createClient(options: ClientOptions): AncsClient {
         (await request('GET', '/api/v1/workspaces', listOf(workspaceWithRoleSchema))).items,
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema),
       entitlements: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/entitlements`, workspaceEntitlementSchema),
+      graphExport: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/graph-export`, graphExportSchema),
+      assetBundle: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/asset-bundle`, assetBundleExportSchema),
       checkout: (workspaceId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/billing/checkout`, z.object({ checkoutUrl: z.string(), providerSubscriptionRef: z.string().nullable() }), {
           body: input,

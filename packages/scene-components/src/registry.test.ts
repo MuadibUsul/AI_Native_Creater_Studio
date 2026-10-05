@@ -62,3 +62,15 @@ describe('组件注册表', () => {
     expect(listComponents().length).toBeGreaterThanOrEqual(STANDARD_SCENE_TYPES.length);
   });
 });
+
+describe('组件目录快照漂移锁定（P10-06）', () => {
+  it('contracts.BUILTIN_COMPONENT_CATALOG 必须与注册表 componentCatalog() 一致（否则 CI 失败）', async () => {
+    registerBuiltInComponents();
+    const { BUILTIN_COMPONENT_CATALOG } = await import('@ancs/contracts');
+    const registryEntries = componentCatalog()
+      .map((entry) => ({ type: entry.type, title: entry.title, description: entry.description }))
+      .sort((left, right) => left.type.localeCompare(right.type));
+    const snapshot = BUILTIN_COMPONENT_CATALOG.map((entry) => ({ type: entry.type, title: entry.title, description: entry.description })).sort((left, right) => left.type.localeCompare(right.type));
+    expect(snapshot).toEqual(registryEntries);
+  });
+});

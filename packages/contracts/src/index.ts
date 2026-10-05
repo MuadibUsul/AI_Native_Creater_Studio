@@ -1184,3 +1184,22 @@ export type {
   RenderOutputEnhancements,
   RenderOutputsErrorReason,
 } from './output-enhancements.js';
+
+// 组件目录快照与搜索/导出契约（P10-06 / §62）
+export { BUILTIN_COMPONENT_CATALOG, componentCatalogEntrySummarySchema } from './component-catalog.js';
+export type { ComponentCatalogEntrySummary } from './component-catalog.js';
+export {
+  SEARCH_ENTITY_KINDS,
+  searchEntityKindSchema,
+  searchResultItemSchema,
+  searchResponseSchema,
+  SEARCH_ERROR_REASONS,
+  GRAPH_EXPORT_VERSION,
+  graphExportSchema,
+  ASSET_BUNDLE_EXPORT_VERSION,
+  assetBundleEntrySchema,
+  assetBundleExcludedSchema,
+  assetBundleExportSchema,
+  PROJECT_EXPORT_ERROR_REASONS,
+} from './search.js';
+export type { SearchEntityKind, SearchResultItem, SearchResponse, GraphExport, AssetBundleEntry, AssetBundleExcluded, AssetBundleExport } from './search.js';
