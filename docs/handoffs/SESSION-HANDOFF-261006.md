@@ -2,21 +2,22 @@
 
 - **交接时点**：2026-10-06（上一会话结束于 P10 全部完成；本会话因上下文满而交接）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`f9ea71e` feat(p10-06) 检索迁移 —— **CI 绿**
+- **最后已推送提交**：`9b70d34` feat(p11-01) ContentCore —— CI 状态见 gh run list（推送于会话尾）
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：60 项已交付（≈58%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
+**104 项计划任务：61 项已交付（≈59%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
 | P00–P08（V1 内部生产） | 48 | ✅ 全部交付（P08-05 真实金样、P06-01/02/04/05 真实 Provider 核验 **BLOCKED 凭据**——代码/工具已就位） |
 | P09（对外 SaaS 与商业运营） | 6 | ✅ 全部交付（真实 Stripe BLOCKED；P09-06 上线门机制交付，LG-01…14 人工台账全 BLOCKED） |
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
-| P11–P16 | 44 | ⬜ 未开始（下一项 **P11-01 ContentCore**） |
+| P11（Content Core 与官方 Pack） | 4 | P11-01 ✅（ContentCore 1:1 派生迁移，验证 756）；**P11-02 Atom/Recipe 为下一项**；P11-03/04 未开始 |
+| P12–P16 | 40 | ⬜ 未开始 |
 
 - 测试规模：**752**（unit 341 · web 70 · motion 19 · integration 279 · security 22 · render 6 · golden 15）
 - 迁移最新编号：**0033**（voice_clone 三表）；下一迁移为 0034
@@ -35,16 +36,11 @@
 | P10-02 真实克隆 / P10-03 真实素材·图像·Runway | 对应 Provider 凭据+端点核验 | 实现 VoiceCloneProvider/AssetSearchProvider/GenerationProvider seam → 回放验收矩阵 |
 | P09-06 LG-01…14 | 法务/商务/财务（人工） | `docs/ops/launch-gate.md` 台账举证 → `launch-gate-check.mjs --live` |
 
-## 4. 下一任务：P11-01 ContentCore（设计要点已备）
+## 4. P11-01 已完成（2026-10-06；commit 9b70d34）——下一任务：P11-02 Atom/Recipe
 
-- **验收**：V1 内容结构无损转换为 Thesis/Claims/Facts/Relations/Evidence 核心模型；**旧项目迁移前后来源与关键事实一致，保留原文档**。
-- **已有基础**：ContentDocument（blocks/claims/citations/tables/figures）+ project_sources（P04-01）+ 证据抽取（P04-02，`evidence.extract`）。
-- **建议实现顺序**（严格按 §7：contracts → migration → domain → API → SDK → tests → docs）：
-  1. 契约 `packages/contracts/src/content-core.ts`：thesis/claim/fact/relation/evidence 模式 + `contentCoreSchema` + 迁移记录（来源条数/声明数/事实数快照——供一致性核对）；
-  2. 迁移 0034：`content_cores`（project 唯一；核心模型 JSONB + 迁移审计列）；
-  3. domain `content-core.ts`：`migrateProjectToContentCore` —— 从既有 ContentDocument/Sources/Evidence **派生**核心模型；**幂等**（重跑产出一致）；**保留原文档**（不删不改）；一致性核对字段随行落库；
-  4. API（project:read/write 能力）+ SDK；集成测试：URL 导入→抽取→迁移→**断言来源条数/摘录/声明文本与迁移前一致** + 原文档未变 + 幂等重跑。
-- **后续**：P11-02 Atom/Recipe（NOT_RECOMMENDED 通道）→ P11-03 官方 Pack（受限 PluginContext）→ P11-04 派生血缘 → P12（各 Pack）→ P13（发布）→ P14（运营/学习）→ P15（性能/规模）→ P16（合规收尾，含 Enterprise 隐私）。
+- **P11-01 交付摘要**：契约 content-core.ts + 迁移 0034（content_cores，project 唯一）+ domain（1:1 派生/facts=fact 子投影/relations 不推断/thesis 不编造/原文档零改动/inputsDigest 幂等）+ API/SDK（client.content.contentCore.{migrate,state}）+ 集成 4/4 + verify 756。详见 docs/verification/P11-01.md。
+- **P11-02 设计要点**：Atom = 核心模型最小可复用单元（claim/fact/source-quote 级），**必须携带来源引用**（sourceIds/claimId）；Recipe = 渠道→结构映射（版本化）；Fit = 规则化评估（时长/结构/渠道约束），不合适 → **NOT_RECOMMENDED + 原因**（非报错）。已有基础：P11-01 核心模型 + Channel 版本化样式（P01-04）。
+- **后续**：P11-03 官方 Pack（NOT_RECOMMENDED 通道）→ P11-03 官方 Pack（受限 PluginContext）→ P11-04 派生血缘 → P12（各 Pack）→ P13（发布）→ P14（运营/学习）→ P15（性能/规模）→ P16（合规收尾，含 Enterprise 隐私）。
 
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
 
@@ -76,7 +72,7 @@ docker ps | grep ancs                         # 本地 DB/Redis（55432）
 
 ## 6. 交接时仓库状态
 
-- 工作树**干净**（全部已提交推送）；本会话无未完成半成品。
+- 工作树**干净**（全部已提交推送）；P11-01 已完成（9b70d34）。
 - 若新会话发现未提交变更：为上一会话中断的部分实现——先 `git status`/`git diff` 评估，按 §4 的任务定义继续或干净丢弃（勿盲目提交）。
 - `.artifacts/` 为 gitignore 的本地产物目录（渲染 PNG/测试存储），可随时清理。
 
