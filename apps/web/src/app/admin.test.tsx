@@ -27,6 +27,13 @@ describe('运营界面（P08-02）', () => {
   it('非管理员（404）→ 无权限块（不渲染运营数据）', async () => {
     const client = mockClient({
       admin: {
+        users: vi.fn().mockResolvedValue([]),
+        workspaces: vi.fn().mockResolvedValue([]),
+        abuseFlags: vi.fn().mockResolvedValue([]),
+        storage: vi.fn().mockResolvedValue({ totalBytes: 0, items: [] }),
+        providerStatus: vi.fn().mockResolvedValue({ items: [] }),
+        auditLog: vi.fn().mockResolvedValue([]),
+        supportGrants: vi.fn().mockResolvedValue([]),
         overview: vi.fn().mockRejectedValue(apiError(404, 'NOT_FOUND', 'not found')),
         jobs: vi.fn().mockResolvedValue([]),
         audit: vi.fn().mockResolvedValue([]),
@@ -41,6 +48,13 @@ describe('运营界面（P08-02）', () => {
   it('未登录（401）→ 需要登录', async () => {
     const client = mockClient({
       admin: {
+        users: vi.fn().mockResolvedValue([]),
+        workspaces: vi.fn().mockResolvedValue([]),
+        abuseFlags: vi.fn().mockResolvedValue([]),
+        storage: vi.fn().mockResolvedValue({ totalBytes: 0, items: [] }),
+        providerStatus: vi.fn().mockResolvedValue({ items: [] }),
+        auditLog: vi.fn().mockResolvedValue([]),
+        supportGrants: vi.fn().mockResolvedValue([]),
         overview: vi.fn().mockRejectedValue(apiError(401, 'UNAUTHENTICATED', 'not authenticated')),
         jobs: vi.fn().mockResolvedValue([]),
         audit: vi.fn().mockResolvedValue([]),
@@ -55,6 +69,13 @@ describe('运营界面（P08-02）', () => {
     const retryJob = vi.fn().mockResolvedValue({ id: 'job_1', type: 'RENDER_FINAL', status: 'QUEUED', attempts: 2, maxAttempts: 2, needsReconciliation: false, input: {}, result: null, error: null, stage: null, submitState: 'NOT_SUBMITTED', priority: 0, nextAttemptAt: null, enqueuedAt: null, startedAt: null, completedAt: null, workspaceId: 'ws_1', projectId: null, createdAt: '2026-10-05T11:00:00.000Z', updatedAt: '2026-10-05T12:00:00.000Z' });
     const client = mockClient({
       admin: {
+        users: vi.fn().mockResolvedValue([]),
+        workspaces: vi.fn().mockResolvedValue([]),
+        abuseFlags: vi.fn().mockResolvedValue([]),
+        storage: vi.fn().mockResolvedValue({ totalBytes: 0, items: [] }),
+        providerStatus: vi.fn().mockResolvedValue({ items: [] }),
+        auditLog: vi.fn().mockResolvedValue([]),
+        supportGrants: vi.fn().mockResolvedValue([]),
         overview: vi.fn().mockResolvedValue(overview),
         jobs: vi.fn().mockImplementation((query: { status?: string }) =>
           Promise.resolve(

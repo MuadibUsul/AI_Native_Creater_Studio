@@ -40,6 +40,32 @@ export function registerStorageRoutes(app: FastifyInstance, storage: StorageDeps
     if (bytes.length > maxBytes) {
       return reply.status(413).send(errorEnvelope('VALIDATION_FAILED', '上传超过该意图声明的字节数', request.id, { maxBytes, receivedBytes: bytes.length }));
     }
+    // 上传扫描（§43.3）：检出 → **拒绝落盘** + 审计（upload.malware_rejected）
+    if (storage.scanner !== undefined) {
+      const declared = typeof request.headers['x-ancs-filename'] === 'string' ? request.headers['x-ancs-filename'] : payload.downloadFilename ?? payload.key.split('/').pop() ?? 'upload.bin';
+      const contentType = typeof request.headers['content-type'] === 'string' ? request.headers['content-type'] : 'application/octet-stream';
+      const scan = await storage.scanner.scan({ bytes: new Uint8Array(bytes), filename: declared, contentType });
+      if (scan.status === 'INFECTED') {
+        if (storage.auditSink !== undefined) {
+          await storage.auditSink({
+            action: 'upload.malware_rejected',
+            workspaceId: payload.workspaceId,
+            key: payload.key,
+            filename: declared.slice(0, 200),
+            contentType: contentType.slice(0, 100),
+            findings: scan.findings.map((finding) => ({ code: finding.code, message: finding.message })),
+            scanner: scan.scanner,
+          });
+        }
+        return reply.status(422).send(
+          errorEnvelope('VALIDATION_FAILED', `上传被拒绝：${String(scan.findings.length)} 项安全检出（内容未落盘）`, request.id, {
+            reason: 'MALWARE_DETECTED',
+            scanner: scan.scanner,
+            findings: scan.findings,
+          }),
+        );
+      }
+    }
     await local.writeObject(payload.key, new Uint8Array(bytes));
     return reply.status(200).send({ ok: true, sizeBytes: bytes.length });
   });

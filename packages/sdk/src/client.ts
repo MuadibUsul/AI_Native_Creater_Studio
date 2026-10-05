@@ -120,6 +120,20 @@ import {
   refundCreditRequestSchema,
   workspaceInvitationSchema,
   myInvitationSchema,
+  abuseFlagSchema,
+  createAbuseFlagRequestSchema,
+  resolveAbuseFlagRequestSchema,
+  setWorkspaceAbuseStateRequestSchema,
+  workspaceAbuseStateSchema,
+  supportAccessGrantSchema,
+  createSupportGrantRequestSchema,
+  supportViewSchema,
+  auditLogEntrySchema,
+  adminUserSummarySchema,
+  adminWorkspaceSummarySchema,
+  adminProjectSummarySchema,
+  adminProviderStatusSchema,
+  adminStorageSummarySchema,
   createInvitationRequestSchema,
   setPrivacyTierRequestSchema,
   type ClientType,
@@ -132,6 +146,16 @@ import {
   type WorkspaceWithRole,
   type WorkspaceInvitation,
   type MyInvitation,
+  type AbuseFlag,
+  type WorkspaceAbuseState,
+  type SupportAccessGrant,
+  type SupportView,
+  type AuditLogEntry,
+  type AdminUserSummary,
+  type AdminWorkspaceSummary,
+  type AdminProjectSummary,
+  type AdminProviderStatus,
+  type AdminStorageSummary,
   type PrivacyTier,
   type ChannelWithStyle,
   type ChannelStyleVersion,
@@ -718,6 +742,33 @@ export interface AncsClient {
     grantCredits(workspaceId: string, input: { amountCredits: number; reason: string }, options?: MutationOptions): Promise<{ entry: LedgerEntry; balanceCredits: number }>;
     /** 退款（对应原 CREDIT 条目的反向 REFUND；重复退款幂等） */
     refundCredit(workspaceId: string, input: { entryId: string; note?: string }, options?: MutationOptions): Promise<{ entry: LedgerEntry; balanceCredits: number; idempotent: boolean }>;
+    /* ---------- P09-05 SaaS 安全运营 ---------- */
+    /** 用户列表（查询邮箱/名称） */
+    users(query?: { query?: string; limit?: number }): Promise<AdminUserSummary[]>;
+    /** Workspace 列表（套餐/用量/积分/限制状态/未解决标记） */
+    workspaces(query?: { query?: string; limit?: number }): Promise<AdminWorkspaceSummary[]>;
+    /** Project 列表（查询标题/按 Workspace） */
+    projects(query?: { query?: string; workspaceId?: string; limit?: number }): Promise<AdminProjectSummary[]>;
+    /** Provider 状态（近 7 天聚合） */
+    providerStatus(): Promise<AdminProviderStatus>;
+    /** 存储用量（Top-N + 总量） */
+    storage(query?: { limit?: number }): Promise<AdminStorageSummary>;
+    /** 运营审计表（append-only） */
+    auditLog(query?: { workspaceId?: string; action?: string; limit?: number }): Promise<AuditLogEntry[]>;
+    /** 指定 Workspace 的 Credits 账单（平台视图） */
+    workspaceCredits(workspaceId: string): Promise<CreditStatement>;
+    /** 滥用标记（调查载体） */
+    abuseFlags(query?: { workspaceId?: string; status?: 'OPEN' | 'RESOLVED'; limit?: number }): Promise<AbuseFlag[]>;
+    createAbuseFlag(workspaceId: string, input: { category: AbuseFlag['category']; severity: AbuseFlag['severity']; note: string }, options?: MutationOptions): Promise<AbuseFlag>;
+    resolveAbuseFlag(flagId: string, input: { resolutionNote: string }, options?: MutationOptions): Promise<AbuseFlag>;
+    /** 工作区限制状态（RESTRICTED = 阻止新的成本性任务） */
+    setAbuseState(workspaceId: string, input: { abuseState: WorkspaceAbuseState; note: string }, options?: MutationOptions): Promise<{ workspaceId: string; abuseState: WorkspaceAbuseState }>;
+    /** 支持访问授权（时限 ≤ 24h；不可无痕：审计 + 工作区可见事件） */
+    supportGrants(workspaceId: string): Promise<SupportAccessGrant[]>;
+    createSupportGrant(workspaceId: string, input: { purpose: string; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
+    revokeSupportGrant(grantId: string, options?: MutationOptions): Promise<SupportAccessGrant>;
+    /** 支持视图（需有效授权；仅元数据摘要；每次访问留痕） */
+    supportView(workspaceId: string): Promise<SupportView>;
   };
   /** 套餐目录（P09-01；版本化、价格为数据） */
   plans: {
@@ -1646,6 +1697,81 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: refundCreditRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      users: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.query !== undefined) search.set('query', query.query);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/users${suffix}`, z.object({ items: z.array(adminUserSummarySchema) }))).items;
+      },
+      workspaces: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.query !== undefined) search.set('query', query.query);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/workspaces${suffix}`, z.object({ items: z.array(adminWorkspaceSummarySchema) }))).items;
+      },
+      projects: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.query !== undefined) search.set('query', query.query);
+        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/projects${suffix}`, z.object({ items: z.array(adminProjectSummarySchema) }))).items;
+      },
+      providerStatus: () => request('GET', '/api/v1/admin/provider-status', adminProviderStatusSchema),
+      storage: (query) => {
+        const suffix = query?.limit === undefined ? '' : `?limit=${String(query.limit)}`;
+        return request('GET', `/api/v1/admin/storage${suffix}`, adminStorageSummarySchema);
+      },
+      auditLog: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
+        if (query?.action !== undefined) search.set('action', query.action);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/audit-log${suffix}`, z.object({ items: z.array(auditLogEntrySchema) }))).items;
+      },
+      workspaceCredits: (workspaceId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/credits`, creditStatementSchema),
+      abuseFlags: async (query) => {
+        const search = new URLSearchParams();
+        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
+        if (query?.status !== undefined) search.set('status', query.status);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return (await request('GET', `/api/v1/admin/abuse-flags${suffix}`, z.object({ items: z.array(abuseFlagSchema) }))).items;
+      },
+      createAbuseFlag: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/abuse-flags`, abuseFlagSchema, {
+          body: input,
+          bodySchema: createAbuseFlagRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      resolveAbuseFlag: (flagId, input, mutation) =>
+        request('POST', `/api/v1/admin/abuse-flags/${flagId}/resolve`, abuseFlagSchema, {
+          body: input,
+          bodySchema: resolveAbuseFlagRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      setAbuseState: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/abuse-state`, z.object({ workspaceId: z.string(), abuseState: workspaceAbuseStateSchema }), {
+          body: input,
+          bodySchema: setWorkspaceAbuseStateRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      supportGrants: async (workspaceId) =>
+        (await request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, z.object({ items: z.array(supportAccessGrantSchema) }))).items,
+      createSupportGrant: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, supportAccessGrantSchema, {
+          body: input,
+          bodySchema: createSupportGrantRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revokeSupportGrant: (grantId, mutation) =>
+        request('POST', `/api/v1/admin/support-grants/${grantId}/revoke`, supportAccessGrantSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      supportView: (workspaceId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-view`, supportViewSchema),
     },
     plans: {
       list: async (query) => {

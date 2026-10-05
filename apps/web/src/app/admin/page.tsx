@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useAncsClient } from '@/lib/client';
 import { useAdminAudit, useAdminJobs, useAdminOverview } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
+import { SecurityOps } from '@/ui/SecurityOps';
 
 /**
  * 最小运营界面（P08-02 / §67）：`/admin`
@@ -152,6 +153,9 @@ export default function AdminPage() {
           </ul>
         ) : null}
       </div>
+
+      {/* P09-05：安全运营面板（完整 Admin / 滥用处理 / 支持工具 / 运营审计表） */}
+      <SecurityOps />
     </section>
   );
 }

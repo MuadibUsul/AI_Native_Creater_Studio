@@ -37,7 +37,7 @@ import type { DomainDeps } from './channels.js';
  * 未订阅 workspace 的默认套餐（部署配置 ANCS_DEFAULT_PLAN；默认 ENTERPRISE = 预上线内部模式）。
  * **SaaS 上线门（P09-06）要求正式环境置为 FREE（或注册流程显式分配）**——默认值即默认额度口径。
  */
-function defaultPlanKeyForUnsubscribed(): PlanKey {
+export function defaultPlanKeyForUnsubscribed(): PlanKey {
   const raw = process.env['ANCS_DEFAULT_PLAN'];
   if (raw === undefined || raw === '') return 'ENTERPRISE';
   const allowed: readonly string[] = ['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'];

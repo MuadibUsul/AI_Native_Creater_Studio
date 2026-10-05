@@ -28,6 +28,7 @@ import {
   listBillingEvents,
   listCreditPacks,
   reconcileCredits,
+  recordAudit,
   refundCreditEntry,
   startCheckout,
   startCreditCheckout,
@@ -206,6 +207,15 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: AuthDeps, paym
     const body = grantCreditsRequestSchema.safeParse(request.body);
     if (!body.success) return reply.status(422).send(errorEnvelope('VALIDATION_FAILED', '请求体不符合契约', request.id));
     const result = await grantCredits(domain, { workspaceId: params.data.workspaceId, request: body.data, actorId: context.userId });
+    await recordAudit(domain, {
+      actorKind: 'PLATFORM_ADMIN',
+      actorUserId: context.userId,
+      action: 'credits.grant',
+      targetType: 'credit_ledger_entry',
+      targetId: result.entry.id,
+      workspaceId: params.data.workspaceId,
+      details: { amountCredits: body.data.amountCredits, reason: body.data.reason.slice(0, 200) },
+    });
     return reply.status(200).send(result);
   });
 
@@ -216,6 +226,15 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: AuthDeps, paym
     const body = refundCreditRequestSchema.safeParse(request.body);
     if (!body.success) return reply.status(422).send(errorEnvelope('VALIDATION_FAILED', '请求体不符合契约', request.id));
     const result = await refundCreditEntry(domain, { workspaceId: params.data.workspaceId, request: body.data, actorId: context.userId });
+    await recordAudit(domain, {
+      actorKind: 'PLATFORM_ADMIN',
+      actorUserId: context.userId,
+      action: 'credits.refund',
+      targetType: 'credit_ledger_entry',
+      targetId: result.entry.id,
+      workspaceId: params.data.workspaceId,
+      details: { originalEntryId: body.data.entryId, idempotent: result.idempotent },
+    });
     return reply.status(200).send(result);
   });
 

@@ -114,6 +114,24 @@ export {
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
 export {
+  createAbuseFlag,
+  createSupportGrant,
+  getAdminProviderStatus,
+  getAdminStorageSummary,
+  getSupportView,
+  listAbuseFlags,
+  listAdminProjects,
+  listAdminUsers,
+  listAdminWorkspaces,
+  listAuditLog,
+  listSupportGrants,
+  recordAudit,
+  resolveAbuseFlag,
+  revokeSupportGrant,
+  setWorkspaceAbuseState,
+  workspaceRestrictedFailure,
+} from './security-ops.js';
+export {
   assertByokAllowed,
   assertChannelQuota,
   assertCustomMotionBudget,

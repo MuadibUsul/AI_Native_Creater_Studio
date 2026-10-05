@@ -27,7 +27,8 @@
     "fastify-type-provider-zod": "7.0.0",
     "zod": "4.6.5",
     "@ancs/providers-mock-tts": "workspace:*",
-    "@ancs/providers-mock-payments": "workspace:*"
+    "@ancs/providers-mock-payments": "workspace:*",
+    "@ancs/providers-malware-heuristic": "workspace:*"
   },
   "devDependencies": {
     "@ancs/sdk": "workspace:*",

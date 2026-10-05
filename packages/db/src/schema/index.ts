@@ -2,6 +2,7 @@ export { account, session, user, verification } from './auth.js';
 export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './auth-native.js';
 export { idempotencyKeys } from './idempotency.js';
 export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
+export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
 export {
   avatarIdentities,
   brandIdentities,

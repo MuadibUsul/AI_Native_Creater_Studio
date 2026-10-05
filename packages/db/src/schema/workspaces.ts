@@ -13,6 +13,8 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   /** STANDARD / PRIVATE / ENTERPRISE（P09-04 / §20.4；契约层枚举校验） */
   privacyTier: text('privacy_tier').notNull().default('STANDARD'),
+  /** NORMAL / RESTRICTED（P09-05 滥用限制；**仅平台可见**，不进用户侧 DTO） */
+  abuseState: text('abuse_state').notNull().default('NORMAL'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

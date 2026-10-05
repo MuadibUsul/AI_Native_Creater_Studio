@@ -11,8 +11,9 @@ import {
   type JobQueueMessage,
   type JobStatus,
 } from '@ancs/contracts';
-import { jobDependencies, jobs, outboxEvents } from '@ancs/db';
+import { jobDependencies, jobs, outboxEvents, workspaces } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { workspaceRestrictedFailure } from './security-ops.js';
 
 /**
  * 任务系统（P03-01 / 计划 §5.5；规范 §35 强制规则）。
@@ -230,6 +231,12 @@ export async function createJob(deps: DomainDeps, input: CreateJobInput): Promis
       }
     }
 
+    // 滥用限制闸门（P09-05）：RESTRICTED 工作区的新任务被阻止（已入队/运行中任务不受影响）
+    const abuseRows = await tx.select({ abuseState: workspaces.abuseState }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
+    if (abuseRows[0]?.abuseState === 'RESTRICTED') {
+      throw workspaceRestrictedFailure();
+    }
+
     const now = new Date();
     const status: JobStatus = dependsOn.length > 0 ? 'WAITING_DEPENDENCY' : 'QUEUED';
     const inserted = await tx
@@ -280,6 +287,11 @@ export async function createJobInTx(
   tx: Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0],
   input: CreateJobTxInput,
 ): Promise<Job> {
+  // 滥用限制闸门（P09-05）：RESTRICTED 工作区的新任务被阻止（已入队/运行中任务不受影响）
+  const abuseRows = await tx.select({ abuseState: workspaces.abuseState }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
+  if (abuseRows[0]?.abuseState === 'RESTRICTED') {
+    throw workspaceRestrictedFailure();
+  }
   const now = new Date();
   const inserted = await tx
     .insert(jobs)

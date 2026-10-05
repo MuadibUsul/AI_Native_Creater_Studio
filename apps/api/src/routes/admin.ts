@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { errorEnvelopeSchema, jobSchema, jobStatusSchema, opaqueIdSchema, opsAuditEntrySchema, opsOverviewSchema } from '@ancs/contracts';
-import { getOpsOverview, listOpsAudit, listOpsJobs, retryOpsJob, type DomainDeps } from '@ancs/domain';
+import { getOpsOverview, listOpsAudit, listOpsJobs, recordAudit, retryOpsJob, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 import type { AdminDeps } from '../plugins/admin.js';
 
@@ -70,8 +70,18 @@ export function registerAdminRoutes(app: FastifyInstance, auth: AuthDeps, admin:
       },
     },
     async (request) => {
-      await app.requirePlatformAdmin(request);
-      return retryOpsJob(domain, { jobId: request.params.jobId, reason: request.body.reason ?? null });
+      const { context } = await app.requirePlatformAdmin(request);
+      const job = await retryOpsJob(domain, { jobId: request.params.jobId, reason: request.body.reason ?? null });
+      await recordAudit(domain, {
+        actorKind: 'PLATFORM_ADMIN',
+        actorUserId: context.userId,
+        action: 'job.retry',
+        targetType: 'job',
+        targetId: job.id,
+        workspaceId: job.workspaceId,
+        details: { reason: (request.body.reason ?? '').slice(0, 200) },
+      });
+      return job;
     },
   );
 

@@ -171,3 +171,45 @@ export function useWorkspaceInvitations(workspaceId: string) {
     retry: false,
   });
 }
+
+/* ---------- P09-05 SaaS 安全运营（/admin） ---------- */
+
+export function useAdminUsers(query: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'users', query], queryFn: () => client.admin.users({ query, limit: 20 }), retry: false });
+}
+
+export function useAdminWorkspaces(query: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'workspaces', query], queryFn: () => client.admin.workspaces({ query, limit: 20 }), retry: false });
+}
+
+export function useAdminAbuseFlags() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'abuse-flags'], queryFn: () => client.admin.abuseFlags({ limit: 50 }), retry: false, refetchInterval: 15000 });
+}
+
+export function useAdminStorage() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'storage'], queryFn: () => client.admin.storage({ limit: 10 }), retry: false });
+}
+
+export function useAdminProviderStatus() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'provider-status'], queryFn: () => client.admin.providerStatus(), retry: false });
+}
+
+export function useAdminOpsAuditLog() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['admin', 'audit-log'], queryFn: () => client.admin.auditLog({ limit: 50 }), retry: false, refetchInterval: 15000 });
+}
+
+export function useAdminSupportGrants(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: ['admin', 'support-grants', workspaceId],
+    queryFn: () => client.admin.supportGrants(workspaceId),
+    enabled: workspaceId !== '',
+    retry: false,
+  });
+}

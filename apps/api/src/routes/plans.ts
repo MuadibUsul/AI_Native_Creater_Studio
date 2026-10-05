@@ -12,7 +12,7 @@ import {
   workspaceEntitlementSchema,
   workspaceSubscriptionSchema,
 } from '@ancs/contracts';
-import { assignWorkspacePlan, getWorkspaceEntitlement, listPlanVersions, type DomainDeps } from '@ancs/domain';
+import { assignWorkspacePlan, getWorkspaceEntitlement, listPlanVersions, recordAudit, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -77,12 +77,22 @@ export function registerPlanRoutes(app: FastifyInstance, deps: AuthDeps): void {
     },
     async (request) => {
       const { context } = await app.requirePlatformAdmin(request);
-      return assignWorkspacePlan(domain, {
+      const subscription = await assignWorkspacePlan(domain, {
         workspaceId: request.params.workspaceId,
         planKey: request.body.planKey,
         assignedBy: context.userId,
         note: request.body.note ?? null,
       });
+      await recordAudit(domain, {
+        actorKind: 'PLATFORM_ADMIN',
+        actorUserId: context.userId,
+        action: 'plan.assign',
+        targetType: 'workspace_subscription',
+        targetId: subscription.id,
+        workspaceId: request.params.workspaceId,
+        details: { planKey: request.body.planKey, planVersion: subscription.planVersion },
+      });
+      return subscription;
     },
   );
 }

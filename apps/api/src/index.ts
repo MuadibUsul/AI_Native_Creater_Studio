@@ -14,6 +14,8 @@ import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { MockTtsAdapter } from '@ancs/providers-mock-tts';
+import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
+import { recordAudit } from '@ancs/domain';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -61,6 +63,20 @@ if (storageDriver === 'local') {
       publicBaseUrl,
       signingSecret: storageSecret,
     }),
+    {
+      // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
+      scanner: new HeuristicMalwareScanner(),
+      auditSink: async (entry) => {
+        await recordAudit({ db: handle.db }, {
+          actorKind: 'SYSTEM',
+          action: entry.action,
+          targetType: 'storage_object',
+          targetId: entry.key,
+          workspaceId: entry.workspaceId,
+          details: { filename: entry.filename, contentType: entry.contentType, findings: entry.findings, scanner: entry.scanner },
+        });
+      },
+    },
   );
 } else {
   console.error(`启动失败：未知的 ANCS_STORAGE_DRIVER=${storageDriver}（当前仅支持 local；S3/R2 适配器在真实凭据阶段接入）。`);
