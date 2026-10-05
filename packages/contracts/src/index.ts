@@ -1093,3 +1093,16 @@ export type {
   AdminProviderStatus,
   AdminStorageSummary,
 } from './security-ops.js';
+
+// 文档解析 seam（P10-01 / §4、§84—85）
+export {
+  DOCUMENT_KINDS,
+  documentKindSchema,
+  parsedDocumentElementSchema,
+  parsedDocumentSchema,
+  parsedEmailDocumentSchema,
+  DOCUMENT_PARSE_ERROR_REASONS,
+  DocumentParseError,
+  DOCUMENT_IMPORT_MAX_BYTES,
+} from './documents.js';
+export type { DocumentKind, ParsedDocumentElement, ParsedDocument, ParsedEmailDocument, DocumentParseErrorReason, DocumentParser } from './documents.js';

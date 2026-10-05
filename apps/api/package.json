@@ -28,7 +28,8 @@
     "zod": "4.6.5",
     "@ancs/providers-mock-tts": "workspace:*",
     "@ancs/providers-mock-payments": "workspace:*",
-    "@ancs/providers-malware-heuristic": "workspace:*"
+    "@ancs/providers-malware-heuristic": "workspace:*",
+    "@ancs/providers-document-extract": "workspace:*"
   },
   "devDependencies": {
     "@ancs/sdk": "workspace:*",

@@ -82,7 +82,12 @@ export interface BuildServerOptions {
    * 内容输入依赖（P04-01）与叙事生成依赖（P04-03）：
    * articleFetcher（URL 归一化）、llm（结构化生成；无凭据时可注入 Mock，§76-03）。
    */
-  content?: { articleFetcher?: import('@ancs/contracts').ArticleFetcher; llm?: import('@ancs/contracts').LlmAdapter };
+  content?: {
+    articleFetcher?: import('@ancs/contracts').ArticleFetcher;
+    llm?: import('@ancs/contracts').LlmAdapter;
+    /** 文档解析（P10-01；未提供 → 文档导入端点 501 fail-closed） */
+    documentParser?: import('@ancs/contracts').DocumentParser;
+  };
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
 }
@@ -157,7 +162,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         if (webhookDeps !== undefined) {
           registerWebhookRoutes(instance, authDeps, webhookDeps);
         }
-        registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher);
+        registerContentRoutes(instance, authDeps, contentDeps?.articleFetcher, {
+          ...(contentDeps?.documentParser !== undefined ? { parser: contentDeps.documentParser } : {}),
+          ...(storageDeps?.scanner !== undefined ? { scanner: storageDeps.scanner } : {}),
+          ...(storageDeps?.auditSink !== undefined ? { auditSink: storageDeps.auditSink } : {}),
+        });
         registerEvidenceRoutes(instance, authDeps);
         registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
         registerVisualGrammarRoutes(instance, authDeps);

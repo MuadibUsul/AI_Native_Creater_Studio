@@ -247,8 +247,10 @@ export {
 } from './evidence-extract.js';
 export {
   createContent,
+  createContentFromDocument,
   createContentFromText,
   createContentFromUrl,
+  detectDocumentKind,
   getContentDocument,
   listContentDocuments,
   listProjectSources,

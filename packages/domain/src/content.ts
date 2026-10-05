@@ -3,6 +3,9 @@ import { and, desc, eq } from 'drizzle-orm';
 import {
   ApiFailure,
   CONTENT_INPUT_ERROR_REASONS,
+  DOCUMENT_IMPORT_MAX_BYTES,
+  DOCUMENT_PARSE_ERROR_REASONS,
+  DocumentParseError,
   ERROR_CODES,
   contentDocumentSchema,
   contentDocumentRecordSchema,
@@ -12,7 +15,11 @@ import {
   type ContentDocument,
   type ContentDocumentRecord,
   type ContentSource,
+  type ContentSourceType,
   type CreateContentRequest,
+  type DocumentKind,
+  type DocumentParser,
+  type ParsedDocumentElement,
   type UpdateSourceRequest,
 } from '@ancs/contracts';
 import { contentBlocks, contentDocuments, projectSources, projects } from '@ancs/db';
@@ -81,7 +88,7 @@ async function persistDocument(
     workspaceId: string;
     projectId: string;
     createdBy: string | null;
-    sourceType: 'URL_ARTICLE' | 'PASTED_TEXT' | 'MANUAL_SCRIPT';
+    sourceType: ContentSourceType;
     sourceId: string | null;
     title: string;
     language: string;
@@ -459,4 +466,238 @@ export async function updateSource(
   const next = updated[0];
   if (!next) throw new ApiFailure(ERROR_CODES.INTERNAL, 'source update failed', 500);
   return toSourceDto(next);
+}
+
+/* ---------- P10-01：文档导入（Markdown / PDF / DOCX / Newsletter） ---------- */
+
+/**
+ * 按扩展名 + 内容类型 + 魔数识别文档种类（纯函数；**不猜测**——无法识别返回 null → 415）。
+ * HTML 不走本函数（Newsletter HTML 直接经既有 HTML 抽取；.eml 归 EMAIL）。
+ */
+export function detectDocumentKind(input: { filename: string; contentType: string; bytes: Uint8Array }): DocumentKind | null {
+  const filename = input.filename.toLowerCase();
+  const contentType = input.contentType.toLowerCase().split(';')[0]?.trim() ?? '';
+  const extension = filename.includes('.') ? (filename.split('.').pop() ?? '') : '';
+  const isPdfMagic = input.bytes.length >= 5 && input.bytes[0] === 0x25 && input.bytes[1] === 0x50 && input.bytes[2] === 0x44 && input.bytes[3] === 0x46 && input.bytes[4] === 0x2d;
+  const isZipMagic = input.bytes.length >= 2 && input.bytes[0] === 0x50 && input.bytes[1] === 0x4b;
+
+  if (isPdfMagic || extension === 'pdf' || contentType === 'application/pdf') return 'PDF';
+  if (extension === 'eml' || contentType === 'message/rfc822') return 'EMAIL';
+  if (isZipMagic || extension === 'docx' || contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'DOCX';
+  if (extension === 'md' || extension === 'markdown' || contentType === 'text/markdown') return 'MARKDOWN';
+  return null;
+}
+
+/** 解析元素 → ContentBlock（稳定 ID；表格保留 columns/rows）。 */
+function elementsToBlocks(elements: ParsedDocumentElement[]): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  let counter = 0;
+  const nextId = (): string => {
+    counter += 1;
+    return `blk_${String(counter)}`;
+  };
+  for (const element of elements) {
+    switch (element.type) {
+      case 'heading':
+        blocks.push({ id: nextId(), type: 'heading', level: Math.min(6, Math.max(1, element.level)), text: element.text });
+        break;
+      case 'paragraph':
+        blocks.push({ id: nextId(), type: 'paragraph', text: element.text });
+        break;
+      case 'quote':
+        blocks.push({ id: nextId(), type: 'quote', text: element.text });
+        break;
+      case 'list':
+        blocks.push({ id: nextId(), type: 'list', items: element.items });
+        break;
+      case 'table':
+        blocks.push({ id: nextId(), type: 'table', table: { columns: element.columns, rows: element.rows } });
+        break;
+    }
+  }
+  return blocks;
+}
+
+const trimNote = (note: string): string => (note.length > 200 ? `${note.slice(0, 197)}...` : note);
+
+const parseFailure = (error: DocumentParseError): ApiFailure =>
+  new ApiFailure(ERROR_CODES.VALIDATION_FAILED, `文档解析失败：${error.message}`, 422, {
+    reason: error.reason === DOCUMENT_PARSE_ERROR_REASONS.ENCRYPTED ? CONTENT_INPUT_ERROR_REASONS.DOCUMENT_ENCRYPTED : CONTENT_INPUT_ERROR_REASONS.DOCUMENT_PARSE_FAILED,
+    parseReason: error.reason,
+    ...error.details,
+  });
+
+/**
+ * 文档字节 → ContentDocument（P10-01 / 验收："错误文件、扫描 PDF、缺页、嵌入对象有明确处理；不伪造提取成功"）。
+ *
+ * - 识别失败 → 415 UNKNOWN_DOCUMENT_KIND；超限 → 413 TOO_LARGE（服务端上限，客户端声明不可信）；
+ * - 解析失败（损坏/加密）→ 422 DOCUMENT_PARSE_FAILED / DOCUMENT_ENCRYPTED（带 parseReason）；
+ * - **扫描件 PDF（无文本层）→ 422 SCANNED_PDF_NO_TEXT**（绝不返回"空成功"）；
+ * - 缺页/嵌入对象/未支持构造 → normalization.notes 逐条（≤200 字），来源与内容哈希落 project_sources；
+ * - Newsletter：`.eml` → 取 text/html（附件列明不提取）；`.html` → 既有 HTML 抽取。
+ */
+export async function createContentFromDocument(
+  deps: DomainDeps,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    createdBy: string | null;
+    filename: string;
+    contentType: string;
+    bytes: Uint8Array;
+    parser: DocumentParser | undefined;
+    /** Newsletter HTML（.html/.htm）：不经解析器，走既有 HTML 抽取 */
+    html?: string;
+  },
+): Promise<ContentDocumentRecord> {
+  await assertProjectWritable(deps, input.workspaceId, input.projectId);
+
+  if (input.bytes.byteLength === 0) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '文档为空（0 字节）', 400, { reason: CONTENT_INPUT_ERROR_REASONS.EMPTY_INPUT });
+  }
+  if (input.bytes.byteLength > DOCUMENT_IMPORT_MAX_BYTES) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '文档超过大小上限', 413, {
+      reason: CONTENT_INPUT_ERROR_REASONS.TOO_LARGE,
+      maxBytes: DOCUMENT_IMPORT_MAX_BYTES,
+      receivedBytes: input.bytes.byteLength,
+    });
+  }
+
+  const kind = detectDocumentKind({ filename: input.filename, contentType: input.contentType, bytes: input.bytes });
+  const notes: string[] = [];
+  let blocks: ContentBlock[];
+  let titleHint: string | null = null;
+  let languageText = '';
+  let documentKindLabel: string;
+
+  if (input.html !== undefined) {
+    documentKindLabel = 'NEWSLETTER_HTML';
+    blocks = extractBlocksFromHtml(input.html);
+    languageText = input.html;
+    notes.push('Newsletter HTML 经内置 HTML 抽取（脚本/样式不入正文）');
+  } else {
+    if (input.parser === undefined) {
+      throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '文档解析器未配置（服务端未装配 document parser）', 501);
+    }
+    if (kind === null) {
+      throw new ApiFailure(ERROR_CODES.UNSUPPORTED_MEDIA_TYPE, `不支持的文档类型：${input.filename}（${input.contentType || '未知类型'}）——支持 Markdown/PDF/DOCX/EML/HTML`, 415, {
+        reason: CONTENT_INPUT_ERROR_REASONS.UNKNOWN_DOCUMENT_KIND,
+        filename: input.filename.slice(0, 200),
+        contentType: input.contentType.slice(0, 100),
+      });
+    }
+    documentKindLabel = kind;
+    try {
+      if (kind === 'EMAIL') {
+        const email = await input.parser.parseEmail({ bytes: input.bytes });
+        for (const warning of email.warnings) notes.push(trimNote(warning));
+        for (const attachment of email.attachments) notes.push(trimNote(`附件未提取：${attachment.filename}（${attachment.contentType ?? '未知类型'}）`));
+        titleHint = email.subject;
+        if (email.from !== null) notes.push(trimNote(`发件人：${email.from}`));
+        if (email.html !== null) {
+          blocks = extractBlocksFromHtml(email.html);
+          languageText = email.html;
+        } else if (email.text !== null) {
+          blocks = extractBlocksFromText(email.text, 'PASTED_TEXT');
+          languageText = email.text;
+        } else {
+          blocks = [];
+        }
+      } else {
+        const parsed =
+          kind === 'MARKDOWN'
+            ? await input.parser.parseMarkdown({ bytes: input.bytes })
+            : kind === 'DOCX'
+              ? await input.parser.parseDocx({ bytes: input.bytes })
+              : await input.parser.parsePdf({ bytes: input.bytes });
+        for (const warning of parsed.warnings) notes.push(trimNote(warning));
+        if (!parsed.hasExtractableText) {
+          throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'PDF 无文本层（疑似扫描件）：无法提取正文——需 OCR（后续/人工），本系统不会伪造提取结果', 422, {
+            reason: CONTENT_INPUT_ERROR_REASONS.SCANNED_PDF_NO_TEXT,
+            pageCount: parsed.pageCount,
+            pagesWithoutText: parsed.pagesWithoutText,
+          });
+        }
+        titleHint = parsed.titleHint;
+        blocks = elementsToBlocks(parsed.elements);
+        languageText = parsed.elements
+          .map((element) =>
+            element.type === 'heading' || element.type === 'paragraph' || element.type === 'quote'
+              ? element.text
+              : element.type === 'list'
+                ? element.items.join(' ')
+                : element.columns.join(' '),
+          )
+          .join('\n');
+        if (parsed.pageCount !== null) notes.push(trimNote(`PDF 共 ${String(parsed.pageCount)} 页；无文本页：${parsed.pagesWithoutText.length === 0 ? '无' : parsed.pagesWithoutText.join(',')}`));
+      }
+    } catch (error) {
+      if (error instanceof ApiFailure) throw error;
+      if (error instanceof DocumentParseError) throw parseFailure(error);
+      throw error;
+    }
+  }
+
+  if (blocks.length === 0) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '文档没有可读正文（抽取结果为空）', 422, {
+      reason: CONTENT_INPUT_ERROR_REASONS.EMPTY_CONTENT,
+      filename: input.filename.slice(0, 200),
+    });
+  }
+
+  const firstHeading = blocks.find((block) => block.type === 'heading')?.text;
+  const firstParagraph = blocks.find((block) => block.type === 'paragraph')?.text;
+  const baseName = input.filename.replace(/\.[^.]+$/, '');
+  const title = (typeof firstHeading === 'string' && firstHeading.trim() !== '' ? firstHeading : null) ?? (titleHint !== null && titleHint.trim() !== '' ? titleHint : baseName.slice(0, 120));
+  const excerpt = (firstParagraph ?? blocks[0]?.text ?? '').slice(0, 500);
+  const contentHash = sha256Hex(Buffer.from(input.bytes).toString('base64'));
+  const sourceId = `src_${randomUUID()}`;
+  const sourceType: ContentSourceType = documentKindLabel === 'NEWSLETTER_HTML' || documentKindLabel === 'EMAIL' ? 'NEWSLETTER_IMPORT' : 'DOCUMENT_IMPORT';
+
+  // 出处（§85）：本地文档不以 URL 伪装——用内容寻址 URN 标识该次导入（可核对哈希）
+  await deps.db.insert(projectSources).values({
+    id: sourceId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    url: `urn:ancs:document:${contentHash.slice(0, 32)}`,
+    title,
+    publisher: `本地文件导入（${input.filename.slice(0, 100)}）`,
+    author: null,
+    publishedAt: null,
+    contentHash,
+    excerpt: excerpt !== '' ? excerpt : title,
+    snapshotKind: 'document_upload',
+  });
+
+  return persistDocument(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    createdBy: input.createdBy,
+    sourceType,
+    sourceId,
+    title,
+    language: detectLanguage(languageText),
+    author: null,
+    sourceUrl: null,
+    publishedAt: null,
+    blocks,
+    normalization: {
+      sourceType,
+      fetchedUrl: null,
+      finalUrl: null,
+      charset: kind === 'MARKDOWN' ? 'utf-8' : null,
+      title,
+      blockCount: blocks.length,
+      claims: 0,
+      tables: blocks.filter((block) => block.type === 'table').length,
+      figures: 0,
+      notes: [
+        `documentKind=${documentKindLabel}`,
+        `filename=${input.filename.slice(0, 100)}`,
+        `bytes=${String(input.bytes.byteLength)}`,
+        `sha256=${contentHash.slice(0, 16)}`,
+        ...notes,
+      ].map(trimNote),
+    },
+  });
 }

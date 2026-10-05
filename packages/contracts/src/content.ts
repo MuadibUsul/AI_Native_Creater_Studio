@@ -141,8 +141,8 @@ export type ContentDocument = z.infer<typeof contentDocumentSchema>;
 
 /** ---------- 输入归一化契约（P04-01 / 规范 §7、§8；计划 P04-01） ---------- */
 
-/** V1 文本输入形态（上传图片/视频/音频走资产链路，P02-04） */
-export const CONTENT_SOURCE_TYPES = ['URL_ARTICLE', 'PASTED_TEXT', 'MANUAL_SCRIPT'] as const;
+/** V1 文本输入形态（上传图片/视频/音频走资产链路，P02-04；P10-01 增文档导入与通讯导入） */
+export const CONTENT_SOURCE_TYPES = ['URL_ARTICLE', 'PASTED_TEXT', 'MANUAL_SCRIPT', 'DOCUMENT_IMPORT', 'NEWSLETTER_IMPORT'] as const;
 export const contentSourceTypeSchema = z.enum(CONTENT_SOURCE_TYPES);
 export type ContentSourceType = z.infer<typeof contentSourceTypeSchema>;
 
@@ -169,6 +169,14 @@ export const CONTENT_INPUT_ERROR_REASONS = {
   ENCODING_UNSUPPORTED: 'ENCODING_UNSUPPORTED',
   /** 输入为空（粘贴文本/手写脚本） */
   EMPTY_INPUT: 'EMPTY_INPUT',
+  /** 文档格式不受支持（扩展名/内容类型无法识别为 Markdown/PDF/DOCX/Newsletter） */
+  UNKNOWN_DOCUMENT_KIND: 'UNKNOWN_DOCUMENT_KIND',
+  /** 文档解析失败（损坏/结构非法；**不伪造提取成功**） */
+  DOCUMENT_PARSE_FAILED: 'DOCUMENT_PARSE_FAILED',
+  /** 扫描件 PDF：无文本层（不伪造提取成功）——需 OCR（后续/人工） */
+  SCANNED_PDF_NO_TEXT: 'SCANNED_PDF_NO_TEXT',
+  /** 加密文档（PDF/DOCX 带密码）——无法提取 */
+  DOCUMENT_ENCRYPTED: 'DOCUMENT_ENCRYPTED',
 } as const;
 
 export type ContentInputErrorReason = (typeof CONTENT_INPUT_ERROR_REASONS)[keyof typeof CONTENT_INPUT_ERROR_REASONS];
@@ -235,7 +243,8 @@ export const contentSourceSchema = z.object({
   retrievedAt: z.string().min(1),
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
   excerpt: z.string().min(1),
-  snapshotKind: z.enum(['live_fetch', 'fixture_reconstruction']),
+  /** live_fetch（在线抓取）| fixture_reconstruction（夹具重建）| document_upload（P10-01 本地文件导入） */
+  snapshotKind: z.enum(['live_fetch', 'fixture_reconstruction', 'document_upload']),
   note: z.string().nullable().default(null),
 });
 

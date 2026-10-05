@@ -518,6 +518,13 @@ export interface AncsClient {
       input: CreateContentRequest,
       options?: MutationOptions,
     ): Promise<ContentDocumentRecord>;
+    /** 文档导入（P10-01）：Markdown/PDF/DOCX/EML/HTML 字节 → ContentDocument（服务端写入前扫描+解析） */
+    importDocument(
+      workspaceId: string,
+      projectId: string,
+      input: { filename: string; contentType: string; data: Uint8Array },
+      options?: MutationOptions,
+    ): Promise<ContentDocumentRecord>;
     list(workspaceId: string, projectId: string): Promise<ContentDocumentRecord[]>;
     get(workspaceId: string, projectId: string, documentId: string): Promise<ContentDocumentRecord>;
     sources(workspaceId: string, projectId: string): Promise<ContentSource[]>;
@@ -1318,6 +1325,25 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createContentRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      importDocument: async (workspaceId, projectId, input) => {
+        // 注意：buildHeaders 返回 Headers 实例（展开 `{...headers}` 不会携带任何头）
+        const headers = await buildHeaders(false);
+        headers.set('content-type', input.contentType);
+        const response = await doFetch(
+          `${baseUrl}/api/v1/workspaces/${workspaceId}/projects/${projectId}/content/document?filename=${encodeURIComponent(input.filename)}`,
+          {
+            method: 'POST',
+            headers,
+            // Uint8Array 泛型在 DOM/Node 两套 BodyInit 定义下不完全兼容（运行时均接受二进制体）
+            body: input.data as NonNullable<Parameters<typeof doFetch>[1]>['body'],
+            credentials,
+          },
+        );
+        captureCookies(response);
+        const payload: unknown = await response.json().catch(() => undefined);
+        if (!response.ok) throw parseError(response.status, payload);
+        return contentDocumentRecordSchema.parse(payload);
+      },
       list: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content`, listOf(contentDocumentRecordSchema))).items,
       get: (workspaceId, projectId, documentId) =>

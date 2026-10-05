@@ -16,6 +16,7 @@ import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { MockTtsAdapter } from '@ancs/providers-mock-tts';
 import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
 import { recordAudit } from '@ancs/domain';
+import { LocalDocumentParser } from '@ancs/providers-document-extract';
 
 /**
  * API 入口（P01-02 起接入认证）。
@@ -147,7 +148,12 @@ const app = await buildServer({
   logger: true,
   credentials: credentialDeps,
   webhooks: webhookDeps,
-  content: { articleFetcher: createHttpArticleFetcher(), ...llmDeps },
+  content: {
+    articleFetcher: createHttpArticleFetcher(),
+    ...llmDeps,
+    // 文档导入（P10-01）：本地解析器（Markdown/DOCX/PDF/EML；扫描件不伪造成功）
+    documentParser: new LocalDocumentParser(),
+  },
   audio: audioDeps,
   auth: {
     auth,
