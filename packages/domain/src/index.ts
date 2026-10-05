@@ -117,6 +117,7 @@ export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
 export { buildRenderOutputEnhancements } from './output-enhancements.js';
 export { searchWorkspace } from './search.js';
 export { exportProjectAssetBundle, exportProjectGraph } from './project-exports.js';
+export { getProjectContentCoreState, migrateProjectToContentCore } from './content-core.js';
 export {
   addVoiceSample,
   analyzeVoiceSampleQuality,

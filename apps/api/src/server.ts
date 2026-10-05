@@ -34,6 +34,7 @@ import { registerVoiceCloneRoutes } from './routes/voice-clones.js';
 import { registerStockRoutes } from './routes/stock.js';
 import { registerOutputEnhancementRoutes } from './routes/output-enhancements.js';
 import { registerSearchExportRoutes } from './routes/search-exports.js';
+import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -180,6 +181,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerStockRoutes(instance, authDeps, options.media ?? {}, storageDeps?.adapter);
         registerOutputEnhancementRoutes(instance, authDeps, storageDeps?.adapter);
         registerSearchExportRoutes(instance, authDeps, storageDeps?.adapter);
+        registerContentCoreRoutes(instance, authDeps);
         registerVoiceCloneRoutes(instance, authDeps, {
           ...(options.voiceClone ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),

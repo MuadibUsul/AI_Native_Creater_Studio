@@ -129,6 +129,8 @@ import {
   searchResponseSchema,
   graphExportSchema,
   assetBundleExportSchema,
+  contentCoreMigrationSchema,
+  contentCoreStateSchema,
   renderOutputEnhancementsSchema,
   addVoiceSampleRequestSchema,
   confirmVoiceConsentRequestSchema,
@@ -168,6 +170,8 @@ import {
   type SearchResponse,
   type GraphExport,
   type AssetBundleExport,
+  type ContentCoreMigration,
+  type ContentCoreState,
   type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
@@ -590,6 +594,11 @@ export interface AncsClient {
     list(workspaceId: string, projectId: string): Promise<ContentDocumentRecord[]>;
     get(workspaceId: string, projectId: string, documentId: string): Promise<ContentDocumentRecord>;
     sources(workspaceId: string, projectId: string): Promise<ContentSource[]>;
+    /** Content Core（P11-01）：幂等迁移（1:1 派生；原文档保留）+ 状态（实时计数对照） */
+    contentCore: {
+      migrate(workspaceId: string, projectId: string, options?: MutationOptions): Promise<ContentCoreMigration>;
+      state(workspaceId: string, projectId: string): Promise<ContentCoreState>;
+    };
     /** Sources 编辑：仅元数据（内容与哈希是快照事实） */
     updateSource(
       workspaceId: string,
@@ -1489,6 +1498,14 @@ export function createClient(options: ClientOptions): AncsClient {
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content/${documentId}`, contentDocumentRecordSchema),
       sources: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sources`, listOf(contentSourceSchema))).items,
+      contentCore: {
+        migrate: (workspaceId, projectId, mutation) =>
+          request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-core/migrate`, contentCoreMigrationSchema, {
+            idempotencyKey: mutation?.idempotencyKey,
+          }),
+        state: (workspaceId, projectId) =>
+          request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-core`, contentCoreStateSchema),
+      },
       updateSource: (workspaceId, projectId, sourceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sources/${sourceId}`, contentSourceSchema, {
           body: input,

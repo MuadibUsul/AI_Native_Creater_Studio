@@ -1203,3 +1203,29 @@ export {
   PROJECT_EXPORT_ERROR_REASONS,
 } from './search.js';
 export type { SearchEntityKind, SearchResultItem, SearchResponse, GraphExport, AssetBundleEntry, AssetBundleExcluded, AssetBundleExport } from './search.js';
+
+// Content Core 契约（P11-01 / §92—93）
+export {
+  CONTENT_CORE_VERSION,
+  coreClaimSchema,
+  coreFactSchema,
+  coreRelationSchema,
+  coreEvidenceSchema,
+  coreDocumentRefSchema,
+  contentCoreSchema,
+  contentCoreConsistencySchema,
+  contentCoreMigrationSchema,
+  contentCoreStateSchema,
+  CONTENT_CORE_ERROR_REASONS,
+} from './content-core.js';
+export type {
+  CoreClaim,
+  CoreFact,
+  CoreRelation,
+  CoreEvidence,
+  CoreDocumentRef,
+  ContentCore,
+  ContentCoreConsistency,
+  ContentCoreMigration,
+  ContentCoreState,
+} from './content-core.js';
