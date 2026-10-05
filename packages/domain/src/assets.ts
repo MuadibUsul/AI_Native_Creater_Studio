@@ -93,7 +93,7 @@ export function buildStorageKey(input: {
   return `workspaces/${input.workspaceId}/${scope}/${category}/assets/${input.assetId}/v${String(input.versionNumber)}/${sanitizeFilename(input.filename)}`;
 }
 
-function requireStorage(deps: DomainDeps) {
+export function requireStorage(deps: DomainDeps) {
   if (deps.storage === undefined) {
     throw new ApiFailure(ERROR_CODES.INTERNAL, '对象存储适配器未配置（DomainDeps.storage）', 500);
   }

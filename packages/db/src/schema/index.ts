@@ -3,6 +3,7 @@ export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './a
 export { idempotencyKeys } from './idempotency.js';
 export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
 export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
+export { voiceCloneSamples, voiceClones, voiceConsents } from './voice-clone.js';
 export {
   avatarIdentities,
   brandIdentities,

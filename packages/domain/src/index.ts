@@ -114,6 +114,24 @@ export {
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
 export {
+  addVoiceSample,
+  analyzeVoiceSampleQuality,
+  confirmVoiceConsent,
+  deleteVoiceCloneAtProvider,
+  getVoiceCloneState,
+  getVoiceConsent,
+  listVoiceSamples,
+  refreshVoiceClone,
+  retireVoiceClone,
+  retryVoiceClone,
+  revokeVoiceConsent,
+  submitVoiceClone,
+  unlinkVoiceClone,
+  VOICE_CONSENT_STATEMENT,
+  VOICE_CONSENT_STATEMENT_VERSION,
+  voiceConsentStatementHash,
+} from './voice-clone.js';
+export {
   createAbuseFlag,
   createSupportGrant,
   getAdminProviderStatus,

@@ -20,7 +20,7 @@ export function registerStorageRoutes(app: FastifyInstance, storage: StorageDeps
   if (local === undefined) return; // 非本地驱动不暴露端点
 
   // 二进制请求体解析（JSON 解析器优先级更高，不受影响）
-  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
+  app.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: local.maxLocalUploadBytes }, (_request, body, done) => {
     done(null, body);
   });
 

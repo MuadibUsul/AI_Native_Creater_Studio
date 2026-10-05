@@ -13,7 +13,7 @@ import { parseWebhookVerifiers } from './plugins/webhooks.js';
 import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
-import { MockTtsAdapter } from '@ancs/providers-mock-tts';
+import { MockTtsAdapter, MockVoiceCloneProvider } from '@ancs/providers-mock-tts';
 import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
 import { recordAudit } from '@ancs/domain';
 import { LocalDocumentParser } from '@ancs/providers-document-extract';
@@ -93,6 +93,13 @@ if (storageDriver === 'local') {
 const credentialDeps = credentialDepsFromEnv();
 
 /**
+ * 声音克隆（P10-02）：V1 使用**明确 Mock**（无真实训练能力——同其他 Mock 驱动）。
+ * 真实 Provider（ElevenLabs/HeyGen 等）为契约同构 seam 替换（BLOCKED：凭据）。
+ */
+console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）：仅限开发/测试，不得视为真实克隆结果。');
+const voiceCloneDeps = { provider: new MockVoiceCloneProvider() };
+
+/**
  * LLM 适配器（P04-03）：无真实凭据时使用**明确 Mock**（§76-03：不得伪造"真实生成成功"）。
  * ANCS_LLM_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
@@ -155,6 +162,7 @@ const app = await buildServer({
     documentParser: new LocalDocumentParser(),
   },
   audio: audioDeps,
+  voiceClone: voiceCloneDeps,
   auth: {
     auth,
     db: handle.db,

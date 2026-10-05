@@ -1,4 +1,4 @@
-import type { AlignmentWord, AudioSynthesisAdapter, SynthesizedAudio, SynthesisVoiceRef } from '@ancs/contracts';
+import type { AlignmentWord, AudioSynthesisAdapter, SynthesizedAudio, SynthesisVoiceRef, VoiceCloneProvider, VoiceCloneProviderInput } from '@ancs/contracts';
 import { encodeWavPcm16 } from '@ancs/domain';
 
 /**
@@ -85,5 +85,75 @@ export class MockTtsAdapter implements AudioSynthesisAdapter {
       durationMs,
       wordTimestamps,
     };
+  }
+}
+
+/* ---------- P10-02：Mock 声音克隆 Provider（契约同构；真实适配器随凭据接入） ---------- */
+
+/** 脚本化训练状态（按序消费；空则默认 TRAINING → READY） */
+export const MOCK_CLONE_STATES = ['TRAINING', 'READY', 'FAILED'] as const;
+
+export interface MockVoiceCloneOptions {
+  /** getCloneStatus 的脚本序列（每次调用消费一个；耗尽后 READY） */
+  statusScript?: ('TRAINING' | 'READY' | 'FAILED')[];
+  /** createProfessionalClone 直接失败（测试训练失败→重试） */
+  failNextProfessional?: boolean;
+}
+
+/**
+ * Mock 声音克隆（P10-02）：
+ * - createInstantClone → 确定性 providerVoiceId（`mockv_<hash>`）；
+ * - createProfessionalClone → 确定性 providerJobId；`getCloneStatus` 按脚本返回训练状态；
+ * - deleteVoice → 记录删除（幂等）；
+ * - 全程不访问网络；**绝不用于生产**（无真实训练/验证能力）。
+ */
+export class MockVoiceCloneProvider implements VoiceCloneProvider {
+  readonly kind = 'mock-voice';
+  /** 可观测：提交的样本数/字节与删除记录（测试断言"未授权不提交"= 零调用） */
+  readonly instantCalls: { samples: number; bytes: number; mode: string }[] = [];
+  readonly professionalCalls: { samples: number; bytes: number }[] = [];
+  readonly deletedVoiceIds: string[] = [];
+  private readonly statusScript: ('TRAINING' | 'READY' | 'FAILED')[];
+  private failNextProfessional: boolean;
+
+  constructor(options: MockVoiceCloneOptions = {}) {
+    this.statusScript = [...(options.statusScript ?? [])];
+    this.failNextProfessional = options.failNextProfessional ?? false;
+  }
+
+  /** 追加脚本化训练状态（测试/演练：TRAINING/READY/FAILED 按序消费） */
+  queueStatuses(...states: ('TRAINING' | 'READY' | 'FAILED')[]): void {
+    this.statusScript.push(...states);
+  }
+
+  private digest(input: string): string {
+    let hash = 0;
+    for (const char of input) hash = (hash * 31 + char.charCodeAt(0)) % 0xffffffff;
+    return hash.toString(16).padStart(8, '0');
+  }
+
+  async createInstantClone(input: VoiceCloneProviderInput): Promise<{ providerVoiceId: string }> {
+    this.instantCalls.push({ samples: input.samples.length, bytes: input.samples.reduce((sum, sample) => sum + sample.bytes.byteLength, 0), mode: input.kind });
+    return { providerVoiceId: `mockv_${this.digest(`${input.workspaceId}:${input.creatorIdentityId}:instant`)}` };
+  }
+
+  async createProfessionalClone(input: VoiceCloneProviderInput): Promise<{ providerJobId: string }> {
+    if (this.failNextProfessional) {
+      this.failNextProfessional = false;
+      throw new Error('Mock 训练提交失败（脚本化）');
+    }
+    this.professionalCalls.push({ samples: input.samples.length, bytes: input.samples.reduce((sum, sample) => sum + sample.bytes.byteLength, 0) });
+    return { providerJobId: `mockjob_${this.digest(`${input.workspaceId}:${input.creatorIdentityId}:pro:${String(this.professionalCalls.length)}`)}` };
+  }
+
+  async getCloneStatus(_input: { providerJobId: string }): Promise<{ state: 'TRAINING' | 'READY' | 'FAILED'; providerVoiceId?: string; error?: { code: string; message: string } }> {
+    const next = this.statusScript.shift() ?? 'READY';
+    if (next === 'READY') return { state: 'READY', providerVoiceId: `mockv_${this.digest(_input.providerJobId)}` };
+    if (next === 'FAILED') return { state: 'FAILED', error: { code: 'TRAINING_FAILED', message: 'Mock 训练失败（脚本化；可重试）' } };
+    return { state: 'TRAINING' };
+  }
+
+  async deleteVoice(input: { providerVoiceId: string }): Promise<void> {
+    this.deletedVoiceIds.push(input.providerVoiceId);
   }
 }

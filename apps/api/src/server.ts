@@ -30,6 +30,7 @@ import { registerCustomMotionRoutes } from './routes/custom-motion.js';
 import { registerApprovalRoutes } from './routes/approval.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminSecurityRoutes } from './routes/admin-security.js';
+import { registerVoiceCloneRoutes } from './routes/voice-clones.js';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -88,6 +89,8 @@ export interface BuildServerOptions {
     /** 文档解析（P10-01；未提供 → 文档导入端点 501 fail-closed） */
     documentParser?: import('@ancs/contracts').DocumentParser;
   };
+  /** 声音克隆（P10-02；未提供 → 提交/刷新/删除 501 fail-closed） */
+  voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
 }
@@ -169,6 +172,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         });
         registerEvidenceRoutes(instance, authDeps);
         registerNarrativeRoutes(instance, authDeps, contentDeps?.llm);
+        registerVoiceCloneRoutes(instance, authDeps, {
+          ...(options.voiceClone ?? {}),
+          ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
+        });
         registerVisualGrammarRoutes(instance, authDeps);
         registerDirectorRoutes(instance, authDeps);
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);

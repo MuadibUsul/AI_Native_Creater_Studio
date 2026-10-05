@@ -10,6 +10,7 @@ import {
   opaqueIdSchema,
   pageResponseSchema,
   updateSourceRequestSchema,
+  DOCUMENT_IMPORT_MAX_BYTES,
   type DocumentParser,
   type MalwareScanner,
 } from '@ancs/contracts';
@@ -63,7 +64,7 @@ export function registerContentRoutes(
 
   // 二进制请求体（文档导入）：幂等注册（存储路由可能已注册通配解析器）
   if (!app.hasContentTypeParser('*')) {
-    app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
+    app.addContentTypeParser('*', { parseAs: 'buffer', bodyLimit: DOCUMENT_IMPORT_MAX_BYTES }, (_request, body, done) => {
       done(null, body);
     });
   }

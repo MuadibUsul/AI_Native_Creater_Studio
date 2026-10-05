@@ -120,6 +120,13 @@ import {
   refundCreditRequestSchema,
   workspaceInvitationSchema,
   myInvitationSchema,
+  voiceCloneSchema,
+  voiceCloneSampleSchema,
+  voiceCloneStateSchema,
+  voiceConsentSchema,
+  addVoiceSampleRequestSchema,
+  confirmVoiceConsentRequestSchema,
+  submitVoiceCloneRequestSchema,
   abuseFlagSchema,
   createAbuseFlagRequestSchema,
   resolveAbuseFlagRequestSchema,
@@ -146,6 +153,10 @@ import {
   type WorkspaceWithRole,
   type WorkspaceInvitation,
   type MyInvitation,
+  type VoiceClone,
+  type VoiceCloneSample,
+  type VoiceCloneState,
+  type VoiceConsent,
   type AbuseFlag,
   type WorkspaceAbuseState,
   type SupportAccessGrant,
@@ -403,6 +414,31 @@ export interface AncsClient {
       input: Record<string, unknown>,
       options?: MutationOptions,
     ): Promise<CreatorIdentity>;
+  };
+  /** Voice Clone（P10-02 / §6.2）：样本→音质检测→Consent→提交→状态→三态生命周期 */
+  voiceClone: {
+    state(workspaceId: string, creatorIdentityId: string): Promise<VoiceCloneState>;
+    consentStatement(workspaceId: string, creatorIdentityId: string): Promise<{ version: string; statement: string; statementHash: string }>;
+    addSample(workspaceId: string, creatorIdentityId: string, input: { assetId: string; assetVersionId: string; kind?: 'INSTANT' | 'PROFESSIONAL' }, options?: MutationOptions): Promise<VoiceCloneSample>;
+    samples(workspaceId: string, creatorIdentityId: string): Promise<VoiceCloneSample[]>;
+    confirmConsent(
+      workspaceId: string,
+      creatorIdentityId: string,
+      input: { subjectType: 'SELF' | 'AUTHORIZED_OTHER'; notes?: string },
+      options?: MutationOptions,
+    ): Promise<VoiceConsent>;
+    revokeConsent(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceConsent>;
+    submit(
+      workspaceId: string,
+      creatorIdentityId: string,
+      input: { kind: 'INSTANT' | 'PROFESSIONAL'; provider: string; mode: 'MANAGED' | 'BYOK'; retentionPolicy?: string; ownershipMetadata?: Record<string, unknown> },
+      options?: MutationOptions,
+    ): Promise<VoiceClone>;
+    refresh(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
+    retry(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
+    retire(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
+    unlink(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
+    deleteProviderVoice(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
   };
   speechProfiles: {
     create(workspaceId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<SpeechProfile>;
@@ -1111,6 +1147,54 @@ export function createClient(options: ClientOptions): AncsClient {
           creatorIdentitySchema,
           { body: input, bodySchema: updateCreatorIdentityRequestSchema, idempotencyKey: mutation?.idempotencyKey },
         ),
+    },
+
+    voiceClone: {
+      state: (workspaceId, creatorIdentityId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone`, voiceCloneStateSchema),
+      consentStatement: (workspaceId, creatorIdentityId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/consent-statement`, z.object({ version: z.string(), statement: z.string(), statementHash: z.string() })),
+      addSample: (workspaceId, creatorIdentityId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/samples`, voiceCloneSampleSchema, {
+          body: input, bodySchema: addVoiceSampleRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      samples: async (workspaceId, creatorIdentityId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/samples`, z.object({ items: z.array(voiceCloneSampleSchema) }))).items,
+      confirmConsent: (workspaceId, creatorIdentityId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/consent`, voiceConsentSchema, {
+          body: input, bodySchema: confirmVoiceConsentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revokeConsent: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/consent/revoke`, voiceConsentSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      submit: (workspaceId, creatorIdentityId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/submit`, voiceCloneSchema, {
+          body: input, bodySchema: submitVoiceCloneRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      refresh: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/refresh`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      retry: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/retry`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      retire: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/retire`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      unlink: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/unlink`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      deleteProviderVoice: (workspaceId, creatorIdentityId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/delete-provider-voice`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     speechProfiles: {

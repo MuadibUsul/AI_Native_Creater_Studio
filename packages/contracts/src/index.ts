@@ -1106,3 +1106,43 @@ export {
   DOCUMENT_IMPORT_MAX_BYTES,
 } from './documents.js';
 export type { DocumentKind, ParsedDocumentElement, ParsedDocument, ParsedEmailDocument, DocumentParseErrorReason, DocumentParser } from './documents.js';
+
+// Voice Clone 契约（P10-02 / §6.2、§14.3、§20.x、§95）
+export {
+  VOICE_CLONE_KINDS,
+  voiceCloneKindSchema,
+  VOICE_CLONE_MODES,
+  voiceCloneModeSchema,
+  VOICE_CLONE_STATUSES,
+  voiceCloneStatusSchema,
+  VOICE_QUALITY_VERDICTS,
+  voiceQualityVerdictSchema,
+  voiceQualityFindingSchema,
+  voiceQualityReportSchema,
+  VOICE_QUALITY_THRESHOLDS,
+  VOICE_CONSENT_SUBJECT_TYPES,
+  voiceConsentSubjectTypeSchema,
+  voiceConsentSchema,
+  confirmVoiceConsentRequestSchema,
+  voiceCloneSampleSchema,
+  addVoiceSampleRequestSchema,
+  voiceCloneFailureSchema,
+  voiceCloneSchema,
+  submitVoiceCloneRequestSchema,
+  voiceCloneStateSchema,
+  VOICE_CLONE_ERROR_REASONS,
+} from './voice-clone.js';
+export type {
+  VoiceCloneKind,
+  VoiceCloneStatus,
+  VoiceQualityVerdict,
+  VoiceQualityReport,
+  VoiceQualityFinding,
+  VoiceConsent,
+  VoiceCloneSample,
+  VoiceClone,
+  VoiceCloneState,
+  VoiceCloneErrorReason,
+  VoiceCloneProviderInput,
+  VoiceCloneProvider,
+} from './voice-clone.js';
