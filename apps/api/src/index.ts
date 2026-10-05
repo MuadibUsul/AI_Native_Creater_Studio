@@ -14,6 +14,7 @@ import { createHttpResultFetcher } from './plugins/result-fetcher.js';
 import { createHttpArticleFetcher } from './plugins/article-fetcher.js';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { MockTtsAdapter, MockVoiceCloneProvider } from '@ancs/providers-mock-tts';
+import { MockAssetSearchProvider, RunwayGenerationAdapter } from '@ancs/providers-mock-provider';
 import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
 import { recordAudit } from '@ancs/domain';
 import { LocalDocumentParser } from '@ancs/providers-document-extract';
@@ -100,6 +101,14 @@ console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）�
 const voiceCloneDeps = { provider: new MockVoiceCloneProvider() };
 
 /**
+ * 素材搜索（P10-03）：Mock（确定性结果，含无许可/缺署名两类不可用样本——证明守卫）。
+ * Runway：**fail-closed 骨架**（未实现；接入需凭据 + 端点核验——不以未核验实现冒充真实接入）。
+ */
+console.warn('[api] 素材搜索驱动 = mock（确定性素材；不代表真实素材库）：仅限开发/测试。');
+const mediaDeps = { stockSearch: new MockAssetSearchProvider() };
+void RunwayGenerationAdapter;
+
+/**
  * LLM 适配器（P04-03）：无真实凭据时使用**明确 Mock**（§76-03：不得伪造"真实生成成功"）。
  * ANCS_LLM_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
@@ -163,6 +172,7 @@ const app = await buildServer({
   },
   audio: audioDeps,
   voiceClone: voiceCloneDeps,
+  media: mediaDeps,
   auth: {
     auth,
     db: handle.db,

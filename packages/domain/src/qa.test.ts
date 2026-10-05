@@ -14,6 +14,7 @@ const subject = (overrides: Partial<QaSubject> = {}): QaSubject => ({
     {
       id: 'scn_1',
       sceneType: 'CHAPTER_TITLE',
+      semanticType: 'NARRATIVE',
       status: 'READY',
       needsReview: false,
       dataBindings: [],
@@ -23,6 +24,7 @@ const subject = (overrides: Partial<QaSubject> = {}): QaSubject => ({
     {
       id: 'scn_2',
       sceneType: 'LINE_CHART',
+      semanticType: 'NARRATIVE',
       status: 'READY',
       needsReview: false,
       dataBindings: [{ datasetId: 'dst_1' }],
@@ -47,6 +49,7 @@ describe('内容/前置检查（预检与 Final QA 共用引擎）', () => {
       'SCENES_PRESENT',
       'SCENE_STATUS_NO_PLACEHOLDER',
       'MEDIA_SCENE_ASSETS_BOUND',
+      'EVIDENCE_ASSET_ORIGIN',
       'SCENES_NOT_NEEDS_REVIEW',
       'CHART_DATA_BINDINGS',
       'SOURCE_REFERENCES_PRESENT',
@@ -84,7 +87,7 @@ describe('内容/前置检查（预检与 Final QA 共用引擎）', () => {
   });
 
   it('媒体类场景未绑定素材 → 阻止（占位不允许进入 Final）', () => {
-    const mediaScene = subject({ scenes: [{ id: 'scn_m', sceneType: 'IMAGE_FULL', status: 'READY', needsReview: false, dataBindings: [], sourceBindings: [], assetBindings: [] }] });
+    const mediaScene = subject({ scenes: [{ id: 'scn_m', sceneType: 'IMAGE_FULL', semanticType: 'NARRATIVE', status: 'READY', needsReview: false, dataBindings: [], sourceBindings: [], assetBindings: [] }] });
     const checks = runContentChecks(mediaScene);
     expect(status(checks, 'MEDIA_SCENE_ASSETS_BOUND')).toBe('FAIL');
     expect(summarizeQa(checks).verdict).toBe('FAIL');
@@ -104,6 +107,22 @@ describe('内容/前置检查（预检与 Final QA 共用引擎）', () => {
   it('素材绑定未冻结 → 阻止（缺素材不允许发布）', () => {
     const notFrozen = subject({ frozenAssetIds: new Set() });
     expect(status(runContentChecks(notFrozen), 'ASSET_BINDINGS_FROZEN')).toBe('FAIL');
+  });
+
+  it('生成图不冒充证据：证据/数据类场景绑定 GENERATED 素材 → 阻止；非证据场景不误伤', () => {
+    const generated = subject({
+      scenes: [
+        { id: 'scn_g', sceneType: 'SOURCE_CARD', semanticType: 'QUOTE', status: 'READY', needsReview: false, dataBindings: [], sourceBindings: [{ sourceId: 'src_1' }], assetBindings: [{ assetId: 'ast_gen', origin: 'GENERATED' }] },
+        subject().scenes[0]!,
+      ],
+    });
+    expect(status(runContentChecks(generated), 'EVIDENCE_ASSET_ORIGIN')).toBe('FAIL');
+    expect(summarizeQa(runContentChecks(generated)).verdict).toBe('FAIL');
+
+    const narrativeGenerated = subject({
+      scenes: [{ id: 'scn_n', sceneType: 'IMAGE_FULL', semanticType: 'NARRATIVE', status: 'READY', needsReview: false, dataBindings: [], sourceBindings: [], assetBindings: [{ assetId: 'ast_gen', origin: 'GENERATED' }] }],
+    });
+    expect(status(runContentChecks(narrativeGenerated), 'EVIDENCE_ASSET_ORIGIN')).toBe('PASS');
   });
 
   it('缺 Master Narration / 未完成 Provider 任务 → 阻止', () => {

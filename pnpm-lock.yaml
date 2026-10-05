@@ -56,6 +56,9 @@ importers:
       '@ancs/providers-mock-payments':
         specifier: workspace:*
         version: link:../../packages/providers/mock-payments
+      '@ancs/providers-mock-provider':
+        specifier: workspace:*
+        version: link:../../packages/providers/mock-provider
       '@ancs/providers-mock-tts':
         specifier: workspace:*
         version: link:../../packages/providers/mock-tts

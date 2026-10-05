@@ -1146,3 +1146,19 @@ export type {
   VoiceCloneProviderInput,
   VoiceCloneProvider,
 } from './voice-clone.js';
+
+// 素材获取契约（P10-03 / §84、§12）
+export {
+  ASSET_LICENSE_TYPES,
+  assetLicenseTypeSchema,
+  assetLicenseSchema,
+  stockResultUsability,
+  originMayServeAsEvidence,
+  STOCK_ASSET_KINDS,
+  stockAssetKindSchema,
+  stockSearchResultSchema,
+  stockAcquisitionResultSchema,
+  STOCK_ERROR_REASONS,
+  ASSET_SEARCH_MAX_BYTES,
+} from './media-providers.js';
+export type { AssetLicenseType, AssetLicense, StockAssetKind, StockSearchResult, StockAcquisitionResult, StockSearchRequest, AssetSearchProvider } from './media-providers.js';

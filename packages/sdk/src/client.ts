@@ -124,6 +124,8 @@ import {
   voiceCloneSampleSchema,
   voiceCloneStateSchema,
   voiceConsentSchema,
+  stockSearchResultSchema,
+  stockAcquisitionResultSchema,
   addVoiceSampleRequestSchema,
   confirmVoiceConsentRequestSchema,
   submitVoiceCloneRequestSchema,
@@ -157,6 +159,8 @@ import {
   type VoiceCloneSample,
   type VoiceCloneState,
   type VoiceConsent,
+  type StockSearchResult,
+  type StockAcquisitionResult,
   type AbuseFlag,
   type WorkspaceAbuseState,
   type SupportAccessGrant,
@@ -439,6 +443,14 @@ export interface AncsClient {
     retire(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
     unlink(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
     deleteProviderVoice(workspaceId: string, creatorIdentityId: string, options?: MutationOptions): Promise<VoiceClone>;
+  };
+  /** 素材搜索/获取（P10-03 / §84；许可状态随结果返回；获取前服务端复核） */
+  stock: {
+    search(
+      workspaceId: string,
+      query?: { query?: string; kind?: 'IMAGE' | 'VIDEO' | 'MUSIC'; usableOnly?: boolean; limit?: number },
+    ): Promise<{ providerId: string; items: StockSearchResult[] }>;
+    acquire(workspaceId: string, input: { providerAssetId: string; projectId?: string }, options?: MutationOptions): Promise<StockAcquisitionResult>;
   };
   speechProfiles: {
     create(workspaceId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<SpeechProfile>;
@@ -1193,6 +1205,23 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       deleteProviderVoice: (workspaceId, creatorIdentityId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/creator-identities/${creatorIdentityId}/voice-clone/delete-provider-voice`, voiceCloneSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    stock: {
+      search: (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.query !== undefined) search.set('query', query.query);
+        if (query?.kind !== undefined) search.set('kind', query.kind);
+        if (query?.usableOnly !== undefined) search.set('usableOnly', String(query.usableOnly));
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return request('GET', `/api/v1/workspaces/${workspaceId}/stock/search${suffix}`, z.object({ providerId: z.string(), items: z.array(stockSearchResultSchema) }));
+      },
+      acquire: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/stock/acquire`, stockAcquisitionResultSchema, {
+          body: input,
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

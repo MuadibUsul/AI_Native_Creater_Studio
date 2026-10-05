@@ -29,7 +29,8 @@
     "@ancs/providers-mock-tts": "workspace:*",
     "@ancs/providers-mock-payments": "workspace:*",
     "@ancs/providers-malware-heuristic": "workspace:*",
-    "@ancs/providers-document-extract": "workspace:*"
+    "@ancs/providers-document-extract": "workspace:*",
+    "@ancs/providers-mock-provider": "workspace:*"
   },
   "devDependencies": {
     "@ancs/sdk": "workspace:*",

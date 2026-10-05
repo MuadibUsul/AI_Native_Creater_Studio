@@ -2,6 +2,10 @@ import {
   ProviderRateLimitedError,
   ProviderSubmissionUnknownError,
   providerCallbackSchema,
+  stockResultUsability,
+  type AssetSearchProvider,
+  type StockSearchRequest,
+  type StockSearchResult,
   type GenerationCancelResult,
   type GenerationProvider,
   type GenerationStatusResult,
@@ -217,5 +221,200 @@ export class MockGenerationProvider implements GenerationProvider {
     const record = this.records.get(providerJobId);
     if (record === undefined) return null;
     return { bytes: this.options.resultBytesFor(providerJobId, 0), contentType: 'image/png' };
+  }
+}
+/* ---------- P10-03：素材搜索 / 图像生成（Mock 同构）与 Runway fail-closed 骨架 ---------- */
+
+/** 最小 PNG（8×8；头部合法可被嗅探/宽高探测）——Mock 下载结果，**不冒充真实素材** */
+function mockPngBytes(r: number, g: number, b: number): Uint8Array {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.set([0x00, 0x00, 0x00, 0x0d], 8);
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
+  bytes[19] = 8; // width 8
+  bytes[23] = 8; // height 8
+  bytes[24] = 8; // bit depth
+  bytes[25] = 2; // color type RGB
+  bytes[26] = r & 0xff;
+  bytes[27] = g & 0xff;
+  bytes[28] = b & 0xff;
+  return bytes;
+}
+
+/**
+ * Mock 素材搜索（P10-03）：确定性结果集，**覆盖三类许可状态**——
+ * ① 授权可用（LICENSED_STOCK + 许可证引用 + 署名文本）；② **无许可（licenseType=null → usable=false，
+ * 不得冒充已授权）**；③ 需署名但缺署名文本（usable=false，明确原因）。
+ * `lookup` 供获取前**服务端复核**（不信任客户端提交的许可字段）。
+ */
+export class MockAssetSearchProvider implements AssetSearchProvider {
+  readonly providerId: string;
+  /** 可观测调用记录 */
+  readonly calls: { search: number; lookup: number; fetch: number } = { search: 0, lookup: 0, fetch: 0 };
+
+  constructor(options: { providerId?: string } = {}) {
+    this.providerId = options.providerId ?? 'mock-stock';
+  }
+
+  private candidates(): StockSearchResult[] {
+    const base = {
+      providerId: this.providerId,
+      kind: 'IMAGE' as const,
+      width: 8,
+      height: 8,
+      durationMs: null,
+      previewUrl: null,
+    };
+    const withUsability = (result: Omit<StockSearchResult, 'usable' | 'unusableReason'>): StockSearchResult => {
+      const usability = stockResultUsability(result.license);
+      return { ...result, usable: usability.usable, unusableReason: usability.reason };
+    };
+    return [
+      withUsability({
+        ...base,
+        providerAssetId: 'mockimg_licensed_a',
+        title: '素材 A（已授权）',
+        license: {
+          licenseType: 'LICENSED_STOCK',
+          licenseReference: 'MOCK-LIC-0001',
+          attributionRequired: true,
+          attributionText: '素材：MockStock / 摄影 A（许可：MOCK-LIC-0001）',
+          usageRestrictions: '仅限本平台成片使用',
+          sourceUrl: 'https://stock.mock.local/asset/a',
+          acquiredAt: null,
+        },
+      }),
+      withUsability({
+        ...base,
+        providerAssetId: 'mockimg_no_license_b',
+        title: '素材 B（许可未知——不可用）',
+        license: {
+          licenseType: null,
+          licenseReference: null,
+          attributionRequired: false,
+          attributionText: null,
+          usageRestrictions: null,
+          sourceUrl: null,
+          acquiredAt: null,
+        },
+      }),
+      withUsability({
+        ...base,
+        providerAssetId: 'mockimg_cc_c',
+        title: '素材 C（需署名但缺失署名文本——不可用）',
+        license: {
+          licenseType: 'CREATIVE_COMMONS',
+          licenseReference: 'CC-BY-4.0',
+          attributionRequired: true,
+          attributionText: null,
+          usageRestrictions: null,
+          sourceUrl: 'https://stock.mock.local/asset/c',
+          acquiredAt: null,
+        },
+      }),
+    ];
+  }
+
+  async search(input: StockSearchRequest): Promise<StockSearchResult[]> {
+    this.calls.search += 1;
+    if (input.kind !== 'IMAGE') return []; // Mock 未模拟 VIDEO/MUSIC（诚实空结果，不造假数据）
+    const query = input.query.trim().toLowerCase();
+    const matched = this.candidates().filter((result) => query === '' || result.title.toLowerCase().includes(query) || query.includes('mock') || result.providerAssetId.includes(query));
+    const filtered = input.usableOnly === true ? matched.filter((result) => result.usable) : matched;
+    return filtered.slice(0, input.limit ?? 20);
+  }
+
+  async lookup(input: { providerAssetId: string }): Promise<StockSearchResult | null> {
+    this.calls.lookup += 1;
+    return this.candidates().find((result) => result.providerAssetId === input.providerAssetId) ?? null;
+  }
+
+  async fetchAsset(input: { providerAssetId: string }): Promise<{ bytes: Uint8Array; contentType: string }> {
+    this.calls.fetch += 1;
+    const result = await this.lookup(input);
+    if (result === null) throw new Error(`MockStock 资产不存在：${input.providerAssetId}`);
+    return { bytes: mockPngBytes(20, 120, 200), contentType: 'image/png' };
+  }
+}
+
+/**
+ * Mock 图像生成（P10-03）：实现 `GenerationProvider`（operation `image.generate`），
+ * 结果 descriptor 与 Mock Provider 同构（临时 URL → 结果回收链路写入自有存储；origin=PROVIDER_GENERATED）。
+ * 接入真实图像 Provider 时替换本实现（凭据 + 端点核验，**不得以未核验实现冒充接入**）。
+ */
+export class MockImageGenerationProvider implements GenerationProvider {
+  readonly providerId: string;
+  /** 可观测：提交记录（operation/提示词长度） */
+  readonly submissions: { operation: string; promptLength: number }[] = [];
+
+  constructor(options: { providerId?: string } = {}) {
+    this.providerId = options.providerId ?? 'mock-image';
+  }
+
+  async submit(input: { secret: string; request: GenerationSubmitRequest }): Promise<GenerationSubmitResult> {
+    if (input.secret.trim() === '') {
+      // 与 Mock Provider 同纪律：空凭据 fail-closed（避免把"空凭据也能过"带进真实链路）
+      throw new Error('MockImageGenerationProvider：缺少凭据（secret 为空）');
+    }
+    this.submissions.push({ operation: input.request.operation, promptLength: String(input.request.parameters['prompt'] ?? '').length });
+    const providerJobId = `mockimgjob_${String(this.submissions.length).padStart(4, '0')}`;
+    return { providerJobId, state: 'SUCCEEDED' };
+  }
+
+  async getStatus(input: { secret: string; providerJobId: string }): Promise<GenerationStatusResult> {
+    if (!input.providerJobId.startsWith('mockimgjob_')) return { state: 'UNKNOWN' };
+    const bytes = mockPngBytes(200, 80, 40);
+    return {
+      state: 'SUCCEEDED',
+      results: [
+        {
+          url: `mock-image://${input.providerJobId}/0.png`,
+          contentType: 'image/png',
+          sizeBytes: bytes.byteLength,
+          checksumSha256: null,
+          assetType: 'GENERATED_IMAGE',
+          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        },
+      ],
+    };
+  }
+
+  async cancel(input: { secret: string; providerJobId: string }): Promise<GenerationCancelResult> {
+    return { ok: false, reason: input.providerJobId.startsWith('mockimgjob_') ? 'ALREADY_SUCCEEDED' : 'UNKNOWN_PROVIDER_JOB' };
+  }
+
+  /** 结果字节（供结果回收链路/测试的拉取器解析 `mock-image://` URL） */
+  resultPayloadFor(providerJobId: string): { bytes: Uint8Array; contentType: string } | null {
+    return providerJobId.startsWith('mockimgjob_') ? { bytes: mockPngBytes(200, 80, 40), contentType: 'image/png' } : null;
+  }
+}
+
+/** Runway（AI Video）**未实现**——明确信息（不得以未核验实现冒充真实接入） */
+export const RUNWAY_NOT_IMPLEMENTED_MESSAGE =
+  'Runway 适配器未实现（BLOCKED：需 API 凭据 + 端点核验）。以未核验的 HTTP 实现冒充"真实接入"被明确禁止——接入时实现 GenerationProvider 并回放公共契约测试。';
+
+/**
+ * Runway fail-closed 骨架（P10-03）：只做**显式拒绝**——任何提交/查询都明确失败并说明阻塞原因；
+ * 不发送任何网络请求（避免"看起来接入了"的假象）。接入路径：实现 GenerationProvider →
+ * 过 P03-07 公共契约测试 → 以真实凭据回放 P06 矩阵。
+ */
+export class RunwayGenerationAdapter implements GenerationProvider {
+  readonly providerId = 'runway';
+  readonly apiKey: string | null;
+
+  constructor(options: { apiKey?: string } = {}) {
+    this.apiKey = options.apiKey === undefined || options.apiKey === '' ? null : options.apiKey;
+  }
+
+  async submit(_input: { secret: string; request: GenerationSubmitRequest }): Promise<never> {
+    throw new Error(RUNWAY_NOT_IMPLEMENTED_MESSAGE);
+  }
+
+  async getStatus(_input: { secret: string; providerJobId: string }): Promise<never> {
+    throw new Error(RUNWAY_NOT_IMPLEMENTED_MESSAGE);
+  }
+
+  async cancel(_input: { secret: string; providerJobId: string }): Promise<never> {
+    throw new Error(RUNWAY_NOT_IMPLEMENTED_MESSAGE);
   }
 }

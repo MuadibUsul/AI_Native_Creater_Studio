@@ -24,6 +24,7 @@ import { assembleSceneGraph } from './projects.js';
 import { getCurrentMasterNarration, getMasterNarrationById } from './alignment.js';
 import { getRender, transitionRender } from './render.js';
 import { createJob } from './jobs.js';
+import { AI_VIDEO_FORBIDDEN_SCENE_TYPES, AI_VIDEO_FORBIDDEN_SEMANTIC } from './scene-generation.js';
 
 /**
  * 发布前 QA（P07-05 / 规范 §86、§87）。
@@ -39,11 +40,14 @@ import { createJob } from './jobs.js';
 export interface QaSubjectScene {
   id: string;
   sceneType: string;
+  /** 语义类型（证据/数据类判定用；§14.4/§84） */
+  semanticType: string;
   status: string;
   needsReview: boolean;
   dataBindings: { datasetId: string }[];
   sourceBindings: { sourceId: string }[];
-  assetBindings: { assetId: string }[];
+  /** origin = 素材来源类别（GENERATED/PROVIDER_GENERATED 不得冒充证据——EVIDENCE_ASSET_ORIGIN 检查） */
+  assetBindings: { assetId: string; origin?: string }[];
 }
 
 export interface QaSubject {
@@ -110,6 +114,21 @@ export function runContentChecks(subject: QaSubject, category: 'PRE_RENDER' | 'T
       : check('MEDIA_SCENE_ASSETS_BOUND', category, 'BLOCKER', 'FAIL', `媒体类场景未绑定素材（${String(unboundMedia.length)} 个）：将以占位呈现，不允许进入 Final（§86）`, {
           sceneIds: unboundMedia.map((scene) => scene.id),
           sceneTypes: unboundMedia.map((scene) => scene.sceneType),
+        }),
+  );
+
+  // **生成图不冒充证据**（§84/§14.4）：证据/数据类场景绑定了 AI 生成素材 → 阻止（生成素材与真实来源可区分）
+  const evidenceScenes = subject.scenes.filter((scene) => AI_VIDEO_FORBIDDEN_SEMANTIC.has(scene.semanticType) || AI_VIDEO_FORBIDDEN_SCENE_TYPES.has(scene.sceneType));
+  const evidenceViolations = evidenceScenes.flatMap((scene) =>
+    scene.assetBindings
+      .filter((binding) => binding.origin === 'GENERATED' || binding.origin === 'PROVIDER_GENERATED')
+      .map((binding) => ({ sceneId: scene.id, assetId: binding.assetId, origin: binding.origin ?? 'UNKNOWN' })),
+  );
+  checks.push(
+    evidenceViolations.length === 0
+      ? check('EVIDENCE_ASSET_ORIGIN', category, 'BLOCKER', 'PASS', null, { evidenceScenes: evidenceScenes.length })
+      : check('EVIDENCE_ASSET_ORIGIN', category, 'BLOCKER', 'FAIL', `证据/数据类场景绑定了 AI 生成素材（${String(evidenceViolations.length)} 处）：生成图不得冒充证据（§84）——请替换为真实素材/数据组件`, {
+          violations: evidenceViolations,
         }),
   );
 
@@ -353,19 +372,35 @@ async function countPendingProviderJobs(deps: DomainDeps, workspaceId: string, p
   return rows.length;
 }
 
+/** 批量读取资产 origin（EVIDENCE_ASSET_ORIGIN 检查用；缺行 → 不含 origin 字段）。 */
+async function loadAssetOrigins(deps: DomainDeps, assetIds: readonly string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(assetIds)];
+  if (unique.length === 0) return new Map();
+  const rows = await deps.db.select({ id: assets.id, origin: assets.origin }).from(assets).where(inArray(assets.id, unique));
+  return new Map(rows.map((row) => [row.id, row.origin]));
+}
+
+const bindWithOrigin = (bindings: readonly { assetId: string }[], originById: Map<string, string>): { assetId: string; origin?: string }[] =>
+  bindings.map((binding) => {
+    const origin = originById.get(binding.assetId);
+    return origin === undefined ? { assetId: binding.assetId } : { assetId: binding.assetId, origin };
+  });
+
 /** 渲染前预检（对当前项目状态；只读查询，不产生报告行）。 */
 export async function precheckRenderReadiness(deps: DomainDeps, input: { workspaceId: string; projectId: string }): Promise<QaReport> {
   const graph = await assembleSceneGraph(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
   const master = await getCurrentMasterNarration(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+  const originById = await loadAssetOrigins(deps, graph.scenes.flatMap((scene) => scene.assetBindings.map((binding) => binding.assetId)));
   const subject: QaSubject = {
     scenes: graph.scenes.map((scene) => ({
       id: scene.id,
       sceneType: scene.sceneType,
+      semanticType: scene.semanticType,
       status: scene.status,
       needsReview: scene.needsReview,
       dataBindings: scene.dataBindings.map((binding) => ({ datasetId: binding.datasetId })),
       sourceBindings: scene.sourceBindings.map((binding) => ({ sourceId: binding.sourceId })),
-      assetBindings: scene.assetBindings.map((binding) => ({ assetId: binding.assetId })),
+      assetBindings: bindWithOrigin(scene.assetBindings, originById),
     })),
     knownSourceIds: await loadKnownSourceIds(deps, input.workspaceId, input.projectId),
     frozenAssetIds: null,
@@ -464,15 +499,17 @@ export async function runRenderQa(
     for (const row of rows) frozenAssetIds.add(row.assetId);
   }
 
+  const originById = await loadAssetOrigins(deps, graph.scenes.flatMap((scene) => scene.assetBindings.map((binding) => binding.assetId)));
   const subject: QaSubject = {
     scenes: graph.scenes.map((scene) => ({
       id: scene.id,
       sceneType: scene.sceneType,
+      semanticType: scene.semanticType,
       status: scene.status,
       needsReview: scene.needsReview,
       dataBindings: scene.dataBindings.map((binding) => ({ datasetId: binding.datasetId })),
       sourceBindings: scene.sourceBindings.map((binding) => ({ sourceId: binding.sourceId })),
-      assetBindings: scene.assetBindings.map((binding) => ({ assetId: binding.assetId })),
+      assetBindings: bindWithOrigin(scene.assetBindings, originById),
     })),
     knownSourceIds: await loadKnownSourceIds(deps, render.workspaceId, render.projectId),
     frozenAssetIds,

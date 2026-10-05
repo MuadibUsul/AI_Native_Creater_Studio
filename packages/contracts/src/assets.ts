@@ -35,7 +35,25 @@ export const ASSET_TYPES = [
 export const assetTypeSchema = z.enum(ASSET_TYPES);
 export type AssetType = z.infer<typeof assetTypeSchema>;
 
-export const ASSET_ORIGINS = ['USER_UPLOAD', 'SOURCE_IMPORT', 'PROVIDER_GENERATED', 'SYSTEM_RENDER'] as const;
+export const ASSET_ORIGINS = [
+  'USER_UPLOAD',
+  /** §84 新枚举：用户素材库 */
+  'USER_LIBRARY',
+  /** §84：来源文档（与旧值 SOURCE_IMPORT 并存） */
+  'SOURCE_DOCUMENT',
+  /** §84：授权素材库（需 license_reference） */
+  'LICENSED_STOCK',
+  /** §84：公开来源（需 source_url 与署名判断） */
+  'PUBLIC_SOURCE',
+  /** §84：AI 生成（**不得冒充证据**） */
+  'GENERATED',
+  /** §84：Provider 导入 */
+  'PROVIDER_IMPORT',
+  // —— P02-04 旧值（向后兼容；新代码不新增使用） ——
+  'SOURCE_IMPORT',
+  'PROVIDER_GENERATED',
+  'SYSTEM_RENDER',
+] as const;
 export const assetOriginSchema = z.enum(ASSET_ORIGINS);
 export type AssetOrigin = z.infer<typeof assetOriginSchema>;
 

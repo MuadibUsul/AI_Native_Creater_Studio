@@ -42,6 +42,8 @@ export const QA_CHECK_IDS = [
   'ASSET_BINDINGS_FROZEN',
   /** 媒体类场景（IMAGE_FULL/REAL_BROLL/AI_VIDEO）必须已绑定素材（未解决占位不允许进入 Final，§86） */
   'MEDIA_SCENE_ASSETS_BOUND',
+  /** 生成图不冒充证据（§84）：证据/数据类场景不得绑定 GENERATED 素材 */
+  'EVIDENCE_ASSET_ORIGIN',
   /** Master Narration 存在（Audio-First） */
   'MASTER_NARRATION_PRESENT',
   /** 无未完成 Provider 生成任务（§86：未完成 Provider Job 不允许发布） */

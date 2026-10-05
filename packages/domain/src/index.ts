@@ -113,6 +113,7 @@ export {
   verifyPaymentWebhook,
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
+export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
 export {
   addVoiceSample,
   analyzeVoiceSampleQuality,
