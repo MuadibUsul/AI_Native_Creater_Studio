@@ -149,3 +149,25 @@ export function useEntitlements(workspaceId: string) {
   const client = useAncsClient();
   return useQuery({ queryKey: ['workspaces', workspaceId, 'entitlements'], queryFn: () => client.workspaces.entitlements(workspaceId) });
 }
+
+/** Workspace 详情（含我的角色与隐私档位；P09-04 团队页） */
+export function useWorkspace(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['workspaces', workspaceId, 'detail'], queryFn: () => client.workspaces.get(workspaceId) });
+}
+
+/** 成员列表（P09-04） */
+export function useWorkspaceMembers(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['workspaces', workspaceId, 'members'], queryFn: () => client.workspaces.members.list(workspaceId) });
+}
+
+/** 邀请列表（P09-04；需 member:manage——非管理角色 403 由页面呈现） */
+export function useWorkspaceInvitations(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: ['workspaces', workspaceId, 'invitations'],
+    queryFn: () => client.workspaces.invitations.list(workspaceId),
+    retry: false,
+  });
+}

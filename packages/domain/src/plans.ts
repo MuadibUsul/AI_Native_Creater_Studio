@@ -14,6 +14,7 @@ import {
   workspaceSubscriptionSchema,
   type CreatePlanVersionRequest,
   type EntitlementUsage,
+  type OverCommittedDimension,
   type Plan,
   type PlanKey,
   type WorkspaceEntitlement,
@@ -262,13 +263,31 @@ export async function getWorkspaceEntitlement(deps: DomainDeps, input: { workspa
     source = 'SUBSCRIPTION';
   }
   const usage = await loadUsage(deps, input.workspaceId);
+  const privacyRows = await deps.db.select({ privacyTier: workspaces.privacyTier }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
+  const privacyTier = privacyRows[0]?.privacyTier ?? 'STANDARD';
   return workspaceEntitlementSchema.parse({
     workspaceId: input.workspaceId,
     plan,
     entitlements: plan.entitlements,
     usage,
     source,
+    overCommitted: computeOverCommitted(plan.entitlements, usage, privacyTier),
   });
+}
+
+/**
+ * 超额维度（P09-04）：用量 > 上限（null = 不限）。**降级套餐有清晰超额处理**——
+ * 进入本清单（界面明确提示），新增被额度断言阻止，存量成员/数据保留、档位不静默改写。
+ */
+function computeOverCommitted(entitlements: Plan['entitlements'], usage: EntitlementUsage, privacyTier: string): OverCommittedDimension[] {
+  const result: OverCommittedDimension[] = [];
+  if (entitlements.seats !== null && usage.seatsUsed > entitlements.seats) result.push('seats');
+  if (entitlements.storageBytes !== null && usage.storageBytesUsed > entitlements.storageBytes) result.push('storageBytes');
+  if (entitlements.maxChannels !== null && usage.channelsUsed > entitlements.maxChannels) result.push('maxChannels');
+  if (entitlements.maxCreatorIdentities !== null && usage.creatorIdentitiesUsed > entitlements.maxCreatorIdentities) result.push('maxCreatorIdentities');
+  if (entitlements.customMotionPerMonth !== null && usage.customMotionUsedThisMonth > entitlements.customMotionPerMonth) result.push('customMotionPerMonth');
+  if (privacyTier !== 'STANDARD' && !entitlements.privacyMode) result.push('privacyMode');
+  return result;
 }
 
 /* ---------- 额度断言（**API 强制执行**；违约 = 明确 4xx） ---------- */

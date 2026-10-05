@@ -85,6 +85,14 @@ export {
 export type { QaSubject, QaSubjectScene, QaArtifactBytes, RunTechnicalChecksInput, RunRenderQaResult } from './qa.js';
 export { buildRenderExportPackage, decideRenderApproval, getLatestRenderApproval } from './approval.js';
 export {
+  acceptInvitation,
+  createInvitation,
+  INVITATION_TTL_DAYS,
+  listInvitations,
+  listMyInvitations,
+  revokeInvitation,
+} from './invitations.js';
+export {
   applyCreditPurchaseInTx,
   createCreditPackVersion,
   ensureDefaultCreditPacks,

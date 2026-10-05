@@ -362,6 +362,8 @@ export {
   assignPlanRequestSchema,
   createPlanVersionRequestSchema,
   DEFAULT_PLAN_SEEDS,
+  OVER_COMMITTED_DIMENSIONS,
+  overCommittedDimensionSchema,
 } from './plans.js';
 export type {
   PlanKey,
@@ -374,6 +376,7 @@ export type {
   EntitlementErrorReason,
   AssignPlanRequest,
   CreatePlanVersionRequest,
+  OverCommittedDimension,
 } from './plans.js';
 
 // 最小运营契约（P08-02 / §67）
@@ -1017,7 +1020,20 @@ export {
   addWorkspaceMemberRequestSchema,
   updateWorkspaceMemberRoleRequestSchema,
 } from './workspaces.js';
-export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember } from './workspaces.js';
+export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember, PrivacyTier, SetPrivacyTierRequest } from './workspaces.js';
+
+// 隐私档位与邀请契约（P09-04）
+export { PRIVACY_TIERS, privacyTierSchema, setPrivacyTierRequestSchema } from './workspaces.js';
+export {
+  INVITATION_STORED_STATUSES,
+  INVITATION_STATUSES,
+  invitationStatusSchema,
+  workspaceInvitationSchema,
+  myInvitationSchema,
+  createInvitationRequestSchema,
+  INVITATION_ERROR_REASONS,
+} from './invitations.js';
+export type { InvitationStatus, WorkspaceInvitation, MyInvitation, CreateInvitationRequest, InvitationErrorReason } from './invitations.js';
 
 export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';

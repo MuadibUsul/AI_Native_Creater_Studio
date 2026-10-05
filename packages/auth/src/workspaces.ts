@@ -4,17 +4,20 @@ import { and, eq, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  privacyTierSchema,
   workspaceRoleSchema,
+  type PrivacyTier,
   type WorkspaceMember,
   type WorkspaceRole,
   type WorkspaceWithRole,
 } from '@ancs/contracts';
-import { user, workspaceMembers, workspaces } from '@ancs/db';
+import { isUniqueViolation, user, workspaceMembers, workspaces } from '@ancs/db';
 import { authorizeWorkspace } from './authorization.js';
 
 /**
  * Workspace 与成员服务（P01-03）。
  * 所有读写先经 authorizeWorkspace（统一授权入口）；OWNER 不变量在此层强制。
+ * P09-04：隐私档位（§20.4）读写（**权益门在 API 层**——本层只管数据）。
  */
 
 export interface WorkspaceServiceDeps {
@@ -26,12 +29,14 @@ const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
 const toWorkspaceDto = (row: {
   id: string;
   name: string;
+  privacyTier?: string;
   createdAt: Date;
   updatedAt: Date;
   role: string;
 }): WorkspaceWithRole => ({
   id: row.id,
   name: row.name,
+  privacyTier: privacyTierSchema.parse(row.privacyTier ?? 'STANDARD'),
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   role: workspaceRoleSchema.parse(row.role),
@@ -45,7 +50,7 @@ export async function createWorkspace(
   const now = new Date();
   const workspaceId = newId('ws');
   await deps.db.transaction(async (tx) => {
-    await tx.insert(workspaces).values({ id: workspaceId, name: input.name, createdAt: now, updatedAt: now });
+    await tx.insert(workspaces).values({ id: workspaceId, name: input.name, privacyTier: 'STANDARD', createdAt: now, updatedAt: now });
     await tx.insert(workspaceMembers).values({
       id: newId('wsm'),
       workspaceId,
@@ -58,6 +63,7 @@ export async function createWorkspace(
   return {
     id: workspaceId,
     name: input.name,
+    privacyTier: 'STANDARD',
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     role: 'OWNER',
@@ -73,6 +79,7 @@ export async function listWorkspaces(
     .select({
       id: workspaces.id,
       name: workspaces.name,
+      privacyTier: workspaces.privacyTier,
       createdAt: workspaces.createdAt,
       updatedAt: workspaces.updatedAt,
       role: workspaceMembers.role,
@@ -112,6 +119,29 @@ export async function updateWorkspace(
   const updated = await deps.db
     .update(workspaces)
     .set({ name: input.name, updatedAt: now })
+    .where(eq(workspaces.id, input.workspaceId))
+    .returning();
+  const row = updated[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'workspace not found', 404);
+  return toWorkspaceDto({ ...row, role: membership.role });
+}
+
+/**
+ * 设置隐私档位（P09-04 / §20.4）；**权益门在 API 层**（domain 断言 privacyMode 权益后调用本函数）。
+ */
+export async function setWorkspacePrivacyTier(
+  deps: WorkspaceServiceDeps,
+  input: { userId: string; workspaceId: string; privacyTier: PrivacyTier },
+): Promise<WorkspaceWithRole> {
+  const membership = await authorizeWorkspace(deps.db, {
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    capability: 'workspace:update',
+  });
+  const now = new Date();
+  const updated = await deps.db
+    .update(workspaces)
+    .set({ privacyTier: input.privacyTier, updatedAt: now })
     .where(eq(workspaces.id, input.workspaceId))
     .returning();
   const row = updated[0];
@@ -193,8 +223,8 @@ export async function addMember(
       updatedAt: now,
     });
   } catch (error) {
-    // 唯一约束兜底（并发添加同一成员）
-    if (typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505') {
+    // 唯一约束兜底（并发添加同一成员）；drizzle 包装错误需解包 cause（isUniqueViolation）
+    if (isUniqueViolation(error)) {
       throw new ApiFailure(ERROR_CODES.ALREADY_EXISTS, `user "${input.email}" is already a member`, 409);
     }
     throw error;

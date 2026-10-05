@@ -39,6 +39,7 @@ export {
   listMembers,
   listWorkspaces,
   removeMember,
+  setWorkspacePrivacyTier,
   updateMemberRole,
   updateWorkspace,
 } from './workspaces.js';

@@ -118,6 +118,10 @@ import {
   buyCreditsRequestSchema,
   grantCreditsRequestSchema,
   refundCreditRequestSchema,
+  workspaceInvitationSchema,
+  myInvitationSchema,
+  createInvitationRequestSchema,
+  setPrivacyTierRequestSchema,
   type ClientType,
   type HealthResponse,
   type SessionInfo,
@@ -126,6 +130,9 @@ import {
   type TokenResponse,
   type WorkspaceMember,
   type WorkspaceWithRole,
+  type WorkspaceInvitation,
+  type MyInvitation,
+  type PrivacyTier,
   type ChannelWithStyle,
   type ChannelStyleVersion,
   type CreateSceneResponse,
@@ -336,6 +343,19 @@ export interface AncsClient {
       ): Promise<WorkspaceMember>;
       remove(workspaceId: string, userId: string, options?: MutationOptions): Promise<void>;
     };
+    /** 邀请（P09-04；接受时邮箱匹配 + 权威席位检查） */
+    invitations: {
+      list(workspaceId: string): Promise<WorkspaceInvitation[]>;
+      create(workspaceId: string, input: { email: string; role: WorkspaceMember['role'] }, options?: MutationOptions): Promise<WorkspaceInvitation>;
+      revoke(workspaceId: string, invitationId: string, options?: MutationOptions): Promise<WorkspaceInvitation>;
+    };
+    /** 隐私档位（P09-04 / §20.4；非 STANDARD 需套餐权益 privacyMode） */
+    setPrivacyTier(workspaceId: string, input: { privacyTier: PrivacyTier }, options?: MutationOptions): Promise<WorkspaceWithRole>;
+  };
+  /** 我的邀请（含接受的 Workspace 上下文） */
+  invitations: {
+    mine(): Promise<MyInvitation[]>;
+    accept(invitationId: string, options?: MutationOptions): Promise<{ workspace: WorkspaceWithRole; invitation: WorkspaceInvitation }>;
   };
   channels: {
     create(workspaceId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<ChannelWithStyle>;
@@ -932,6 +952,21 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       creditStatement: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/billing/credits`, creditStatementSchema),
       reconcileCredits: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/billing/credits/reconcile`, creditReconcileSchema),
+      invitations: {
+        list: async (workspaceId) =>
+          (await request('GET', `/api/v1/workspaces/${workspaceId}/invitations`, listOf(workspaceInvitationSchema))).items,
+        create: (workspaceId, input, mutation) =>
+          request('POST', `/api/v1/workspaces/${workspaceId}/invitations`, workspaceInvitationSchema, {
+            body: input, bodySchema: createInvitationRequestSchema,
+            idempotencyKey: mutation?.idempotencyKey,
+          }),
+        revoke: (workspaceId, invitationId) =>
+          request('DELETE', `/api/v1/workspaces/${workspaceId}/invitations/${invitationId}`, workspaceInvitationSchema),
+      },
+      setPrivacyTier: (workspaceId, input) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/privacy`, workspaceWithRoleSchema, {
+          body: input, bodySchema: setPrivacyTierRequestSchema,
+        }),
       update: (workspaceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema, {
           body: input, bodySchema: updateWorkspaceRequestSchema,
@@ -955,6 +990,15 @@ export function createClient(options: ClientOptions): AncsClient {
             idempotencyKey: mutation?.idempotencyKey,
           }),
       },
+    },
+
+    invitations: {
+      mine: async () =>
+        (await request('GET', '/api/v1/invitations', listOf(myInvitationSchema))).items,
+      accept: (invitationId, mutation) =>
+        request('POST', `/api/v1/invitations/${invitationId}/accept`, z.object({ workspace: workspaceWithRoleSchema, invitation: workspaceInvitationSchema }), {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     channels: {

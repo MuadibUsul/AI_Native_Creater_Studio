@@ -108,6 +108,24 @@ export const entitlementUsageSchema = z.object({
 
 export type EntitlementUsage = z.infer<typeof entitlementUsageSchema>;
 
+/**
+ * 超额维度（P09-04 "降级套餐有清晰超额处理"）：用量 > 上限时进入本清单。
+ * 语义：**新增被阻止**（额度断言）、**现有成员/数据保留**、档位不静默改写——
+ * 界面明确提示"升级或显式调整"；系统绝不自动删除成员或数据。
+ */
+export const OVER_COMMITTED_DIMENSIONS = [
+  'seats',
+  'storageBytes',
+  'maxChannels',
+  'maxCreatorIdentities',
+  'customMotionPerMonth',
+  /** 隐私档位高于套餐权益（privacyMode=false 时启用 PRIVATE/ENTERPRISE） */
+  'privacyMode',
+] as const;
+
+export const overCommittedDimensionSchema = z.enum(OVER_COMMITTED_DIMENSIONS);
+export type OverCommittedDimension = z.infer<typeof overCommittedDimensionSchema>;
+
 export const workspaceEntitlementSchema = z.object({
   workspaceId: opaqueIdSchema,
   /** 当前生效的 Plan 版本（workspace 无订阅 = 默认 FREE 版本） */
@@ -116,6 +134,8 @@ export const workspaceEntitlementSchema = z.object({
   usage: entitlementUsageSchema,
   /** 由订阅或默认 FREE 解析 */
   source: z.enum(['SUBSCRIPTION', 'DEFAULT_FREE']),
+  /** 超额维度（降级后可能非空；新增被阻止、存量保留——见 OVER_COMMITTED_DIMENSIONS） */
+  overCommitted: z.array(overCommittedDimensionSchema).default([]),
 });
 
 export type WorkspaceEntitlement = z.infer<typeof workspaceEntitlementSchema>;

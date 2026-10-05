@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { and, eq } from 'drizzle-orm';
 import { ApiFailure, ERROR_CODES, idempotencyKeySchema } from '@ancs/contracts';
-import { idempotencyKeys } from '@ancs/db';
+import { idempotencyKeys, isUniqueViolation } from '@ancs/db';
 import type { AuthDeps } from './auth.js';
 
 /**
@@ -73,7 +73,7 @@ export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void 
         requestHash,
       });
     } catch (error) {
-      if (typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505') {
+      if (isUniqueViolation(error)) {
         throw new ApiFailure(ERROR_CODES.IDEMPOTENCY_CONFLICT, '相同幂等键的请求仍在处理中', 409);
       }
       throw error;
