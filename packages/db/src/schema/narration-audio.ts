@@ -42,6 +42,8 @@ export const masterNarrations = pgTable(
     voiceIdentityVersion: integer('voice_identity_version'),
     speechProfileId: text('speech_profile_id'),
     speechProfileVersion: integer('speech_profile_version'),
+    /** 旁白语言（null = 源语言；多语言派生版 = 目标语言——P12-04；缓存复用按语言隔离） */
+    language: text('language'),
     /** 缓存统计（局部重建审计：reused / synthesized） */
     cacheStats: jsonb('cache_stats').notNull().default({}),
     warnings: jsonb('warnings').notNull().default([]),

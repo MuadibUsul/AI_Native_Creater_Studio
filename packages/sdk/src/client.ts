@@ -40,6 +40,12 @@ import {
   opsAuditEntrySchema,
   editPlanSchema,
   masterNarrationSchema,
+  translationResultSchema,
+  translationJobListSchema,
+  terminologyEntrySchema,
+  terminologyListSchema,
+  upsertTerminologyRequestSchema,
+  translateNarrationRequestSchema,
   mixPlanRequestSchema,
   mixPlanSchema,
   subtitleOutputSchema,
@@ -248,6 +254,11 @@ import {
   type EditPlan,
   type DirectorPolicyInput,
   type MasterNarration,
+  type TranslationResult,
+  type TranslationJobList,
+  type TerminologyEntry,
+  type TerminologyList,
+  type UpsertTerminologyRequest,
   type MixPlan,
   type MixPlanRequest,
   type SubtitleFormat,
@@ -610,6 +621,19 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  /** 多语言（P12-04）：术语词典 + 翻译并重新合成（数字/实体 fail-closed；新语言全新时间戳） */
+  multilingual: {
+    translate(
+      workspaceId: string,
+      projectId: string,
+      planId: string,
+      input: { targetLanguage: string },
+      options?: MutationOptions,
+    ): Promise<TranslationResult>;
+    translations(workspaceId: string, projectId: string): Promise<TranslationJobList>;
+    upsertTerminology(workspaceId: string, projectId: string, input: UpsertTerminologyRequest, options?: MutationOptions): Promise<TerminologyEntry>;
+    terminology(workspaceId: string, projectId: string, language?: string): Promise<TerminologyList>;
   };
   /** 派生血缘（P11-04；只追加；stale 过期提示不覆盖已批准行；approve 可绑定产出项目版本） */
   derivations: {
@@ -1145,6 +1169,26 @@ export function createClient(options: ClientOptions): AncsClient {
           request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/artifacts/${artifactId}/validate`, artifactValidationResultSchema, {
             idempotencyKey: mutation?.idempotencyKey,
           }),
+      },
+    },
+    multilingual: {
+      translate: (workspaceId, projectId, planId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narration/translations`, translationResultSchema, {
+          body: { planId, targetLanguage: input.targetLanguage },
+          bodySchema: translateNarrationRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      translations: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narration/translations`, translationJobListSchema),
+      upsertTerminology: (workspaceId, projectId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/terminology`, terminologyEntrySchema, {
+          body: input,
+          bodySchema: upsertTerminologyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      terminology: (workspaceId, projectId, language) => {
+        const query = language === undefined ? '' : `?language=${encodeURIComponent(language)}`;
+        return request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/terminology${query}`, terminologyListSchema);
       },
     },
     derivations: {

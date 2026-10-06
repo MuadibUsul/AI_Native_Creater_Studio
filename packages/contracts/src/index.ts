@@ -1352,3 +1352,36 @@ export type {
   PackArtifactList,
   PackArtifactErrorReason,
 } from './pack-artifacts.js';
+
+// 多语言契约（P12-04 / §5.1、§94）
+export {
+  TERMINOLOGY_KINDS,
+  terminologyKindSchema,
+  terminologyEntrySchema,
+  upsertTerminologyRequestSchema,
+  terminologyListSchema,
+  termMappingSchema,
+  translationUnitSchema,
+  numbersCheckSchema,
+  entitiesCheckSchema,
+  translationJobSchema,
+  translationJobListSchema,
+  translationResultSchema,
+  translateNarrationRequestSchema,
+  MULTILINGUAL_ERROR_REASONS,
+} from './multilingual.js';
+export type {
+  TerminologyKind,
+  TerminologyEntry,
+  UpsertTerminologyRequest,
+  TerminologyList,
+  TermMapping,
+  TranslationUnit,
+  NumbersCheck,
+  EntitiesCheck,
+  TranslationJob,
+  TranslationJobList,
+  TranslationResult,
+  TranslateNarrationRequest,
+  MultilingualErrorReason,
+} from './multilingual.js';

@@ -92,6 +92,8 @@ export const masterNarrationSchema = z.object({
     voiceIdentityId: opaqueIdSchema.nullable().default(null),
     voiceIdentityVersion: z.number().int().positive().nullable().default(null),
   }),
+  /** 旁白语言（null = 源语言/未标注；多语言派生版 = 目标语言，如 'en'——P12-04） */
+  language: z.string().min(2).max(20).nullable().default(null),
   cacheStats: z.object({
     segments: z.number().int().nonnegative(),
     reused: z.number().int().nonnegative(),

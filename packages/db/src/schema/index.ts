@@ -9,6 +9,7 @@ export { channelRecipes, contentAtoms } from './atoms.js';
 export { packEnablements, packInstallations, projectPackBindings } from './packs.js';
 export { derivationLineage } from './lineage.js';
 export { packArtifactValidations, packArtifacts } from './pack-artifacts.js';
+export { narrationTranslations, terminologyEntries } from './multilingual.js';
 export {
   avatarIdentities,
   brandIdentities,

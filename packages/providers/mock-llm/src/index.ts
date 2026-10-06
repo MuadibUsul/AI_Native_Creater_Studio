@@ -32,6 +32,9 @@ export const MOCK_LLM_MODES = [
   'motion_unsafe',
   'motion_type_error',
   'motion_unregistered',
+  // P12-04 多语言翻译（completePrompt，purpose='translation'）：合法（词典应用）/ 数字丢失（触发 fail-closed）
+  'translation_valid',
+  'translation_numbers_dropped',
 ] as const;
 export type MockLlmMode = (typeof MOCK_LLM_MODES)[number];
 
@@ -161,6 +164,49 @@ export class MockLlmAdapter implements LlmAdapter {
     if (mode === 'unrepairable') {
       return { content: JSON.stringify({ rationale: [] }), modelVersion: this.options.modelVersion, promptVersion, usage: {} };
     }
+
+    // P12-04 多语言翻译（purpose='translation'）：确定性 Mock 翻译——
+    // 应用词典（systemPrompt 行 `src=>tgt`）逐词替换；数字逐字保留。
+    // mode='translation_numbers_dropped' → 首块译文抹掉数字（验证服务端数字一致性 fail-closed）。
+    // **Mock 输出 ≠ 真实翻译**：真实翻译 Provider BLOCKED 凭据（同 P06-02 纪律，不冒充）。
+    if (input.purpose === 'translation' || mode === 'translation_valid' || mode === 'translation_numbers_dropped') {
+      const dictionary = [...input.systemPrompt.matchAll(/([^\n=>]+)=>([^\n]+)/g)].map((match) => ({
+        source: match[1]?.trim() ?? '',
+        target: match[2]?.trim() ?? '',
+      }));
+      let blocks: { narrationBlockId: string; text: string }[] = [];
+      try {
+        const parsed: unknown = JSON.parse(input.userPrompt);
+        if (typeof parsed === 'object' && parsed !== null && 'blocks' in parsed) {
+          const raw = (parsed as { blocks: unknown }).blocks;
+          if (Array.isArray(raw)) {
+            blocks = raw
+              .filter((entry): entry is { narrationBlockId: string; text: string } => typeof entry === 'object' && entry !== null && 'narrationBlockId' in entry && 'text' in entry)
+              .map((entry) => ({ narrationBlockId: String(entry.narrationBlockId), text: String(entry.text) }));
+          }
+        }
+      } catch {
+        blocks = [];
+      }
+      const translations = blocks.map((block, index) => {
+        let translated = block.text;
+        for (const entry of dictionary) {
+          if (entry.source === '') continue;
+          translated = translated.split(entry.source).join(entry.target);
+        }
+        if (mode === 'translation_numbers_dropped' && index === 0) {
+          translated = translated.replace(/\d+(\.\d+)?/g, '');
+        }
+        return { narrationBlockId: block.narrationBlockId, text: translated };
+      });
+      return {
+        content: JSON.stringify({ targetLanguage: /targetLanguage:\s*(\S+)/.exec(input.systemPrompt)?.[1] ?? '', translations }),
+        modelVersion: this.options.modelVersion,
+        promptVersion,
+        usage: {},
+      };
+    }
+
     if (mode === 'ai_edit_invalid_then_valid') {
       return { content: '这不是 JSON（Mock：首次损坏）', modelVersion: this.options.modelVersion, promptVersion, usage: {} };
     }

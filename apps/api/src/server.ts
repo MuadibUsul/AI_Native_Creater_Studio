@@ -24,6 +24,7 @@ import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerJobRoutes } from './routes/jobs.js';
 import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
+import { registerMultilingualRoutes } from './routes/multilingual.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
@@ -205,6 +206,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
         registerCustomMotionRoutes(instance, authDeps);
         registerNarrationAudioRoutes(instance, authDeps, {
+          ...(audioDeps ?? {}),
+          ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
+        });
+        registerMultilingualRoutes(instance, authDeps, {
+          ...(contentDeps?.llm !== undefined ? { llm: contentDeps.llm } : {}),
           ...(audioDeps ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
         });

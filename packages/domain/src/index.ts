@@ -133,6 +133,7 @@ export {
 export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official-packs.js';
 export { createSocialVisualPlugin, SOCIAL_VISUAL_MANIFEST } from './official-social-pack.js';
 export { createTextPackPlugin, TEXT_PACK_MANIFEST } from './official-text-pack.js';
+export { listTerminology, listTranslationJobs, translateNarration, upsertTerminologyEntry } from './multilingual.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,

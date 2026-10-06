@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { parseWavPcm16 } from './wav.js';
 import {
   ALIGNMENT_ERROR_REASONS,
@@ -173,7 +173,16 @@ export const segmentStorageKey = (workspaceId: string, projectId: string, cacheK
  */
 export async function synthesizeMasterNarration(
   deps: DomainDeps,
-  input: { workspaceId: string; projectId: string; planId: string; onlyBlockId?: string },
+  input: {
+    workspaceId: string;
+    projectId: string;
+    planId: string;
+    onlyBlockId?: string;
+    /** 目标语言（P12-04 多语言派生；缺省 = 源语言）。缓存复用按语言隔离——原语言行永不作为译文缓存源 */
+    language?: string;
+    /** 逐块文本覆盖（多语言翻译后的旁白；必须覆盖计划全部块） */
+    texts?: { narrationBlockId: string; text: string }[];
+  },
 ): Promise<MasterNarration> {
   const tts = requireTts(deps);
   const storage = requireStorage(deps);
@@ -204,13 +213,29 @@ export async function synthesizeMasterNarration(
   const previousRows = await deps.db
     .select()
     .from(masterNarrations)
-    .where(and(eq(masterNarrations.workspaceId, input.workspaceId), eq(masterNarrations.projectId, input.projectId), eq(masterNarrations.narrativePlanId, input.planId)))
+    .where(
+      and(
+        eq(masterNarrations.workspaceId, input.workspaceId),
+        eq(masterNarrations.projectId, input.projectId),
+        eq(masterNarrations.narrativePlanId, input.planId),
+        // 缓存源按语言隔离（P12-04）：原语言行（language IS NULL）永不作为译文缓存源
+        input.language === undefined ? isNull(masterNarrations.language) : eq(masterNarrations.language, input.language),
+      ),
+    )
     .orderBy(desc(masterNarrations.createdAt))
     .limit(1);
   const previousSegments = new Map<string, AlignmentSegment>();
   for (const segment of (previousRows[0]?.segments as AlignmentSegment[] | undefined) ?? []) {
     previousSegments.set(segment.narrationBlockId, segment);
   }
+
+  const textOverrides = new Map((input.texts ?? []).map((entry) => [entry.narrationBlockId, entry.text]));
+  if (input.texts !== undefined && textOverrides.size !== blocks.length) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '翻译文本必须覆盖计划全部旁白块', 422, {
+      reason: 'TRANSLATION_INCOMPLETE',
+    });
+  }
+  const textOf = (block: { id: string; text: string }): string => textOverrides.get(block.id) ?? block.text;
 
   const speechByBlock = new Map<string, SpeechPlan['segments'][number]>();
   for (const segment of speech.segments) {
@@ -225,7 +250,13 @@ export async function synthesizeMasterNarration(
     const speechSegment = speechByBlock.get(block.id);
     const speed = speechSegment?.speed ?? 1;
     const styleInstruction = speechSegment?.styleInstruction ?? null;
-    const cacheKey = segmentCacheKey({ text: block.text, speed, styleInstruction, voiceKey: `${voice.voiceIdentityId}@${String(voice.languageProfile)}` });
+    const segmentText = textOf(block);
+    const cacheKey = segmentCacheKey({
+      text: segmentText,
+      speed,
+      styleInstruction,
+      voiceKey: `${voice.voiceIdentityId}@${String(voice.languageProfile)}@${input.language ?? 'src'}`,
+    });
     const storageKey = segmentStorageKey(input.workspaceId, input.projectId, cacheKey);
     const previous = previousSegments.get(block.id);
     // 局部重建：只重合成目标段；其余段在 cacheKey 相同时复用（不重复调用 TTS）
@@ -234,7 +265,7 @@ export async function synthesizeMasterNarration(
     if (canReuse && previous !== undefined) {
       records.push({
         narrationBlockId: block.id,
-        text: block.text,
+        text: segmentText,
         durationMs: previous.durationMs,
         words: previous.words,
         cacheKey,
@@ -244,7 +275,7 @@ export async function synthesizeMasterNarration(
       continue;
     }
 
-    const synthesized = await tts.synthesize({ text: block.text, voiceRef: voice, speed, styleInstruction });
+    const synthesized = await tts.synthesize({ text: segmentText, voiceRef: voice, speed, styleInstruction });
     let words = synthesized.wordTimestamps;
     let durationMs = synthesized.durationMs;
     if (words === null) {
@@ -255,13 +286,13 @@ export async function synthesizeMasterNarration(
           narrationBlockId: block.id,
         });
       }
-      const aligned = await deps.aligner.align({ bytes: synthesized.bytes, mimeType: synthesized.mimeType, text: block.text });
+      const aligned = await deps.aligner.align({ bytes: synthesized.bytes, mimeType: synthesized.mimeType, text: segmentText });
       words = aligned.words;
       durationMs = aligned.durationMs;
       alignmentMethod = 'ALIGNMENT_PROVIDER';
     }
     await storage.putObject(storageKey, synthesized.bytes);
-    records.push({ narrationBlockId: block.id, text: block.text, durationMs, words, cacheKey, storageKey, reused: false });
+    records.push({ narrationBlockId: block.id, text: segmentText, durationMs, words, cacheKey, storageKey, reused: false });
   }
 
   const { alignment, cues, totalDurationMs } = buildAlignment(records);
@@ -351,6 +382,7 @@ export async function synthesizeMasterNarration(
     voiceIdentityVersion: speech.voice.voiceIdentityVersion,
     speechProfileId: speech.speechProfile.id,
     speechProfileVersion: speech.speechProfile.version,
+    language: input.language ?? null,
     cacheStats: { segments: records.length, reused, synthesized: records.length - reused },
     warnings,
   };
@@ -378,6 +410,7 @@ const toMasterDto = (row: typeof masterNarrations.$inferSelect): MasterNarration
     segments: row.segments,
     cues: row.cues,
     voice: { voiceIdentityId: row.voiceIdentityId, voiceIdentityVersion: row.voiceIdentityVersion },
+    language: row.language,
     cacheStats: row.cacheStats,
     warnings: row.warnings,
     createdAt: row.createdAt.toISOString(),
