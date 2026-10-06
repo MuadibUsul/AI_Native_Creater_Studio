@@ -401,6 +401,9 @@ export function createShortsAnalyzerPlugin(): PackPlugin {
       };
     },
     generate: async (ctx) => generateShorts(ctx),
-    validate: async (artifact, ctx) => validateShorts(artifact, ctx),
+    validate: async (artifact, ctx) =>
+      artifact.kind === 'DERIVED_SCENE_GRAPH'
+        ? validateShorts(artifact, ctx)
+        : { ok: false, issues: [{ severity: 'error', code: 'PAYLOAD_KIND_MISMATCH', message: `载荷类型 ${artifact.kind} 不属于 Shorts Pack`, artifactId: null }] },
   };
 }

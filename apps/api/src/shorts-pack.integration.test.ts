@@ -123,22 +123,24 @@ describe('Shorts Pack 完整链路（P12-01）', () => {
     const artifact = await client.packs.generate(workspaceId, projectId, 'ancs.pack.shorts-analyzer');
     expect(artifact.payloadKind).toBe('DERIVED_SCENE_GRAPH');
     expect(artifact.packVersion).toBe('1.0.0');
-    expect(artifact.payload.format.aspectRatio).toBe('9:16');
-    expect(artifact.payload.format.width).toBe(1080);
-    expect(artifact.payload.format.height).toBe(1920);
+    const payload = artifact.payload;
+    if (payload.kind !== 'DERIVED_SCENE_GRAPH') throw new Error('unexpected payload kind');
+    expect(payload.format.aspectRatio).toBe('9:16');
+    expect(payload.format.width).toBe(1080);
+    expect(payload.format.height).toBe(1920);
 
     // Hook 前置 + 字幕 + 来源卡（短片独立可理解）
-    const scenes = artifact.payload.graph.scenes;
-    expect(scenes[0]?.id).toBe(artifact.payload.hook.sceneId);
-    expect(artifact.payload.hook.durationMs).toBeLessThanOrEqual(3000);
-    expect(artifact.payload.hook.text).toBe('利率维持 5.25%');
-    expect(artifact.payload.graph.captions.length).toBeGreaterThanOrEqual(1);
+    const scenes = payload.graph.scenes;
+    expect(scenes[0]?.id).toBe(payload.hook.sceneId);
+    expect(payload.hook.durationMs).toBeLessThanOrEqual(3000);
+    expect(payload.hook.text).toBe('利率维持 5.25%');
+    expect(payload.graph.captions.length).toBeGreaterThanOrEqual(1);
     expect(scenes.some((scene) => scene.sceneType === 'SOURCE')).toBe(true);
 
     // 来源保留：逐场景 provenance（Atom→Claim→Source）
-    expect(artifact.payload.topic.atomIds).toEqual([atomId]);
+    expect(payload.topic.atomIds).toEqual([atomId]);
     for (const scene of scenes) {
-      const entry = artifact.payload.provenance.find((candidate) => candidate.sceneId === scene.id);
+      const entry = payload.provenance.find((candidate) => candidate.sceneId === scene.id);
       expect(entry).toBeDefined();
       expect(entry?.atomId).toBe(atomId);
       expect((entry?.claimIds.length ?? 0) + (entry?.sourceIds.length ?? 0)).toBeGreaterThan(0);
@@ -167,6 +169,7 @@ describe('Shorts Pack 完整链路（P12-01）', () => {
 
     // 篡改 1：把 HOOK 场景盒位移出安全区（y 越界）；篡改 2：删除 SOURCE 场景的 provenance
     const payload = artifact.payload;
+    if (payload.kind !== 'DERIVED_SCENE_GRAPH') throw new Error('unexpected payload kind');
     const tampered = structuredClone(payload);
     const hookScene = tampered.graph.scenes[0];
     if (hookScene !== undefined) {

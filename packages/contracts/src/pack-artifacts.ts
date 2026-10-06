@@ -92,10 +92,107 @@ export const derivedSceneGraphPayloadSchema = z.object({
 
 export type DerivedSceneGraphPayload = z.infer<typeof derivedSceneGraphPayloadSchema>;
 
-/** 产物类型（当前仅 9:16 派生 Graph；P12-02 起扩展图文/信息图载荷） */
-export const ARTIFACT_PAYLOAD_KINDS = ['DERIVED_SCENE_GRAPH'] as const;
+/* ---------- P12-02 Social Visual：1:1 / 4:5 / Carousel / 信息图（§3.2、§93.3） ---------- */
+
+/** 平台帧规格（Social Visual 的两种画幅） */
+export const SOCIAL_SQUARE_FRAME = { width: 1080, height: 1080, fps: 30, aspectRatio: '1:1' } as const;
+export const SOCIAL_PORTRAIT_FRAME = { width: 1080, height: 1350, fps: 30, aspectRatio: '4:5' } as const;
+
+export const SOCIAL_PLATFORM_KEYS = ['SQUARE_1X1', 'PORTRAIT_4X5'] as const;
+export const socialPlatformKeySchema = z.enum(SOCIAL_PLATFORM_KEYS);
+export type SocialPlatformKey = z.infer<typeof socialPlatformKeySchema>;
+
+export const SOCIAL_PLATFORM_FRAMES = {
+  SQUARE_1X1: SOCIAL_SQUARE_FRAME,
+  PORTRAIT_4X5: SOCIAL_PORTRAIT_FRAME,
+} as const;
+
+/** 页内文字预算（大字排版保守值；超出必须拆页——长文本符合 Recipe 的量化口径） */
+export const SOCIAL_TEXT_BUDGET = { COVER: 60, POINT: 180 } as const;
+
+export const SOCIAL_PAGE_ROLES = ['COVER', 'POINT', 'CHART', 'INFOGRAPHIC', 'SOURCE'] as const;
+export const socialPageRoleSchema = z.enum(SOCIAL_PAGE_ROLES);
+export type SocialPageRole = z.infer<typeof socialPageRoleSchema>;
+
+/** 图表数据来源（数值必须可追溯：ATOM_PAYLOAD = 来自 Atom 载荷逐字采用；不虚构） */
+export const socialDataSourceSchema = z.object({
+  kind: z.enum(['ATOM_PAYLOAD']),
+  atomId: opaqueIdSchema,
+});
+
+/** 图文页（页序由 index 表达；页序规则在 validate 中强制） */
+export const socialVisualPageSchema = z.object({
+  pageId: opaqueIdSchema,
+  index: z.number().int().nonnegative(),
+  role: socialPageRoleSchema,
+  platformKey: socialPlatformKeySchema,
+  format: sceneFormatSchema,
+  componentId: z.string().min(1).max(60),
+  text: z.string().max(2000),
+  textChars: z.number().int().nonnegative(),
+  /** 图表页的数据来源（逐字取自 Atom 载荷；缺失 = 不可追溯 → validate error） */
+  dataSource: socialDataSourceSchema.nullable().default(null),
+  /** 署名（对外发布必须可署名；SOURCE 页必填，其余页可空） */
+  attribution: z.object({ text: z.string().min(1).max(500), sourceIds: z.array(opaqueIdSchema).default([]) }).nullable().default(null),
+  /** 来源链（逐页 Atom→Claim→Source） */
+  provenance: z
+    .array(
+      z.object({
+        atomId: opaqueIdSchema,
+        claimIds: z.array(opaqueIdSchema).default([]),
+        sourceIds: z.array(opaqueIdSchema).default([]),
+      }),
+    )
+    .min(1),
+  /** 拆页续页（长文本跨页时的显式衔接；null = 独立页） */
+  continuationOf: opaqueIdSchema.nullable().default(null),
+});
+
+export type SocialVisualPage = z.infer<typeof socialVisualPageSchema>;
+
+export const socialVisualSetPayloadSchema = z.object({
+  kind: z.literal('SOCIAL_VISUAL_SET'),
+  /** 单主题（同 Shorts 纪律：一个内容集讲一个主题） */
+  topic: z.object({
+    title: z.string().min(1).max(120),
+    atomIds: z.array(opaqueIdSchema).min(1),
+    coverage: z.object({
+      atomsUsed: z.number().int().nonnegative(),
+      atomsTotal: z.number().int().nonnegative(),
+      textTruncatedPages: z.number().int().nonnegative(),
+    }),
+  }),
+  /** 页集：1:1 单图 + 4:5 单图 + Carousel 页序 + 信息图 + 来源页（页序见 validate） */
+  pages: z.array(socialVisualPageSchema).min(2),
+});
+
+export type SocialVisualSetPayload = z.infer<typeof socialVisualSetPayloadSchema>;
+
+/** 产物类型（P12-01 9:16 派生 Graph；P12-02 图文/信息图集） */
+export const ARTIFACT_PAYLOAD_KINDS = ['DERIVED_SCENE_GRAPH', 'SOCIAL_VISUAL_SET'] as const;
 export const artifactPayloadKindSchema = z.enum(ARTIFACT_PAYLOAD_KINDS);
 export type ArtifactPayloadKind = z.infer<typeof artifactPayloadKindSchema>;
+
+/** 产物载荷（判别名 kind 区分 Pack 的 generate 产物形态） */
+export const artifactPayloadSchema = z.discriminatedUnion('kind', [derivedSceneGraphPayloadSchema, socialVisualSetPayloadSchema]);
+export type ArtifactPayload = z.infer<typeof artifactPayloadSchema>;
+
+/** Social Visual 校验码（问题逐条可读；error/warning 语义见 P12-02 验收映射） */
+export const SOCIAL_VALIDATION_CODES = {
+  PLATFORM_SIZE_INVALID: 'PLATFORM_SIZE_INVALID',
+  PAGE_ORDER_INVALID: 'PAGE_ORDER_INVALID',
+  PAGE_COUNT_OUT_OF_RECIPE: 'PAGE_COUNT_OUT_OF_RECIPE',
+  PAGE_COUNT_UNVERIFIED: 'PAGE_COUNT_UNVERIFIED',
+  ATTRIBUTION_MISSING: 'ATTRIBUTION_MISSING',
+  CHART_DATA_UNTRACEABLE: 'CHART_DATA_UNTRACEABLE',
+  NO_CHART_PAGE: 'NO_CHART_PAGE',
+  TEXT_OVERFLOW: 'TEXT_OVERFLOW',
+  PROVENANCE_MISSING: 'PROVENANCE_MISSING',
+  MIXED_TOPIC: 'MIXED_TOPIC',
+  PAYLOAD_KIND_MISMATCH: 'PAYLOAD_KIND_MISMATCH',
+} as const;
+
+export type SocialValidationCode = (typeof SOCIAL_VALIDATION_CODES)[keyof typeof SOCIAL_VALIDATION_CODES];
 
 export const packArtifactSchema = z.object({
   artifactId: opaqueIdSchema,
@@ -107,7 +204,7 @@ export const packArtifactSchema = z.object({
   lineageId: opaqueIdSchema,
   payloadKind: artifactPayloadKindSchema,
   title: z.string().min(1).max(200),
-  payload: derivedSceneGraphPayloadSchema,
+  payload: artifactPayloadSchema,
   createdAt: isoDateTimeSchema,
 });
 

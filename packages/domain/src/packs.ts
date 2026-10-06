@@ -5,8 +5,8 @@ import {
   ERROR_CODES,
   PACK_ARTIFACT_ERROR_REASONS,
   PACK_ERROR_REASONS,
+  artifactPayloadSchema,
   artifactValidationResultSchema,
-  derivedSceneGraphPayloadSchema,
   packAnalyzeResultSchema,
   packArtifactSchema,
   packArtifactViewSchema,
@@ -28,7 +28,7 @@ import {
   type RestrictedPluginContext,
   type WorkspacePackView,
 } from '@ancs/contracts';
-import { claims, derivationLineage, packArtifactValidations, packArtifacts, packEnablements, packInstallations, projectPackBindings } from '@ancs/db';
+import { claims, derivationLineage, packArtifactValidations, packArtifacts, packEnablements, packInstallations, projectPackBindings, projectSources } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assertPackEnabled } from './plans.js';
 import { evaluateChannelFit, listAtoms, listChannelRecipes } from './atoms.js';
@@ -270,13 +270,19 @@ async function buildRestrictedContext(
   let core: RestrictedPluginContext['data']['core'] = null;
   let atoms: ContentAtom[] = [];
   let claimSources: RestrictedPluginContext['data']['claimSources'] = [];
+  let sources: RestrictedPluginContext['data']['sources'] = [];
   let channelSnapshot: RestrictedPluginContext['data']['channelSnapshot'] = null;
   if (canReadCore) {
-    const [state, liveAtoms, detail] = await Promise.all([
+    const [state, liveAtoms, detail, sourceRows] = await Promise.all([
       getProjectContentCoreState(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
       listAtoms(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
       getProjectDetail(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
+      deps.db
+        .select({ id: projectSources.id, title: projectSources.title, publisher: projectSources.publisher })
+        .from(projectSources)
+        .where(and(eq(projectSources.workspaceId, input.workspaceId), eq(projectSources.projectId, input.projectId))),
     ]);
+    sources = sourceRows.map((row) => ({ sourceId: row.id, title: row.title, publisher: row.publisher }));
     core = {
       inputsDigest: state.consistency?.inputsDigest ?? '0'.repeat(64),
       counts: {
@@ -317,7 +323,7 @@ async function buildRestrictedContext(
     limits: null,
     packId: input.manifest.packId,
     packVersion: input.packVersion,
-    data: { core, atoms, claimSources, channelSnapshot, recipe, fit },
+    data: { core, atoms, claimSources, sources, channelSnapshot, recipe, fit },
   });
 }
 
@@ -486,7 +492,10 @@ export async function runPackGenerate(
       packVersion: manifest.version,
       lineageId: lineage.id,
       payloadKind: payload.kind,
-      title: `${payload.topic.title}（${payload.format.aspectRatio} 派生）`,
+      title:
+        payload.kind === 'DERIVED_SCENE_GRAPH'
+          ? `${payload.topic.title}（${payload.format.aspectRatio} 派生）`
+          : `${payload.topic.title}（图文集 ${String(payload.pages.length)} 页）`,
       payload,
     })
     .returning();
@@ -551,7 +560,7 @@ export async function runPackValidate(
     manifest,
     packVersion: version,
   });
-  const payload = derivedSceneGraphPayloadSchema.parse(artifactRow.payload);
+  const payload = artifactPayloadSchema.parse(artifactRow.payload);
   const result = await plugin.validate(payload, context);
   const inserted = await deps.db
     .insert(packArtifactValidations)

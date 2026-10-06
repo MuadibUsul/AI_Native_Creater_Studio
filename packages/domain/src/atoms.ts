@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
   channelFitSchema,
   channelRecipeSchema,
+  channelRequirementsSchema,
   contentAtomSchema,
   createAtomRequestSchema,
   type ChannelFit,
@@ -127,41 +128,66 @@ export const DEFAULT_CHANNEL_RECIPES: readonly { channelKey: string; name: strin
     channelKey: 'YOUTUBE_EXPLAINER',
     name: 'YouTube 深度解读',
     description: '8–12 分钟叙事解释（narrative_depth: high；图表多；来源可见）',
-    requirements: { durationMinMs: 480_000, durationMaxMs: 720_000, minFacts: 2, minNumberAtoms: 0, minAtoms: 0, requiresTimeline: false },
+    requirements: { durationMinMs: 480_000, durationMaxMs: 720_000, minFacts: 2, minNumberAtoms: 0, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null },
   },
   {
     channelKey: 'SHORT_INSIGHT',
     name: '短洞察（竖屏 Short）',
     description: '45–90 秒单点洞察（hook < 3s；一个核心观点；大字幕）',
-    requirements: { durationMinMs: 45_000, durationMaxMs: 90_000, minFacts: 0, minNumberAtoms: 1, minAtoms: 0, requiresTimeline: false },
+    requirements: { durationMinMs: 45_000, durationMaxMs: 90_000, minFacts: 0, minNumberAtoms: 1, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null },
   },
   {
     channelKey: 'CAROUSEL',
     name: '图文 Carousel',
     description: '6–10 页（每页一个观点；信息密度高）',
-    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 3, requiresTimeline: false },
+    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 3, requiresTimeline: false, pageCountMin: 6, pageCountMax: 10 },
   },
 ] as const;
 
+/**
+ * 官方渠道 Recipe 种子（幂等）：
+ * - 无 ACTIVE 行 → 建新版本（首次 v1；全部 RETIRED 时继续递增）；
+ * - ACTIVE 需求与种子一致 → 复用（不产生第二份）；
+ * - **需求变化 → 新版本 + 旧版本 RETIRED**（版本化数据纪律：不改写历史行）。
+ */
 export async function ensureDefaultChannelRecipes(deps: DomainDeps): Promise<{ created: string[] }> {
   const created: string[] = [];
   for (const seed of DEFAULT_CHANNEL_RECIPES) {
-    const existing = await deps.db
-      .select({ id: channelRecipes.id })
+    const rows = await deps.db
+      .select()
       .from(channelRecipes)
-      .where(and(eq(channelRecipes.channelKey, seed.channelKey), eq(channelRecipes.version, 1)))
-      .limit(1);
-    if (existing[0] !== undefined) continue;
+      .where(eq(channelRecipes.channelKey, seed.channelKey))
+      .orderBy(desc(channelRecipes.version));
+    const active = rows.find((row) => row.status === 'ACTIVE');
+    const nextRequirements = channelRequirementsSchema.parse(seed.requirements);
+    if (active !== undefined) {
+      const currentRequirements = channelRequirementsSchema.parse(active.requirements);
+      if (JSON.stringify(currentRequirements) === JSON.stringify(nextRequirements) && active.name === seed.name) continue;
+      await deps.db.update(channelRecipes).set({ status: 'RETIRED' }).where(eq(channelRecipes.id, active.id));
+      const nextVersion = active.version + 1;
+      await deps.db.insert(channelRecipes).values({
+        id: `rcp_${randomUUID()}`,
+        channelKey: seed.channelKey,
+        version: nextVersion,
+        name: seed.name,
+        description: seed.description,
+        requirements: nextRequirements,
+        status: 'ACTIVE',
+      });
+      created.push(`${seed.channelKey}@v${String(nextVersion)}`);
+      continue;
+    }
+    const nextVersion = (rows[0]?.version ?? 0) + 1;
     await deps.db.insert(channelRecipes).values({
       id: `rcp_${randomUUID()}`,
       channelKey: seed.channelKey,
-      version: 1,
+      version: nextVersion,
       name: seed.name,
       description: seed.description,
-      requirements: seed.requirements,
+      requirements: nextRequirements,
       status: 'ACTIVE',
     });
-    created.push(seed.channelKey);
+    created.push(nextVersion === 1 ? seed.channelKey : `${seed.channelKey}@v${String(nextVersion)}`);
   }
   return { created };
 }

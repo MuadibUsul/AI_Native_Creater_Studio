@@ -38,7 +38,7 @@ import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerAtomRoutes } from './routes/atoms.js';
 import { registerPackRoutes } from './routes/packs.js';
 import { registerLineageRoutes } from './routes/lineage.js';
-import { createShortsAnalyzerPlugin } from '@ancs/domain';
+import { createShortsAnalyzerPlugin, createSocialVisualPlugin } from '@ancs/domain';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -155,7 +155,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const credentialDeps = options.credentials;
   const webhookDeps = options.webhooks;
   const contentDeps = options.content;
-  const packPlugins = options.packs?.plugins ?? [createShortsAnalyzerPlugin()];
+  const packPlugins = options.packs?.plugins ?? [createShortsAnalyzerPlugin(), createSocialVisualPlugin()];
   const audioDeps = options.audio;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);

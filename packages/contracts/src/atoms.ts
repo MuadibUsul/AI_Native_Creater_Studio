@@ -77,6 +77,9 @@ export const channelRequirementsSchema = z.object({
   minAtoms: z.number().int().nonnegative().default(0),
   /** 需要时间线素材（缺失 → OPTIONAL） */
   requiresTimeline: z.boolean().default(false),
+  /** 页数窗口（图文/Carousel 类渠道的形态约束；null = 不限） */
+  pageCountMin: z.number().int().positive().nullable().default(null),
+  pageCountMax: z.number().int().positive().nullable().default(null),
 });
 
 export type ChannelRequirements = z.infer<typeof channelRequirementsSchema>;

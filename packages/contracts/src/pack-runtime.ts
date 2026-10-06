@@ -6,7 +6,7 @@ import { channelRecipeSchema, contentAtomSchema } from './atoms.js';
 import { pluginCapabilitySchema, pluginContextSchema, outputPlanSchema } from './extensions.js';
 import type { OutputPlan, PackManifest, ValidationResult } from './extensions.js';
 import { channelSnapshotSchema } from './scene-graph.js';
-import type { DerivedSceneGraphPayload } from './pack-artifacts.js';
+import type { ArtifactPayload } from './pack-artifacts.js';
 
 /**
  * Pack 运行时契约（P11-03 / 规范 §92；计划 §8）。
@@ -79,6 +79,10 @@ export const restrictedPluginContextSchema = pluginContextSchema.extend({
     claimSources: z
       .array(z.object({ claimId: opaqueIdSchema, sourceIds: z.array(opaqueIdSchema).default([]) }))
       .default([]),
+    /** 仅 read_content_core 时非空：来源元数据（署名用；不含正文与 URL） */
+    sources: z
+      .array(z.object({ sourceId: opaqueIdSchema, title: z.string().max(500), publisher: z.string().max(200) }))
+      .default([]),
     /** 仅 read_content_core 时非空：项目 Channel 快照（派生 Graph 的渠道引用） */
     channelSnapshot: channelSnapshotSchema.nullable().default(null),
     /** 插件声明渠道的当前 Recipe（版本化数据；缺失时 null——validate 明示 RECIPE_UNAVAILABLE） */
@@ -95,9 +99,9 @@ export interface PackPlugin {
   readonly manifest: PackManifest;
   analyze(ctx: RestrictedPluginContext): Promise<OutputPlan>;
   /** generate 切面：从受限上下文产出派生产物（**不写回源项目**；缺失 → 501 明确失败） */
-  generate?(ctx: RestrictedPluginContext): Promise<DerivedSceneGraphPayload>;
+  generate?(ctx: RestrictedPluginContext): Promise<ArtifactPayload>;
   /** validate 切面：对照 Recipe/安全区/来源逐项检查产物（问题逐条列出，不静默） */
-  validate?(artifact: DerivedSceneGraphPayload, ctx: RestrictedPluginContext): Promise<ValidationResult>;
+  validate?(artifact: ArtifactPayload, ctx: RestrictedPluginContext): Promise<ValidationResult>;
 }
 
 export const packAnalyzeResultSchema = z.object({

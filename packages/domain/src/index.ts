@@ -131,6 +131,7 @@ export {
   runPackValidate,
 } from './packs.js';
 export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official-packs.js';
+export { createSocialVisualPlugin, SOCIAL_VISUAL_MANIFEST } from './official-social-pack.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,
