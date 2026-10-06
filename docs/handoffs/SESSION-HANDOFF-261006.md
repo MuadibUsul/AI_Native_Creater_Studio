@@ -1,26 +1,28 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-06（P11 阶段全部完成；下一次更新应在本文档失准时）
+- **交接时点**：2026-10-07（P12 阶段全部完成）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`6d3d6a8` feat(p11-04) 派生血缘 —— **P11 阶段完成**
+- **最后已推送提交**：`c263dca` feat(p12-05) Podcast —— **P12 阶段完成（CI 绿 run 37511397074）**
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：67 项已交付（≈64%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
+**104 项计划任务：72 项已交付（≈69%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
 | P00–P08（V1 内部生产） | 48 | ✅ 交付 45（P08-05 真实金样、P06-02/04 真实 Provider 核验 **BLOCKED 凭据**——代码/工具已就位） |
 | P09（对外 SaaS 与商业运营） | 6 | ✅ 全部交付（真实 Stripe BLOCKED；P09-06 上线门机制交付，LG-01…14 人工台账全 BLOCKED） |
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
-| P11（Content Core 与官方 Pack） | 4 | ✅ **全部交付**（P11-01 756 / P11-02 759 / P11-03 762 / P11-04 765；RTM REQ-92-02/93-01/93-04/96-05 与 LED-96-PLUGIN-02/03 闭合） |
-| P12–P16 | 40 | ⬜ 未开始（P12 5 / P13 7 / P14 5 / P15 8 / P16 9，另含 3 项凭据阻塞：P06-02/P06-04/P08-05） |
+| P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
+| P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ **全部交付**（P12-01 768 / P12-02 771 / P12-03 774 / P12-04 777 / P12-05 780；各 Pack analyze/generate/validate 完整链路） |
+| P13–P16 | 35 | ⬜ 未开始（P13 7 / P14 5 / P15 8 / P16 9；另含 3 项凭据阻塞：P06-02/P06-04/P08-05） |
 
-- 测试规模：**765**（unit 341 · web 70 · motion 19 · integration 292 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0038**（derivation_lineage.project_version_id）；下一迁移为 0039
+- 测试规模：**780**（unit 341 · web 70 · motion 19 · integration 307 · security 22 · render 6 · golden 15）
+- 迁移最新编号：**0041**（podcast_episodes + master_narrations.variant）；下一迁移为 0042
+- **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
 
