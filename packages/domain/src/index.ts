@@ -119,6 +119,14 @@ export { searchWorkspace } from './search.js';
 export { exportProjectAssetBundle, exportProjectGraph } from './project-exports.js';
 export { getProjectContentCoreState, migrateProjectToContentCore } from './content-core.js';
 export {
+  createAtom,
+  ensureDefaultChannelRecipes,
+  evaluateChannelFit,
+  listAtoms,
+  listChannelRecipes,
+  DEFAULT_CHANNEL_RECIPES,
+} from './atoms.js';
+export {
   addVoiceSample,
   analyzeVoiceSampleQuality,
   confirmVoiceConsent,

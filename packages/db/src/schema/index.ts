@@ -5,6 +5,7 @@ export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces
 export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
 export { voiceCloneSamples, voiceClones, voiceConsents } from './voice-clone.js';
 export { contentCores } from './content-core.js';
+export { channelRecipes, contentAtoms } from './atoms.js';
 export {
   avatarIdentities,
   brandIdentities,

@@ -131,6 +131,10 @@ import {
   assetBundleExportSchema,
   contentCoreMigrationSchema,
   contentCoreStateSchema,
+  contentAtomSchema,
+  createAtomRequestSchema,
+  channelRecipeSchema,
+  channelFitSchema,
   renderOutputEnhancementsSchema,
   addVoiceSampleRequestSchema,
   confirmVoiceConsentRequestSchema,
@@ -172,6 +176,9 @@ import {
   type AssetBundleExport,
   type ContentCoreMigration,
   type ContentCoreState,
+  type ContentAtom,
+  type ChannelRecipe,
+  type ChannelFit,
   type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
@@ -594,6 +601,22 @@ export interface AncsClient {
     list(workspaceId: string, projectId: string): Promise<ContentDocumentRecord[]>;
     get(workspaceId: string, projectId: string, documentId: string): Promise<ContentDocumentRecord>;
     sources(workspaceId: string, projectId: string): Promise<ContentSource[]>;
+    /** Content Atom（P11-02）：可独立传播单元（来源引用强制可追溯） */
+    atoms: {
+      create(
+        workspaceId: string,
+        projectId: string,
+        input: { kind: 'KEY_NUMBER' | 'CONCLUSION' | 'CAUSAL_RELATION' | 'QUESTION_ANSWER' | 'TIMELINE_SPAN' | 'IMPACT' | 'SUB_TOPIC'; title: string; text: string; sourceRefs: { claimId?: string | null; sourceId?: string | null }[]; payload?: Record<string, unknown> },
+        options?: MutationOptions,
+      ): Promise<ContentAtom>;
+      list(workspaceId: string, projectId: string): Promise<ContentAtom[]>;
+    };
+    /** Channel Recipe 目录（版本化需求） */
+    channelRecipes: {
+      list(workspaceId: string): Promise<ChannelRecipe[]>;
+    };
+    /** Channel Fit（规则化评估；NOT_RECOMMENDED 为 200 正常结果 + 逐条原因） */
+    channelFit(workspaceId: string, projectId: string, channelKey: string): Promise<ChannelFit>;
     /** Content Core（P11-01）：幂等迁移（1:1 派生；原文档保留）+ 状态（实时计数对照） */
     contentCore: {
       migrate(workspaceId: string, projectId: string, options?: MutationOptions): Promise<ContentCoreMigration>;
@@ -1506,6 +1529,22 @@ export function createClient(options: ClientOptions): AncsClient {
         state: (workspaceId, projectId) =>
           request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-core`, contentCoreStateSchema),
       },
+      atoms: {
+        create: (workspaceId, projectId, input, mutation) =>
+          request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/atoms`, contentAtomSchema, {
+            body: input,
+            bodySchema: createAtomRequestSchema,
+            idempotencyKey: mutation?.idempotencyKey,
+          }),
+        list: async (workspaceId, projectId) =>
+          (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/atoms`, z.object({ items: z.array(contentAtomSchema) }))).items,
+      },
+      channelRecipes: {
+        list: async (workspaceId) =>
+          (await request('GET', `/api/v1/workspaces/${workspaceId}/channel-recipes`, z.object({ items: z.array(channelRecipeSchema) }))).items,
+      },
+      channelFit: (workspaceId, projectId, channelKey) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/channel-fit?channelKey=${encodeURIComponent(channelKey)}`, channelFitSchema),
       updateSource: (workspaceId, projectId, sourceId, input, mutation) =>
         request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sources/${sourceId}`, contentSourceSchema, {
           body: input,

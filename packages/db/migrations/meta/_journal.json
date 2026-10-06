@@ -246,6 +246,13 @@
       "when": 1791222416331,
       "tag": "0034_amazing_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791284734592,
+      "tag": "0035_black_rumiko_fujikawa",
+      "breakpoints": true
     }
   ]
 }

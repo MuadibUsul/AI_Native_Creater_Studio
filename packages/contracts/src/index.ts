@@ -1229,3 +1229,31 @@ export type {
   ContentCoreMigration,
   ContentCoreState,
 } from './content-core.js';
+
+// Content Atom / Channel Recipe / Fit 契约（P11-02 / §93.2—93.4）
+export {
+  ATOM_KINDS,
+  atomKindSchema,
+  atomSourceRefSchema,
+  contentAtomSchema,
+  createAtomRequestSchema,
+  ATOM_ERROR_REASONS,
+  CHANNEL_FIT_VERDICTS,
+  channelFitVerdictSchema,
+  channelRequirementsSchema,
+  channelRecipeSchema,
+  channelFitReasonSchema,
+  channelFitSchema,
+  CHANNEL_FIT_ERROR_REASONS,
+} from './atoms.js';
+export type {
+  AtomKind,
+  AtomSourceRef,
+  ContentAtom,
+  CreateAtomRequest,
+  ChannelFitVerdict,
+  ChannelRequirements,
+  ChannelRecipe,
+  ChannelFitReason,
+  ChannelFit,
+} from './atoms.js';
