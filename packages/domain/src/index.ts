@@ -134,6 +134,7 @@ export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official
 export { createSocialVisualPlugin, SOCIAL_VISUAL_MANIFEST } from './official-social-pack.js';
 export { createTextPackPlugin, TEXT_PACK_MANIFEST } from './official-text-pack.js';
 export { listTerminology, listTranslationJobs, translateNarration, upsertTerminologyEntry } from './multilingual.js';
+export { generatePodcastEpisode, listPodcastEpisodes, validatePodcastEpisode } from './podcast.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,

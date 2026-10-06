@@ -46,6 +46,10 @@ import {
   terminologyListSchema,
   upsertTerminologyRequestSchema,
   translateNarrationRequestSchema,
+  podcastEpisodeSchema,
+  podcastEpisodeListSchema,
+  podcastValidationResultSchema,
+  generatePodcastRequestSchema,
   mixPlanRequestSchema,
   mixPlanSchema,
   subtitleOutputSchema,
@@ -259,6 +263,9 @@ import {
   type TerminologyEntry,
   type TerminologyList,
   type UpsertTerminologyRequest,
+  type PodcastEpisode,
+  type PodcastEpisodeList,
+  type PodcastValidationResult,
   type MixPlan,
   type MixPlanRequest,
   type SubtitleFormat,
@@ -621,6 +628,12 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
+  podcast: {
+    generate(workspaceId: string, projectId: string, input: { planId: string }, options?: MutationOptions): Promise<PodcastEpisode>;
+    list(workspaceId: string, projectId: string): Promise<PodcastEpisodeList>;
+    validate(workspaceId: string, projectId: string, episodeId: string, options?: MutationOptions): Promise<PodcastValidationResult>;
   };
   /** 多语言（P12-04）：术语词典 + 翻译并重新合成（数字/实体 fail-closed；新语言全新时间戳） */
   multilingual: {
@@ -1170,6 +1183,20 @@ export function createClient(options: ClientOptions): AncsClient {
             idempotencyKey: mutation?.idempotencyKey,
           }),
       },
+    },
+    podcast: {
+      generate: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/podcast/episodes`, podcastEpisodeSchema, {
+          body: input,
+          bodySchema: generatePodcastRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/podcast/episodes`, podcastEpisodeListSchema),
+      validate: (workspaceId, projectId, episodeId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/podcast/episodes/${episodeId}/validate`, podcastValidationResultSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>

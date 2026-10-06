@@ -35,6 +35,8 @@ export const MOCK_LLM_MODES = [
   // P12-04 多语言翻译（completePrompt，purpose='translation'）：合法（词典应用）/ 数字丢失（触发 fail-closed）
   'translation_valid',
   'translation_numbers_dropped',
+  // P12-05 Podcast（narrative complete）：偶数块含视觉指涉句（验证纯音频改写移除+披露）
+  'visual_refs',
 ] as const;
 export type MockLlmMode = (typeof MOCK_LLM_MODES)[number];
 
@@ -280,6 +282,14 @@ export class MockLlmAdapter implements LlmAdapter {
     }
 
     const plan = this.buildPlan(input.request);
+    if (mode === 'visual_refs') {
+      // P12-05：偶数块注入视觉指涉句（"如图所示/这一列"）——供纯音频改写的移除+披露路径
+      plan.narrationBlocks = plan.narrationBlocks.map((block, index) => ({
+        ...block,
+        text: index % 2 === 0 ? `如图所示，看这一列：${block.text}` : block.text,
+      }));
+      return { content: JSON.stringify(plan), modelVersion: this.options.modelVersion, promptVersion, usage: {} };
+    }
     if (mode === 'verbatim') {
       // 全部旁白逐字复制原文（触发 8-gram 重叠门控；§8.2 不得逐字朗读）
       const digestTexts = input.request.contentDigest.map((item) => item.text).filter((text) => text.length >= 12);

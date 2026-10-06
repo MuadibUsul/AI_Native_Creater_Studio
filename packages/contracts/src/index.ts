@@ -1370,6 +1370,32 @@ export {
   translateNarrationRequestSchema,
   MULTILINGUAL_ERROR_REASONS,
 } from './multilingual.js';
+// Podcast 契约（P12-05 / §4.2、§59）
+export {
+  PODCAST_VARIANTS,
+  podcastVariantSchema,
+  VISUAL_REFERENCE_LEXICON,
+  podcastScriptUnitSchema,
+  podcastChapterSchema,
+  podcastEpisodeSchema,
+  podcastEpisodeListSchema,
+  generatePodcastRequestSchema,
+  podcastValidationResultSchema,
+  PODCAST_ERROR_REASONS,
+  PODCAST_VALIDATION_CODES,
+} from './podcast.js';
+export type {
+  PodcastVariant,
+  PodcastScriptUnit,
+  PodcastChapter,
+  PodcastEpisode,
+  PodcastEpisodeList,
+  GeneratePodcastRequest,
+  PodcastValidationResult,
+  PodcastErrorReason,
+  PodcastValidationCode,
+} from './podcast.js';
+
 export type {
   TerminologyKind,
   TerminologyEntry,

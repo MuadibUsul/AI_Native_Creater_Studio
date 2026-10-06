@@ -94,6 +94,8 @@ export const masterNarrationSchema = z.object({
   }),
   /** 旁白语言（null = 源语言/未标注；多语言派生版 = 目标语言，如 'en'——P12-04） */
   language: z.string().min(2).max(20).nullable().default(null),
+  /** 变体（MASTER = 视频母带——画面/字幕/渲染唯一基础；PODCAST = 纯音频派生——不进视频主链，P12-05） */
+  variant: z.enum(['MASTER', 'PODCAST']).default('MASTER'),
   cacheStats: z.object({
     segments: z.number().int().nonnegative(),
     reused: z.number().int().nonnegative(),

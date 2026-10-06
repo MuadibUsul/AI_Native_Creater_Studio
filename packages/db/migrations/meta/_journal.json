@@ -288,6 +288,13 @@
       "when": 1791303833129,
       "tag": "0040_cool_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791306423466,
+      "tag": "0041_pretty_rictor",
+      "breakpoints": true
     }
   ]
 }

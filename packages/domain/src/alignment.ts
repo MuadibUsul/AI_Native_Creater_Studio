@@ -180,8 +180,10 @@ export async function synthesizeMasterNarration(
     onlyBlockId?: string;
     /** 目标语言（P12-04 多语言派生；缺省 = 源语言）。缓存复用按语言隔离——原语言行永不作为译文缓存源 */
     language?: string;
-    /** 逐块文本覆盖（多语言翻译后的旁白；必须覆盖计划全部块） */
+    /** 逐块文本覆盖（多语言翻译/纯音频改写后的旁白；未覆盖的块在 variant=PODCAST 时整块跳过） */
     texts?: { narrationBlockId: string; text: string }[];
+    /** 变体（缺省 MASTER = 视频母带；PODCAST = 纯音频派生——不进视频主链，P12-05） */
+    variant?: 'MASTER' | 'PODCAST';
   },
 ): Promise<MasterNarration> {
   const tts = requireTts(deps);
@@ -209,6 +211,8 @@ export async function synthesizeMasterNarration(
     });
   }
 
+  const variant = input.variant ?? 'MASTER';
+
   // 上一次 Master（缓存来源：同 cacheKey 的段直接复用音频与时间戳）
   const previousRows = await deps.db
     .select()
@@ -218,7 +222,8 @@ export async function synthesizeMasterNarration(
         eq(masterNarrations.workspaceId, input.workspaceId),
         eq(masterNarrations.projectId, input.projectId),
         eq(masterNarrations.narrativePlanId, input.planId),
-        // 缓存源按语言隔离（P12-04）：原语言行（language IS NULL）永不作为译文缓存源
+        // 缓存源按变体 + 语言隔离（P12-04/P12-05）：原语言行永不作为译文缓存源；PODCAST 行永不复用 MASTER 音频
+        eq(masterNarrations.variant, variant),
         input.language === undefined ? isNull(masterNarrations.language) : eq(masterNarrations.language, input.language),
       ),
     )
@@ -230,11 +235,13 @@ export async function synthesizeMasterNarration(
   }
 
   const textOverrides = new Map((input.texts ?? []).map((entry) => [entry.narrationBlockId, entry.text]));
-  if (input.texts !== undefined && textOverrides.size !== blocks.length) {
+  if (input.texts !== undefined && variant === 'MASTER' && textOverrides.size !== blocks.length) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '翻译文本必须覆盖计划全部旁白块', 422, {
       reason: 'TRANSLATION_INCOMPLETE',
     });
   }
+  // variant=PODCAST：texts 未覆盖的块 = 纯视觉块 → 整块跳过（子集 episode；披露由调用方承担）
+  const isSkipped = (blockId: string): boolean => input.texts !== undefined && !textOverrides.has(blockId);
   const textOf = (block: { id: string; text: string }): string => textOverrides.get(block.id) ?? block.text;
 
   const speechByBlock = new Map<string, SpeechPlan['segments'][number]>();
@@ -247,6 +254,7 @@ export async function synthesizeMasterNarration(
   let alignmentMethod: MasterNarration['alignmentMethod'] = 'PROVIDER_TIMESTAMPS';
 
   for (const block of blocks) {
+    if (isSkipped(block.id)) continue;
     const speechSegment = speechByBlock.get(block.id);
     const speed = speechSegment?.speed ?? 1;
     const styleInstruction = speechSegment?.styleInstruction ?? null;
@@ -383,6 +391,7 @@ export async function synthesizeMasterNarration(
     speechProfileId: speech.speechProfile.id,
     speechProfileVersion: speech.speechProfile.version,
     language: input.language ?? null,
+    variant,
     cacheStats: { segments: records.length, reused, synthesized: records.length - reused },
     warnings,
   };
@@ -411,6 +420,7 @@ const toMasterDto = (row: typeof masterNarrations.$inferSelect): MasterNarration
     cues: row.cues,
     voice: { voiceIdentityId: row.voiceIdentityId, voiceIdentityVersion: row.voiceIdentityVersion },
     language: row.language,
+    variant: (row.variant as 'MASTER' | 'PODCAST' | undefined) ?? 'MASTER',
     cacheStats: row.cacheStats,
     warnings: row.warnings,
     createdAt: row.createdAt.toISOString(),
@@ -421,7 +431,12 @@ export async function getCurrentMasterNarration(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; planId?: string },
 ): Promise<MasterNarration | null> {
-  const conditions = [eq(masterNarrations.workspaceId, input.workspaceId), eq(masterNarrations.projectId, input.projectId)];
+  const conditions = [
+    eq(masterNarrations.workspaceId, input.workspaceId),
+    eq(masterNarrations.projectId, input.projectId),
+    // 视频主链只认 MASTER 变体（P12-05：PODCAST 纯音频派生不冒充视频母带）
+    eq(masterNarrations.variant, 'MASTER'),
+  ];
   if (input.planId !== undefined) conditions.push(eq(masterNarrations.narrativePlanId, input.planId));
   const rows = await deps.db
     .select()
