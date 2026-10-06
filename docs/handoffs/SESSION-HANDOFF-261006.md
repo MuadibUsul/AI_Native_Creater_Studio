@@ -1,26 +1,26 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-06（上一会话结束于 P10 全部完成；本会话因上下文满而交接）
+- **交接时点**：2026-10-06（P11 阶段全部完成；下一次更新应在本文档失准时）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`b949889` feat(p11-02) Atom/Recipe/Fit —— **CI 绿**
+- **最后已推送提交**：`6d3d6a8` feat(p11-04) 派生血缘 —— **P11 阶段完成**
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：62 项已交付（≈60%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
+**104 项计划任务：67 项已交付（≈64%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
-| P00–P08（V1 内部生产） | 48 | ✅ 全部交付（P08-05 真实金样、P06-01/02/04/05 真实 Provider 核验 **BLOCKED 凭据**——代码/工具已就位） |
+| P00–P08（V1 内部生产） | 48 | ✅ 交付 45（P08-05 真实金样、P06-02/04 真实 Provider 核验 **BLOCKED 凭据**——代码/工具已就位） |
 | P09（对外 SaaS 与商业运营） | 6 | ✅ 全部交付（真实 Stripe BLOCKED；P09-06 上线门机制交付，LG-01…14 人工台账全 BLOCKED） |
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
-| P11（Content Core 与官方 Pack） | 4 | P11-01 ✅（ContentCore 1:1 派生迁移，756）；**P11-02 ✅（Atom/Recipe/Fit，验证 759）**；P11-03/04 未开始 |
-| P12–P16 | 40 | ⬜ 未开始 |
+| P11（Content Core 与官方 Pack） | 4 | ✅ **全部交付**（P11-01 756 / P11-02 759 / P11-03 762 / P11-04 765；RTM REQ-92-02/93-01/93-04/96-05 与 LED-96-PLUGIN-02/03 闭合） |
+| P12–P16 | 40 | ⬜ 未开始（P12 5 / P13 7 / P14 5 / P15 8 / P16 9，另含 3 项凭据阻塞：P06-02/P06-04/P08-05） |
 
-- 测试规模：**752**（unit 341 · web 70 · motion 19 · integration 279 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0033**（voice_clone 三表）；下一迁移为 0034
+- 测试规模：**765**（unit 341 · web 70 · motion 19 · integration 292 · security 22 · render 6 · golden 15）
+- 迁移最新编号：**0038**（derivation_lineage.project_version_id）；下一迁移为 0039
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
 
@@ -36,12 +36,14 @@
 | P10-02 真实克隆 / P10-03 真实素材·图像·Runway | 对应 Provider 凭据+端点核验 | 实现 VoiceCloneProvider/AssetSearchProvider/GenerationProvider seam → 回放验收矩阵 |
 | P09-06 LG-01…14 | 法务/商务/财务（人工） | `docs/ops/launch-gate.md` 台账举证 → `launch-gate-check.mjs --live` |
 
-## 4. P11-01/P11-02 已完成（2026-10-06；9b70d34 / b949889）——下一任务：P11-03 官方 Pack
+## 4. P11 阶段完成（2026-10-06；9b70d34 / b949889 / df2175a / 6d3d6a8）——下一任务：P12-01 Shorts Pack
 
 - **P11-01 交付摘要**：契约 content-core.ts + 迁移 0034（content_cores，project 唯一）+ domain（1:1 派生/facts=fact 子投影/relations 不推断/thesis 不编造/原文档零改动/inputsDigest 幂等）+ API/SDK（client.content.contentCore.{migrate,state}）+ 集成 4/4 + verify 756。详见 docs/verification/P11-01.md。
 - **P11-02 交付摘要**：契约 atoms.ts（7 类 Atom sourceRefs≥1 强制 + Recipe requirements 数据化 + Fit verdict/reasons/inputs）+ 迁移 0035（content_atoms + channel_recipes）+ domain（createAtom 悬空引用 422；官方三渠道种子幂等；evaluateChannelFit 三档判定 NOT_RECOMMENDED=200）+ API/SDK（client.content.{atoms,channelRecipes,channelFit}）+ 集成 3/3 + verify 759。详见 docs/verification/P11-02.md。
-- **P11-03 设计要点**：PluginManifest（id/version/capabilities 白名单声明）→ 注册校验；**受限 PluginContext**（未声明能力拿不到数据；永不提供 DB/Secret）；权益检查 = entitlements.packs 白名单（未启用明确拒绝）；版本锁定 = 项目绑定 Pack 版本；首个官方 Pack 实例（如 Shorts Analyzer 消费 Fit/Atom 出 plan 骨架）证明契约可工作。已有基础：packages/extensions（ExtensionRegistry）+ §92 OutputPlugin/Capability + P09-01 packs 权益。
-- **后续**：P11-03 官方 Pack（NOT_RECOMMENDED 通道）→ P11-03 官方 Pack（受限 PluginContext）→ P11-04 派生血缘 → P12（各 Pack）→ P13（发布）→ P14（运营/学习）→ P15（性能/规模）→ P16（合规收尾，含 Enterprise 隐私）。
+- **P11-03 交付摘要**：契约 pack-runtime.ts（安装/启用/绑定三段 + restrictedPluginContext + PackPlugin 接口）+ 迁移 0036（pack_installations/pack_enablements/project_pack_bindings）+ domain（四道闸门：绑定→安装→启用→权益白名单 403；buildRestrictedContext 能力门控**无 DB/Secret**）+ 官方 Shorts Analyzer（Fit/Atom → OutputPlan）+ API/SDK（client.packs.{list,enable,disable,bind,analyze}）+ 集成 3/3 + verify 762。详见 docs/verification/P11-03.md。
+- **P11-04 交付摘要**：契约 lineage.ts（血缘=派生时输入快照 coreInputsDigest/inputsSnapshot/packVersion/channelKey + 可选 projectVersionId）+ 迁移 0037/0038 + domain（recordPlanLineage 只追加；stale=读取时提示不改状态；approve 一次性+重复 409+可选绑定项目版本同项目校验）+ analyze 自动挂血缘 + API/SDK（client.derivations.{list,approve}）+ 集成 3/3 + verify 765；审计 REQ-92-02（Core 无输出硬编码分支）。详见 docs/verification/P11-04.md。
+- **P12-01 设计要点（下一任务）**：Shorts 必须**从 Atom 重新编导**（REQ-93-03，非长视频时间轴机械裁切）；落 generate 切面（OutputPlan → 9:16 派生 SceneGraph）；**原长视频/图不被修改**（派生独立产物，不写回源项目）；竖屏安全区校验（§10 规则复用）；来源保留 = 派生 Scene 引用 Atom→Claim 链；短片独立理解 = Hook 重写 + 单主题约束。已有基础：P11-02 Atom/Recipe/Fit、P11-03 Pack 生命周期 + analyze、P11-04 血缘（approve 可绑 projectVersionId）。落地顺序按 AGENTS.md：contracts → migration → domain → API → SDK → tests → docs。
+- **后续**：P12（各 Pack：Shorts/Social/Text/多语言/Podcast）→ P13（发布/交付/CMS）→ P14（运营与学习）→ P15（多端）→ P16（Marketplace/Enterprise，含插件签名与生命周期）。
 
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
 
