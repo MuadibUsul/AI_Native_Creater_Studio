@@ -2,21 +2,21 @@
 
 - **交接时点**：2026-10-06（上一会话结束于 P10 全部完成；本会话因上下文满而交接）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`9b70d34` feat(p11-01) ContentCore —— CI 状态见 gh run list（推送于会话尾）
+- **最后已推送提交**：`b949889` feat(p11-02) Atom/Recipe/Fit —— **CI 绿**
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：61 项已交付（≈59%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
+**104 项计划任务：62 项已交付（≈60%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
 | P00–P08（V1 内部生产） | 48 | ✅ 全部交付（P08-05 真实金样、P06-01/02/04/05 真实 Provider 核验 **BLOCKED 凭据**——代码/工具已就位） |
 | P09（对外 SaaS 与商业运营） | 6 | ✅ 全部交付（真实 Stripe BLOCKED；P09-06 上线门机制交付，LG-01…14 人工台账全 BLOCKED） |
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
-| P11（Content Core 与官方 Pack） | 4 | P11-01 ✅（ContentCore 1:1 派生迁移，验证 756）；**P11-02 Atom/Recipe 为下一项**；P11-03/04 未开始 |
+| P11（Content Core 与官方 Pack） | 4 | P11-01 ✅（ContentCore 1:1 派生迁移，756）；**P11-02 ✅（Atom/Recipe/Fit，验证 759）**；P11-03/04 未开始 |
 | P12–P16 | 40 | ⬜ 未开始 |
 
 - 测试规模：**752**（unit 341 · web 70 · motion 19 · integration 279 · security 22 · render 6 · golden 15）
@@ -36,10 +36,11 @@
 | P10-02 真实克隆 / P10-03 真实素材·图像·Runway | 对应 Provider 凭据+端点核验 | 实现 VoiceCloneProvider/AssetSearchProvider/GenerationProvider seam → 回放验收矩阵 |
 | P09-06 LG-01…14 | 法务/商务/财务（人工） | `docs/ops/launch-gate.md` 台账举证 → `launch-gate-check.mjs --live` |
 
-## 4. P11-01 已完成（2026-10-06；commit 9b70d34）——下一任务：P11-02 Atom/Recipe
+## 4. P11-01/P11-02 已完成（2026-10-06；9b70d34 / b949889）——下一任务：P11-03 官方 Pack
 
 - **P11-01 交付摘要**：契约 content-core.ts + 迁移 0034（content_cores，project 唯一）+ domain（1:1 派生/facts=fact 子投影/relations 不推断/thesis 不编造/原文档零改动/inputsDigest 幂等）+ API/SDK（client.content.contentCore.{migrate,state}）+ 集成 4/4 + verify 756。详见 docs/verification/P11-01.md。
-- **P11-02 设计要点**：Atom = 核心模型最小可复用单元（claim/fact/source-quote 级），**必须携带来源引用**（sourceIds/claimId）；Recipe = 渠道→结构映射（版本化）；Fit = 规则化评估（时长/结构/渠道约束），不合适 → **NOT_RECOMMENDED + 原因**（非报错）。已有基础：P11-01 核心模型 + Channel 版本化样式（P01-04）。
+- **P11-02 交付摘要**：契约 atoms.ts（7 类 Atom sourceRefs≥1 强制 + Recipe requirements 数据化 + Fit verdict/reasons/inputs）+ 迁移 0035（content_atoms + channel_recipes）+ domain（createAtom 悬空引用 422；官方三渠道种子幂等；evaluateChannelFit 三档判定 NOT_RECOMMENDED=200）+ API/SDK（client.content.{atoms,channelRecipes,channelFit}）+ 集成 3/3 + verify 759。详见 docs/verification/P11-02.md。
+- **P11-03 设计要点**：PluginManifest（id/version/capabilities 白名单声明）→ 注册校验；**受限 PluginContext**（未声明能力拿不到数据；永不提供 DB/Secret）；权益检查 = entitlements.packs 白名单（未启用明确拒绝）；版本锁定 = 项目绑定 Pack 版本；首个官方 Pack 实例（如 Shorts Analyzer 消费 Fit/Atom 出 plan 骨架）证明契约可工作。已有基础：packages/extensions（ExtensionRegistry）+ §92 OutputPlugin/Capability + P09-01 packs 权益。
 - **后续**：P11-03 官方 Pack（NOT_RECOMMENDED 通道）→ P11-03 官方 Pack（受限 PluginContext）→ P11-04 派生血缘 → P12（各 Pack）→ P13（发布）→ P14（运营/学习）→ P15（性能/规模）→ P16（合规收尾，含 Enterprise 隐私）。
 
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
@@ -58,6 +59,8 @@
 6. **drizzle 0.45 错误包装**：唯一冲突判定用 `@ancs/db` 的 `isUniqueViolation(error)`（解包 cause），不要直接读 `error.code`。
 7. **SDK `Headers` 实例不能展开**（`{...headers}` 得到空对象）——用 `headers.set()`。
 8. **二进制端点必须显式 `bodyLimit`**（Fastify 默认 1MiB）：存储 64MB、文档导入 25MB。
+8a. **SDK 编辑后必须 `pnpm install`** 刷新 apps/api 的注入拷贝（workspace 拷贝非符号链接——不刷新则 typecheck 读旧类型）。
+8b. **SDK 防重复守卫陷阱**：向 client.ts 插接口+实现分两步时，接口含 `xxx: {` 会使实现的 `includes` 守卫误判已存在——实现需单独 Edit 插入。
 9. **新迁移流程**：改 `packages/db/src/schema/*` → `cd packages/db && pnpm run db:generate` → 检查 SQL → typecheck。
 10. 迁移文件命名随机；提交前确认 `_journal.json` 与 snapshot 一致并入库。
 
@@ -72,7 +75,7 @@ docker ps | grep ancs                         # 本地 DB/Redis（55432）
 
 ## 6. 交接时仓库状态
 
-- 工作树**干净**（全部已提交推送）；P11-01 已完成（9b70d34）。
+- 工作树**干净**（全部已提交推送）；P11-01/P11-02 已完成。
 - 若新会话发现未提交变更：为上一会话中断的部分实现——先 `git status`/`git diff` 评估，按 §4 的任务定义继续或干净丢弃（勿盲目提交）。
 - `.artifacts/` 为 gitignore 的本地产物目录（渲染 PNG/测试存储），可随时清理。
 
