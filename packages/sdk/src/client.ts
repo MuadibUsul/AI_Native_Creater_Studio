@@ -135,6 +135,9 @@ import {
   createAtomRequestSchema,
   workspacePackViewSchema,
   packAnalyzeResultSchema,
+  packArtifactViewSchema,
+  packArtifactListSchema,
+  artifactValidationResultSchema,
   derivationListSchema,
   derivationListItemSchema,
   approveDerivationRequestSchema,
@@ -186,6 +189,8 @@ import {
   type ChannelFit,
   type WorkspacePackView,
   type PackAnalyzeResult,
+  type PackArtifactView,
+  type ArtifactValidationResult,
   type DerivationList,
   type DerivationListItem,
   type RenderOutputEnhancements,
@@ -381,6 +386,12 @@ export interface AncsClient {
     disable(workspaceId: string, packId: string, options?: MutationOptions): Promise<void>;
     bind(workspaceId: string, projectId: string, packId: string, options?: MutationOptions): Promise<{ projectId: string; packId: string; version: string; boundAt: string }>;
     analyze(workspaceId: string, projectId: string, packId: string, options?: MutationOptions): Promise<PackAnalyzeResult>;
+    /** 生成派生产物（P12-01；须先 analyze——血缘锚；产物只追加，不写回源项目） */
+    generate(workspaceId: string, projectId: string, packId: string, options?: MutationOptions): Promise<PackArtifactView>;
+    artifacts: {
+      list(workspaceId: string, projectId: string): Promise<PackArtifactView[]>;
+      validate(workspaceId: string, projectId: string, artifactId: string, options?: MutationOptions): Promise<ArtifactValidationResult>;
+    };
   };
   /** 工作区搜索（P10-06；租户内 + 排除软删；kinds 可选过滤） */
   search(workspaceId: string, input: { q: string; kinds?: string[]; limit?: number }): Promise<SearchResponse>;
@@ -1121,6 +1132,20 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/packs/${packId}/analyze`, packAnalyzeResultSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      /** 生成派生产物（P12-01；须先 analyze——血缘锚；产物只追加，**不写回源项目**） */
+      generate: (workspaceId, projectId, packId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/packs/${packId}/generate`, packArtifactViewSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      artifacts: {
+        list: async (workspaceId, projectId) =>
+          (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/artifacts`, packArtifactListSchema)).items,
+        /** 产物校验（安全区/来源链/Hook/字幕/Recipe 窗口；结果只追加） */
+        validate: (workspaceId, projectId, artifactId, mutation) =>
+          request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/artifacts/${artifactId}/validate`, artifactValidationResultSchema, {
+            idempotencyKey: mutation?.idempotencyKey,
+          }),
+      },
     },
     derivations: {
       list: async (workspaceId, projectId) =>

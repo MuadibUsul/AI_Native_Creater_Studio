@@ -8,6 +8,7 @@ export { contentCores } from './content-core.js';
 export { channelRecipes, contentAtoms } from './atoms.js';
 export { packEnablements, packInstallations, projectPackBindings } from './packs.js';
 export { derivationLineage } from './lineage.js';
+export { packArtifactValidations, packArtifacts } from './pack-artifacts.js';
 export {
   avatarIdentities,
   brandIdentities,

@@ -1292,3 +1292,36 @@ export {
   LINEAGE_ERROR_REASONS,
 } from './lineage.js';
 export type { DerivationLineage, DerivationListItem, DerivationList, ApproveDerivationRequest } from './lineage.js';
+
+// Pack 产物契约（P12-01 Shorts Pack / §92.1、§93.2）
+export {
+  SHORT_VERTICAL_FRAME,
+  SHORT_VERTICAL_SAFE_AREA,
+  shortSafeAreaSchema,
+  SHORT_SCENE_ROLES,
+  shortSceneRoleSchema,
+  shortSceneLayoutSchema,
+  SHORT_LAYOUT_PROP_KEY,
+  HOOK_TEXT_SOURCES,
+  derivedSceneGraphPayloadSchema,
+  ARTIFACT_PAYLOAD_KINDS,
+  artifactPayloadKindSchema,
+  packArtifactSchema,
+  artifactValidationResultSchema,
+  packArtifactViewSchema,
+  packArtifactListSchema,
+  PACK_ARTIFACT_ERROR_REASONS,
+  SHORT_VALIDATION_CODES,
+} from './pack-artifacts.js';
+export type {
+  ShortSafeArea,
+  ShortSceneRole,
+  ShortSceneLayout,
+  DerivedSceneGraphPayload,
+  ArtifactPayloadKind,
+  PackArtifact,
+  ArtifactValidationResult,
+  PackArtifactView,
+  PackArtifactList,
+  PackArtifactErrorReason,
+} from './pack-artifacts.js';

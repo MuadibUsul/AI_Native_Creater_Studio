@@ -124,8 +124,11 @@ export {
   enablePackForWorkspace,
   ensurePacksInstalled,
   installPack,
+  listProjectArtifacts,
   listWorkspacePacks,
   runPackAnalyze,
+  runPackGenerate,
+  runPackValidate,
 } from './packs.js';
 export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official-packs.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';

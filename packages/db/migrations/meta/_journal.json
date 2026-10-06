@@ -274,6 +274,13 @@
       "when": 1791297785883,
       "tag": "0038_amused_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791298978459,
+      "tag": "0039_solid_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

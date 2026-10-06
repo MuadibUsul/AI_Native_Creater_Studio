@@ -1,21 +1,44 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { errorEnvelopeSchema, opaqueIdSchema, packAnalyzeResultSchema, workspacePackViewSchema } from '@ancs/contracts';
-import { bindProjectPack, disablePackForWorkspace, enablePackForWorkspace, ensurePacksInstalled, listWorkspacePacks, runPackAnalyze, type DomainDeps } from '@ancs/domain';
+import {
+  artifactValidationResultSchema,
+  errorEnvelopeSchema,
+  opaqueIdSchema,
+  packAnalyzeResultSchema,
+  packArtifactListSchema,
+  packArtifactViewSchema,
+  workspacePackViewSchema,
+} from '@ancs/contracts';
+import {
+  bindProjectPack,
+  disablePackForWorkspace,
+  enablePackForWorkspace,
+  ensurePacksInstalled,
+  listProjectArtifacts,
+  listWorkspacePacks,
+  runPackAnalyze,
+  runPackGenerate,
+  runPackValidate,
+  type DomainDeps,
+} from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
- * Pack 路由（P11-03 / §92）：
+ * Pack 路由（P11-03 / §92；P12-01 增 generate/validate）：
  * - GET    /workspaces/:id/packs —— 安装清单 + 启用状态（首次访问幂等安装官方 Pack）；
  * - POST   /workspaces/:id/packs/:packId/enable|disable —— 启用/停用（**权益白名单强制**）；
  * - POST   /workspaces/:id/projects/:projectId/packs/:packId/bind —— 项目绑定（**版本锁定**）；
- * - POST   /workspaces/:id/projects/:projectId/packs/:packId/analyze —— 受限上下文运行（OutputPlan 供预览/批准）。
+ * - POST   /workspaces/:id/projects/:projectId/packs/:packId/analyze —— 受限上下文运行（OutputPlan 供预览/批准）；
+ * - POST   /workspaces/:id/projects/:projectId/packs/:packId/generate —— 产出派生产物（**不写回源项目**）；
+ * - GET    /workspaces/:id/projects/:projectId/artifacts —— 产物列表（附最近校验）；
+ * - POST   /workspaces/:id/projects/:projectId/artifacts/:artifactId/validate —— 产物校验（追加校验历史）。
  */
 
 const workspaceParamsSchema = z.object({ id: opaqueIdSchema });
 const workspacePackParamsSchema = z.object({ id: opaqueIdSchema, packId: z.string().min(3).max(120) });
 const projectPackParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema, packId: z.string().min(3).max(120) });
+const projectArtifactParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema, artifactId: opaqueIdSchema });
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema, 501: errorEnvelopeSchema };
 
 export interface PackRouteOptions {
@@ -114,6 +137,60 @@ export function registerPackRoutes(app: FastifyInstance, deps: AuthDeps, _option
       await app.requireWorkspace(request, request.params.id, 'project:read');
       await ensurePacksInstalled(domain);
       return runPackAnalyze(domain, { workspaceId: request.params.id, projectId: request.params.projectId, packId: request.params.packId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/packs/:packId/generate',
+    {
+      schema: {
+        tags: ['packs'],
+        summary: '生成派生产物（P12-01：analyze 血缘锚 → 插件 generate 切面 → 产物只追加；**不写回源项目**）',
+        params: projectPackParamsSchema,
+        response: { 200: packArtifactViewSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      await ensurePacksInstalled(domain);
+      return runPackGenerate(domain, { workspaceId: request.params.id, projectId: request.params.projectId, packId: request.params.packId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/artifacts',
+    {
+      schema: {
+        tags: ['packs'],
+        summary: '产物列表（新→旧；附最近一次校验结果——校验历史只追加）',
+        params: z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema }),
+        response: { 200: packArtifactListSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      const items = await listProjectArtifacts(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+      return { items };
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/artifacts/:artifactId/validate',
+    {
+      schema: {
+        tags: ['packs'],
+        summary: '产物校验（安全区/来源链/Hook/字幕/Recipe 窗口逐项检查；结果只追加）',
+        params: projectArtifactParamsSchema,
+        response: { 200: artifactValidationResultSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return runPackValidate(domain, {
+        workspaceId: request.params.id,
+        projectId: request.params.projectId,
+        artifactId: request.params.artifactId,
+      });
     },
   );
 }

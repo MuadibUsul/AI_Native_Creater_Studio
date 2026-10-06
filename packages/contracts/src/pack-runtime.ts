@@ -2,9 +2,11 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { channelFitSchema } from './atoms.js';
-import { contentAtomSchema } from './atoms.js';
+import { channelRecipeSchema, contentAtomSchema } from './atoms.js';
 import { pluginCapabilitySchema, pluginContextSchema, outputPlanSchema } from './extensions.js';
-import type { OutputPlan, PackManifest } from './extensions.js';
+import type { OutputPlan, PackManifest, ValidationResult } from './extensions.js';
+import { channelSnapshotSchema } from './scene-graph.js';
+import type { DerivedSceneGraphPayload } from './pack-artifacts.js';
 
 /**
  * Pack 运行时契约（P11-03 / 规范 §92；计划 §8）。
@@ -73,6 +75,14 @@ export const restrictedPluginContextSchema = pluginContextSchema.extend({
       .nullable(),
     /** 仅 read_content_core 时非空（Atom 自带来源引用） */
     atoms: z.array(contentAtomSchema).default([]),
+    /** 仅 read_content_core 时非空：Claim→Source 索引（Atom→Claim→Source 链闭合用） */
+    claimSources: z
+      .array(z.object({ claimId: opaqueIdSchema, sourceIds: z.array(opaqueIdSchema).default([]) }))
+      .default([]),
+    /** 仅 read_content_core 时非空：项目 Channel 快照（派生 Graph 的渠道引用） */
+    channelSnapshot: channelSnapshotSchema.nullable().default(null),
+    /** 插件声明渠道的当前 Recipe（版本化数据；缺失时 null——validate 明示 RECIPE_UNAVAILABLE） */
+    recipe: channelRecipeSchema.nullable().default(null),
     /** 插件声明渠道的 Fit（无法评估时 null） */
     fit: channelFitSchema.nullable().default(null),
   }),
@@ -80,10 +90,14 @@ export const restrictedPluginContextSchema = pluginContextSchema.extend({
 
 export type RestrictedPluginContext = z.infer<typeof restrictedPluginContextSchema>;
 
-/** Pack 插件（§92.1 OutputPlugin 的 analyze 切面；generate/validate 随 P12 各 Pack 落地） */
+/** Pack 插件（§92.1 OutputPlugin；P12-01 起 analyze/generate/validate 三切面齐备） */
 export interface PackPlugin {
   readonly manifest: PackManifest;
   analyze(ctx: RestrictedPluginContext): Promise<OutputPlan>;
+  /** generate 切面：从受限上下文产出派生产物（**不写回源项目**；缺失 → 501 明确失败） */
+  generate?(ctx: RestrictedPluginContext): Promise<DerivedSceneGraphPayload>;
+  /** validate 切面：对照 Recipe/安全区/来源逐项检查产物（问题逐条列出，不静默） */
+  validate?(artifact: DerivedSceneGraphPayload, ctx: RestrictedPluginContext): Promise<ValidationResult>;
 }
 
 export const packAnalyzeResultSchema = z.object({

@@ -3,16 +3,23 @@ import { and, desc, eq } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  PACK_ARTIFACT_ERROR_REASONS,
   PACK_ERROR_REASONS,
+  artifactValidationResultSchema,
+  derivedSceneGraphPayloadSchema,
   packAnalyzeResultSchema,
+  packArtifactSchema,
+  packArtifactViewSchema,
   packEnablementSchema,
   packInstallationSchema,
   packManifestSchema,
   projectPackBindingSchema,
   restrictedPluginContextSchema,
   workspacePackViewSchema,
+  type ArtifactValidationResult,
   type ContentAtom,
   type PackAnalyzeResult,
+  type PackArtifactView,
   type PackEnablement,
   type PackInstallation,
   type PackManifest,
@@ -21,12 +28,13 @@ import {
   type RestrictedPluginContext,
   type WorkspacePackView,
 } from '@ancs/contracts';
-import { packEnablements, packInstallations, projectPackBindings } from '@ancs/db';
+import { claims, derivationLineage, packArtifactValidations, packArtifacts, packEnablements, packInstallations, projectPackBindings } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assertPackEnabled } from './plans.js';
-import { evaluateChannelFit, listAtoms } from './atoms.js';
+import { evaluateChannelFit, listAtoms, listChannelRecipes } from './atoms.js';
 import { recordPlanLineage } from './lineage.js';
 import { getProjectContentCoreState } from './content-core.js';
+import { getProjectDetail } from './projects.js';
 
 /**
  * Pack 生命周期与受限运行时（P11-03 / 规范 §92；计划 §8）。
@@ -250,8 +258,8 @@ export async function bindProjectPack(
 /* ---------- 受限上下文 + analyze ---------- */
 
 /**
- * 构建受限上下文（能力门控）：manifest 声明了 read_content_core 才给核心摘要/Atom；
- * **上下文只含显式授予的数据面——无 DB、无 Secret**。
+ * 构建受限上下文（能力门控）：manifest 声明了 read_content_core 才给核心摘要/Atom/Claim→Source 索引/
+ * Channel 快照/Recipe；**上下文只含显式授予的数据面——无 DB、无 Secret**。
  */
 async function buildRestrictedContext(
   deps: DomainDeps,
@@ -261,8 +269,14 @@ async function buildRestrictedContext(
   const canReadCore = granted.has('read_content_core');
   let core: RestrictedPluginContext['data']['core'] = null;
   let atoms: ContentAtom[] = [];
+  let claimSources: RestrictedPluginContext['data']['claimSources'] = [];
+  let channelSnapshot: RestrictedPluginContext['data']['channelSnapshot'] = null;
   if (canReadCore) {
-    const state = await getProjectContentCoreState(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+    const [state, liveAtoms, detail] = await Promise.all([
+      getProjectContentCoreState(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
+      listAtoms(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
+      getProjectDetail(deps, { workspaceId: input.workspaceId, projectId: input.projectId }),
+    ]);
     core = {
       inputsDigest: state.consistency?.inputsDigest ?? '0'.repeat(64),
       counts: {
@@ -272,11 +286,29 @@ async function buildRestrictedContext(
         sourceCount: state.liveCounts.sourceCount,
       },
     };
-    atoms = await listAtoms(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+    atoms = liveAtoms;
+    // Claim→Source 索引（Atom→Claim→Source 链闭合；只有 id 映射，不含正文）
+    const claimRows = await deps.db
+      .select({ id: claims.id, sourceIds: claims.sourceIds })
+      .from(claims)
+      .where(and(eq(claims.workspaceId, input.workspaceId), eq(claims.projectId, input.projectId)));
+    claimSources = claimRows.map((row) => ({ claimId: row.id, sourceIds: (row.sourceIds ?? []) as string[] }));
+    channelSnapshot = {
+      channelId: detail.channelSnapshot.channelId,
+      channelStyleVersion: String(detail.channelSnapshot.styleVersion),
+      speechProfileId: null,
+      speechProfileVersion: null,
+    };
   }
   let fit: RestrictedPluginContext['data']['fit'] = null;
+  let recipe: RestrictedPluginContext['data']['recipe'] = null;
   if (input.manifest.defaultChannelKey !== null) {
-    fit = await evaluateChannelFit(deps, { workspaceId: input.workspaceId, projectId: input.projectId, channelKey: input.manifest.defaultChannelKey }).catch(() => null);
+    const [fitResult, recipes] = await Promise.all([
+      evaluateChannelFit(deps, { workspaceId: input.workspaceId, projectId: input.projectId, channelKey: input.manifest.defaultChannelKey }).catch(() => null),
+      listChannelRecipes(deps),
+    ]);
+    fit = fitResult;
+    recipe = recipes.find((candidate) => candidate.channelKey === input.manifest.defaultChannelKey && candidate.status === 'ACTIVE') ?? null;
   }
   return restrictedPluginContextSchema.parse({
     workspaceId: input.workspaceId,
@@ -285,15 +317,18 @@ async function buildRestrictedContext(
     limits: null,
     packId: input.manifest.packId,
     packVersion: input.packVersion,
-    data: { core, atoms, fit },
+    data: { core, atoms, claimSources, channelSnapshot, recipe, fit },
   });
 }
 
-/** analyze 全链闸门：绑定 → 安装 → 启用 → 权益 → 插件实例 → 受限上下文 → OutputPlan。 */
-export async function runPackAnalyze(
+/**
+ * 全链闸门解析（analyze/generate/validate 共用）：
+ * 绑定（版本锁定）→ 安装（按绑定版本）→ 启用 → 权益白名单 → 插件实例。
+ */
+async function resolvePackRuntime(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; packId: string },
-): Promise<PackAnalyzeResult> {
+): Promise<{ manifest: PackManifest; plugin: PackPlugin; version: string }> {
   // 1) 绑定（版本锁定）
   const bindingRows = await deps.db
     .select()
@@ -342,13 +377,22 @@ export async function runPackAnalyze(
       reason: PACK_ERROR_REASONS.PLUGIN_NOT_REGISTERED,
     });
   }
+  return { manifest, plugin, version: binding.version };
+}
+
+/** analyze 全链闸门：绑定 → 安装 → 启用 → 权益 → 插件实例 → 受限上下文 → OutputPlan。 */
+export async function runPackAnalyze(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; packId: string },
+): Promise<PackAnalyzeResult> {
+  const { manifest, plugin, version } = await resolvePackRuntime(deps, input);
 
   // 6) 受限上下文 + analyze
   const context = await buildRestrictedContext(deps, {
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     manifest,
-    packVersion: binding.version,
+    packVersion: version,
   });
   const plan = await plugin.analyze(context);
   // 派生血缘（P11-04）：只追加 PLAN 行（输入快照；过期由列表读取时对照提示）
@@ -364,4 +408,163 @@ export async function runPackAnalyze(
     summary: plan.summary,
   });
   return packAnalyzeResultSchema.parse({ plan, context });
+}
+
+/* ---------- 产物（P12-01）：generate / validate（只追加） ---------- */
+
+const toArtifactDto = (row: typeof packArtifacts.$inferSelect) =>
+  packArtifactSchema.parse({
+    artifactId: row.id,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId,
+    packId: row.packId,
+    packVersion: row.packVersion,
+    lineageId: row.lineageId,
+    payloadKind: row.payloadKind,
+    title: row.title,
+    payload: row.payload,
+    createdAt: row.createdAt.toISOString(),
+  });
+
+const toValidationDto = (row: {
+  artifactId: string;
+  ok: boolean;
+  issues: unknown;
+  validatedAt: Date;
+}): ArtifactValidationResult =>
+  artifactValidationResultSchema.parse({
+    artifactId: row.artifactId,
+    ok: row.ok,
+    issues: row.issues,
+    validatedAt: row.validatedAt.toISOString(),
+  });
+
+/**
+ * generate 全链（P12-01；§92.1）：闸门同 analyze + **须先有 analyze 血缘行**（来源锚）→
+ * 插件 generate 切面 → 产物**只追加**落库（**不写回源项目**）。
+ */
+export async function runPackGenerate(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; packId: string },
+): Promise<PackArtifactView> {
+  const { manifest, plugin, version } = await resolvePackRuntime(deps, input);
+
+  // 来源锚：analyze 的 PLAN 血缘行（generate 不得凭空产出）
+  const lineageRows = await deps.db
+    .select()
+    .from(derivationLineage)
+    .where(and(eq(derivationLineage.workspaceId, input.workspaceId), eq(derivationLineage.projectId, input.projectId), eq(derivationLineage.packId, input.packId)))
+    .orderBy(desc(derivationLineage.createdAt))
+    .limit(1);
+  const lineage = lineageRows[0];
+  if (lineage === undefined) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '尚无 analyze 血缘行：请先 analyze 生成规划（来源锚）', 409, {
+      reason: PACK_ARTIFACT_ERROR_REASONS.ANALYZE_REQUIRED,
+      packId: input.packId,
+    });
+  }
+
+  if (plugin.generate === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, `插件未实现 generate 切面：${manifest.packId}@${manifest.version}`, 501, {
+      reason: PACK_ARTIFACT_ERROR_REASONS.PLUGIN_GENERATE_NOT_IMPLEMENTED,
+    });
+  }
+  const context = await buildRestrictedContext(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    manifest,
+    packVersion: version,
+  });
+  const payload = await plugin.generate(context);
+  const inserted = await deps.db
+    .insert(packArtifacts)
+    .values({
+      id: `art_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      packId: manifest.packId,
+      packVersion: manifest.version,
+      lineageId: lineage.id,
+      payloadKind: payload.kind,
+      title: `${payload.topic.title}（${payload.format.aspectRatio} 派生）`,
+      payload,
+    })
+    .returning();
+  const row = inserted[0];
+  if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'artifact insert failed', 500);
+  return packArtifactViewSchema.parse({ ...toArtifactDto(row), latestValidation: null });
+}
+
+/** 产物列表（新→旧；附最近一次校验结果——校验历史只追加，旧行不改写）。 */
+export async function listProjectArtifacts(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string },
+): Promise<PackArtifactView[]> {
+  const rows = await deps.db
+    .select()
+    .from(packArtifacts)
+    .where(and(eq(packArtifacts.workspaceId, input.workspaceId), eq(packArtifacts.projectId, input.projectId)))
+    .orderBy(desc(packArtifacts.createdAt));
+  if (rows.length === 0) return [];
+  const validations = await deps.db
+    .select()
+    .from(packArtifactValidations)
+    .where(and(eq(packArtifactValidations.workspaceId, input.workspaceId), eq(packArtifactValidations.projectId, input.projectId)))
+    .orderBy(desc(packArtifactValidations.validatedAt));
+  const latest = new Map<string, ArtifactValidationResult>();
+  for (const validation of validations) {
+    if (!latest.has(validation.artifactId)) latest.set(validation.artifactId, toValidationDto(validation));
+  }
+  return rows.map((row) => packArtifactViewSchema.parse({ ...toArtifactDto(row), latestValidation: latest.get(row.id) ?? null }));
+}
+
+/**
+ * validate 全链（P12-01）：闸门同 analyze → 插件 validate 切面 →
+ * 校验结果**只追加**（历史保留；重校验不改写旧行）。
+ */
+export async function runPackValidate(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; artifactId: string },
+): Promise<ArtifactValidationResult> {
+  const artifactRows = await deps.db
+    .select()
+    .from(packArtifacts)
+    .where(and(eq(packArtifacts.id, input.artifactId), eq(packArtifacts.workspaceId, input.workspaceId), eq(packArtifacts.projectId, input.projectId)))
+    .limit(1);
+  const artifactRow = artifactRows[0];
+  if (artifactRow === undefined) {
+    throw new ApiFailure(ERROR_CODES.NOT_FOUND, '产物不存在', 404, { reason: PACK_ARTIFACT_ERROR_REASONS.ARTIFACT_NOT_FOUND });
+  }
+  const { manifest, plugin, version } = await resolvePackRuntime(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    packId: artifactRow.packId,
+  });
+  if (plugin.validate === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, `插件未实现 validate 切面：${manifest.packId}@${manifest.version}`, 501, {
+      reason: PACK_ARTIFACT_ERROR_REASONS.PLUGIN_VALIDATE_NOT_IMPLEMENTED,
+    });
+  }
+  const context = await buildRestrictedContext(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    manifest,
+    packVersion: version,
+  });
+  const payload = derivedSceneGraphPayloadSchema.parse(artifactRow.payload);
+  const result = await plugin.validate(payload, context);
+  const inserted = await deps.db
+    .insert(packArtifactValidations)
+    .values({
+      id: `artval_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      artifactId: artifactRow.id,
+      ok: result.ok,
+      issues: result.issues,
+    })
+    .returning();
+  const row = inserted[0];
+  if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'artifact validation insert failed', 500);
+  return toValidationDto(row);
 }
