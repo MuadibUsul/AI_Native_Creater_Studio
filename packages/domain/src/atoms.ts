@@ -128,19 +128,38 @@ export const DEFAULT_CHANNEL_RECIPES: readonly { channelKey: string; name: strin
     channelKey: 'YOUTUBE_EXPLAINER',
     name: 'YouTube 深度解读',
     description: '8–12 分钟叙事解释（narrative_depth: high；图表多；来源可见）',
-    requirements: { durationMinMs: 480_000, durationMaxMs: 720_000, minFacts: 2, minNumberAtoms: 0, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null },
+    requirements: { durationMinMs: 480_000, durationMaxMs: 720_000, minFacts: 2, minNumberAtoms: 0, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null, postMaxChars: null, threadMaxPosts: null, threadPostMaxChars: null, newsletterMaxChars: null },
   },
   {
     channelKey: 'SHORT_INSIGHT',
     name: '短洞察（竖屏 Short）',
     description: '45–90 秒单点洞察（hook < 3s；一个核心观点；大字幕）',
-    requirements: { durationMinMs: 45_000, durationMaxMs: 90_000, minFacts: 0, minNumberAtoms: 1, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null },
+    requirements: { durationMinMs: 45_000, durationMaxMs: 90_000, minFacts: 0, minNumberAtoms: 1, minAtoms: 0, requiresTimeline: false, pageCountMin: null, pageCountMax: null, postMaxChars: null, threadMaxPosts: null, threadPostMaxChars: null, newsletterMaxChars: null },
   },
   {
     channelKey: 'CAROUSEL',
     name: '图文 Carousel',
     description: '6–10 页（每页一个观点；信息密度高）',
-    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 3, requiresTimeline: false, pageCountMin: 6, pageCountMax: 10 },
+    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 3, requiresTimeline: false, pageCountMin: 6, pageCountMax: 10, postMaxChars: null, threadMaxPosts: null, threadPostMaxChars: null, newsletterMaxChars: null },
+  },
+  // 文字类渠道（P12-03；长度限制为**平台保守默认值**，可经 Recipe 版本化升级覆盖——代码不硬编码平台）
+  {
+    channelKey: 'TEXT_THREAD',
+    name: 'Thread（线程贴）',
+    description: '≤12 条、单条 ≤280 字符的线程贴（逐字引用，不改写事实）',
+    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 1, requiresTimeline: false, pageCountMin: null, pageCountMax: null, threadMaxPosts: 12, threadPostMaxChars: 280, postMaxChars: null, newsletterMaxChars: null },
+  },
+  {
+    channelKey: 'TEXT_POST',
+    name: '短文 / 平台文案',
+    description: '≤220 字符的单条短文（标题 + 要点，逐字引用）',
+    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 1, requiresTimeline: false, pageCountMin: null, pageCountMax: null, postMaxChars: 220, threadMaxPosts: null, threadPostMaxChars: null, newsletterMaxChars: null },
+  },
+  {
+    channelKey: 'NEWSLETTER',
+    name: 'Newsletter 长文',
+    description: '≤6000 字符的分节长文（每节一个 Atom，逐字引用，来源清单）',
+    requirements: { durationMinMs: null, durationMaxMs: null, minFacts: 1, minNumberAtoms: 0, minAtoms: 1, requiresTimeline: false, pageCountMin: null, pageCountMax: null, newsletterMaxChars: 6000, postMaxChars: null, threadMaxPosts: null, threadPostMaxChars: null },
   },
 ] as const;
 
@@ -153,41 +172,55 @@ export const DEFAULT_CHANNEL_RECIPES: readonly { channelKey: string; name: strin
 export async function ensureDefaultChannelRecipes(deps: DomainDeps): Promise<{ created: string[] }> {
   const created: string[] = [];
   for (const seed of DEFAULT_CHANNEL_RECIPES) {
-    const rows = await deps.db
-      .select()
-      .from(channelRecipes)
-      .where(eq(channelRecipes.channelKey, seed.channelKey))
-      .orderBy(desc(channelRecipes.version));
-    const active = rows.find((row) => row.status === 'ACTIVE');
     const nextRequirements = channelRequirementsSchema.parse(seed.requirements);
-    if (active !== undefined) {
-      const currentRequirements = channelRequirementsSchema.parse(active.requirements);
-      if (JSON.stringify(currentRequirements) === JSON.stringify(nextRequirements) && active.name === seed.name) continue;
-      await deps.db.update(channelRecipes).set({ status: 'RETIRED' }).where(eq(channelRecipes.id, active.id));
-      const nextVersion = active.version + 1;
-      await deps.db.insert(channelRecipes).values({
-        id: `rcp_${randomUUID()}`,
-        channelKey: seed.channelKey,
-        version: nextVersion,
-        name: seed.name,
-        description: seed.description,
-        requirements: nextRequirements,
-        status: 'ACTIVE',
-      });
-      created.push(`${seed.channelKey}@v${String(nextVersion)}`);
-      continue;
+    // 并发安全（多进程/多测试文件并行调用）：读 → （必要时）插新版本；插入冲突 = 其他进程已处理 → 重读判定
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const rows = await deps.db
+        .select()
+        .from(channelRecipes)
+        .where(eq(channelRecipes.channelKey, seed.channelKey))
+        .orderBy(desc(channelRecipes.version));
+      const active = rows.find((row) => row.status === 'ACTIVE');
+      if (active !== undefined) {
+        const currentRequirements = channelRequirementsSchema.parse(active.requirements);
+        if (JSON.stringify(currentRequirements) === JSON.stringify(nextRequirements) && active.name === seed.name) break; // 幂等复用
+        await deps.db.update(channelRecipes).set({ status: 'RETIRED' }).where(eq(channelRecipes.id, active.id));
+        const inserted = await deps.db
+          .insert(channelRecipes)
+          .values({
+            id: `rcp_${randomUUID()}`,
+            channelKey: seed.channelKey,
+            version: active.version + 1,
+            name: seed.name,
+            description: seed.description,
+            requirements: nextRequirements,
+            status: 'ACTIVE',
+          })
+          .onConflictDoNothing()
+          .returning({ id: channelRecipes.id });
+        if (inserted.length > 0) created.push(`${seed.channelKey}@v${String(active.version + 1)}`);
+        break;
+      }
+      const nextVersion = (rows[0]?.version ?? 0) + 1;
+      const inserted = await deps.db
+        .insert(channelRecipes)
+        .values({
+          id: `rcp_${randomUUID()}`,
+          channelKey: seed.channelKey,
+          version: nextVersion,
+          name: seed.name,
+          description: seed.description,
+          requirements: nextRequirements,
+          status: 'ACTIVE',
+        })
+        .onConflictDoNothing()
+        .returning({ id: channelRecipes.id });
+      if (inserted.length > 0) {
+        created.push(nextVersion === 1 ? seed.channelKey : `${seed.channelKey}@v${String(nextVersion)}`);
+        break;
+      }
+      // 冲突：其他进程刚插入 → 重读后再判定
     }
-    const nextVersion = (rows[0]?.version ?? 0) + 1;
-    await deps.db.insert(channelRecipes).values({
-      id: `rcp_${randomUUID()}`,
-      channelKey: seed.channelKey,
-      version: nextVersion,
-      name: seed.name,
-      description: seed.description,
-      requirements: nextRequirements,
-      status: 'ACTIVE',
-    });
-    created.push(nextVersion === 1 ? seed.channelKey : `${seed.channelKey}@v${String(nextVersion)}`);
   }
   return { created };
 }

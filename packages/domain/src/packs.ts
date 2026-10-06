@@ -76,9 +76,20 @@ export async function installPack(
       status: 'INSTALLED',
       manifest,
     })
+    .onConflictDoNothing()
     .returning();
   const row = inserted[0];
-  if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'pack installation failed', 500);
+  if (row === undefined) {
+    // 并发安装（其他进程刚插入同 packId+version）→ 复用既有行（幂等语义不变）
+    const reread = await deps.db
+      .select()
+      .from(packInstallations)
+      .where(and(eq(packInstallations.packId, manifest.packId), eq(packInstallations.version, manifest.version)))
+      .limit(1);
+    const existingRow = reread[0];
+    if (existingRow === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'pack installation failed', 500);
+    return { installation: toInstallationDto(existingRow), reused: true };
+  }
   return { installation: toInstallationDto(row), reused: false };
 }
 
@@ -308,13 +319,10 @@ async function buildRestrictedContext(
   }
   let fit: RestrictedPluginContext['data']['fit'] = null;
   let recipe: RestrictedPluginContext['data']['recipe'] = null;
+  const activeRecipes = await listChannelRecipes(deps);
   if (input.manifest.defaultChannelKey !== null) {
-    const [fitResult, recipes] = await Promise.all([
-      evaluateChannelFit(deps, { workspaceId: input.workspaceId, projectId: input.projectId, channelKey: input.manifest.defaultChannelKey }).catch(() => null),
-      listChannelRecipes(deps),
-    ]);
-    fit = fitResult;
-    recipe = recipes.find((candidate) => candidate.channelKey === input.manifest.defaultChannelKey && candidate.status === 'ACTIVE') ?? null;
+    fit = await evaluateChannelFit(deps, { workspaceId: input.workspaceId, projectId: input.projectId, channelKey: input.manifest.defaultChannelKey }).catch(() => null);
+    recipe = activeRecipes.find((candidate) => candidate.channelKey === input.manifest.defaultChannelKey && candidate.status === 'ACTIVE') ?? null;
   }
   return restrictedPluginContextSchema.parse({
     workspaceId: input.workspaceId,
@@ -323,7 +331,7 @@ async function buildRestrictedContext(
     limits: null,
     packId: input.manifest.packId,
     packVersion: input.packVersion,
-    data: { core, atoms, claimSources, sources, channelSnapshot, recipe, fit },
+    data: { core, atoms, claimSources, sources, channelSnapshot, recipe, recipes: activeRecipes, fit },
   });
 }
 
@@ -495,7 +503,9 @@ export async function runPackGenerate(
       title:
         payload.kind === 'DERIVED_SCENE_GRAPH'
           ? `${payload.topic.title}（${payload.format.aspectRatio} 派生）`
-          : `${payload.topic.title}（图文集 ${String(payload.pages.length)} 页）`,
+          : payload.kind === 'SOCIAL_VISUAL_SET'
+            ? `${payload.topic.title}（图文集 ${String(payload.pages.length)} 页）`
+            : `${payload.topic.title}（文字集 ${String(payload.units.length)} 单元）`,
       payload,
     })
     .returning();

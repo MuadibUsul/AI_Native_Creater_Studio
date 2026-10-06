@@ -87,6 +87,8 @@ export const restrictedPluginContextSchema = pluginContextSchema.extend({
     channelSnapshot: channelSnapshotSchema.nullable().default(null),
     /** 插件声明渠道的当前 Recipe（版本化数据；缺失时 null——validate 明示 RECIPE_UNAVAILABLE） */
     recipe: channelRecipeSchema.nullable().default(null),
+    /** 全部 ACTIVE Recipe（多形态 Pack 按渠道取长度/形态限制；仍为平台数据，非 Secret） */
+    recipes: z.array(channelRecipeSchema).default([]),
     /** 插件声明渠道的 Fit（无法评估时 null） */
     fit: channelFitSchema.nullable().default(null),
   }),

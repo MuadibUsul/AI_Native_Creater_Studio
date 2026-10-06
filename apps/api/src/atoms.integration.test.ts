@@ -148,9 +148,9 @@ describe('Atom / Recipe / Fit（P11-02）', () => {
     const client = await newClient('atom-fit');
     const { workspaceId, projectId, claimIds } = await makeProjectWithContent(client);
 
-    // 种子幂等：目录三渠道（每次请求都 ensure，行不重复）
+    // 种子幂等：目录六渠道（视频三 + P12-03 文字三；每次请求都 ensure，行不重复）
     const recipes = await client.content.channelRecipes.list(workspaceId);
-    expect(recipes.map((recipe) => recipe.channelKey).sort()).toEqual(['CAROUSEL', 'SHORT_INSIGHT', 'YOUTUBE_EXPLAINER']);
+    expect(recipes.map((recipe) => recipe.channelKey).sort()).toEqual(['CAROUSEL', 'NEWSLETTER', 'SHORT_INSIGHT', 'TEXT_POST', 'TEXT_THREAD', 'YOUTUBE_EXPLAINER']);
     const recipesAgain = await client.content.channelRecipes.list(workspaceId);
     expect(recipesAgain.map((recipe) => recipe.id).sort()).toEqual(recipes.map((recipe) => recipe.id).sort());
 

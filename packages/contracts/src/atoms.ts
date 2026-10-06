@@ -80,6 +80,11 @@ export const channelRequirementsSchema = z.object({
   /** 页数窗口（图文/Carousel 类渠道的形态约束；null = 不限） */
   pageCountMin: z.number().int().positive().nullable().default(null),
   pageCountMax: z.number().int().positive().nullable().default(null),
+  /** 文本长度限制（文字类渠道；null = 未定义——validate 明示未核验，不猜） */
+  postMaxChars: z.number().int().positive().nullable().default(null),
+  threadMaxPosts: z.number().int().positive().nullable().default(null),
+  threadPostMaxChars: z.number().int().positive().nullable().default(null),
+  newsletterMaxChars: z.number().int().positive().nullable().default(null),
 });
 
 export type ChannelRequirements = z.infer<typeof channelRequirementsSchema>;

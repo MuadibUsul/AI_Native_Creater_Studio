@@ -168,14 +168,87 @@ export const socialVisualSetPayloadSchema = z.object({
 
 export type SocialVisualSetPayload = z.infer<typeof socialVisualSetPayloadSchema>;
 
-/** 产物类型（P12-01 9:16 派生 Graph；P12-02 图文/信息图集） */
-export const ARTIFACT_PAYLOAD_KINDS = ['DERIVED_SCENE_GRAPH', 'SOCIAL_VISUAL_SET'] as const;
+/* ---------- P12-03 Text Pack：Thread / 短文 / Newsletter / 平台文案（§4.2、§93.3） ---------- */
+
+export const TEXT_UNIT_KINDS = ['THREAD_POST', 'SHORT_POST', 'PLATFORM_COPY', 'NEWSLETTER_SECTION'] as const;
+export const textUnitKindSchema = z.enum(TEXT_UNIT_KINDS);
+export type TextUnitKind = z.infer<typeof textUnitKindSchema>;
+
+/** 逐字引用（"引用和事实不丢失"的载体：正文必须可由引文逐字重建） */
+export const textQuoteSchema = z.object({
+  claimId: opaqueIdSchema.nullable().default(null),
+  sourceId: opaqueIdSchema.nullable().default(null),
+  /** 逐字引文（必须与所用 Atom 句子一致） */
+  text: z.string().min(1).max(2000),
+});
+
+export const textUnitSchema = z.object({
+  unitId: opaqueIdSchema,
+  index: z.number().int().nonnegative(),
+  kind: textUnitKindSchema,
+  /** 归属渠道（长度限制按该渠道 Recipe 校验） */
+  channelKey: z.string().min(1).max(60),
+  /** 条内前缀标记（如 `[1/5] `、`（续）`）——前缀不计入引文重建 */
+  prefix: z.string().max(20).default(''),
+  text: z.string().min(1).max(20000),
+  textChars: z.number().int().nonnegative(),
+  quotes: z.array(textQuoteSchema).min(1),
+  provenance: z
+    .array(
+      z.object({
+        atomId: opaqueIdSchema,
+        claimIds: z.array(opaqueIdSchema).default([]),
+        sourceIds: z.array(opaqueIdSchema).default([]),
+      }),
+    )
+    .min(1),
+});
+
+export type TextUnit = z.infer<typeof textUnitSchema>;
+
+export const textSetPayloadSchema = z.object({
+  kind: z.literal('TEXT_SET'),
+  topic: z.object({
+    title: z.string().min(1).max(120),
+    atomIds: z.array(opaqueIdSchema).min(1),
+    coverage: z.object({
+      sentencesUsed: z.number().int().nonnegative(),
+      sentencesTotal: z.number().int().nonnegative(),
+    }),
+  }),
+  units: z.array(textUnitSchema).min(1),
+  /** 因长度限制无法在不改文字前提下生成的形态（显式列出，不静默省略） */
+  unavailableFormats: z
+    .array(z.object({ channelKey: z.string().min(1).max(60), reason: z.string().min(1).max(300) }))
+    .default([]),
+});
+
+export type TextSetPayload = z.infer<typeof textSetPayloadSchema>;
+
+/** 产物类型（P12-01 9:16 派生 Graph；P12-02 图文/信息图集；P12-03 文字集） */
+export const ARTIFACT_PAYLOAD_KINDS = ['DERIVED_SCENE_GRAPH', 'SOCIAL_VISUAL_SET', 'TEXT_SET'] as const;
 export const artifactPayloadKindSchema = z.enum(ARTIFACT_PAYLOAD_KINDS);
 export type ArtifactPayloadKind = z.infer<typeof artifactPayloadKindSchema>;
 
 /** 产物载荷（判别名 kind 区分 Pack 的 generate 产物形态） */
-export const artifactPayloadSchema = z.discriminatedUnion('kind', [derivedSceneGraphPayloadSchema, socialVisualSetPayloadSchema]);
+export const artifactPayloadSchema = z.discriminatedUnion('kind', [derivedSceneGraphPayloadSchema, socialVisualSetPayloadSchema, textSetPayloadSchema]);
 export type ArtifactPayload = z.infer<typeof artifactPayloadSchema>;
+
+/** Text Pack 校验码（error/warning 语义见 P12-03 验收映射） */
+export const TEXT_VALIDATION_CODES = {
+  QUOTE_MISMATCH: 'QUOTE_MISMATCH',
+  FACT_QUOTE_UNTRACEABLE: 'FACT_QUOTE_UNTRACEABLE',
+  LENGTH_LIMIT_EXCEEDED: 'LENGTH_LIMIT_EXCEEDED',
+  LIMIT_UNVERIFIED: 'LIMIT_UNVERIFIED',
+  THREAD_TOO_LONG: 'THREAD_TOO_LONG',
+  NEWSLETTER_TOO_LONG: 'NEWSLETTER_TOO_LONG',
+  UNIT_ORDER_INVALID: 'UNIT_ORDER_INVALID',
+  PROVENANCE_MISSING: 'PROVENANCE_MISSING',
+  MIXED_TOPIC: 'MIXED_TOPIC',
+  PARTIAL_COVERAGE: 'PARTIAL_COVERAGE',
+} as const;
+
+export type TextValidationCode = (typeof TEXT_VALIDATION_CODES)[keyof typeof TEXT_VALIDATION_CODES];
 
 /** Social Visual 校验码（问题逐条可读；error/warning 语义见 P12-02 验收映射） */
 export const SOCIAL_VALIDATION_CODES = {
