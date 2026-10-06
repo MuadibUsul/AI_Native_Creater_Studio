@@ -133,6 +133,8 @@ import {
   contentCoreStateSchema,
   contentAtomSchema,
   createAtomRequestSchema,
+  workspacePackViewSchema,
+  packAnalyzeResultSchema,
   channelRecipeSchema,
   channelFitSchema,
   renderOutputEnhancementsSchema,
@@ -179,6 +181,8 @@ import {
   type ContentAtom,
   type ChannelRecipe,
   type ChannelFit,
+  type WorkspacePackView,
+  type PackAnalyzeResult,
   type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
@@ -364,6 +368,14 @@ export interface AncsClient {
     }): Promise<AuthorizeResult>;
     token(input: import('@ancs/contracts').TokenRequest): Promise<TokenResponse>;
     revoke(input: { clientId: string; refreshToken: string }): Promise<void>;
+  };
+  /** Pack 运行时（P11-03；安装→启用→绑定→analyze 四段；权益白名单强制） */
+  packs: {
+    list(workspaceId: string): Promise<WorkspacePackView[]>;
+    enable(workspaceId: string, packId: string, options?: MutationOptions): Promise<{ packId: string; version: string; enabledAt: string }>;
+    disable(workspaceId: string, packId: string, options?: MutationOptions): Promise<void>;
+    bind(workspaceId: string, projectId: string, packId: string, options?: MutationOptions): Promise<{ projectId: string; packId: string; version: string; boundAt: string }>;
+    analyze(workspaceId: string, projectId: string, packId: string, options?: MutationOptions): Promise<PackAnalyzeResult>;
   };
   /** 工作区搜索（P10-06；租户内 + 排除软删；kinds 可选过滤） */
   search(workspaceId: string, input: { q: string; kinds?: string[]; limit?: number }): Promise<SearchResponse>;
@@ -1074,6 +1086,27 @@ export function createClient(options: ClientOptions): AncsClient {
       },
     },
 
+    packs: {
+      list: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/packs`, z.object({ items: z.array(workspacePackViewSchema) }))).items,
+      enable: (workspaceId, packId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/packs/${packId}/enable`, z.object({ packId: z.string(), version: z.string(), enabledAt: z.string() }), {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      disable: async (workspaceId, packId, mutation) => {
+        await request('POST', `/api/v1/workspaces/${workspaceId}/packs/${packId}/disable`, emptySchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        });
+      },
+      bind: (workspaceId, projectId, packId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/packs/${packId}/bind`, z.object({ projectId: z.string(), packId: z.string(), version: z.string(), boundAt: z.string() }), {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      analyze: (workspaceId, projectId, packId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/packs/${packId}/analyze`, packAnalyzeResultSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
     search: async (workspaceId, input) => {
       const search = new URLSearchParams({ q: input.q });
       if (input.kinds !== undefined && input.kinds.length > 0) search.set('kinds', input.kinds.join(','));

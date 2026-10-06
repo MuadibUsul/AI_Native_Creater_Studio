@@ -253,6 +253,13 @@
       "when": 1791284734592,
       "tag": "0035_black_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791288357402,
+      "tag": "0036_cuddly_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ const testPack: PackManifest = {
   version: '0.1.0',
   capabilities: ['read_content_core'],
   compatibility: { coreRange: '>=0.1.0', sceneGraphSchemaVersion: null },
+  defaultChannelKey: null,
   outputFormats: ['test_1x1'],
   quota: null,
   signature: null,

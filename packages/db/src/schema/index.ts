@@ -6,6 +6,7 @@ export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
 export { voiceCloneSamples, voiceClones, voiceConsents } from './voice-clone.js';
 export { contentCores } from './content-core.js';
 export { channelRecipes, contentAtoms } from './atoms.js';
+export { packEnablements, packInstallations, projectPackBindings } from './packs.js';
 export {
   avatarIdentities,
   brandIdentities,

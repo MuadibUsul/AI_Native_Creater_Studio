@@ -1257,3 +1257,25 @@ export type {
   ChannelFitReason,
   ChannelFit,
 } from './atoms.js';
+
+// Pack 运行时契约（P11-03 / §92）
+export {
+  PACK_INSTALLATION_VERSION,
+  packInstallationSchema,
+  packEnablementSchema,
+  projectPackBindingSchema,
+  restrictedPluginContextSchema,
+  packAnalyzeResultSchema,
+  PACK_ERROR_REASONS,
+  workspacePackViewSchema,
+} from './pack-runtime.js';
+export type {
+  PackInstallation,
+  PackEnablement,
+  ProjectPackBinding,
+  RestrictedPluginContext,
+  PackPlugin,
+  PackAnalyzeResult,
+  PackErrorReason,
+  WorkspacePackView,
+} from './pack-runtime.js';

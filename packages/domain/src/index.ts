@@ -119,6 +119,16 @@ export { searchWorkspace } from './search.js';
 export { exportProjectAssetBundle, exportProjectGraph } from './project-exports.js';
 export { getProjectContentCoreState, migrateProjectToContentCore } from './content-core.js';
 export {
+  bindProjectPack,
+  disablePackForWorkspace,
+  enablePackForWorkspace,
+  ensurePacksInstalled,
+  installPack,
+  listWorkspacePacks,
+  runPackAnalyze,
+} from './packs.js';
+export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official-packs.js';
+export {
   createAtom,
   ensureDefaultChannelRecipes,
   evaluateChannelFit,

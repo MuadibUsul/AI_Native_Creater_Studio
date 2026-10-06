@@ -36,6 +36,8 @@ import { registerOutputEnhancementRoutes } from './routes/output-enhancements.js
 import { registerSearchExportRoutes } from './routes/search-exports.js';
 import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerAtomRoutes } from './routes/atoms.js';
+import { registerPackRoutes } from './routes/packs.js';
+import { createShortsAnalyzerPlugin } from '@ancs/domain';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -94,6 +96,8 @@ export interface BuildServerOptions {
     /** 文档解析（P10-01；未提供 → 文档导入端点 501 fail-closed） */
     documentParser?: import('@ancs/contracts').DocumentParser;
   };
+  /** Pack 插件（P11-03；默认装配官方 Shorts Analyzer；analyze 经四道闸门 + 受限上下文） */
+  packs?: { plugins?: import('@ancs/contracts').PackPlugin[] };
   /** 素材搜索（P10-03；未提供 → 搜索/获取 501 fail-closed） */
   media?: { stockSearch?: import('@ancs/contracts').AssetSearchProvider };
   /** 声音克隆（P10-02；未提供 → 提交/刷新/删除 501 fail-closed） */
@@ -150,6 +154,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const credentialDeps = options.credentials;
   const webhookDeps = options.webhooks;
   const contentDeps = options.content;
+  const packPlugins = options.packs?.plugins ?? [createShortsAnalyzerPlugin()];
   const audioDeps = options.audio;
   if (authDeps !== undefined) {
     registerAuth(app, authDeps);
@@ -184,6 +189,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerSearchExportRoutes(instance, authDeps, storageDeps?.adapter);
         registerContentCoreRoutes(instance, authDeps);
         registerAtomRoutes(instance, authDeps);
+        registerPackRoutes(instance, authDeps, options.packs ?? {}, packPlugins);
         registerVoiceCloneRoutes(instance, authDeps, {
           ...(options.voiceClone ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),

@@ -47,6 +47,8 @@ export const packManifestSchema = z.object({
     coreRange: z.string().min(1),
     sceneGraphSchemaVersion: z.string().nullable().default(null),
   }),
+  /** 插件声明的默认评估渠道（Fit 输入；null = 不评估） */
+  defaultChannelKey: z.string().max(60).nullable().default(null),
   /** 该 Pack 提供的输出格式标识（例如 "shorts_9x16"、"carousel"） */
   outputFormats: z.array(z.string().min(1).max(64)).default([]),
   /** 资源配额（运行时执行限制；第三方插件强制，P16-02） */

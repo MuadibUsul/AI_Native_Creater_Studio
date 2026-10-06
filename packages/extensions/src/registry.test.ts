@@ -9,6 +9,7 @@ const testPack: PackManifest = {
   version: '0.1.0',
   capabilities: ['read_content_core', 'create_assets'],
   compatibility: { coreRange: '>=0.1.0 <1.0.0', sceneGraphSchemaVersion: '0.1' },
+  defaultChannelKey: null,
   outputFormats: ['alpha_1x1', 'alpha_4x5'],
   quota: null,
   signature: null,
