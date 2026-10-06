@@ -1,8 +1,8 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-07（P12 阶段全部完成）
+- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 2/7）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`c263dca` feat(p12-05) Podcast —— **P12 阶段完成（CI 绿 run 37511397074）**
+- **最后已推送提交**：`cc3efa1` feat(p13-02) YouTube（CI 绿 run 37527273062）——下一任务 P13-03
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
@@ -17,11 +17,12 @@
 | P09（对外 SaaS 与商业运营） | 6 | ✅ 全部交付（真实 Stripe BLOCKED；P09-06 上线门机制交付，LG-01…14 人工台账全 BLOCKED） |
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
 | P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
-| P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ **全部交付**（P12-01 768 / P12-02 771 / P12-03 774 / P12-04 777 / P12-05 780；各 Pack analyze/generate/validate 完整链路） |
-| P13–P16 | 35 | ⬜ 未开始（P13 7 / P14 5 / P15 8 / P16 9；另含 3 项凭据阻塞：P06-02/P06-04/P08-05） |
+| P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ 全部交付（768/771/774/777/780；各 Pack analyze/generate/validate 完整链路） |
+| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783；批准闸门/幂等四元组/对账不重发）+ P13-02 YouTube ✅（786；官方 API v3 参考实现 + 超时恢复不重复创建；**真实远端 BLOCKED OAuth 凭据**——Mock 同构）｜P13-03..07 未开始 |
+| P14–P16 | 28 | ⬜ 未开始（P14 5 / P15 8 / P16 9；另含 3 项凭据阻塞：P06-02/P06-04/P08-05 + P13-02 真实远端） |
 
-- 测试规模：**780**（unit 341 · web 70 · motion 19 · integration 307 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0041**（podcast_episodes + master_narrations.variant）；下一迁移为 0042
+- 测试规模：**786**（unit 341 · web 70 · motion 19 · integration 313 · security 22 · render 6 · golden 15）
+- 迁移最新编号：**0042**（publications 幂等键四元组唯一）；下一迁移为 0043
 - **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
