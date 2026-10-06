@@ -927,6 +927,10 @@ export {
   platformAnalyticsSchema,
   revokeRequestSchema,
   distributionProviderRegistrationSchema,
+  publicationRecordSchema,
+  publicationResponseSchema,
+  publicationListSchema,
+  PUBLICATION_ERROR_REASONS,
 } from './publishing.js';
 export type {
   PublishCapabilityTier,
@@ -935,6 +939,7 @@ export type {
   PublicationStatus,
   PublicationKey,
   PublicationRequest,
+  PublicationRequestInput,
   DraftTransferResult,
   ProviderContext,
   AuthorizationRequest,
@@ -946,6 +951,10 @@ export type {
   RevokeRequest,
   DistributionProvider,
   DistributionProviderRegistration,
+  PublicationRecord,
+  PublicationResponse,
+  PublicationList,
+  PublicationErrorReason,
 } from './publishing.js';
 
 // 主题 / Channel / 身份 / SpeechProfile 契约（P01-04）

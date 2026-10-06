@@ -11,6 +11,7 @@ export { derivationLineage } from './lineage.js';
 export { packArtifactValidations, packArtifacts } from './pack-artifacts.js';
 export { narrationTranslations, terminologyEntries } from './multilingual.js';
 export { podcastEpisodes } from './podcast.js';
+export { publications } from './publications.js';
 export {
   avatarIdentities,
   brandIdentities,

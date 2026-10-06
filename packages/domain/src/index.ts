@@ -135,6 +135,14 @@ export { createSocialVisualPlugin, SOCIAL_VISUAL_MANIFEST } from './official-soc
 export { createTextPackPlugin, TEXT_PACK_MANIFEST } from './official-text-pack.js';
 export { listTerminology, listTranslationJobs, translateNarration, upsertTerminologyEntry } from './multilingual.js';
 export { generatePodcastEpisode, listPodcastEpisodes, validatePodcastEpisode } from './podcast.js';
+export {
+  getPublication,
+  listPendingPublications,
+  listProjectPublications,
+  reconcilePublication,
+  requestPublication,
+} from './publications.js';
+export { createMockDistributionProvider, MockDistributionProvider } from './mock-distribution.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,

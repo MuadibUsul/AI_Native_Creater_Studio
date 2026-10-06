@@ -78,6 +78,8 @@ export const publicationRequestSchema = z.object({
 });
 
 export type PublicationRequest = z.infer<typeof publicationRequestSchema>;
+/** 客户端输入形状（zod default 字段可省略；服务端补全） */
+export type PublicationRequestInput = z.input<typeof publicationRequestSchema>;
 
 export const draftTransferResultSchema = z.object({
   transferId: z.string().min(1),
@@ -109,7 +111,71 @@ export const authorizationResultSchema = z.object({
 export const publicationJobSchema = z.object({
   jobId: z.string().min(1),
   state: z.enum(PUBLICATION_STATES),
+  /** Provider 返回的远端引用（PUBLISHED 时由核心回填；缺失时经 getStatus 对账获取） */
+  remoteId: z.string().nullable().default(null),
+  remoteUrl: z.string().nullable().default(null),
 });
+
+/* ---------- 发布核心（P13-01 / §90；计划 §8 P13）---------- */
+
+/** 发布记录（幂等键固定四元组有唯一索引——重复请求只形成一个逻辑发布） */
+export const publicationRecordSchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  platformId: z.string().min(1).max(80),
+  accountId: z.string().min(1).max(120),
+  projectVersionId: opaqueIdSchema,
+  outputAssetId: opaqueIdSchema,
+  state: z.enum(PUBLICATION_STATES),
+  remoteId: z.string().nullable().default(null),
+  remoteUrl: z.string().nullable().default(null),
+  publishedAt: isoDateTimeSchema.nullable().default(null),
+  title: z.string().min(1).max(300),
+  description: z.string().max(5000).nullable().default(null),
+  tags: z.array(z.string().min(1).max(60)).default([]),
+  scheduledAt: isoDateTimeSchema.nullable().default(null),
+  disclosure: z.string().nullable().default(null),
+  lastError: z.string().max(500).nullable().default(null),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+
+export type PublicationRecord = z.infer<typeof publicationRecordSchema>;
+
+/** 发布响应 = 记录 + 是否幂等复用（deduped=true 表示重复请求命中既有逻辑发布） */
+export const publicationResponseSchema = z.object({
+  publication: publicationRecordSchema,
+  deduped: z.boolean(),
+});
+
+export type PublicationResponse = z.infer<typeof publicationResponseSchema>;
+
+export const publicationListSchema = z.object({
+  items: z.array(publicationRecordSchema),
+});
+
+export type PublicationList = z.infer<typeof publicationListSchema>;
+
+export const PUBLICATION_ERROR_REASONS = {
+  /** 输出资产不属于该版本的任何 Render */
+  OUTPUT_ASSET_UNKNOWN: 'OUTPUT_ASSET_UNKNOWN',
+  /** 未批准版本不能发布（无批准 / manifest 漂移 / 版本不一致） */
+  NOT_APPROVED: 'NOT_APPROVED',
+  /** 平台 Provider 未注册（501；真实平台接入随 P13-02/03） */
+  PROVIDER_UNREGISTERED: 'PROVIDER_UNREGISTERED',
+  /** Provider 能力不含 DIRECT_PUBLISH（能力分级与真实 capability 一致） */
+  CAPABILITY_MISSING: 'CAPABILITY_MISSING',
+  /** Provider validate 拒绝（问题逐条返回，不静默） */
+  PROVIDER_VALIDATION_FAILED: 'PROVIDER_VALIDATION_FAILED',
+  /** Provider publish 执行失败（状态记 FAILED + lastError；不自动重发） */
+  PROVIDER_PUBLISH_FAILED: 'PROVIDER_PUBLISH_FAILED',
+  /** 对账不可用（Provider 未实现 getStatus 或发布无远端引用） */
+  RECONCILE_UNAVAILABLE: 'RECONCILE_UNAVAILABLE',
+  NOT_FOUND: 'NOT_FOUND',
+} as const;
+
+export type PublicationErrorReason = (typeof PUBLICATION_ERROR_REASONS)[keyof typeof PUBLICATION_ERROR_REASONS];
 
 export const updatePublicationRequestSchema = z.object({
   remoteId: z.string().min(1),

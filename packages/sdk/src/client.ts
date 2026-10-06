@@ -46,6 +46,10 @@ import {
   terminologyListSchema,
   upsertTerminologyRequestSchema,
   translateNarrationRequestSchema,
+  publicationResponseSchema,
+  publicationRequestSchema,
+  publicationListSchema,
+  publicationRecordSchema,
   podcastEpisodeSchema,
   podcastEpisodeListSchema,
   podcastValidationResultSchema,
@@ -263,6 +267,10 @@ import {
   type TerminologyEntry,
   type TerminologyList,
   type UpsertTerminologyRequest,
+  type PublicationRequestInput,
+  type PublicationResponse,
+  type PublicationList,
+  type PublicationRecord,
   type PodcastEpisode,
   type PodcastEpisodeList,
   type PodcastValidationResult,
@@ -628,6 +636,14 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  /** 发布（P13-01 / §90）：批准闸门 + 能力分级 + 幂等四元组（重复请求只形成一个逻辑发布） */
+  publications: {
+    request(workspaceId: string, projectId: string, input: PublicationRequestInput, options?: MutationOptions): Promise<PublicationResponse>;
+    list(workspaceId: string, projectId: string): Promise<PublicationList>;
+    get(workspaceId: string, projectId: string, publicationId: string): Promise<PublicationRecord>;
+    /** 对账（结果未知先查询；以 Provider getStatus 为准——不自动重发） */
+    reconcile(workspaceId: string, projectId: string, publicationId: string, options?: MutationOptions): Promise<PublicationRecord>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1195,6 +1211,22 @@ export function createClient(options: ClientOptions): AncsClient {
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/podcast/episodes`, podcastEpisodeListSchema),
       validate: (workspaceId, projectId, episodeId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/podcast/episodes/${episodeId}/validate`, podcastValidationResultSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+    publications: {
+      request: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications`, publicationResponseSchema, {
+          body: input,
+          bodySchema: publicationRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications`, publicationListSchema),
+      get: (workspaceId, projectId, publicationId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}`, publicationRecordSchema),
+      reconcile: (workspaceId, projectId, publicationId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}/reconcile`, publicationRecordSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

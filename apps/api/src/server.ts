@@ -26,6 +26,7 @@ import { registerJobRoutes } from './routes/jobs.js';
 import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerMultilingualRoutes } from './routes/multilingual.js';
 import { registerPodcastRoutes } from './routes/podcast.js';
+import { registerPublicationRoutes } from './routes/publications.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
@@ -40,7 +41,7 @@ import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerAtomRoutes } from './routes/atoms.js';
 import { registerPackRoutes } from './routes/packs.js';
 import { registerLineageRoutes } from './routes/lineage.js';
-import { createShortsAnalyzerPlugin, createSocialVisualPlugin, createTextPackPlugin } from '@ancs/domain';
+import { createMockDistributionProvider, createShortsAnalyzerPlugin, createSocialVisualPlugin, createTextPackPlugin } from '@ancs/domain';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -107,6 +108,7 @@ export interface BuildServerOptions {
   voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
+  distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
 }
 
 /**
@@ -218,6 +220,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerPodcastRoutes(instance, authDeps, {
           ...(audioDeps ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
+        });
+        registerPublicationRoutes(instance, authDeps, {
+          distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider()],
         });
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {

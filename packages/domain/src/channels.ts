@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PackPlugin } from '@ancs/contracts';
+import type { DistributionProvider, PackPlugin } from '@ancs/contracts';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
@@ -57,6 +57,8 @@ export interface DomainDeps {
   retryPolicy?: RetryPolicy;
   /** Pack 插件实例（P11-03；接口在 contracts，官方/测试实例由 API 装配注入） */
   packPlugins?: readonly PackPlugin[];
+  /** 分发 Provider 实例（P13-01；接口在 contracts，Mock/真实实例由 API 装配注入） */
+  distributionProviders?: readonly DistributionProvider[];
   /** 凭据密文服务（P03-04；接口在 contracts，实现由 API/Worker 注入，domain 不依赖 providers/*） */
   credentials?: CredentialCipher;
   /** 平台托管凭据来源（P03-04；运行时环境/KMS） */
