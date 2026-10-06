@@ -191,8 +191,8 @@
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
 | LED-96-PLUGIN-01 | OutputPlugin / Pack registry contract 已定义 | REQ-92-01/REQ-92-03 | P01-06（P01） | VERIFIED（2026-10-04：OutputPlugin 接口 + PackManifest + registry 就位并测试） |
-| LED-96-PLUGIN-02 | Core 业务没有对 XHS/YouTube/Newsletter 等输出类型硬编码分支 | REQ-92-02 | P11-03 审计（P11） | TODO |
-| LED-96-PLUGIN-03 | ContentDocument / Narrative 可向 ContentCore 演进 | REQ-93-01 | P11-01（P11） | TODO |
+| LED-96-PLUGIN-02 | Core 业务没有对 XHS/YouTube/Newsletter 等输出类型硬编码分支 | REQ-92-02 | P11-04 审计（P11） | VERIFIED（2026-10-06 P11-04 审计：domain/contracts/api **非测试**代码无 `outputType ===` 与平台名（YOUTUBE/XHS/XIAOHONGSHU/TIKTOK/NEWSLETTER…）条件分支（零命中）；渠道键仅作为 Recipe 种子数据（atoms.ts）与 Pack manifest 声明（official-packs.ts，经公开契约消费）；输出形态经 Pack analyze 扩展（P11-03）；证据：docs/verification/P11-04.md） |
+| LED-96-PLUGIN-03 | ContentDocument / Narrative 可向 ContentCore 演进 | REQ-93-01 | P11-01（P11） | VERIFIED（2026-10-06：P11-01 无损演进——ContentDocument/claims/project_sources 1:1 派生 ContentCore，原文档零改动、幂等可重跑、漂移可发现；证据：docs/verification/P11-01.md） |
 
 ## 汇总
 
@@ -201,7 +201,7 @@
 | §77 Web MVP DoD | 24 | 21 VERIFIED / 0 进度 / 0 TODO / 3 BLOCKED |
 | §78 Multi-Client Readiness | 11 | 11 VERIFIED / 0 进度 / 0 TODO / 0 BLOCKED |
 | 附录 C | 56 | 56 VERIFIED / 0 进度 / 0 TODO / 0 BLOCKED |
-| §96 增量验收 | 21 | 17 VERIFIED / 2 进度 / 2 TODO / 0 BLOCKED |
-| 合计 | 112 | 见上（P08-06 对账：2026-10-04） |
+| §96 增量验收 | 21 | 19 VERIFIED / 2 进度 / 0 TODO / 0 BLOCKED（2026-10-06 更新：LED-96-PLUGIN-02/03 → VERIFIED） |
+| 合计 | 112 | 见上（P08-06 对账：2026-10-04；2026-10-06：§96 PLUGIN-02/03 闭合） |
 
 本账本与 `traceability.md` 的"状态"列同步维护；关闭动作记录在 `docs/verification/` 对应阶段文件中。

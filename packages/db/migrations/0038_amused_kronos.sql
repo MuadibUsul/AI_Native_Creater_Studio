@@ -1,0 +1,1 @@
+ALTER TABLE "derivation_lineage" ADD COLUMN "project_version_id" text;

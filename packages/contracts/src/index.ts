@@ -1279,3 +1279,16 @@ export type {
   PackErrorReason,
   WorkspacePackView,
 } from './pack-runtime.js';
+
+// 派生血缘契约（P11-04 / §93）
+export {
+  DERIVATION_LINEAGE_VERSION,
+  DERIVATION_STATUSES,
+  derivationStatusSchema,
+  derivationLineageSchema,
+  derivationListItemSchema,
+  derivationListSchema,
+  approveDerivationRequestSchema,
+  LINEAGE_ERROR_REASONS,
+} from './lineage.js';
+export type { DerivationLineage, DerivationListItem, DerivationList, ApproveDerivationRequest } from './lineage.js';

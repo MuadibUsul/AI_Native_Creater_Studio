@@ -25,6 +25,7 @@ import { packEnablements, packInstallations, projectPackBindings } from '@ancs/d
 import type { DomainDeps } from './channels.js';
 import { assertPackEnabled } from './plans.js';
 import { evaluateChannelFit, listAtoms } from './atoms.js';
+import { recordPlanLineage } from './lineage.js';
 import { getProjectContentCoreState } from './content-core.js';
 
 /**
@@ -350,5 +351,17 @@ export async function runPackAnalyze(
     packVersion: binding.version,
   });
   const plan = await plugin.analyze(context);
+  // 派生血缘（P11-04）：只追加 PLAN 行（输入快照；过期由列表读取时对照提示）
+  await recordPlanLineage(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    packId: manifest.packId,
+    packVersion: manifest.version,
+    channelKey: manifest.defaultChannelKey,
+    coreInputsDigest: context.data.core?.inputsDigest ?? null,
+    atomCount: context.data.atoms.length,
+    claimCount: context.data.core?.counts.claimCount ?? 0,
+    summary: plan.summary,
+  });
   return packAnalyzeResultSchema.parse({ plan, context });
 }

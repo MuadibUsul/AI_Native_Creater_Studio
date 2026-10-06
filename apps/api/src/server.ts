@@ -37,6 +37,7 @@ import { registerSearchExportRoutes } from './routes/search-exports.js';
 import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerAtomRoutes } from './routes/atoms.js';
 import { registerPackRoutes } from './routes/packs.js';
+import { registerLineageRoutes } from './routes/lineage.js';
 import { createShortsAnalyzerPlugin } from '@ancs/domain';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
@@ -190,6 +191,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerContentCoreRoutes(instance, authDeps);
         registerAtomRoutes(instance, authDeps);
         registerPackRoutes(instance, authDeps, options.packs ?? {}, packPlugins);
+        registerLineageRoutes(instance, authDeps);
         registerVoiceCloneRoutes(instance, authDeps, {
           ...(options.voiceClone ?? {}),
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),

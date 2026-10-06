@@ -135,6 +135,9 @@ import {
   createAtomRequestSchema,
   workspacePackViewSchema,
   packAnalyzeResultSchema,
+  derivationListSchema,
+  derivationListItemSchema,
+  approveDerivationRequestSchema,
   channelRecipeSchema,
   channelFitSchema,
   renderOutputEnhancementsSchema,
@@ -183,6 +186,8 @@ import {
   type ChannelFit,
   type WorkspacePackView,
   type PackAnalyzeResult,
+  type DerivationList,
+  type DerivationListItem,
   type RenderOutputEnhancements,
   type AbuseFlag,
   type WorkspaceAbuseState,
@@ -594,6 +599,16 @@ export interface AncsClient {
       workspaceId: string,
       options?: { cursor?: number; signal?: AbortSignal },
     ): AsyncGenerator<WorkspaceEvent, void, unknown>;
+  };
+  /** 派生血缘（P11-04；只追加；stale 过期提示不覆盖已批准行；approve 可绑定产出项目版本） */
+  derivations: {
+    list(workspaceId: string, projectId: string): Promise<DerivationList>;
+    approve(
+      workspaceId: string,
+      projectId: string,
+      lineageId: string,
+      options?: MutationOptions & { projectVersionId?: string | null },
+    ): Promise<DerivationListItem>;
   };
   content: {
     /** 输入归一化：URL 文章 / 粘贴正文 / 手写脚本 → ContentDocument（API 路径含 workspace） */
@@ -1104,6 +1119,16 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       analyze: (workspaceId, projectId, packId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/packs/${packId}/analyze`, packAnalyzeResultSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+    derivations: {
+      list: async (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/derivations`, derivationListSchema),
+      approve: (workspaceId, projectId, lineageId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/derivations/${lineageId}/approve`, derivationListItemSchema, {
+          body: { projectVersionId: mutation?.projectVersionId ?? null },
+          bodySchema: approveDerivationRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

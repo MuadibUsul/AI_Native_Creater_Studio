@@ -128,6 +128,7 @@ export {
   runPackAnalyze,
 } from './packs.js';
 export { createShortsAnalyzerPlugin, SHORTS_ANALYZER_MANIFEST } from './official-packs.js';
+export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,
   ensureDefaultChannelRecipes,
