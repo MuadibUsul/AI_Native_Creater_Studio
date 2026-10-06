@@ -221,6 +221,8 @@ export interface DistributionProvider {
   updateMetadata?(req: UpdatePublicationRequest): Promise<void>;
   fetchAnalytics?(req: AnalyticsRequest): Promise<PlatformAnalytics>;
   revoke?(req: RevokeRequest): Promise<void>;
+  /** 按发布幂等键回查远端（P13-02：结果未知/超时恢复时先查询——命中即采纳，不重复创建） */
+  findByPublicationKey?(key: PublicationKey): Promise<PublicationStatus | null>;
 }
 
 export type AuthorizationRequest = z.infer<typeof authorizationRequestSchema>;

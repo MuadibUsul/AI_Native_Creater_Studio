@@ -65,6 +65,9 @@ importers:
       '@ancs/providers-storage-local':
         specifier: workspace:*
         version: link:../../packages/providers/storage-local
+      '@ancs/providers-youtube':
+        specifier: workspace:*
+        version: link:../../packages/providers/youtube
       '@fastify/swagger':
         specifier: 9.9.1
         version: 9.9.1
@@ -522,6 +525,22 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+
+  packages/providers/youtube:
+    dependencies:
+      '@ancs/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@26.6.4)(jsdom@26.1.0)(vite@8.3.2(@types/node@26.6.4)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/remotion-core:
     dependencies:

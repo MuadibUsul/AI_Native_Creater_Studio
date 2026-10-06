@@ -291,13 +291,36 @@ export async function reconcilePublication(
 ): Promise<PublicationRecord> {
   const current = await getPublication(deps, input);
   const provider = requireProviders(deps).find((candidate) => candidate.providerId === current.platformId);
-  if (provider === undefined || provider.getStatus === undefined || current.remoteId === null) {
-    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '对账不可用（Provider 未实现 getStatus 或无远端引用）', 422, {
+  if (provider === undefined || provider.getStatus === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '对账不可用（Provider 未实现 getStatus）', 422, {
       reason: PUBLICATION_ERROR_REASONS.RECONCILE_UNAVAILABLE,
       publicationId: current.id,
     });
   }
-  const status = await provider.getStatus(current.remoteId);
+  let remoteId = current.remoteId;
+  if (remoteId === null && provider.findByPublicationKey !== undefined) {
+    // 超时恢复（P13-02）：无远端引用 → 按幂等键回查远端——命中即采纳（不重复创建、不重发）
+    const found = await provider.findByPublicationKey({
+      platformId: current.platformId,
+      accountId: current.accountId,
+      projectVersionId: current.projectVersionId,
+      outputAssetId: current.outputAssetId,
+    });
+    if (found === null) {
+      throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '对账不可用（无远端引用且按幂等键未回查到远端发布）', 422, {
+        reason: PUBLICATION_ERROR_REASONS.RECONCILE_UNAVAILABLE,
+        publicationId: current.id,
+      });
+    }
+    remoteId = found.remoteId;
+  }
+  if (remoteId === null) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '对账不可用（无远端引用）', 422, {
+      reason: PUBLICATION_ERROR_REASONS.RECONCILE_UNAVAILABLE,
+      publicationId: current.id,
+    });
+  }
+  const status = await provider.getStatus(remoteId);
   const updates: Partial<typeof publications.$inferInsert> = {
     state: status.state,
     remoteId: status.remoteId ?? current.remoteId,
