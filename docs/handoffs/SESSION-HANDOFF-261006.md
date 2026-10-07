@@ -1,15 +1,15 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-07（P13 阶段 7/7 全部完成；下一任务 P14-01）
+- **交接时点**：2026-10-07（P14 阶段 5/5 全部完成；按用户指令暂停验收）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **P13-07 交付提交**：`efb23c5` `feat(p13-07): CMS 签名回写与可恢复重试`；GitHub CI run `37603911103` 全绿（Verify + 部署 + 备份恢复 + 商业上线门）——下一任务 P14-01
+- **P14 交付提交**：`06c979e` `feat(p14): Analytics Director 与 Finance Pack Web 闭环`；本地 `pnpm verify` 全绿，等待最终 CI run ID 回填
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：73 项已交付（≈70%），P13 已收尾；`pnpm verify` 14 步全绿。**
+**104 项计划任务：78 项已交付（75%），P14 已收尾；`pnpm verify` 14 步全绿。当前按用户指令暂停。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
@@ -19,10 +19,11 @@
 | P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
 | P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ 全部交付（768/771/774/777/780；各 Pack analyze/generate/validate 完整链路） |
 | P13（Publishing/Handoff/CMS） | 7 | ✅ 7/7 全部交付：P13-07 CMS 回写完成（803；签名、SSRF、有限重试、崩溃恢复、失败不改 Render） |
-| P14–P16 | 22 | ⬜ 未开始（P14 5 / P15 8 / P16 9；P14 完成后按用户要求暂停验收，未经确认不进入 P15/P16） |
+| P14（Analytics Director 与 Finance Pack） | 5 | ✅ 5/5 全部交付：表现采集、冻结 Graph 归因、可控学习、六类 Finance、许可来源与版本模板 |
+| P15–P16 | 17 | ⏸️ 暂停（P15 8 / P16 9；未经用户明确验收确认不进入） |
 
-- 测试规模：**803 项真实断言**（unit 343 · web 70 · motion 19 · integration 328 · security 22 · render 6 · golden 15；contract/e2e 为显式 `[PLANNED]`）
-- 迁移最新编号：**0046**（cms_writeback_targets + cms_writeback_attempts）；下一迁移为 0047
+- 测试规模：**810 项真实断言**（unit 346 · web 72 · motion 19 · integration 330 · security 22 · render 6 · golden 15；contract/e2e 为显式 `[PLANNED]`）
+- 迁移最新编号：**0050**（P14 Analytics/Finance 共 7 张表）；下一迁移为 0051
 - **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
@@ -64,6 +65,17 @@
 - P14 全部完成后立即暂停，让用户检查和测试。
 - 未收到用户明确验收确认前，禁止开始 P15（Desktop/Mobile）或 P16（Marketplace/Enterprise）。
 
+## 4d. P14 已完成任务摘要（2026-10-07）
+
+- **P14-01 数据采集**：Publication analytics collect/list；采样区间/粒度/时区/来源落库；缺失指标保持 null；授权撤销时在 Provider 调用前停止；Web 显示未知而非 0。
+- **P14-02 Scene 归因**：只读取发布时不可变 ProjectVersion Graph；留存点按 Scene 左闭右开时间窗聚合；派生行保存方法和样本数，固定 CORRELATION_ONLY。
+- **P14-03 学习建议**：节奏/Scene 类型/Avatar 比例三类解释性建议；可查看/接受/禁用/恢复；channelMutationApplied 固定 false，Channel Style 不被静默修改。
+- **P14-04 Finance Pack**：Candle/Yield Curve/Policy Path/Supply Chain/Trade Route/Scenario Tree 六类结构化产物；单位/币种/时区/调整口径/来源强制可追溯；缺失值 422 fail closed。
+- **P14-05 数据与模板**：许可来源、事务串行的模板版本、产物内嵌来源许可证和模板快照；创建 v2 不改变历史 v1 产物。Web 完成来源/模板/产物操作面。
+- **证据**：docs/verification/P14-01.md—P14-05.md；pnpm verify 14 步全绿，810 项真实断言；最新迁移 0050。
+- **外部边界**：Analytics 使用脚本化 Provider，真实平台 OAuth 核验仍需凭据；Finance 使用 fixture 与许可元数据，没有冒充真实收费数据源实测。
+- **当前门槛**：P14 5/5 已完成，立即暂停。等待用户检查 Web 与测试；明确确认后才可选择 P15-01。
+
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
 
 **流程纪律**
@@ -101,8 +113,8 @@ docker ps | grep ancs                         # 本地 DB/Redis（55432）
 
 ## 6. 交接时仓库状态
 
-- P13-07 完成后应保持工作树干净；下一任务为 P14-01。
+- P14-01—05 完成后应保持工作树干净；当前没有可自动开始的任务。
 - 若新会话发现未提交变更：为上一会话中断的部分实现——先 `git status`/`git diff` 评估，按 §4 的任务定义继续或干净丢弃（勿盲目提交）。
 - `.artifacts/` 为 gitignore 的本地产物目录（渲染 PNG/测试存储），可随时清理。
 
-— 交接完毕。接手后从 **P14-01** 开始。完成 P14-01—P14-05 后必须暂停，等待用户检查测试；未经用户明确确认不得开始 P15 或 P16。
+— 交接完毕。当前必须暂停，等待用户检查测试；未经用户明确确认不得开始 P15 或 P16。
