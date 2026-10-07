@@ -42,4 +42,4 @@
 - 18 个原型状态有同环境对照图；真实产品的合法空态与原型的演示成功数据不同，大量全图像素值不可比，**不能称为 1:1 通过**。逐行差异及最终 run ID 见视觉报告。截图夹具以 `SYNTHETIC_VISUAL_ONLY` 命名，拦截写请求，不读写开发数据库。
 - 320/390/768/1280/1920 宽度的创作台、导演、成片、设置、Finance 共 25 组初拍发现唯一整页溢出：768px 导演时间线超出 150px。改为容器内横向滚动后，使用已纳入仓库的 `pnpm visual:qf:responsive --run-id 261008-final-cli` 在全新目录 `.artifacts/quiet-frame/responsive-audit/261008-final-cli/` 重拍 25 PNG 与 JSON：25/25 根节点无横向溢出，主操作裁切 0，页面错误、夹具未命中及外部请求均为 0；768px 时间线本身 282px 可视宽、679px 内容宽，可独立滚动。早期临时审计脚本一次误用了 261007 输出目录，覆盖当时的 JSON 和导演 768 PNG；原参考图与 18 状态视觉基准没有被覆盖。本轮最终目录与初拍摘要分开保存，不把被覆盖的 JSON 当完整初始证据。
 - 新建 Render、付费 Voice Clone 训练/重试和 Master Narration 合成受后端费用/任务/幂等门控缺口阻塞；UI 显示原因，未造假成功。Provider 侧删除缺服务端归属和版本条件。详见 `docs/quiet-frame-rebuild/FUNCTIONAL_REGRESSION_REPORT.md` §4。无法以本轮 Mock 或本地数据关闭这些真实 Provider 项。
-- 本轮没有 push 或 GitHub CI 结果；用户要求 Web 检查后暂停，P15/P16 未启动。开发库历史数据恢复按用户指示留待之后，不能从当前本地材料声称已恢复。
+- 用户随后明确要求先推送 GitHub；实现提交 `7e21d1066998430b39ca1a4b29dc8c12e34a8a3a` 已推到 `origin/codex/quiet-frame-rebuild`，`gh api` 核对远端 ref 与该 SHA 一致。仓库 CI 仅对 `main` 的 push 与 pull request 运行，因此此次分支推送没有 GitHub CI 结果；本地最终 `pnpm verify` 证据见上表。用户检查 Web 前仍暂停 P15/P16。开发库历史数据恢复按用户指示留待之后，不能从当前本地材料声称已恢复。

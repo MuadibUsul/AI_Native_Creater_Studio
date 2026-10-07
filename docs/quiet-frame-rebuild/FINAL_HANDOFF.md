@@ -30,4 +30,4 @@
 - 真实第三方 Provider、平台发布、付款、完整 Render→批准→交付链路未在本轮执行。Mock LLM、本地存储、SDK 替身和视觉 DTO 各有独立证据边界，不能推断为真实外部服务通过。
 - 先前误用开发库的集成测试删除了旧业务行；代码未丢失。未找到本地可用备份，恢复工作已按用户要求延后。事故与测试库防复发见 `docs/verification/QUIET-FRAME-BASELINE.md`。
 
-本轮不会自动推送、部署、触发付费 Provider 或推进 P15/P16。当前是否接受上述视觉与功能待验项，由用户在检查 Web 后决定；未获确认的偏差均保留 `PENDING`。
+用户随后明确要求先推送 GitHub，`codex/quiet-frame-rebuild` 分支已推送；没有部署或触发付费 Provider。当前是否接受上述视觉与功能待验项，由用户在检查 Web 后决定；未获确认的偏差均保留 `PENDING`，P15/P16 暂停。
