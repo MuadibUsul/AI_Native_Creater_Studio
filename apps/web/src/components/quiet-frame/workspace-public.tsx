@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useSession } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { DesignSystemControls, DesignSystemExampleActions, DesignSystemStatusAction } from './DesignSystemControls';
 import './workspace.css';
@@ -23,10 +26,11 @@ function LandingChartPreview() {
 }
 
 export function WelcomePage() {
+  const entryHref = useSession().data?.user ? '/' : '/sign-in';
   return <div className="landing qf-landing">
-    <header className="landing-nav"><Mark /><nav className="landing-links" aria-label="欢迎页导航"><Link href="/design-system">设计理念</Link><Link href="/" title="进入工作室后查看扩展目录">扩展能力</Link><Link href="/" title="进入工作室后查看创作者身份">创作者身份</Link><Link href="/" className="btn primary small"><QuietIcon name="arrow" />进入工作室</Link></nav></header>
+    <header className="landing-nav"><Mark /><nav className="landing-links" aria-label="欢迎页导航"><Link href="/design-system">设计理念</Link><Link href={entryHref} title="进入工作室后查看扩展目录">扩展能力</Link><Link href={entryHref} title="进入工作室后查看创作者身份">创作者身份</Link><Link href={entryHref} className="btn primary small"><QuietIcon name="arrow" />进入工作室</Link></nav></header>
     <main className="landing-hero" id="main"><div className="eyebrow">A STUDIO FOR YOUR THINKING.</div><h1>一篇好文章。<br /><span>一部好作品。</span></h1><p>把研究交给 AI，把表达留给你。<br />从脚本、分镜到成片，让观点有自己的画面。</p>
-      <div className="landing-buttons"><Link href="/" className="btn primary large"><QuietIcon name="arrow" />开始你的第一部作品</Link><Link href="/" className="btn large" title="进入工作室后选择项目"><QuietIcon name="play" />体验导演工作台</Link></div>
+      <div className="landing-buttons"><Link href={entryHref} className="btn primary large"><QuietIcon name="arrow" />开始你的第一部作品</Link><Link href={entryHref} className="btn large" title="进入工作室后选择项目"><QuietIcon name="play" />体验导演工作台</Link></div>
       <div className="row mt16 qf-landing-assurance"><QuietIcon name="shield" />先看草稿，再确认生成 · 不自动发布</div>
       <div className="landing-product" aria-label="静态产品界面示意，不含真实项目数据"><aside className="mini-side"><Mark />{Array.from({ length: 6 }, (_, index) => <div className="mini-row" key={index} />)}</aside><section className="mini-content"><div className="row between qf-preview-head"><span>当算力成为新资产</span><span className="badge green">草稿预览</span></div><LandingChartPreview /><div className="prompt-dock qf-preview-prompt"><QuietIcon name="spark" /><span className="small muted grow">让这一段，更有说服力。</span><QuietIcon name="arrow" /></div></section><aside className="mini-inspector"><h3>画面设置</h3><div className="mini-preview mt24" aria-hidden="true"><span style={{ height: 14 }} /><span style={{ height: 23 }} /><span style={{ height: 34 }} /><span style={{ height: 41 }} /></div><p>趋势对比 / 确定性组件</p><div className="mini-setting"><span>标题</span><span>增长与回报</span></div><div className="mini-setting"><span>时长</span><span>设计示意</span></div><div className="mini-setting"><span>来源</span><span>待绑定</span></div><div className="mini-setting"><span>配色</span><span>品牌默认</span></div><p>AI 提出修改建议。<br />只有你确认，作品才改变。</p></aside></div>
     </main><footer className="landing-values"><span><QuietIcon name="file" />内容驱动，不从空时间线开始</span><span><QuietIcon name="shield" />事实与来源，始终在场</span><span><QuietIcon name="spark" />AI 创造，你来决定</span></footer><div className="sample-note qf-landing-disclaimer">产品视觉方案 · 曲线为设计示意，非真实业务数据 · 能力描述需通过实际验收后上线</div>

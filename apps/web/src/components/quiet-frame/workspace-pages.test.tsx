@@ -100,14 +100,21 @@ describe('Quiet Frame 工作区与公开页', () => {
     expect(screen.queryByText(fixture)).toBeNull();
   });
 
-  it('欢迎页的入口可导航，设计系统中的操作样本不伪装成真实数据', () => {
-    const client = mockClient({});
+  it('欢迎页匿名入口前往登录，设计系统中的操作样本不伪装成真实数据', () => {
+    const client = mockClient({ auth: { session: vi.fn().mockRejectedValue(new Error('未登录')) } });
     const landing = renderWithClient(<WelcomePage />, client);
-    expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/sign-in');
+    expect(screen.getByRole('link', { name: /进入工作室/ }).getAttribute('href')).toBe('/sign-in');
     expect(screen.getByLabelText('静态产品界面示意，不含真实项目数据')).toBeTruthy();
     landing.unmount();
     renderWithClient(<DesignSystemPage />, client);
     expect(screen.getByText('Quiet Frame · 静框')).toBeTruthy();
     expect(screen.getByRole('link', { name: /返回创作台/ }).getAttribute('href')).toBe('/');
+  });
+
+  it('欢迎页已有会话时直接进入创作台', async () => {
+    const client = mockClient({ auth: { session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', email: 'a@test.local' } }) } });
+    renderWithClient(<WelcomePage />, client);
+    await waitFor(() => expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/'));
   });
 });

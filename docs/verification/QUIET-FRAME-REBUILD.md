@@ -27,7 +27,8 @@
 | 设计系统样式示例接线前的 `pnpm verify` | 主动中止于 integration，**不算完整通过** | `.artifacts/quiet-frame-rebuild/verify-final-261008-c.log`；已通过 secrets、lint、typecheck、build、arch、unit 347、Web 136、motion 19。交互审计发现 QF-13 三个按钮外观样式示例仍是静态 `span`，先改为真实安全操作再运行最终全量 |
 | 设计系统动作接线后的 `pnpm verify` | 退出码 0；secrets、lint、typecheck、build、arch 及所有已实现套件通过 | `.artifacts/quiet-frame-rebuild/verify-final-261008-d.log`；unit 347、Web 138、motion 19、integration 331、security 22、render 6、golden 15。随后发现命令搜索列表两个合法入口共用 React key，修复后另跑最终验证 |
 | 命令搜索 key 修复聚焦测试 | 1 文件、9/9；无重复 key 警告 | `pnpm exec vitest run apps/web/src/ui/StudioShell.test.tsx --reporter=dot`，退出码 0；仅验证该组件，不替代全量 |
-| 最终源码的 `pnpm verify` | **退出码 0**；secrets、lint、typecheck、build、arch 全通过；unit 42 文件/347、Web 27/138、motion 2/19、integration 74/331、security 4/22、render 2/6、golden 2/15 | `.artifacts/quiet-frame-rebuild/verify-final-261008-e.log`；`test:contract` 与 `test:e2e` 仍是 `[PLANNED]` 无断言，不计测试通过 |
+| 命令搜索 key 修复后的 `pnpm verify` | **退出码 0**；secrets、lint、typecheck、build、arch 全通过；unit 42 文件/347、Web 27/138、motion 2/19、integration 74/331、security 4/22、render 2/6、golden 2/15 | `.artifacts/quiet-frame-rebuild/verify-final-261008-e.log`；`test:contract` 与 `test:e2e` 仍是 `[PLANNED]` 无断言，不计测试通过 |
+| 匿名入口修复后的 `pnpm verify` | **退出码 0**；secrets、lint、typecheck、build、arch 全通过；unit 42 文件/347、Web 27/139、motion 2/19、integration 74/331、security 4/22、render 2/6、golden 2/15 | `.artifacts/quiet-frame-rebuild/verify-anon-entry-261008.log`；显式使用隔离测试库 `ancs_quiet_frame_test_261007`；`test:contract` 与 `test:e2e` 仍是 `[PLANNED]`，不计通过 |
 
 `git diff --cached --check` 对新纳入的原始设计参考目录报 3 处 Markdown 行尾双空格（`README.md:3`、`handoff/IMPLEMENTATION_HANDOFF.md:3-4`），这是 ZIP 原文的换行标记，按只读要求保留。排除该只读参考目录后的 `git diff --cached --check -- . ':(exclude)docs/design-reference/quiet-frame/a04a074c62f0/ANCS_Quiet_Frame/**'` 退出 0；没有产品实现文件空白错误。
 
@@ -43,3 +44,9 @@
 - 320/390/768/1280/1920 宽度的创作台、导演、成片、设置、Finance 共 25 组初拍发现唯一整页溢出：768px 导演时间线超出 150px。改为容器内横向滚动后，使用已纳入仓库的 `pnpm visual:qf:responsive --run-id 261008-final-cli` 在全新目录 `.artifacts/quiet-frame/responsive-audit/261008-final-cli/` 重拍 25 PNG 与 JSON：25/25 根节点无横向溢出，主操作裁切 0，页面错误、夹具未命中及外部请求均为 0；768px 时间线本身 282px 可视宽、679px 内容宽，可独立滚动。早期临时审计脚本一次误用了 261007 输出目录，覆盖当时的 JSON 和导演 768 PNG；原参考图与 18 状态视觉基准没有被覆盖。本轮最终目录与初拍摘要分开保存，不把被覆盖的 JSON 当完整初始证据。
 - 新建 Render、付费 Voice Clone 训练/重试和 Master Narration 合成受后端费用/任务/幂等门控缺口阻塞；UI 显示原因，未造假成功。Provider 侧删除缺服务端归属和版本条件。详见 `docs/quiet-frame-rebuild/FUNCTIONAL_REGRESSION_REPORT.md` §4。无法以本轮 Mock 或本地数据关闭这些真实 Provider 项。
 - 用户随后明确要求先推送 GitHub；实现提交 `7e21d1066998430b39ca1a4b29dc8c12e34a8a3a` 已推到 `origin/codex/quiet-frame-rebuild`，`gh api` 核对远端 ref 与该 SHA 一致。仓库 CI 仅对 `main` 的 push 与 pull request 运行，因此此次分支推送没有 GitHub CI 结果；本地最终 `pnpm verify` 证据见上表。用户检查 Web 前仍暂停 P15/P16。开发库历史数据恢复按用户指示留待之后，不能从当前本地材料声称已恢复。
+
+## 匿名根入口与状态样式补修
+
+用户在 `http://127.0.0.1:4000/` 看到私有侧栏和旧深灰“需要登录”卡。原因是根页面将 401 渲染成私有工作台的状态块，而 `/welcome` 已有完整公开首页。修复后，`/` 收到确切 401 才跳转 `/welcome`；会话故障仍保留重试，已登录用户继续进入原有创作台。欢迎页的工作室入口按会话分别指向 `/sign-in` 或 `/`，避免匿名往返循环。通用 `StateBlock` 改用 Quiet Frame 的 `panel`、`badge`、`btn` token，业务状态与操作保持原语义。此项只涉及 Web UI 与测试；contracts、migration、domain、API、SDK 均不适用。
+
+聚焦测试 `pnpm exec vitest run --project web apps/web/src/app/dashboard.test.tsx apps/web/src/components/quiet-frame/workspace-pages.test.tsx apps/web/src/ui/StateBlock.test.tsx` 为 3 文件、16/16；`pnpm --filter @ancs/web typecheck`、`pnpm arch:check`、`pnpm --filter @ancs/web build` 均退出 0。全量结果见上表最后一行。真实浏览器匿名打开 `/` 最终 URL 为 `/welcome`，主 CTA 指向 `/sign-in`，点击后出现登录表单；本地截图 `.artifacts/quiet-frame-rebuild/anonymous-root-after.png`。浏览器验证未登录，也未写入开发库；已登录根页由 Web 组件测试覆盖，本次没有重跑此前的完整登录浏览器 smoke。

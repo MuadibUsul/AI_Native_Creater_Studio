@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import DashboardPage from './page.js';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
+
 /**
  * Dashboard 状态矩阵（P05-03）：加载（由 pending 覆盖于其他用例）/
  * 未登录（可去登录）/ 失败（可重试）/ 空工作区（可创建）/ 空项目（可创建）/ 正常列表。
@@ -13,14 +16,15 @@ const session = () => ({ user: { id: 'usr_1', email: 'a@test.local' } });
 const workspace = (id: string, name: string) => ({ id, name, role: 'OWNER' });
 
 describe('Dashboard', () => {
-  it('未登录：明确提示并可前往登录', async () => {
+  it('未登录：进入公开欢迎页，不显示私有创作台状态', async () => {
+    replace.mockClear();
     const client = mockClient({
       auth: { session: vi.fn().mockRejectedValue(apiError(401, 'UNAUTHENTICATED')) },
       workspaces: { list: vi.fn().mockResolvedValue([]) },
     });
     renderWithClient(<DashboardPage />, client);
-    expect(await screen.findByText('需要登录')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '前往登录' })).toBeTruthy();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/welcome'));
+    expect(screen.queryByText('需要登录')).toBeNull();
   });
 
   it('会话服务故障：保留局部重试入口，不显示已登录创作台', async () => {

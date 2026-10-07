@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
@@ -39,6 +40,7 @@ function editedAt(value: string): string {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const client = useAncsClient();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -84,8 +86,12 @@ export default function DashboardPage() {
     } catch { /* The new project page still works without session storage. */ }
     window.location.href = `/w/${effectiveWorkspaceId}/new`;
   };
+  const isUnauthenticated = session.isError && describeError(session.error).kind === 'unauthenticated';
+  useEffect(() => {
+    if (isUnauthenticated) router.replace('/welcome');
+  }, [isUnauthenticated, router]);
+  if (isUnauthenticated) return null;
   if (session.isPending || workspaces.isPending) return <div className="page narrow"><StateBlock variant="loading" title="正在加载工作区…" /></div>;
-  if (session.isError && describeError(session.error).kind === 'unauthenticated') return <div className="page narrow"><StateBlock variant="unauthenticated" title="需要登录" description="登录后继续创作。" action={{ label: '前往登录', onClick: () => { window.location.href = '/sign-in'; } }} /></div>;
   if (session.isError) return <div className="page narrow"><StateBlock variant="error" title="会话暂不可用" description={describeError(session.error).message} action={{ label: '重试', onClick: () => void session.refetch() }} /></div>;
   if (workspaces.isError) {
     const error = describeError(workspaces.error);
