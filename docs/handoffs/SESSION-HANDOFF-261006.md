@@ -1,8 +1,8 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 5/7）
+- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 6/7，仅剩 P13-07）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`d55ea5b` feat(p13-05) Handoff（CI 绿 run 37574170902）——下一任务 P13-06
+- **最后已推送提交**：`abc8985` feat(p13-06) CMS 输入 —— **本地 verify 797 全绿；CI run 37596079383 交接时仍在运行（接手后先 `gh run list` 确认，失败按日志修复重跑）**——下一任务 P13-07
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
@@ -18,11 +18,11 @@
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
 | P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
 | P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ 全部交付（768/771/774/777/780；各 Pack analyze/generate/validate 完整链路） |
-| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783）+ P13-02 YouTube ✅（786；真实远端 BLOCKED）+ P13-03 平台矩阵 ✅（789；平台实测 BLOCKED）+ P13-04 P3/P4 体验 ✅（791；Draft 不显示 Published/末步由用户）+ P13-05 Handoff ✅（794；过期 410/跨租户 404）｜P13-06/07 未开始 |
+| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783）+ P13-02 YouTube ✅（786；真实远端 BLOCKED）+ P13-03 平台矩阵 ✅（789；平台实测 BLOCKED）+ P13-04 P3/P4 体验 ✅（791）+ P13-05 Handoff ✅（794）+ P13-06 CMS 输入 ✅（797；事件幂等/来源版本化）｜**仅剩 P13-07 CMS 回写** |
 | P14–P16 | 28 | ⬜ 未开始（P14 5 / P15 8 / P16 9；凭据阻塞：P06-02/P06-04/P08-05 + P13-02 真实远端 + P13-03 平台实测） |
 
-- 测试规模：**794**（unit 341 · web 70 · motion 19 · integration 321 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0044**（handoffs）；下一迁移为 0045
+- 测试规模：**797**（unit 341 · web 70 · motion 19 · integration 323 · security 22 · render 6 · golden 15）
+- 迁移最新编号：**0045**（cms_ingestions 事件幂等唯一索引）；下一迁移为 0046
 - **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
@@ -48,6 +48,16 @@
 - **P12-01 设计要点（下一任务）**：Shorts 必须**从 Atom 重新编导**（REQ-93-03，非长视频时间轴机械裁切）；落 generate 切面（OutputPlan → 9:16 派生 SceneGraph）；**原长视频/图不被修改**（派生独立产物，不写回源项目）；竖屏安全区校验（§10 规则复用）；来源保留 = 派生 Scene 引用 Atom→Claim 链；短片独立理解 = Hook 重写 + 单主题约束。已有基础：P11-02 Atom/Recipe/Fit、P11-03 Pack 生命周期 + analyze、P11-04 血缘（approve 可绑 projectVersionId）。落地顺序按 AGENTS.md：contracts → migration → domain → API → SDK → tests → docs。
 - **后续**：P12（各 Pack：Shorts/Social/Text/多语言/Podcast）→ P13（发布/交付/CMS）→ P14（运营与学习）→ P15（多端）→ P16（Marketplace/Enterprise，含插件签名与生命周期）。
 
+## 4b. P13 已完成任务摘要（2026-10-07；8c052e7/cc3efa1/93a4367/c62689d/d55ea5b/abc8985，全部 CI 绿或本地 verify 全绿）
+
+- **P13-01 发布核心**：publications 表（幂等键四元组唯一索引 platform+account+projectVersion+outputAsset）；批准闸门（render_approvals + manifestHash 对账，漂移 409 NOT_APPROVED）；reconcile 以 Provider getStatus 为准**不重发**；能力闸门投递方式感知；client.publications.{request,list,get,reconcile}。
+- **P13-02 YouTube**：providers/youtube 包（YoutubeApiClient seam：RealYoutubeClient 官方 API v3 代码就位但**真实远端 BLOCKED OAuth 凭据** + MockYoutubeClient 故障重放 timeout_after_upload）；**超时恢复不重复创建**三层（核心唯一索引 / publish 前幂等键标签回查 / reconcile 采纳）；AIGC 披露逐字 + alteredContent；契约 additive `findByPublicationKey?`。
+- **P13-03 平台矩阵**：PLATFORM_CAPABILITY_MATRIX 数据驱动（TikTok=P1/抖音=P4/Bilibili=P2/LinkedIn=P2/X=P4，全标注 UNVERIFIED_CREDENTIALS_REQUIRED——**平台实测 BLOCKED 账号凭据**）；PlatformStubProvider 生效能力=声明∩已核验=空 → 闸门 422 CAPABILITY_MISSING（tier 透出，UI 与真实 capability 一致）。
+- **P13-04 P3/P4 体验**：deliveryMode（PUBLISH|DRAFT——Draft 状态 publishedAt 恒 null **不显示为 Published** + transferInstructions）；P4 导出包（export_packages 表；矩阵声明 EXPORT_PACKAGE 才可打包；批准闸门与发布同源；PLATFORM_EXPORT_CHECKLISTS 数据驱动、**末步=由用户完成 finalStepByUser=true**）；能力闸门模式感知（DRAFT→UPLOAD_DRAFT）。
+- **P13-05 Handoff**：handoffs 表；创建（Artifact 逐个校验真实归属 422）/claim（**过期 410 HANDOFF_EXPIRED**（isExpired 读取时计算）；并发领取条件更新；REVOKED/COMPLETED 409）/cancel（可撤销）/get/list（**跨租户 404 反枚举**）；TTL 上限 7 天；claim 端点为 P15-06 移动端预留。
+- **P13-06 CMS 输入**：cms_ingestions 表（**事件幂等唯一索引 workspace+source+externalId+contentHash**）；ingestCmsEvent（contentHash=内容字节 sha256——URL 先抓取再哈希；重放 deduped 不重复建项目；**正文变化 → 同项目新 ContentDocument 新来源版本（旧版本保留）**；机器路径复用人工链路 P04-01 URL 抓取/P10-01 HTML 导入；并发重放 onConflictDoNothing 兜底）；client.cms.{ingest,list}。
+- **P13-07 设计要点（下一任务，P13 收尾）**：视频就绪（Render READY）后向 CMS 注册的回调 URL 发送**签名回调**（HMAC-SHA256 + 时间戳防重放——复用 P03-06 webhook_events 范式）；保存尝试/响应/重试记录（append-only）；**回写失败不影响成片**（回调失败仅记录，Render 状态不变）；**重复回调可安全处理**（deliveryId 幂等）；**URL 遵守 SSRF 规则**（复用 P04-01 SSRF 守卫——拒绝内网/非 http(s)）。端点：配置回写目标（workspace 级）+ 手动重发 + 尝试列表。迁移 0046（cms_writeback_targets + cms_writeback_attempts）。落地顺序：契约 → 迁移 → domain → API → SDK → tests → docs。
+
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
 
 **流程纪律**
@@ -63,6 +73,11 @@
 5. **drizzle `sql\`\`` 内插列对象渲染为未限定列名**——相关子查询必须写显式限定名（`wm.user_id = "user".id`），否则计数恒 0。
 6. **drizzle 0.45 错误包装**：唯一冲突判定用 `@ancs/db` 的 `isUniqueViolation(error)`（解包 cause），不要直接读 `error.code`。
 7. **SDK `Headers` 实例不能展开**（`{...headers}` 得到空对象）——用 `headers.set()`。
+8. **bash 工作目录会在调用间漂移**——每个脚本前显式 `cd /e/Codes/ANCS`；多替换 python 脚本必须**最后才写文件**（中途 assert 失败 = 文件未写，勿假设部分生效）。
+9. **zod default 字段的 SDK 类型**：`z.infer` 输出类型必填——客户端入参用 `z.input`（如 PublicationRequestInput/CreateExportPackageRequestInput），SDK 方法签名用 Input 类型。
+10. **只 throw 的 async 方法推断 Promise<void>**（非 never）——实现接口时必须显式注解返回类型；**410 等非标准状态**复用 `ERROR_CODES.PRECONDITION_FAILED` + status 参数区分。
+11. **catch 回调内丢失类型窄化**（如 `input.content.url`）——窄化值先提取为局部变量再进回调。
+12. **本机渲染集成测试贴近超时线**（110–115s，高负载下曾越线级联 26 失败）——**不得放宽阈值**（AGENTS.md）；静置后复跑即绿；CI runner 稳定，以 CI 为准。
 8. **二进制端点必须显式 `bodyLimit`**（Fastify 默认 1MiB）：存储 64MB、文档导入 25MB。
 8a. **SDK 编辑后必须 `pnpm install`** 刷新 apps/api 的注入拷贝（workspace 拷贝非符号链接——不刷新则 typecheck 读旧类型）。
 8b. **SDK 防重复守卫陷阱**：向 client.ts 插接口+实现分两步时，接口含 `xxx: {` 会使实现的 `includes` 守卫误判已存在——实现需单独 Edit 插入。
