@@ -28,6 +28,7 @@ import { registerMultilingualRoutes } from './routes/multilingual.js';
 import { registerPodcastRoutes } from './routes/podcast.js';
 import { registerPublicationRoutes } from './routes/publications.js';
 import { registerHandoffRoutes } from './routes/handoffs.js';
+import { registerCmsRoutes } from './routes/cms.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
@@ -226,6 +227,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider(), ...createPlatformStubProviders()],
         });
         registerHandoffRoutes(instance, authDeps);
+        registerCmsRoutes(instance, authDeps, {
+          ...(contentDeps?.articleFetcher !== undefined ? { articleFetcher: contentDeps.articleFetcher } : {}),
+        });
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

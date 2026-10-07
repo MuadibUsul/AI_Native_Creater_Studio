@@ -14,6 +14,7 @@ export { podcastEpisodes } from './podcast.js';
 export { publications } from './publications.js';
 export { exportPackages } from './export-packages.js';
 export { handoffs } from './handoffs.js';
+export { cmsIngestions } from './cms.js';
 export {
   avatarIdentities,
   brandIdentities,

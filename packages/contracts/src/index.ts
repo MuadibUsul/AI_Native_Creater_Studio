@@ -942,6 +942,30 @@ export {
   PLATFORM_CAPABILITY_MATRIX,
 } from './publishing.js';
 
+// CMS 输入契约（P13-06 / §88）
+export {
+  CMS_SOURCES,
+  cmsSourceSchema,
+  CMS_INGESTION_STATUSES,
+  cmsIngestionStatusSchema,
+  cmsEventContentSchema,
+  ingestCmsEventRequestSchema,
+  cmsIngestionRecordSchema,
+  ingestCmsEventResponseSchema,
+  cmsIngestionListSchema,
+  CMS_ERROR_REASONS,
+} from './cms.js';
+export type {
+  CmsSource,
+  CmsIngestionStatus,
+  CmsEventContent,
+  IngestCmsEventRequest,
+  CmsIngestionRecord,
+  IngestCmsEventResponse,
+  CmsIngestionList,
+  CmsErrorReason,
+} from './cms.js';
+
 // Handoff 记录契约（P13-05 / §42.3）
 export {
   handoffRecordSchema,

@@ -56,6 +56,9 @@ import {
   handoffRecordSchema,
   handoffListSchema,
   createHandoffRequestSchema,
+  ingestCmsEventRequestSchema,
+  ingestCmsEventResponseSchema,
+  cmsIngestionListSchema,
   podcastEpisodeSchema,
   podcastEpisodeListSchema,
   podcastValidationResultSchema,
@@ -283,6 +286,9 @@ import {
   type HandoffRecord,
   type HandoffList,
   type CreateHandoffRequest,
+  type IngestCmsEventRequest,
+  type IngestCmsEventResponse,
+  type CmsIngestionList,
   type PodcastEpisode,
   type PodcastEpisodeList,
   type PodcastValidationResult,
@@ -669,6 +675,11 @@ export interface AncsClient {
     get(workspaceId: string, projectId: string, handoffId: string): Promise<HandoffRecord>;
     claim(workspaceId: string, projectId: string, handoffId: string, claimedBy: string, options?: MutationOptions): Promise<HandoffRecord>;
     cancel(workspaceId: string, projectId: string, handoffId: string, options?: MutationOptions): Promise<HandoffRecord>;
+  };
+  /** CMS 输入（P13-06）：机器摄取事件（重放幂等；正文变化 → 新来源版本） */
+  cms: {
+    ingest(workspaceId: string, input: IngestCmsEventRequest, options?: MutationOptions): Promise<IngestCmsEventResponse>;
+    list(workspaceId: string): Promise<CmsIngestionList>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1285,6 +1296,16 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs/${handoffId}/cancel`, handoffRecordSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+    cms: {
+      ingest: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/cms/ingest`, ingestCmsEventResponseSchema, {
+          body: input,
+          bodySchema: ingestCmsEventRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: (workspaceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/cms/ingest`, cmsIngestionListSchema),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>
