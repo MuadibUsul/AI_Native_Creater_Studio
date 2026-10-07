@@ -9,7 +9,7 @@
  *   DATABASE_URL 或 ANCS_TEST_DATABASE_URL（默认本地开发库）
  *   BETTER_AUTH_SECRET（必须显式提供；禁止把 Secret 写入仓库）
  */
-import { createDb, redactDatabaseUrl, resolveTestDatabaseUrl } from '@ancs/db';
+import { createDb, DEFAULT_TEST_DATABASE_URL, redactDatabaseUrl } from '@ancs/db';
 import { createAuth } from '../auth-core.js';
 import { createInternalUser } from '../internal-users.js';
 
@@ -49,7 +49,7 @@ if (secret === undefined || secret.length < 16) {
   process.exit(1);
 }
 
-const databaseUrl = resolveTestDatabaseUrl();
+const databaseUrl = process.env['ANCS_TEST_DATABASE_URL'] ?? process.env['DATABASE_URL'] ?? DEFAULT_TEST_DATABASE_URL;
 const handle = createDb(databaseUrl);
 const auth = createAuth({
   db: handle.db,

@@ -3,9 +3,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useAncsClient } from '@/lib/client';
+import { describeError } from '@/lib/errors';
 import { useAdminAudit, useAdminJobs, useAdminOverview } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
 import { SecurityOps } from '@/ui/SecurityOps';
+import styles from '@/components/quiet-frame/legacy.module.css';
 
 /**
  * 最小运营界面（P08-02 / §67）：`/admin`
@@ -49,15 +51,15 @@ export default function AdminPage() {
       setNotice(`任务 ${job.id} 已重新入队（QUEUED）——仍受预算/幂等/版本规则约束。`);
       await queryClient.invalidateQueries({ queryKey: ['admin'] });
     },
-    onError: (error: unknown) => setNotice(`重试失败：${error instanceof Error ? error.message : '未知错误'}`),
+    onError: (error: unknown) => setNotice(`重试失败：${describeError(error).message}`),
   });
 
   const denied = overview.isError && (overview.error as { status?: number } | null)?.status === 404;
   const unauthenticated = overview.isError && (overview.error as { status?: number } | null)?.status === 401;
   if (denied || unauthenticated) {
     return (
-      <section className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">运营</h1>
+      <section className={`page ${styles['surface']} flex flex-col gap-4`}>
+        <div className="eyebrow">PLATFORM / OPERATIONS</div><h1>运营</h1>
         <StateBlock
           variant="info"
           title={unauthenticated ? '需要登录' : '无权限访问（或不存在）'}
@@ -68,11 +70,12 @@ export default function AdminPage() {
   }
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">运营</h1>
-      {notice !== null ? <p className="text-xs text-amber-300">{notice}</p> : null}
+    <section className={`page ${styles['surface']} flex flex-col gap-4`}>
+      <div className="eyebrow">PLATFORM / OPERATIONS</div><h1>运营</h1>
+      {notice !== null ? <p role="status" className="text-xs text-amber-300">{notice}</p> : null}
 
       {overview.isPending ? <p className="text-sm text-slate-400">正在加载运营总览…</p> : null}
+      {overview.isError ? <StateBlock variant="error" title="运营总览加载失败" description={describeError(overview.error).message} action={{ label: '重试', onClick: () => void overview.refetch() }} /> : null}
       {overview.data !== undefined ? (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -115,6 +118,7 @@ export default function AdminPage() {
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
         <h2 className="text-sm font-semibold text-slate-300">失败任务（人工恢复）</h2>
         {failed.isPending || retryable.isPending ? <p className="mt-2 text-sm text-slate-400">正在加载…</p> : null}
+        {failed.isError || retryable.isError ? <p role="alert" className="mt-2 text-sm text-rose-300">失败任务加载失败：{describeError(failed.error ?? retryable.error).message} <button type="button" className="textbtn small" onClick={() => { void failed.refetch(); void retryable.refetch(); }}>重试</button></p> : null}
         {failed.data !== undefined && retryable.data !== undefined ? (
           <ul data-testid="ops-failed-jobs" className="mt-2 flex flex-col gap-2">
             {[...failed.data, ...retryable.data].slice(0, 20).map((job) => (
@@ -142,6 +146,7 @@ export default function AdminPage() {
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
         <h2 className="text-sm font-semibold text-slate-300">审计（job 事件 / 渲染迁移 / 审批）</h2>
         {audit.isPending ? <p className="mt-2 text-sm text-slate-400">正在加载…</p> : null}
+        {audit.isError ? <p role="alert" className="mt-2 text-sm text-rose-300">审计记录加载失败：{describeError(audit.error).message} <button type="button" className="textbtn small" onClick={() => void audit.refetch()}>重试</button></p> : null}
         {audit.data !== undefined ? (
           <ul data-testid="ops-audit" className="mt-2 flex flex-col gap-1 font-mono text-xs text-slate-400">
             {audit.data.slice(0, 20).map((entry) => (

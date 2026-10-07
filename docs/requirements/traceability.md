@@ -4,6 +4,7 @@
 - 需求基线：`creator_video_os_spec_v0.2.md`（v0.2，2026-10-04，共 97 节 + 附录 A/B/C）
 - 工程计划：`ANCS_Plan261004.md`
 - 建立日期：2026-10-04（初始建账）
+- 2026-10-08 交付备注：Quiet Frame Web 视觉重构是 P14 之后的独立界面验收工作，证据见 `docs/verification/QUIET-FRAME-REBUILD.md`。本轮没有新增需求 ID，也没有凭视觉截图把任何 REQ 状态改为 `VERIFIED`；用户检查 Web 前暂停 P15/P16。
 - 配套文件：
   - `docs/requirements/v1-acceptance-ledger.md` — §77 / §78 / 附录 C / §96 逐项验收账本
   - `docs/decisions/0001-scope-decisions.md` — DEC-01..14 范围与解释裁决

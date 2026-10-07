@@ -21,6 +21,7 @@ V1 主链路：**Article / Research → Professional Long Video**。
 ```bash
 pnpm install
 docker compose -f infra/docker-compose.dev.yml up -d   # 本地 PostgreSQL（端口 55432）
+# 先创建独立测试库，并将 ANCS_TEST_DATABASE_URL 显式指向数据库名含 test 的 PostgreSQL URL
 pnpm verify                  # secrets → lint → typecheck → build → arch:check → 全部测试套件（含真实渲染）
 pnpm test:provider-smoke     # 真实 Provider smoke（默认关闭，需显式开启与凭据，会产生费用）
 ```
@@ -75,5 +76,5 @@ scripts/     仓库级验证与占位脚本
 
 ## 当前状态
 
-处于 **P00 工程基线** 阶段（内部生产版本从 P00 推进至 P08）。
-任务完成状态以 `docs/handoffs/` 最新记录为准；只有 `VERIFIED`（验收通过且证据齐全）计入完成。
+截至 2026-10-08，计划任务已推进至 **P14-05**；当前进行 Quiet Frame Web 设计迁移的用户检查。按用户要求，Web 检查前暂停 P15/P16。页面覆盖、视觉差异与功能边界见 `docs/quiet-frame-rebuild/FINAL_HANDOFF.md` 和 `docs/verification/QUIET-FRAME-REBUILD.md`。
+任务完成状态以 `docs/handoffs/` 最新记录为准；只有 `VERIFIED`（验收通过且证据齐全）计入完成。Web 的视觉复拍和 Mock 测试不自动关闭真实 Provider、Render 或发布验收项。

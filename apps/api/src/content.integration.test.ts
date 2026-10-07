@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { ApiFailure, errorEnvelopeSchema, type ArticleFetcher } from '@ancs/contracts';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
@@ -124,7 +124,7 @@ describe('输入归一化（P04-01）', () => {
     expect(sources[0]?.contentHash).toMatch(/^[0-9a-f]{64}$/);
 
     // 数据库侧：规范化块（不是整篇一个大 JSON）
-    const rows = await handle.db.select().from(contentBlocks).where(eq(contentBlocks.documentId, record.document.id));
+    const rows = await handle.db.select().from(contentBlocks).where(eq(contentBlocks.documentId, record.document.id)).orderBy(asc(contentBlocks.position));
     expect(rows.length).toBe(record.document.blocks.length);
     expect(rows.map((row) => row.position)).toEqual(rows.map((_row, index) => index));
 

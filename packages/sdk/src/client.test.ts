@@ -52,6 +52,20 @@ describe('createClient：请求构造与标头（§29.3 / §33）', () => {
     await expect(client.workspaces.create({ name: '' })).rejects.toThrowError();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it('文档字节导入也携带幂等键，供网络失败后安全重试', async () => {
+    const calls: RequestInit[] = [];
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      calls.push(init ?? {});
+      return jsonResponse(422, { error: { code: 'VALIDATION_FAILED', message: '测试拒绝' } });
+    };
+    const client = createClient({ baseUrl: 'http://127.0.0.1:9999', fetchImpl });
+    const data = new TextEncoder().encode('# 标题');
+    await expect(client.content.importDocument('ws_1', 'prj_1', { filename: 'notes.md', contentType: 'text/markdown', data }, { idempotencyKey: 'idem_document_1' })).rejects.toThrow();
+    expect((calls[0]?.headers as Headers).get('idempotency-key')).toBe('idem_document_1');
+    expect((calls[0]?.headers as Headers).get('content-type')).toBe('text/markdown');
+    expect(calls[0]?.body).toBe(data);
+  });
 });
 
 describe('createClient：认证模式', () => {

@@ -1,0 +1,1216 @@
+{
+  "schemaVersion": 1,
+  "label": "SYNTHETIC_VISUAL_ONLY",
+  "apiOrigins": [
+    "http://localhost:3001",
+    "http://127.0.0.1:3001"
+  ],
+  "responses": {
+    "GET /api/v1/auth/session": {
+      "user": {
+        "id": "usr_visual_fixture",
+        "email": "visual@example.invalid",
+        "name": "Creator",
+        "emailVerified": true
+      },
+      "sessionId": "ses_visual_fixture",
+      "method": "web_session",
+      "expiresAt": "2026-10-08T12:00:00.000Z"
+    },
+    "GET /api/v1/workspaces": {
+      "items": [
+        {
+          "id": "ws_visual_fixture",
+          "name": "个人工作室",
+          "privacyTier": "STANDARD",
+          "role": "OWNER",
+          "createdAt": "2026-10-01T00:00:00.000Z",
+          "updatedAt": "2026-10-07T04:00:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture": {
+      "id": "ws_visual_fixture",
+      "name": "个人工作室",
+      "privacyTier": "STANDARD",
+      "role": "OWNER",
+      "createdAt": "2026-10-01T00:00:00.000Z",
+      "updatedAt": "2026-10-07T04:00:00.000Z"
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects": {
+      "items": [
+        {
+          "id": "prj_visual_01",
+          "workspaceId": "ws_visual_fixture",
+          "channelId": "chn_visual",
+          "title": "当算力成为新资产",
+          "sourceType": "MANUAL_SCRIPT",
+          "status": "STORYBOARDING",
+          "revision": 5,
+          "aspectRatio": "16:9",
+          "resolution": "1920x1080",
+          "fps": 30,
+          "targetDurationMs": 272000,
+          "createdAt": "2026-10-01T00:00:00.000Z",
+          "updatedAt": "2026-10-07T03:58:00.000Z"
+        },
+        {
+          "id": "prj_visual_02",
+          "workspaceId": "ws_visual_fixture",
+          "channelId": "chn_visual",
+          "title": "每周商业观察 · 第 12 期",
+          "sourceType": "MANUAL_SCRIPT",
+          "status": "SCRIPTING",
+          "revision": 2,
+          "aspectRatio": "16:9",
+          "resolution": "1920x1080",
+          "fps": 30,
+          "targetDurationMs": null,
+          "createdAt": "2026-10-02T00:00:00.000Z",
+          "updatedAt": "2026-10-07T01:42:00.000Z"
+        },
+        {
+          "id": "prj_visual_03",
+          "workspaceId": "ws_visual_fixture",
+          "channelId": "chn_visual",
+          "title": "把复杂讲得清楚",
+          "sourceType": "MANUAL_SCRIPT",
+          "status": "READY",
+          "revision": 9,
+          "aspectRatio": "16:9",
+          "resolution": "1920x1080",
+          "fps": 30,
+          "targetDurationMs": null,
+          "createdAt": "2026-10-03T00:00:00.000Z",
+          "updatedAt": "2026-10-06T10:30:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/projects/prj_visual_01": {
+      "id": "prj_visual_01",
+      "workspaceId": "ws_visual_fixture",
+      "channelId": "chn_visual",
+      "title": "当算力成为新资产",
+      "sourceType": "MANUAL_SCRIPT",
+      "status": "STORYBOARDING",
+      "revision": 5,
+      "aspectRatio": "16:9",
+      "resolution": "1920x1080",
+      "fps": 30,
+      "targetDurationMs": 272000,
+      "createdAt": "2026-10-01T00:00:00.000Z",
+      "updatedAt": "2026-10-07T03:58:00.000Z",
+      "channelSnapshot": {
+        "channelId": "chn_visual",
+        "channelStyleVersionId": "chstyle_visual",
+        "styleVersion": 1,
+        "defaults": {
+          "language": "zh-CN",
+          "defaultAspectRatio": "16:9",
+          "defaultDurationRangeSeconds": {
+            "min": 480,
+            "max": 600
+          },
+          "hostRatioRange": {
+            "min": 0.15,
+            "max": 0.3
+          },
+          "maxConsecutiveHostSeconds": 25,
+          "visualChangeEverySeconds": {
+            "min": 4,
+            "max": 12
+          },
+          "aiVideoRatioMax": 0.2,
+          "hookStyle": "直接问题开场",
+          "chapterStyle": "章节标题",
+          "endingStyle": "结论收束",
+          "sourceDisplayPolicy": "WHEN_REQUIRED",
+          "aiBrollPolicy": "MINIMAL",
+          "musicPolicy": "SUBTLE",
+          "preferredProviderPolicy": "AUTO",
+          "themeTokens": {
+            "font": {
+              "heading": "Microsoft YaHei, sans-serif",
+              "body": "Microsoft YaHei, sans-serif"
+            },
+            "color": {
+              "background": "#0B1220",
+              "foreground": "#F5F8FF",
+              "accent": "#4F8CFF",
+              "positive": "#34C77B",
+              "negative": "#E5484D"
+            },
+            "spacing": {
+              "sm": 8,
+              "md": 16,
+              "lg": 32
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 16
+            },
+            "motion": {
+              "durationFastMs": 200,
+              "durationBaseMs": 400,
+              "easing": "ease-out"
+            }
+          },
+          "creatorIdentityId": null,
+          "voiceIdentityId": null,
+          "avatarIdentityId": null,
+          "brandIdentityId": null,
+          "speechProfileId": null
+        }
+      }
+    },
+    "GET /api/v1/projects/prj_visual_01/graph": {
+      "schemaVersion": "0.1",
+      "projectId": "prj_visual_01",
+      "projectRevision": 5,
+      "channelSnapshot": {
+        "channelId": "chn_visual",
+        "channelStyleVersion": "chstyle_visual",
+        "speechProfileId": null,
+        "speechProfileVersion": null
+      },
+      "identitySnapshot": {
+        "avatarIdentityId": null,
+        "avatarIdentityVersion": null,
+        "voiceIdentityId": null,
+        "voiceIdentityVersion": null,
+        "brandIdentityId": null,
+        "brandIdentityVersion": null
+      },
+      "format": {
+        "width": 1920,
+        "height": 1080,
+        "fps": 30,
+        "aspectRatio": "16:9"
+      },
+      "timeline": {
+        "durationMs": 272000,
+        "masterAudioAssetId": null
+      },
+      "scenes": [
+        {
+          "id": "scn_visual_01",
+          "revision": 1,
+          "position": 0,
+          "startMs": 0,
+          "durationMs": 18000,
+          "semanticType": "开场",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "一个好问题",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_02",
+          "revision": 1,
+          "position": 1,
+          "startMs": 18000,
+          "durationMs": 24000,
+          "semanticType": "框架",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "从投入到产出",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_03",
+          "revision": 1,
+          "position": 2,
+          "startMs": 42000,
+          "durationMs": 30000,
+          "semanticType": "数据关系",
+          "sceneType": "LINE_CHART",
+          "narrationBlockIds": [],
+          "narration": "把投入、使用和回报放在同一个画面里，判断才会变得清楚。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "line-chart",
+          "componentVersion": "1.0.0",
+          "props": {
+            "title": "增长，何时变成回报？",
+            "unit": "",
+            "series": [
+              {
+                "name": "示意线 A",
+                "points": [
+                  {
+                    "t": "阶段一",
+                    "v": 1
+                  },
+                  {
+                    "t": "阶段二",
+                    "v": 2
+                  },
+                  {
+                    "t": "阶段三",
+                    "v": 2.5
+                  },
+                  {
+                    "t": "阶段四",
+                    "v": 4
+                  },
+                  {
+                    "t": "阶段五",
+                    "v": 5
+                  }
+                ]
+              },
+              {
+                "name": "示意线 B",
+                "points": [
+                  {
+                    "t": "阶段一",
+                    "v": 0.5
+                  },
+                  {
+                    "t": "阶段二",
+                    "v": 1
+                  },
+                  {
+                    "t": "阶段三",
+                    "v": 1.5
+                  },
+                  {
+                    "t": "阶段四",
+                    "v": 2
+                  },
+                  {
+                    "t": "阶段五",
+                    "v": 3
+                  }
+                ]
+              }
+            ],
+            "sourceLabel": "视觉测试示意 / 非真实业务数据"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [
+            {
+              "sourceId": "src_visual_synthetic",
+              "datasetIds": [
+                "ds_visual_synthetic"
+              ],
+              "claimIds": []
+            }
+          ],
+          "dataBindings": [
+            {
+              "datasetId": "ds_visual_synthetic",
+              "seriesId": "fixture_series",
+              "purpose": "isolated-visual-test"
+            }
+          ],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_04",
+          "revision": 1,
+          "position": 3,
+          "startMs": 72000,
+          "durationMs": 21000,
+          "semanticType": "观点",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "研究的边界",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": true,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_05",
+          "revision": 1,
+          "position": 4,
+          "startMs": 93000,
+          "durationMs": 24000,
+          "semanticType": "结尾",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "留一个判断",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_06",
+          "revision": 1,
+          "position": 5,
+          "startMs": 117000,
+          "durationMs": 22000,
+          "semanticType": "过渡",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "叙事展开",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_07",
+          "revision": 1,
+          "position": 6,
+          "startMs": 139000,
+          "durationMs": 25000,
+          "semanticType": "解释",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "更多线索",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_08",
+          "revision": 1,
+          "position": 7,
+          "startMs": 164000,
+          "durationMs": 20000,
+          "semanticType": "证据",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "关键变化",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_09",
+          "revision": 1,
+          "position": 8,
+          "startMs": 184000,
+          "durationMs": 20000,
+          "semanticType": "回顾",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "观点回顾",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_10",
+          "revision": 1,
+          "position": 9,
+          "startMs": 204000,
+          "durationMs": 20000,
+          "semanticType": "判断",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "意义与局限",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_11",
+          "revision": 1,
+          "position": 10,
+          "startMs": 224000,
+          "durationMs": 24000,
+          "semanticType": "总结",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "下一步",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        },
+        {
+          "id": "scn_visual_12",
+          "revision": 1,
+          "position": 11,
+          "startMs": 248000,
+          "durationMs": 24000,
+          "semanticType": "结束",
+          "sceneType": "HOST_FULL",
+          "narrationBlockIds": [],
+          "narration": "视觉测试场景；此内容不是正式作品。",
+          "visualIntent": "设计示意场景；不可当作事实素材",
+          "componentId": "host-full",
+          "componentVersion": "1.0.0",
+          "props": {
+            "lines": "结束",
+            "presenterName": "视觉测试"
+          },
+          "providerRequirement": null,
+          "sourceBindings": [],
+          "dataBindings": [],
+          "assetBindings": [],
+          "transition": {
+            "in": null,
+            "out": null
+          },
+          "locked": false,
+          "approved": false,
+          "needsReview": false,
+          "status": "READY"
+        }
+      ],
+      "captions": [],
+      "audioTracks": [],
+      "overlays": [],
+      "sourceReferences": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/narrative": {
+      "schemaVersion": "1.0",
+      "id": "np_visual_01",
+      "revision": 2,
+      "title": "当算力成为新资产",
+      "thesis": "以可核对的商业问题审视算力投入。",
+      "hook": "好作品，不只是把文章读一遍。它让复杂的问题，有一条可以跟随的线索。",
+      "chapters": [
+        {
+          "id": "ch_visual_01",
+          "title": "开场 · 一个好问题",
+          "intent": null,
+          "narrationBlockIds": [
+            "nb_visual_01"
+          ]
+        },
+        {
+          "id": "ch_visual_02",
+          "title": "从投入到产出",
+          "intent": null,
+          "narrationBlockIds": [
+            "nb_visual_02",
+            "nb_visual_03"
+          ]
+        },
+        {
+          "id": "ch_visual_03",
+          "title": "回到创作者",
+          "intent": null,
+          "narrationBlockIds": [
+            "nb_visual_04"
+          ]
+        },
+        {
+          "id": "ch_visual_04",
+          "title": "结尾 · 留下判断",
+          "intent": null,
+          "narrationBlockIds": [
+            "nb_visual_05"
+          ]
+        }
+      ],
+      "narrationBlocks": [
+        {
+          "id": "nb_visual_01",
+          "position": 0,
+          "text": "当一项新技术受到关注，人们最先看到的，往往是投入的规模。更值得追问的是：这些投入，会通过什么方式转化为可持续的价值？",
+          "chapterId": "ch_visual_01",
+          "claimIds": [],
+          "estimatedDurationMs": 52000,
+          "locked": false,
+          "status": "DRAFT"
+        },
+        {
+          "id": "nb_visual_02",
+          "position": 1,
+          "text": "我们可以把这个问题拆成三部分：投入带来了什么，使用需求是否稳定，以及使用最终带来了什么回报。把三者放在同一个画面里，判断才会变得清楚。",
+          "chapterId": "ch_visual_02",
+          "claimIds": [],
+          "estimatedDurationMs": 55000,
+          "locked": true,
+          "status": "DRAFT"
+        },
+        {
+          "id": "nb_visual_03",
+          "position": 2,
+          "text": "这里使用的是结构示意，而不是市场预测。正式作品中的每一个数字，都需要有明确的数据来源、时间和口径。",
+          "chapterId": "ch_visual_02",
+          "claimIds": [],
+          "estimatedDurationMs": 45000,
+          "locked": false,
+          "status": "DRAFT"
+        },
+        {
+          "id": "nb_visual_04",
+          "position": 3,
+          "text": "工具应该让创作者把更多精力放在观点和判断上。让 AI 整理素材和组织画面，而由你决定，哪一句值得说、哪一个结论值得留下。",
+          "chapterId": "ch_visual_03",
+          "claimIds": [],
+          "estimatedDurationMs": 62000,
+          "locked": false,
+          "status": "DRAFT"
+        },
+        {
+          "id": "nb_visual_05",
+          "position": 4,
+          "text": "这不是一个已经结束的问题。保留判断，也保留继续核对的入口。",
+          "chapterId": "ch_visual_04",
+          "claimIds": [],
+          "estimatedDurationMs": 58000,
+          "locked": false,
+          "status": "DRAFT"
+        }
+      ],
+      "keyClaims": [],
+      "requiredVisualFacts": [],
+      "ending": "带着问题离开，比带着未经核验的结论更好。",
+      "estimatedDurationMs": 272000,
+      "generation": {
+        "method": "MANUAL",
+        "providerId": "synthetic-visual-fixture",
+        "modelVersion": "none",
+        "promptVersion": "none",
+        "repairs": [],
+        "warnings": [
+          "仅供隔离视觉回归；无真实来源或事实核验。"
+        ]
+      }
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/provider-connections": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/provider-settings": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/billing/status": {
+      "workspaceId": "ws_visual_fixture",
+      "balanceCredits": 0,
+      "budget": null,
+      "usage": {
+        "periodKey": "2026-10",
+        "spentCredits": 0,
+        "reservedCredits": 0
+      },
+      "recentPeriods": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/assets": {
+      "items": [
+        {
+          "id": "ast_visual_01",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "CHART_RENDER",
+          "origin": "SYSTEM_RENDER",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_FINAL",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "市场关系示意图",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_01",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_02",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "GENERATED_IMAGE",
+          "origin": "GENERATED",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_PAID_GENERATED",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "暖调抽象封面",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_02",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_03",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "VOICE_AUDIO",
+          "origin": "USER_UPLOAD",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_USER_SOURCE",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "旁白试听片段",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_03",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_04",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "SOURCE_DOCUMENT",
+          "origin": "SOURCE_DOCUMENT",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_USER_SOURCE",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "研究原始文档",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_04",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_05",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "GENERATED_IMAGE",
+          "origin": "GENERATED",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_PAID_GENERATED",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "商业评论封面",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_05",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_06",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "SOURCE_IMAGE",
+          "origin": "USER_UPLOAD",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_USER_SOURCE",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "海蓝色视觉背景",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_06",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_07",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "CHART_RENDER",
+          "origin": "SYSTEM_RENDER",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_FINAL",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "表达框架图",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_07",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        },
+        {
+          "id": "ast_visual_08",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "sceneId": null,
+          "assetType": "SOURCE_DOCUMENT",
+          "origin": "SOURCE_DOCUMENT",
+          "provider": null,
+          "providerAssetId": null,
+          "status": "READY",
+          "retentionClass": "KEEP_USER_SOURCE",
+          "license": {
+            "type": "UNKNOWN",
+            "holder": null,
+            "attribution": null,
+            "sourceUrl": null,
+            "termsUrl": null,
+            "notes": "SYNTHETIC_VISUAL_ONLY；未核验授权",
+            "confirmedBy": null,
+            "confirmedAt": null
+          },
+          "metadata": {
+            "filename": "章节脚本草稿",
+            "visualFixtureOnly": true
+          },
+          "currentVersionId": "av_visual_08",
+          "createdAt": "2026-10-07T02:00:00.000Z",
+          "updatedAt": "2026-10-07T02:00:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/external-results": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/creator-identities": {
+      "items": [
+        {
+          "id": "ident_visual_01",
+          "workspaceId": "ws_visual_fixture",
+          "displayName": "Creator",
+          "avatarIdentity": null,
+          "voiceIdentity": null,
+          "brandIdentity": {
+            "id": "brand_visual_01",
+            "creatorIdentityId": "ident_visual_01",
+            "version": 1,
+            "name": "Creator Studio",
+            "themeTokens": {
+              "font": {
+                "heading": "Microsoft YaHei, sans-serif",
+                "body": "Microsoft YaHei, sans-serif"
+              },
+              "color": {
+                "background": "#0B1220",
+                "foreground": "#F5F8FF",
+                "accent": "#4F8CFF",
+                "positive": "#34C77B",
+                "negative": "#E5484D"
+              },
+              "spacing": {
+                "sm": 8,
+                "md": 16,
+                "lg": 32
+              },
+              "radius": {
+                "sm": 4,
+                "md": 8,
+                "lg": 16
+              },
+              "motion": {
+                "durationFastMs": 200,
+                "durationBaseMs": 400,
+                "easing": "ease-out"
+              }
+            },
+            "createdAt": "2026-10-07T03:00:00.000Z",
+            "updatedAt": "2026-10-07T03:00:00.000Z"
+          },
+          "createdAt": "2026-10-07T03:00:00.000Z",
+          "updatedAt": "2026-10-07T03:00:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/speech-profiles": {
+      "items": [
+        {
+          "id": "speech_visual_01",
+          "workspaceId": "ws_visual_fixture",
+          "name": "旁白风格示意",
+          "currentVersion": 1,
+          "latest": {
+            "id": "speechv_visual_01",
+            "speechProfileId": "speech_visual_01",
+            "version": 1,
+            "fields": {
+              "defaultSpeed": 1,
+              "energy": 0.6,
+              "tone": "专业、克制、清晰",
+              "pauseStyle": "关键数字前后短暂停顿",
+              "sentenceGapMs": 180,
+              "hookStyle": "高能量开场，快速进入重点",
+              "bodyStyle": "稳定节奏，长句拆分",
+              "explanationStyle": "复杂概念适度降速，逐层展开",
+              "quoteStyle": "与主叙述轻微语气区分",
+              "conclusionStyle": "稳定、清晰，避免过度情绪",
+              "numberReadingStyle": "数字逐位读清，单位紧跟其后",
+              "acronymPolicy": "常见缩写按字母读，财经术语按业内习惯",
+              "pronunciationDictionary": [],
+              "disfluencyPolicy": "不注入口头禅；保留自然停顿"
+            },
+            "createdAt": "2026-10-07T03:00:00.000Z"
+          },
+          "createdAt": "2026-10-07T03:00:00.000Z",
+          "updatedAt": "2026-10-07T03:00:00.000Z"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/projects/prj_visual_01/renders": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/publications": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/export-packages": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/handoffs": {
+      "items": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/analytics/learnings": {
+      "items": [],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/sources": {
+      "items": [
+        {
+          "id": "src_visual_01",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "url": "https://example.invalid/visual-fixture",
+          "title": "隔离视觉测试来源",
+          "publisher": "本地夹具",
+          "author": null,
+          "publishedAt": null,
+          "retrievedAt": "2026-10-07T04:00:00.000Z",
+          "contentHash": "1111111111111111111111111111111111111111111111111111111111111111",
+          "excerpt": "只用于页面布局比较；不提供可引用的事实。",
+          "snapshotKind": "fixture_reconstruction",
+          "note": "SYNTHETIC_VISUAL_ONLY"
+        },
+        {
+          "id": "src_visual_02",
+          "workspaceId": "ws_visual_fixture",
+          "projectId": "prj_visual_01",
+          "url": "https://example.invalid/visual-fixture-2",
+          "title": "图表数据说明（示意）",
+          "publisher": "本地夹具",
+          "author": null,
+          "publishedAt": null,
+          "retrievedAt": "2026-10-07T04:00:00.000Z",
+          "contentHash": "2222222222222222222222222222222222222222222222222222222222222222",
+          "excerpt": "无真实数值；正式数据尚未绑定。",
+          "snapshotKind": "fixture_reconstruction",
+          "note": "SYNTHETIC_VISUAL_ONLY"
+        }
+      ],
+      "nextCursor": null
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/packs": {
+      "items": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/narrative/np_visual_01/master-narration": null,
+    "GET /api/v1/workspaces/ws_visual_fixture/finance/data-sources": {
+      "items": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/finance/templates": {
+      "items": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/finance/artifacts": {
+      "items": []
+    },
+    "GET /api/v1/workspaces/ws_visual_fixture/creator-identities/ident_visual_01/voice-clone": {
+      "clone": null,
+      "samples": [],
+      "consent": null,
+      "boundToIdentity": false
+    }
+  },
+  "scriptedResponses": {
+    "POST /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/ai-edit/plan": {
+      "expectedBody": {
+        "prompt": "请仅修改选中分镜「增长，何时变成回报？」（sceneId: scn_visual_03）。用户意图：缩短当前旁白"
+      },
+      "response": {
+        "schemaVersion": "1.0",
+        "planVersion": "edit-plan-v1",
+        "planId": "plan_visual_01",
+        "projectId": "prj_visual_01",
+        "baseProjectRevision": 5,
+        "prompt": "请仅修改选中分镜「增长，何时变成回报？」（sceneId: scn_visual_03）。用户意图：缩短当前旁白",
+        "rationale": [
+          "仅用于隔离视觉回归；未运行模型或保存编辑。"
+        ],
+        "operations": [
+          {
+            "operation": {
+              "op": "update_scene",
+              "sceneId": "scn_visual_03",
+              "changes": {
+                "durationMs": 29000
+              }
+            },
+            "summary": "第三场时长缩短 1 秒（示意）",
+            "sceneId": "scn_visual_03",
+            "before": {
+              "durationMs": 30000
+            },
+            "after": {
+              "durationMs": 29000
+            }
+          }
+        ],
+        "impact": {
+          "scenesAdded": 0,
+          "scenesRemoved": 0,
+          "scenesModified": 1,
+          "durationDeltaMs": -1000,
+          "costImpact": "NONE",
+          "notes": [
+            "SYNTHETIC_VISUAL_ONLY"
+          ]
+        },
+        "warnings": [
+          "此计划仅为浏览器隔离夹具，未调用真实 Provider。"
+        ],
+        "generation": {
+          "method": "LLM",
+          "providerId": "synthetic-visual-fixture",
+          "modelVersion": null,
+          "promptVersion": null,
+          "attempts": 1
+        }
+      }
+    }
+  }
+}

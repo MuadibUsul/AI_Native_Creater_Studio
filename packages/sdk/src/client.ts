@@ -1869,10 +1869,11 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createContentRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      importDocument: async (workspaceId, projectId, input) => {
+      importDocument: async (workspaceId, projectId, input, mutation) => {
         // 注意：buildHeaders 返回 Headers 实例（展开 `{...headers}` 不会携带任何头）
         const headers = await buildHeaders(false);
         headers.set('content-type', input.contentType);
+        if (mutation?.idempotencyKey) headers.set('idempotency-key', mutation.idempotencyKey);
         const response = await doFetch(
           `${baseUrl}/api/v1/workspaces/${workspaceId}/projects/${projectId}/content/document?filename=${encodeURIComponent(input.filename)}`,
           {

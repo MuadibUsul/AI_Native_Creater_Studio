@@ -30,11 +30,14 @@
     "deploy:rehearsal": "node scripts/deploy-rehearsal.mjs",
     "recovery:rehearsal": "node scripts/recovery-rehearsal.mjs",
     "perf:baseline": "node scripts/perf-baseline.mjs",
-    "launch:gate": "node scripts/launch-gate-check.mjs"
+    "launch:gate": "node scripts/launch-gate-check.mjs",
+    "visual:qf": "node scripts/quiet-frame-visual.mjs",
+    "visual:qf:responsive": "node scripts/quiet-frame-responsive-audit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.12.0",
+    "playwright": "1.61.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"

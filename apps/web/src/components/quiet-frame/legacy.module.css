@@ -1,0 +1,21 @@
+.surface { color:var(--text); }
+.surface [class~="bg-slate-900/60"], .surface [class~="bg-slate-950/60"], .surface [class~="bg-slate-950"] { background:var(--panel); }
+.surface [class~="border-slate-800"], .surface [class~="border-slate-700"], .surface [class~="border-slate-600"] { border-color:var(--line); }
+.surface [class~="text-slate-100"], .surface [class~="text-slate-200"], .surface [class~="text-slate-300"] { color:var(--text); }
+.surface [class~="text-slate-400"], .surface [class~="text-slate-500"] { color:var(--muted); }
+.surface [class~="text-sky-300"], .surface [class~="text-sky-200"] { color:var(--accent); }
+.surface [class~="text-emerald-300"] { color:var(--good); }
+.surface [class~="text-amber-300"], .surface [class~="text-amber-200"] { color:var(--warn); }
+.surface [class~="text-rose-300"] { color:var(--bad); }
+.surface [class~="bg-amber-950/40"] { background:var(--warn-soft); border-color:#e9dbc0; }
+.surface [class~="bg-sky-600"] { background:var(--accent); color:#fff; }
+.surface input, .surface select, .surface textarea { color:var(--text); background:var(--panel); }
+.surface button { transition:background .18s var(--ease), transform .18s var(--ease); }
+.surface button:active { transform:scale(.985); }
+.surface [data-testid="team-management"] > h1:first-child, .surface [data-testid="credits-billing"] > h1:first-child { display:none; }
+.timeline { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
+.eventRow { display:flex; align-items:flex-start; gap:15px; padding:18px 0; border-top:1px solid var(--line); }
+.eventRow:first-child { border-top:0; padding-top:0; }
+.eventMarker { display:block; width:11px; height:11px; margin-top:7px; flex:none; border-radius:50%; background:var(--good); box-shadow:0 0 0 4px var(--good-soft); }
+.versionRow { border-top:1px solid var(--line); padding:13px 0; }
+.versionRow:first-child { border-top:0; }

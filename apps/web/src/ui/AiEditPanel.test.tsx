@@ -68,10 +68,11 @@ describe('AiEditPanel（P05-06）', () => {
   it('计划展示：操作摘要 + before→after 差异 + 理由 + 影响 + 成本 NONE', () => {
     renderWithClient(<AiEditPanel {...baseProps} plan={plan()} />, mockClient({}));
     expect(screen.getByTestId('ai-edit-operations').textContent).toContain('update_scene');
-    expect(screen.getByText(/durationMs: 2500 → 3300/)).toBeTruthy();
+    expect(screen.getByText('− durationMs: 2500')).toBeTruthy();
+    expect(screen.getByText('+ durationMs: 3300')).toBeTruthy();
     expect(screen.getByText(/理由：按用户意图延长开场/)).toBeTruthy();
     expect(screen.getByTestId('ai-edit-impact').textContent).toContain('时长 +800ms');
-    expect(screen.getByText(/成本影响：无（计划阶段零 Provider 调用）/)).toBeTruthy();
+    expect(screen.getByText('成本影响').parentElement?.textContent).toContain('无（计划阶段零 Provider 调用）');
   });
 
   it('锁定告警必须展示（AI 不得修改锁定场景）', () => {
@@ -93,6 +94,19 @@ describe('AiEditPanel（P05-06）', () => {
     await userEvent.click(screen.getByRole('button', { name: '拒绝计划' }));
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('失败重试预填原意图；应用期间禁用拒绝，避免把进行中的提交误当取消', async () => {
+    const onReject = vi.fn();
+    const view = renderWithClient(<AiEditPanel {...baseProps} initialPrompt="保留来源并缩短开场" plan={plan()} onReject={onReject} />, mockClient({}));
+    await userEvent.click(screen.getByRole('button', { name: '修改意图并重新生成计划' }));
+    expect((screen.getByLabelText('AI Edit 意图') as HTMLInputElement).value).toBe('保留来源并缩短开场');
+    view.unmount();
+    renderWithClient(<AiEditPanel {...baseProps} plan={plan()} applyPending onReject={onReject} />, mockClient({}));
+    const reject = screen.getByRole('button', { name: '拒绝计划' });
+    expect(reject.hasAttribute('disabled')).toBe(true);
+    await userEvent.click(reject);
+    expect(onReject).not.toHaveBeenCalled();
   });
 
   it('错误展示：生成失败（422）与应用失败（409 冲突 → 明确刷新提示）；整批不提交的文案明确', () => {
@@ -157,15 +171,16 @@ describe('Storyboard × AI Edit（计划不落库 → Apply 走编辑协议）',
     const editFn = vi.fn().mockResolvedValue({ project: { revision: 8 }, scenes: [], editEvents: [] });
 
     const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
       projects: { graph: graphFn, edit: editFn },
       narrative: { current: vi.fn().mockResolvedValue(null), aiEditPlan: planFn },
       assets: { downloadUrl: vi.fn().mockRejectedValue(new Error('none')) },
     });
 
     renderWithClient(<StoryboardPage />, client);
-    await screen.findByText('Storyboard');
-    await userEvent.type(screen.getByLabelText('AI Edit 意图'), '延长开场 800ms');
-    await userEvent.click(screen.getByRole('button', { name: '生成计划' }));
+    await screen.findByRole('region', { name: '导演工作台' });
+    await userEvent.type(screen.getByRole('textbox', { name: '修改当前分镜' }), '延长开场 800ms');
+    await userEvent.click(screen.getByRole('button', { name: '生成修改建议' }));
     await waitFor(() => expect(planFn).toHaveBeenCalledTimes(1));
     // 仅生成计划：未 Apply，编辑协议未被调用
     expect(editFn).not.toHaveBeenCalled();

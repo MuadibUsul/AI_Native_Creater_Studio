@@ -1,19 +1,22 @@
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import './globals.css';
+import './quiet-frame.css';
 import { Providers } from '@/app/providers';
+import { StudioShell } from '@/ui/StudioShell';
 
 export const metadata: Metadata = {
-  title: 'ANCS Creator Studio',
-  description: 'Article → Professional Long Video（V1）',
+  title: 'Creator Studio · ANCS',
+  description: '从文章到专业视频的创作工作台',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen bg-[#05070c] text-slate-100">
+      <body>
+        <a className="skiplink" href="#main">跳到主要内容</a>
         <Providers>
-          <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+          <StudioShell>{children}</StudioShell>
         </Providers>
       </body>
     </html>

@@ -23,11 +23,24 @@ export function createDb(connectionString: string): DbHandle {
   };
 }
 
-/** 本地开发默认连接（infra/docker-compose.dev.yml）；CI 通过 ANCS_TEST_DATABASE_URL 覆盖。 */
+/** 本地开发默认连接（infra/docker-compose.dev.yml）；测试不得使用它。 */
 export const DEFAULT_TEST_DATABASE_URL = 'postgres://ancs:ancs@localhost:55432/ancs_dev';
 
 export function resolveTestDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return env['ANCS_TEST_DATABASE_URL'] ?? env['DATABASE_URL'] ?? DEFAULT_TEST_DATABASE_URL;
+  const value = env['ANCS_TEST_DATABASE_URL'];
+  if (!value) throw new Error('测试必须显式设置 ANCS_TEST_DATABASE_URL，指向独立测试数据库。');
+  let databaseName: string;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') throw new Error('unsupported protocol');
+    databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  } catch {
+    throw new Error('ANCS_TEST_DATABASE_URL 格式无效。');
+  }
+  if (!/(^|[_-])test([_-]|$)/i.test(databaseName) || value === env['DATABASE_URL']) {
+    throw new Error('ANCS_TEST_DATABASE_URL 必须指向独立测试数据库，不能使用开发数据库。');
+  }
+  return value;
 }
 
 /** 便于日志输出的脱敏连接串（不泄漏密码）。 */

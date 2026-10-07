@@ -1,0 +1,128 @@
+[
+  {
+    "file": "screens/01-workspace.png",
+    "label": "创作台",
+    "route": "home",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/02-new-project.png",
+    "label": "新建作品",
+    "route": "new",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/03-script.png",
+    "label": "脚本与来源",
+    "route": "script",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/04-director.png",
+    "label": "导演工作台",
+    "route": "editor",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/05-assets.png",
+    "label": "素材库",
+    "route": "assets",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/06-identity.png",
+    "label": "创作者身份",
+    "route": "identity",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/07-review.png",
+    "label": "成片与审核",
+    "route": "render",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/08-publishing.png",
+    "label": "交付与发布",
+    "route": "publish",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/09-analytics.png",
+    "label": "作品表现",
+    "route": "analytics",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/10-extensions.png",
+    "label": "扩展工具",
+    "route": "extensions",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/11-settings.png",
+    "label": "服务与设置",
+    "route": "settings",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/12-landing.png",
+    "label": "产品首页",
+    "route": "welcome",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/13-design-system.png",
+    "label": "设计系统",
+    "route": "system",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/14-ai-diff.png",
+    "label": "AI 修改差异与确认",
+    "route": "editor + drawer",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/18-dark-workspace.png",
+    "label": "深色创作台",
+    "route": "home + dark",
+    "viewport": "1600 × 1000",
+    "dpr": 1.5
+  },
+  {
+    "file": "screens/15-mobile-workspace.png",
+    "label": "移动端创作台",
+    "route": "home",
+    "viewport": "390 × 844",
+    "dpr": 2
+  },
+  {
+    "file": "screens/16-mobile-director.png",
+    "label": "移动端分镜",
+    "route": "editor",
+    "viewport": "390 × 844",
+    "dpr": 2
+  },
+  {
+    "file": "screens/17-mobile-review.png",
+    "label": "移动端审核",
+    "route": "render",
+    "viewport": "390 × 844",
+    "dpr": 2
+  }
+]

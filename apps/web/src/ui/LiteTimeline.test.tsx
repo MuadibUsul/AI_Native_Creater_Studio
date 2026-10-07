@@ -203,14 +203,15 @@ describe('Storyboard × Lite Timeline（刷新后一致）', () => {
       return { project: { revision: 8 }, scenes: [], editEvents: [] };
     });
     const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
       projects: { graph: graphFn, edit: editFn },
-      assets: { downloadUrl: vi.fn().mockRejectedValue(new Error('no asset')) },
+      assets: { list: vi.fn().mockResolvedValue([]), downloadUrl: vi.fn().mockRejectedValue(new Error('no asset')) },
     });
 
     const { renderWithClient: render } = await import('@/test-utils.js');
     render(<StoryboardPage />, client);
-    await screen.findByText('Storyboard');
-    await userEvent.click(screen.getByText(/Lite Timeline（排序/));
+    await screen.findByRole('region', { name: '导演工作台' });
+    await userEvent.click(screen.getByRole('button', { name: '展开轻时间线' }));
     await waitFor(() => expect(graphFn).toHaveBeenCalledTimes(1));
 
     const duration = screen.getByLabelText('时长 0');
@@ -221,5 +222,41 @@ describe('Storyboard × Lite Timeline（刷新后一致）', () => {
     // 刷新：graph 重新查询，且服务端返回的新时长进入界面（不一致时不冒充一致）
     await waitFor(() => expect(graphFn).toHaveBeenCalledTimes(2));
     await waitFor(() => expect((screen.getByLabelText('时长 0') as HTMLInputElement).defaultValue).toBe('6500'));
+  });
+
+  it('项目新上传且未绑定的 READY 素材可替换空绑定媒体场景', async () => {
+    const { default: StoryboardPage } = await import('@/app/w/[workspaceId]/p/[projectId]/storyboard/page');
+    const graphFn = vi.fn().mockResolvedValue({
+      schemaVersion: '0.1', projectId: 'prj_1', projectRevision: 7,
+      channelSnapshot: {}, identitySnapshot: {},
+      format: { width: 1920, height: 1080, fps: 30, aspectRatio: '16:9' },
+      timeline: { durationMs: 4000, masterAudioAssetId: null },
+      scenes: [mediaScene({ position: 0, assetBindings: [], props: { assetId: null, assetUrl: null, headline: '待替换' } })],
+      captions: [], audioTracks: [], overlays: [], sourceReferences: [],
+    });
+    const editFn = vi.fn().mockResolvedValue({ project: { revision: 8 }, scenes: [], editEvents: [] });
+    const listAssets = vi.fn().mockResolvedValue([
+      { id: 'ast_fresh', assetType: 'SOURCE_IMAGE', status: 'READY', currentVersionId: 'av_fresh' },
+      { id: 'ast_pending', assetType: 'SOURCE_IMAGE', status: 'PROCESSING', currentVersionId: null },
+    ]);
+    renderWithClient(<StoryboardPage />, mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
+      projects: { graph: graphFn, edit: editFn },
+      assets: { list: listAssets },
+    }));
+    await screen.findByRole('region', { name: '导演工作台' });
+    await userEvent.click(screen.getByRole('button', { name: '展开轻时间线' }));
+    await waitFor(() => expect(listAssets).toHaveBeenCalledWith('ws_1', { projectId: 'prj_1' }));
+    const selector = screen.getByLabelText('替换素材 0') as HTMLSelectElement;
+    await waitFor(() => expect(selector.disabled).toBe(false));
+    expect(selector.querySelector('option[value="ast_fresh"]')).toBeTruthy();
+    expect(selector.querySelector('option[value="ast_pending"]')).toBeNull();
+    await userEvent.selectOptions(selector, 'ast_fresh');
+    await waitFor(() => expect(editFn).toHaveBeenCalledTimes(1));
+    expect(editFn.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      baseProjectRevision: 7,
+      expectedSceneRevisions: { scn_media: 1 },
+      operations: [{ op: 'replace_asset', sceneId: 'scn_media', role: 'visual', newAssetId: 'ast_fresh' }],
+    }));
   });
 });

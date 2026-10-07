@@ -9,7 +9,9 @@ import { createClient, type AncsClient } from '@ancs/sdk';
  * 测试通过 AncsClientProvider 注入脚本化客户端，页面组件不直接构造 SDK。
  */
 
-export const DEFAULT_API_BASE_URL = 'http://localhost:3001';
+// Browser requests stay on the Web origin. Next rewrites /api/v1 to the API
+// service; this also keeps session cookies usable across local ports.
+export const DEFAULT_API_BASE_URL = '';
 
 export function createWebClient(baseUrl?: string): AncsClient {
   const resolved = baseUrl ?? process.env['NEXT_PUBLIC_ANCS_API_URL'] ?? DEFAULT_API_BASE_URL;

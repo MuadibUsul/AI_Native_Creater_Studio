@@ -53,6 +53,8 @@ describe('SignIn', () => {
     const signIn = vi.fn().mockRejectedValue(apiError(401, 'INVALID_GRANT', '邮箱或密码不正确'));
     const client = mockClient({ auth: { signIn } });
     renderWithClient(<SignInPage />, client);
+    expect(screen.getByRole('main').id).toBe('main');
+    expect(screen.getByRole('button', { name: '登录' }).classList.contains('primary')).toBe(true);
     await userEvent.type(screen.getByLabelText('邮箱'), 'a@test.local');
     await userEvent.type(screen.getByLabelText('密码'), 'password-1234');
     await userEvent.click(screen.getByRole('button', { name: '登录' }));

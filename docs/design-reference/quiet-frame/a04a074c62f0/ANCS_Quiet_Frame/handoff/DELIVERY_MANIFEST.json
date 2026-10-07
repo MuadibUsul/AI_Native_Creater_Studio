@@ -1,0 +1,165 @@
+{
+  "files": [
+    {
+      "path": "ANCS_Mobile_Overview.png",
+      "bytes": 440337,
+      "sha256": "bd9112f9ace386dd57b5c3feefca4cb576d989cebb385546e68631f8dd2416ec"
+    },
+    {
+      "path": "ANCS_Quiet_Frame_Overview.png",
+      "bytes": 703167,
+      "sha256": "52c1d4583efc287d423ffe2475919d649aa4f53a628a8fc5cfba42e5dee08152"
+    },
+    {
+      "path": "DESIGN_REVIEW_AND_SPEC.zh-CN.md",
+      "bytes": 21243,
+      "sha256": "acc44cff3535c3ec46d268cb6f9919316b5830b74e13e0d91dbe9df7f8e6a7de"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3695,
+      "sha256": "32741c1cda0dfd53c78e74fb0854354924345fdd94cd99fb4e2d6c041d00fa83"
+    },
+    {
+      "path": "handoff/IMPLEMENTATION_HANDOFF.md",
+      "bytes": 14118,
+      "sha256": "433905ca082a99724b5cf60416a4af78fd7339d2ebd3e8267b42251f0b71ddf0"
+    },
+    {
+      "path": "handoff/QA_REPORT.json",
+      "bytes": 11888,
+      "sha256": "95be83ffa9594daf6e71f1afa82f9341906fcb85b56f6ecc04d07556e18d3c99"
+    },
+    {
+      "path": "handoff/QA_REPORT.md",
+      "bytes": 2975,
+      "sha256": "b1e297b08243dc6b9a3cbd061214a5919225022e16e837c7c574b3721188ec10"
+    },
+    {
+      "path": "handoff/SCREEN_MANIFEST.json",
+      "bytes": 2727,
+      "sha256": "c084a6c8f0a9211789eaa5c99d6992b802cbd5315a98f00919bbf52a7f019f97"
+    },
+    {
+      "path": "handoff/TOKEN_CONTRAST.json",
+      "bytes": 564,
+      "sha256": "a0465159e951bf9ed3936741663911a6bd4b8f1e833c00ca2692e386486b55f4"
+    },
+    {
+      "path": "handoff/capture_screens.py",
+      "bytes": 3091,
+      "sha256": "be2131d82f0c48458b99983771296147feaa54eb02e89b4daa6a47532921fadc"
+    },
+    {
+      "path": "handoff/tokens.css",
+      "bytes": 1864,
+      "sha256": "9ec8e23a96dab77091f8cd43d0d0297f5064822e9a826b8451c5e3ac963700d4"
+    },
+    {
+      "path": "handoff/tokens.json",
+      "bytes": 1796,
+      "sha256": "ddfd3b341e909916d0bd77c71b257d6c6c43b00533bfa0524ff804507f23c47b"
+    },
+    {
+      "path": "handoff/verify_prototype.py",
+      "bytes": 7420,
+      "sha256": "f8bbda59b1d2843a4bd990d9375de77404a57302efe511573a33ddd3eea29167"
+    },
+    {
+      "path": "index.html",
+      "bytes": 125641,
+      "sha256": "2bfa1c1770f15831ac38f9cd31568b92219fde1e0ea6e4f895592e7e6681c254"
+    },
+    {
+      "path": "screens/01-workspace.png",
+      "bytes": 689884,
+      "sha256": "a4b1c19be550ce70b937a1aa4be238ab97078ccb0d9da68821c62248f39c2fe9"
+    },
+    {
+      "path": "screens/02-new-project.png",
+      "bytes": 241973,
+      "sha256": "c8c24478115f3d62024536471ba8da340dc16ee9e50b907207e96ace68fd0094"
+    },
+    {
+      "path": "screens/03-script.png",
+      "bytes": 343595,
+      "sha256": "db5990d32ab94bc9e8c994fe0a6cec15d41d1761f0392f3561e2826e803ebc56"
+    },
+    {
+      "path": "screens/04-director.png",
+      "bytes": 700922,
+      "sha256": "652a010a4dbaaf5e11623888fca40ef27f9d8890bb193f994d0a987bb93510e4"
+    },
+    {
+      "path": "screens/05-assets.png",
+      "bytes": 635987,
+      "sha256": "44eda9fc8d9fd908745f63777d4b9ea2752797ab8bdd439c81b7781544a87703"
+    },
+    {
+      "path": "screens/06-identity.png",
+      "bytes": 392064,
+      "sha256": "8038e735acbe27b676ee1c130b392b26c5c08c22717309f1a5a3eae3a10bac08"
+    },
+    {
+      "path": "screens/07-review.png",
+      "bytes": 771488,
+      "sha256": "a191734413de827289e5b6c5ecde97f4d983c7804b98c291b198de7d492be1b3"
+    },
+    {
+      "path": "screens/08-publishing.png",
+      "bytes": 469558,
+      "sha256": "23aefdd69e985f41126b59b8ff80268ae2f0efe162572a4627f9efa782e2c992"
+    },
+    {
+      "path": "screens/09-analytics.png",
+      "bytes": 268397,
+      "sha256": "ae61ad61634178763896f98ee1fb0e347eeba0972fa70ffcd2c6654e88fdf8fd"
+    },
+    {
+      "path": "screens/10-extensions.png",
+      "bytes": 229662,
+      "sha256": "0c1ff6ae8aa9f82cb0c96c50283082514fd44dc3a51266a83b53d78a35e8862c"
+    },
+    {
+      "path": "screens/11-settings.png",
+      "bytes": 242997,
+      "sha256": "4e5fd5496a0fa977f324f92404dfcce2d3cc49aab27767c49bc659c8e2a4f2e7"
+    },
+    {
+      "path": "screens/12-landing.png",
+      "bytes": 406357,
+      "sha256": "2fe077213cee31d57a1d67ae28fe115146f2b5232d1da8ae9c02005dc8939b3f"
+    },
+    {
+      "path": "screens/13-design-system.png",
+      "bytes": 264344,
+      "sha256": "1439957a7e3292bca040f6abeaa0a0e157d06ca99b9ea6d57abfec028605276a"
+    },
+    {
+      "path": "screens/14-ai-diff.png",
+      "bytes": 660653,
+      "sha256": "b84216f4563f8ce91ec44a7a7b906b3a318a92b943526d0f80e0a42dd5c1a1d2"
+    },
+    {
+      "path": "screens/15-mobile-workspace.png",
+      "bytes": 818838,
+      "sha256": "b54eb6d5c54b494c6b4ab6c2ce0eb7938d833280d32508281a7713eea048ed81"
+    },
+    {
+      "path": "screens/16-mobile-director.png",
+      "bytes": 336401,
+      "sha256": "3ca7d317177a7fe42c212d43461c746637f03b97cfa4f2ad8b16350193170f7e"
+    },
+    {
+      "path": "screens/17-mobile-review.png",
+      "bytes": 447913,
+      "sha256": "6a60422065dd09da24c16afaf06ba26c1bbd2f410f5d4743568984864db07373"
+    },
+    {
+      "path": "screens/18-dark-workspace.png",
+      "bytes": 695587,
+      "sha256": "cef58f0a9a213eabdc89efcc28c92db95c5c3403b3d2418f1919ca3062c0a23c"
+    }
+  ],
+  "notes": "No font files, credentials, production source copy or real video included."
+}

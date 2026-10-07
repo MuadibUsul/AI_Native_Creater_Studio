@@ -1,9 +1,9 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { AnalyticsWorkspace } from '@/ui/AnalyticsWorkspace';
+import { DeliveryAnalytics } from '@/components/quiet-frame/delivery-analytics';
 
 export default function AnalyticsPage() {
-  const params = useParams<{ workspaceId: string; projectId: string }>();
-  return <AnalyticsWorkspace workspaceId={params.workspaceId} projectId={params.projectId} />;
+  const { workspaceId, projectId } = useParams<{ workspaceId: string; projectId: string }>();
+  return <DeliveryAnalytics workspaceId={workspaceId} projectId={projectId} />;
 }
