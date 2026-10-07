@@ -81,7 +81,6 @@ async function makeProjectWithAsset(client: AncsClient): Promise<{ workspaceId: 
   const project = await client.projects.create(workspace.id, { title: '利率周报', channelId: channel.id });
   // 直接落一个资产（Artifact 绑定目标；无需走上传全链）
   await handle.db.execute(
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     (
       await import('drizzle-orm')
     ).sql`insert into assets (id, workspace_id, project_id, asset_type, origin, provider, provider_asset_id, status, retention_class, license, metadata, current_version_id)

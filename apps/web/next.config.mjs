@@ -1,7 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // 业务 API 独立于 Next.js（规范 §29.2）：Web 只作为客户端，经 @ancs/sdk 访问
+  // The API remains a separate service. Browser traffic uses the Web origin so
+  // session cookies and preflight behavior are consistent in local development.
+  async rewrites() {
+    const apiOrigin = (process.env.ANCS_API_INTERNAL_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+    return [{ source: '/api/v1/:path*', destination: `${apiOrigin}/api/v1/:path*` }];
+  },
   transpilePackages: ['@ancs/sdk', '@ancs/contracts', '@ancs/scene-components'],
 };
 

@@ -1,0 +1,29 @@
+{
+  "scope": "Only these flat token pairs; not a complete WCAG audit. Control border is a proposed production token.",
+  "pairs": [
+    {
+      "pair": "Primary / surface",
+      "ratio": 15.85
+    },
+    {
+      "pair": "Secondary / bg",
+      "ratio": 5.05
+    },
+    {
+      "pair": "Accent / surface",
+      "ratio": 5.74
+    },
+    {
+      "pair": "Success / success surface",
+      "ratio": 5.04
+    },
+    {
+      "pair": "Warning / warning surface",
+      "ratio": 4.87
+    },
+    {
+      "pair": "Control border / surface",
+      "ratio": 3.34
+    }
+  ]
+}

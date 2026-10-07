@@ -22,20 +22,21 @@ const learning = {
 
 function makeClient() {
   const actOnLearning = vi.fn().mockResolvedValue({ ...learning, status: 'ACCEPTED', acceptedAt: now });
+  const listDataSources = vi.fn().mockRejectedValue(new Error('Finance 暂不可用'));
   const client = mockClient({
     publications: { list: vi.fn().mockResolvedValue({ items: [publication] }), listAnalytics: vi.fn().mockResolvedValue({ items: [performance] }), collectAnalytics: vi.fn() },
     analytics: {
       listScenes: vi.fn().mockResolvedValue({ items: [{ id: 'sp_1', workspaceId: 'ws_1', projectId: 'prj_1', projectVersionId: 'pv_1', sceneId: 'scn_1', videoPerformanceId: 'vperf_1', sceneType: 'LINE_CHART', position: 0, startMs: 0, durationMs: 30000, retentionRate: 0.82, interpretation: 'CORRELATION_ONLY', derivation: { method: 'TIME_WINDOW_AVERAGE', sampleCount: 1 }, createdAt: now }] }),
       listLearnings: vi.fn().mockResolvedValue({ items: [learning] }), attributeScenes: vi.fn(), generateLearnings: vi.fn(), actOnLearning,
     },
-    finance: { listDataSources: vi.fn().mockResolvedValue({ items: [] }), listTemplates: vi.fn().mockResolvedValue({ items: [] }), listArtifacts: vi.fn().mockResolvedValue({ items: [] }), createDataSource: vi.fn(), createTemplate: vi.fn(), generateArtifact: vi.fn() },
+    finance: { listDataSources },
   });
-  return { client, actOnLearning };
+  return { client, actOnLearning, listDataSources };
 }
 
 describe('AnalyticsWorkspace（P14 Web 完成面）', () => {
   it('缺失指标显示未知、场景归因声明相关性，学习操作不声称修改 Channel', async () => {
-    const { client, actOnLearning } = makeClient();
+    const { client, actOnLearning, listDataSources } = makeClient();
     renderWithClient(<AnalyticsWorkspace workspaceId="ws_1" projectId="prj_1" />, client);
     expect(await screen.findByText('1,200')).toBeTruthy();
     expect(screen.getAllByText('未知（平台未返回）').length).toBeGreaterThanOrEqual(2);
@@ -43,17 +44,6 @@ describe('AnalyticsWorkspace（P14 Web 完成面）', () => {
     expect(screen.getByText(/不会静默修改 Channel/)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: '接受' }));
     await waitFor(() => expect(actOnLearning).toHaveBeenCalledWith('ws_1', 'prj_1', 'lrn_1', { action: 'ACCEPT' }));
-  });
-
-  it('提供六类 Finance 图表且不允许用缺失值生成', async () => {
-    const { client } = makeClient();
-    renderWithClient(<AnalyticsWorkspace workspaceId="ws_1" projectId="prj_1" />, client);
-    await screen.findByText('Finance Pack');
-    const selector = screen.getByLabelText('可视化类型');
-    expect(selector.querySelectorAll('option')).toHaveLength(6);
-    await userEvent.type(screen.getByLabelText('产物标题'), '政策利率路径');
-    await userEvent.type(screen.getByLabelText('数据标签'), '2026 Q4');
-    await userEvent.click(screen.getByRole('button', { name: '生成并冻结快照' }));
-    expect(await screen.findByText(/缺失数据不可生成图表/)).toBeTruthy();
+    expect(listDataSources).not.toHaveBeenCalled();
   });
 });

@@ -77,7 +77,7 @@ describe('Assets', () => {
 
   it('上传失败（服务端校验）：明确原因与重试动作', async () => {
     const upload = vi.fn().mockRejectedValue(apiError(415, 'UNSUPPORTED_MEDIA_TYPE', '实际内容与声明不符'));
-    const client = mockClient({ assets: { list: vi.fn().mockResolvedValue([]), upload } });
+    const client = mockClient({ assets: { list: vi.fn().mockResolvedValue([]), upload }, billing: { externalResults: vi.fn().mockResolvedValue([]) } });
     renderWithClient(<AssetsPage />, client);
     await screen.findByText('还没有资产');
     const fileInput = screen.getByLabelText('选择文件');

@@ -1,0 +1,613 @@
+{
+  "artifact": "Quiet Frame standalone prototype; not production repo",
+  "date": "2026-10-07",
+  "method": "Chromium via Playwright page.set_content; no backend, network, origin persistence or real media testing",
+  "checks": [
+    {
+      "name": "13 页面 × 5 视口，无整页横向溢出",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "已有项目时仍有新建入口",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "首页正文导入保留输入",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "无效 URL 不进入生成流程",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "有效 URL 只记录，不伪造抓取",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "生成入口明确打开预置示例",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "脚本锁定成为只读",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "锁定脚本拒绝应用 AI 修改",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "确认 AI 修改后写入本地脚本",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "脚本确认进入分镜",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "拒绝或关闭 AI 修改不改变旁白",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "AI 差异确认后改变旁白",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "轻时间线按需展开",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "锁定分镜拒绝应用",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "未勾选审核不能批准",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "确认后进入交付演示",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "仅下载真实存在的 TXT 样例，不伪造 MP4",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "编辑使本地批准状态失效",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "未批准时导出被拦截",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "授权确认框未勾选不能继续",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "授权流程不假装创建真实克隆",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "命令搜索筛选页面",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Esc 关闭对话层",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "原型没有收集 API Key 的输入框",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "深浅主题可切换",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "手机导航可展开",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "没有 JavaScript 未处理异常",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "没有外部网络请求",
+      "passed": true,
+      "details": ""
+    }
+  ],
+  "viewportScans": [
+    {
+      "route": "home",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1013,
+      "passed": true
+    },
+    {
+      "route": "new",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "script",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1067,
+      "passed": true
+    },
+    {
+      "route": "editor",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "assets",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1147,
+      "passed": true
+    },
+    {
+      "route": "identity",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "render",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1072,
+      "passed": true
+    },
+    {
+      "route": "publish",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1026,
+      "passed": true
+    },
+    {
+      "route": "analytics",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1105,
+      "passed": true
+    },
+    {
+      "route": "extensions",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "settings",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1119,
+      "passed": true
+    },
+    {
+      "route": "welcome",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1091,
+      "passed": true
+    },
+    {
+      "route": "system",
+      "width": 1600,
+      "scrollWidth": 1600,
+      "height": 1147,
+      "passed": true
+    },
+    {
+      "route": "home",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "new",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "script",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1146,
+      "passed": true
+    },
+    {
+      "route": "editor",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "assets",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1027,
+      "passed": true
+    },
+    {
+      "route": "identity",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1009,
+      "passed": true
+    },
+    {
+      "route": "render",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1031,
+      "passed": true
+    },
+    {
+      "route": "publish",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "analytics",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1115,
+      "passed": true
+    },
+    {
+      "route": "extensions",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "settings",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1119,
+      "passed": true
+    },
+    {
+      "route": "welcome",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1091,
+      "passed": true
+    },
+    {
+      "route": "system",
+      "width": 1280,
+      "scrollWidth": 1280,
+      "height": 1147,
+      "passed": true
+    },
+    {
+      "route": "home",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "new",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "script",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1206,
+      "passed": true
+    },
+    {
+      "route": "editor",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "assets",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1234,
+      "passed": true
+    },
+    {
+      "route": "identity",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "render",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1048,
+      "passed": true
+    },
+    {
+      "route": "publish",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1105,
+      "passed": true
+    },
+    {
+      "route": "analytics",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1134,
+      "passed": true
+    },
+    {
+      "route": "extensions",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1000,
+      "passed": true
+    },
+    {
+      "route": "settings",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1112,
+      "passed": true
+    },
+    {
+      "route": "welcome",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1091,
+      "passed": true
+    },
+    {
+      "route": "system",
+      "width": 768,
+      "scrollWidth": 768,
+      "height": 1175,
+      "passed": true
+    },
+    {
+      "route": "home",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1836,
+      "passed": true
+    },
+    {
+      "route": "new",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1510,
+      "passed": true
+    },
+    {
+      "route": "script",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1874,
+      "passed": true
+    },
+    {
+      "route": "editor",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 873,
+      "passed": true
+    },
+    {
+      "route": "assets",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1492,
+      "passed": true
+    },
+    {
+      "route": "identity",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1667,
+      "passed": true
+    },
+    {
+      "route": "render",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1632,
+      "passed": true
+    },
+    {
+      "route": "publish",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1755,
+      "passed": true
+    },
+    {
+      "route": "analytics",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1666,
+      "passed": true
+    },
+    {
+      "route": "extensions",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 2006,
+      "passed": true
+    },
+    {
+      "route": "settings",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 1184,
+      "passed": true
+    },
+    {
+      "route": "welcome",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 875,
+      "passed": true
+    },
+    {
+      "route": "system",
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 2035,
+      "passed": true
+    },
+    {
+      "route": "home",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1762,
+      "passed": true
+    },
+    {
+      "route": "new",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1605,
+      "passed": true
+    },
+    {
+      "route": "script",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 2128,
+      "passed": true
+    },
+    {
+      "route": "editor",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 877,
+      "passed": true
+    },
+    {
+      "route": "assets",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1593,
+      "passed": true
+    },
+    {
+      "route": "identity",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1722,
+      "passed": true
+    },
+    {
+      "route": "render",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1656,
+      "passed": true
+    },
+    {
+      "route": "publish",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1889,
+      "passed": true
+    },
+    {
+      "route": "analytics",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1841,
+      "passed": true
+    },
+    {
+      "route": "extensions",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 2093,
+      "passed": true
+    },
+    {
+      "route": "settings",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 1322,
+      "passed": true
+    },
+    {
+      "route": "welcome",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 875,
+      "passed": true
+    },
+    {
+      "route": "system",
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 2246,
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "networkRequests": [],
+  "passed": true,
+  "limitations": [
+    "No production build or automated repo tests run",
+    "No real LLM, video render, QA, billing, OAuth, cloning or publishing",
+    "LocalStorage persistence not validated: in-memory browser content fixture used",
+    "Not a full WCAG audit or cross-browser device certification"
+  ]
+}

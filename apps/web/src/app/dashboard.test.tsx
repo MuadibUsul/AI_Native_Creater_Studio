@@ -23,6 +23,20 @@ describe('Dashboard', () => {
     expect(screen.getByRole('button', { name: '前往登录' })).toBeTruthy();
   });
 
+  it('会话服务故障：保留局部重试入口，不显示已登录创作台', async () => {
+    const getSession = vi.fn().mockRejectedValueOnce(apiError(503, 'UNAVAILABLE')).mockResolvedValue(session());
+    const client = mockClient({
+      auth: { session: getSession },
+      workspaces: { list: vi.fn().mockResolvedValue([workspace('ws_1', '财经观察')]) },
+      projects: { list: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect(await screen.findByText('会话暂不可用')).toBeTruthy();
+    expect(screen.queryByText('继续创作')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+  });
+
   it('工作区为空：创建入口可用（调用 SDK）', async () => {
     const create = vi.fn().mockResolvedValue(workspace('ws_new', '财经观察'));
     const list = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([workspace('ws_new', '财经观察')]);
@@ -67,8 +81,10 @@ describe('Dashboard', () => {
       },
     });
     renderWithClient(<DashboardPage />, client);
-    expect(await screen.findByText('利率周报视频')).toBeTruthy();
-    expect(screen.getByText(/revision 3/)).toBeTruthy();
+    const projectLink = await screen.findByRole('link', { name: /利率周报视频/ });
+    expect(projectLink.getAttribute('href')).toBe('/w/ws_1/p/prj_1/script');
+    expect(screen.getByText('草稿')).toBeTruthy();
+    expect(screen.getByText(/目标 时长待定 · 16:9/)).toBeTruthy();
   });
 
   it('失败：错误块可重试（重新调用 SDK）', async () => {

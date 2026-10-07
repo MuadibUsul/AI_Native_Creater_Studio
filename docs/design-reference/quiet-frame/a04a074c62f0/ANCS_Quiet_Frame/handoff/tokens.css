@@ -1,0 +1,48 @@
+/* Quiet Frame v1.0 — UI-only design tokens. Do not import business demo state.
+   Integrate into existing Tailwind/Next theme incrementally; no font files included. */
+:root {
+  color-scheme: light;
+  --qf-bg: #f6f6f4;
+  --qf-surface: #ffffff;
+  --qf-navigation: #eeefed;
+  --qf-text: #202322;
+  --qf-text-secondary: #646b68;
+  --qf-separator: #e1e4e0;
+  --qf-control-border: #858f88;
+  --qf-accent: #1768b2;
+  --qf-accent-surface: #eaf3fc;
+  --qf-success: #34735b;
+  --qf-success-surface: #edf5ef;
+  --qf-warning: #8b641e;
+  --qf-warning-surface: #fbf4e7;
+  --qf-danger: #a23a3a;
+  --qf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --qf-radius-control: 8px;
+  --qf-radius-panel: 16px;
+  --qf-radius-dialog: 18px;
+  --qf-space-1: 4px; --qf-space-2: 8px; --qf-space-3: 12px;
+  --qf-space-4: 16px; --qf-space-6: 24px; --qf-space-8: 32px;
+  --qf-space-10: 40px; --qf-space-12: 48px; --qf-space-16: 64px;
+  --qf-sidebar: 208px;
+  --qf-scene-rail: 198px;
+  --qf-inspector: 277px;
+  --qf-feedback-duration: 160ms;
+  --qf-drawer-duration: 220ms;
+  --qf-ease: cubic-bezier(.2,.7,.2,1);
+  --qf-shadow-panel: 0 8px 28px rgb(26 33 28 / 2.5%);
+  --qf-shadow-overlay: 0 24px 72px rgb(16 37 23 / 16%);
+}
+/* Initial dark semantic set; audit every component pair, not just these tokens. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --qf-bg: #171d19; --qf-surface: #202923; --qf-navigation: #1d261f;
+  --qf-text: #edf2ec; --qf-text-secondary: #b6c2b7;
+  --qf-separator: #3c493e; --qf-control-border: #7f9184;
+  --qf-accent: #9dc8f1; --qf-accent-surface: #263c4c;
+  --qf-success: #b3d4be; --qf-success-surface: #273c30;
+  --qf-warning: #e7c585; --qf-warning-surface: #433a27;
+  --qf-danger: #f2a9a9;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --qf-feedback-duration: 0ms; --qf-drawer-duration: 0ms; }
+}

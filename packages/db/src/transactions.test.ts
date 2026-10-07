@@ -1,8 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { createDb, redactDatabaseUrl, resolveTestDatabaseUrl, type DbHandle } from './client.js';
+import { createDb, DEFAULT_TEST_DATABASE_URL, redactDatabaseUrl, resolveTestDatabaseUrl, type DbHandle } from './client.js';
 
 const TABLE = 'p0003_smoke_items';
+
+it('测试数据库连接必须显式隔离，拒绝开发库', () => {
+  expect(() => resolveTestDatabaseUrl({})).toThrow(/ANCS_TEST_DATABASE_URL/);
+  expect(() => resolveTestDatabaseUrl({ ANCS_TEST_DATABASE_URL: DEFAULT_TEST_DATABASE_URL })).toThrow(/独立测试数据库/);
+  expect(() => resolveTestDatabaseUrl({ ANCS_TEST_DATABASE_URL: 'https://localhost/ancs_test' })).toThrow(/格式无效/);
+  const isolated = 'postgres://localhost:5432/ancs_test';
+  expect(resolveTestDatabaseUrl({ ANCS_TEST_DATABASE_URL: isolated })).toBe(isolated);
+  expect(() => resolveTestDatabaseUrl({ ANCS_TEST_DATABASE_URL: isolated, DATABASE_URL: isolated })).toThrow(/独立测试数据库/);
+});
 
 /**
  * P00-03 兼容性验证：Drizzle 事务语义（真实 PostgreSQL）。

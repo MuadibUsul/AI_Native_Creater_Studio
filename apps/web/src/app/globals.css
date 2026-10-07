@@ -1,10 +1,4 @@
 @import "tailwindcss";
 
 /* Web 客户端只做展示与提交（§76）：权威规则在 domain/API 层 */
-:root {
-  color-scheme: dark;
-}
-body {
-  background-color: #05070c;
-  color: #e5ecf8;
-}
+:root { color-scheme: light; }

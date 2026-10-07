@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { mockClient, renderWithClient } from '@/test-utils.js';
+import { mockClient as buildMockClient, renderWithClient } from '@/test-utils.js';
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ workspaceId: 'ws_1', projectId: 'prj_1' }),
@@ -12,11 +12,19 @@ vi.mock('next/link', () => ({
 }));
 
 const { default: RenderPage } = await import('@/app/w/[workspaceId]/p/[projectId]/render/page.js');
+const mockClient = (overrides: Record<string, unknown>) => buildMockClient({
+  workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
+  narrative: {
+    current: vi.fn().mockResolvedValue({ id: 'plan_1', revision: 1 }),
+    masterNarration: vi.fn().mockResolvedValue({ id: 'mn_1', narrativePlanRevision: 1, assetId: 'ast_voice', assetVersionId: 'av_voice', totalDurationMs: 4500, alignmentMethod: 'PROVIDER_TIMESTAMPS', segments: [], warnings: [] }),
+  },
+  ...overrides,
+});
 
 /**
  * Render 与审核界面（P07-05）状态矩阵：
  * - 预检报告（含失败项）与渲染队列状态；
- * - 创建渲染调用 SDK（档位）；
+ * - 缺少后端报价与能力确认时，内容预检不替代创建闸门；
  * - QA 报告逐项展示（阻止项/警告/跳过）+ QA 状态可重触发；
  * - READY 明确"等待人工批准"（不提供假批准按钮——批准属 P07-06）。
  */
@@ -56,7 +64,7 @@ const qaReport = (checks: { id: string; category: string; severity: string; stat
 });
 
 describe('Render 与审核（P07-05）', () => {
-  it('空态 + 创建渲染：调用 SDK（所选档位）并刷新列表', async () => {
+  it('空态可以选择规格，但缺后端报价和能力确认时不提交渲染', async () => {
     const create = vi.fn().mockResolvedValue(renderRecord());
     const client = mockClient({
       renders: { list: vi.fn().mockResolvedValue([]), create, qa: vi.fn(), qaReport: vi.fn().mockResolvedValue(null), approval: vi.fn().mockResolvedValue(null) },
@@ -64,9 +72,11 @@ describe('Render 与审核（P07-05）', () => {
     });
     renderWithClient(<RenderPage />, client);
     expect(await screen.findByText(/还没有渲染/)).toBeTruthy();
-    await userEvent.selectOptions(screen.getByLabelText('渲染档位'), 'DRAFT_720');
-    await userEvent.click(screen.getByRole('button', { name: '创建渲染' }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', 'prj_1', { profile: 'DRAFT_720' }));
+    await userEvent.selectOptions(screen.getByLabelText('渲染规格'), 'DRAFT_720');
+    await userEvent.click(screen.getByRole('button', { name: '创建新渲染' }));
+    expect((screen.getByLabelText('渲染规格') as HTMLSelectElement).value).toBe('DRAFT_720');
+    expect(screen.getByText(/尚未提供所选规格的费用报价/)).toBeTruthy();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('渲染前预检：展示逐项检查与失败原因（阻止项）', async () => {
@@ -84,7 +94,7 @@ describe('Render 与审核（P07-05）', () => {
     expect(await screen.findByTestId('qa-report')).toBeTruthy();
     expect(screen.getByTestId('qa-check-SCENE_STATUS_NO_PLACEHOLDER')).toBeTruthy();
     expect(screen.getByText(/存在未解决的占位场景（2 个）/)).toBeTruthy();
-    expect(screen.getByText(/FAIL · 阻止项失败 1/)).toBeTruthy();
+    expect(screen.getByText(/阻止项 1 · 警告 0/)).toBeTruthy();
   });
 
   it('QA 报告：阻止项失败与显式 SKIP 都可见；QA 状态可重新触发', async () => {
@@ -100,9 +110,9 @@ describe('Render 与审核（P07-05）', () => {
     });
     renderWithClient(<RenderPage />, client);
     expect(await screen.findByTestId('qa-check-AUDIO_TRACK_PRESENT')).toBeTruthy();
-    expect(screen.getByText('成片缺少音轨（§86）')).toBeTruthy();
+    expect(screen.getAllByText('成片缺少音轨（§86）').length).toBeGreaterThan(0);
     expect(screen.getByTestId('qa-check-AI_VISUAL_QA')).toBeTruthy();
-    expect(screen.getByText(/跳过（记录）/)).toBeTruthy();
+    expect(screen.getByText(/跳过 1/)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: '重新触发 QA' }));
     await waitFor(() => expect(qa).toHaveBeenCalledWith('ws_1', 'rnd_1'));
   });
@@ -134,11 +144,13 @@ describe('Render 与审核（P07-05）', () => {
     });
     renderWithClient(<RenderPage />, client);
     expect(await screen.findByTestId('approval-panel')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: '批准' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /我已核对这个真实渲染版本/ }));
+    await userEvent.click(screen.getByRole('button', { name: '批准这一版' }));
     await waitFor(() => expect(decideApproval).toHaveBeenCalledWith('ws_1', 'rnd_1', { decision: 'APPROVED' }));
   });
 
   it('READY + 已批准：展示批准信息与受控导出入口（导出包逐产物链接；编辑提示可见）', async () => {
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const exportPackage = vi.fn().mockResolvedValue({
       schemaVersion: 'render-export-v1',
       renderId: 'rnd_1',
@@ -151,8 +163,8 @@ describe('Render 与审核（P07-05）', () => {
       approvedBy: 'user_1',
       projectEditedSinceApproval: true,
       entries: [
-        { kind: 'VIDEO', assetId: 'ast_v', download: { url: 'https://storage.local/final.mp4?t=1', expiresAt: '2026-10-05T10:20:00.000Z' }, sizeBytes: 1048576, mimeType: 'video/mp4' },
-        { kind: 'MANIFEST', assetId: 'ast_m', download: { url: 'https://storage.local/manifest.json?t=1', expiresAt: '2026-10-05T10:20:00.000Z' }, sizeBytes: 2048, mimeType: 'application/json' },
+        { kind: 'VIDEO', assetId: 'ast_v', download: { url: 'https://storage.local/final.mp4?t=1', expiresAt }, sizeBytes: 1048576, mimeType: 'video/mp4' },
+        { kind: 'MANIFEST', assetId: 'ast_m', download: { url: 'https://storage.local/manifest.json?t=1', expiresAt }, sizeBytes: 2048, mimeType: 'application/json' },
       ],
     });
     const client = mockClient({
@@ -180,11 +192,11 @@ describe('Render 与审核（P07-05）', () => {
       projects: { renderPrecheck: vi.fn() },
     });
     renderWithClient(<RenderPage />, client);
-    expect(await screen.findByText(/已批准/)).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: '导出受控下载入口' }));
+    expect(await screen.findByTestId('approval-panel')).toBeTruthy();
+    await userEvent.click(await screen.findByRole('button', { name: '获取受控下载链接' }));
     await waitFor(() => expect(exportPackage).toHaveBeenCalledWith('ws_1', 'rnd_1'));
     expect(await screen.findByTestId('export-package')).toBeTruthy();
-    expect(screen.getByText(/批准后项目有新编辑/)).toBeTruthy();
+    expect(screen.getByText(/批准后已有新编辑/)).toBeTruthy();
     const videoLink = screen.getByRole('link', { name: /VIDEO/ });
     expect(videoLink.getAttribute('href')).toContain('final.mp4');
   });
@@ -216,8 +228,8 @@ describe('Render 与审核（P07-05）', () => {
     });
     renderWithClient(<RenderPage />, client);
     expect(await screen.findByText(/最近一次审批为驳回：标题需要调整/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: '批准' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '导出受控下载入口' })).toBeNull();
+    expect(screen.getByRole('button', { name: '批准这一版' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '获取受控下载链接' })).toBeNull();
   });
 
   it('FAILED：显示失败原因（error.reason）', async () => {
@@ -231,6 +243,6 @@ describe('Render 与审核（P07-05）', () => {
       projects: { renderPrecheck: vi.fn() },
     });
     renderWithClient(<RenderPage />, client);
-    expect(await screen.findByText('QA_FAILED')).toBeTruthy();
+    expect(await screen.findByText(/渲染失败：QA_FAILED/)).toBeTruthy();
   });
 });

@@ -11,6 +11,17 @@ import { getComponent } from '@ancs/scene-components';
 
 type FieldKind = 'text' | 'number' | 'boolean' | 'json';
 
+const FIELD_LABELS: Record<string, string> = {
+  title: '标题', subtitle: '副标题', index: '序号', headline: '主标题',
+  quote: '引言', attribution: '署名', caption: '画面说明', sourceLabel: '来源标签',
+  unit: '单位', series: '数据序列', items: '内容条目', points: '要点',
+  events: '事件', steps: '步骤', nodes: '节点', regions: '区域',
+  documentTitle: '文档标题', highlightedText: '重点文字', excerpt: '摘录',
+  assetId: '素材 ID', assetUrl: '素材地址', presenterName: '主持人名称',
+  scale: '缩放', offsetX: '水平偏移', offsetY: '垂直偏移',
+};
+const FIELD_KINDS: Record<FieldKind, string> = { text: '文本', number: '数值', boolean: '是 / 否', json: '结构化数据' };
+
 interface FieldSpec {
   name: string;
   kind: FieldKind;
@@ -93,12 +104,13 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
       {fields.map((field) => (
         <label key={field.name} className="flex flex-col gap-1 text-sm">
           <span className="text-slate-300">
-            {field.name}
-            <span className="ml-2 text-xs text-slate-500">{field.kind}</span>
+            {FIELD_LABELS[field.name] ?? field.name}
+            <span className="ml-2 text-xs text-slate-500">{FIELD_LABELS[field.name] === undefined ? '技术字段 · ' : ''}{FIELD_KINDS[field.kind]}</span>
           </span>
           {field.kind === 'boolean' ? (
             <select
               name={field.name}
+              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? 'false'}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
               className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
@@ -109,6 +121,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
           ) : field.kind === 'json' ? (
             <textarea
               name={field.name}
+              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
               rows={6}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
@@ -117,6 +130,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
           ) : (
             <input
               name={field.name}
+              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
               className="rounded border border-slate-700 bg-slate-950 px-2 py-1"

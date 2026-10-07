@@ -95,6 +95,7 @@ describe('P05 阶段退出条件（预览 → 修改 → 撤销 → 恢复快照
   it('完整 Draft 闭环（组件层串联；浏览器 E2E 仍为 PLANNED）', async () => {
     const server = makeServer();
     const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
       projects: {
         graph: server.graph,
         edit: server.edit,
@@ -110,12 +111,14 @@ describe('P05 阶段退出条件（预览 → 修改 → 撤销 → 恢复快照
     // 1) 预览：Storyboard 渲染 Remotion Player（消费 Graph）
     const { default: StoryboardPage } = await import('@/app/w/[workspaceId]/p/[projectId]/storyboard/page');
     const storyboard = renderWithClient(<StoryboardPage />, client);
-    await screen.findByText('Storyboard');
+    await screen.findByRole('region', { name: '导演工作台' });
+    expect(screen.getByRole('complementary', { name: '分镜列表' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '播放完整预览' }));
     await waitFor(() => expect(screen.getByTestId('preview-player')).toBeTruthy());
     await waitFor(() => expect(screen.getByText(/预览为本地渲染/)).toBeTruthy());
 
     // 2) 修改：Lite Timeline 调整时长（经编辑协议；revision 条件）
-    await userEvent.click(screen.getByText(/Lite Timeline（排序/));
+    await userEvent.click(screen.getByRole('button', { name: '展开轻时间线' }));
     const duration = screen.getByLabelText('时长 0');
     fireEvent.change(duration, { target: { value: '3300' } });
     fireEvent.blur(duration);
