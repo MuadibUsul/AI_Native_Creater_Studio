@@ -36,6 +36,8 @@ export const publications = pgTable(
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
     disclosure: text('disclosure'),
     lastError: text('last_error'),
+    /** Send to Draft（P3）的导入说明（DraftTransferResult.instructions；Draft 不显示为 Published） */
+    transferInstructions: text('transfer_instructions'),
     createdBy: text('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

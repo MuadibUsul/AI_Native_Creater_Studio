@@ -75,11 +75,84 @@ export const publicationRequestSchema = z.object({
   scheduledAt: isoDateTimeSchema.nullable().default(null),
   /** AIGC 披露文本等（平台政策要求时） */
   disclosure: z.string().nullable().default(null),
+  /** 投递方式（P13-04）：PUBLISH = 直发/排期；DRAFT = Send to Draft（P3——状态记 DRAFT，**不显示为 Published**） */
+  deliveryMode: z.enum(['PUBLISH', 'DRAFT']).default('PUBLISH'),
 });
 
 export type PublicationRequest = z.infer<typeof publicationRequestSchema>;
 /** 客户端输入形状（zod default 字段可省略；服务端补全） */
 export type PublicationRequestInput = z.input<typeof publicationRequestSchema>;
+
+/* ---------- P4 导出包（P13-04 / §42：Export Package——最后一步由用户完成）---------- */
+
+/** 平台手工清单（数据驱动；逐平台不同——P4 平台必须给出完整清单） */
+export const PLATFORM_EXPORT_CHECKLISTS: Record<string, readonly string[]> = {
+  DOUYIN: [
+    '下载导出包（视频 + 封面 + 文案文件）',
+    '登录抖音创作平台并选择上传',
+    '填入标题与描述（含 AIGC 披露文案）',
+    '按平台要求勾选 AI 生成内容声明',
+    '由用户在平台完成发布（本系统不代发）',
+  ],
+  X: [
+    '下载导出包（视频 + 文案文件）',
+    '登录 X 并创建新帖子',
+    '附加视频并填入文案（含披露）',
+    '由用户在平台完成发布（本系统不代发）',
+  ],
+};
+
+/** P4 导出包载荷（引用资产而非复制存储；清单最后一步恒为"由用户完成"） */
+export const exportPackagePayloadSchema = z.object({
+  platformId: z.string().min(1).max(80),
+  projectVersionId: opaqueIdSchema,
+  videoAssetId: opaqueIdSchema,
+  /** 封面资产（P10-05 真实静帧链路产出；未生成 → null + 明示） */
+  coverAssetId: opaqueIdSchema.nullable().default(null),
+  coverNote: z.string().max(200).nullable().default(null),
+  title: z.string().min(1).max(300),
+  description: z.string().max(5000).nullable().default(null),
+  tags: z.array(z.string().min(1).max(60)).default([]),
+  /** AIGC 披露（逐字进文案文件） */
+  disclosure: z.string().nullable().default(null),
+  /** 平台手工清单（逐平台；末步恒为"由用户完成"） */
+  checklist: z.array(z.string().min(1).max(300)).min(1),
+  finalStepByUser: z.literal(true),
+});
+
+export type ExportPackagePayload = z.infer<typeof exportPackagePayloadSchema>;
+
+export const exportPackageRecordSchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  platformId: z.string().min(1).max(80),
+  payload: exportPackagePayloadSchema,
+  createdAt: isoDateTimeSchema,
+});
+
+export type ExportPackageRecord = z.infer<typeof exportPackageRecordSchema>;
+
+export const exportPackageListSchema = z.object({
+  items: z.array(exportPackageRecordSchema),
+});
+
+export type ExportPackageList = z.infer<typeof exportPackageListSchema>;
+
+export const createExportPackageRequestSchema = z.object({
+  platformId: z.string().min(1).max(80),
+  projectVersionId: opaqueIdSchema,
+  outputAssetId: opaqueIdSchema,
+  coverAssetId: opaqueIdSchema.nullable().default(null),
+  title: z.string().min(1).max(300),
+  description: z.string().max(5000).nullable().default(null),
+  tags: z.array(z.string().min(1).max(60)).default([]),
+  disclosure: z.string().nullable().default(null),
+});
+
+export type CreateExportPackageRequest = z.infer<typeof createExportPackageRequestSchema>;
+/** 客户端输入形状（zod default 字段可省略；服务端补全） */
+export type CreateExportPackageRequestInput = z.input<typeof createExportPackageRequestSchema>;
 
 export const draftTransferResultSchema = z.object({
   transferId: z.string().min(1),
@@ -137,6 +210,8 @@ export const publicationRecordSchema = z.object({
   scheduledAt: isoDateTimeSchema.nullable().default(null),
   disclosure: z.string().nullable().default(null),
   lastError: z.string().max(500).nullable().default(null),
+  /** Send to Draft 的导入说明（P3；状态 DRAFT——不显示为 Published） */
+  transferInstructions: z.string().max(500).nullable().default(null),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -174,6 +249,10 @@ export const PUBLICATION_ERROR_REASONS = {
   RECONCILE_UNAVAILABLE: 'RECONCILE_UNAVAILABLE',
   /** 平台未完成实测核验（P13-03 stub：fail-closed——生效能力为空） */
   PLATFORM_NOT_VERIFIED: 'PLATFORM_NOT_VERIFIED',
+  /** 平台不支持 Send to Draft（能力不含 UPLOAD_DRAFT） */
+  DRAFT_NOT_SUPPORTED: 'DRAFT_NOT_SUPPORTED',
+  /** P4 导出包不适用（平台矩阵未声明 EXPORT_PACKAGE） */
+  EXPORT_PACKAGE_UNAVAILABLE: 'EXPORT_PACKAGE_UNAVAILABLE',
   NOT_FOUND: 'NOT_FOUND',
 } as const;
 

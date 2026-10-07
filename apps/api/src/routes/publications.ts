@@ -2,7 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  createExportPackageRequestSchema,
   errorEnvelopeSchema,
+  exportPackageListSchema,
+  exportPackageRecordSchema,
   opaqueIdSchema,
   publicationListSchema,
   publicationRecordSchema,
@@ -11,7 +14,9 @@ import {
   type DistributionProvider,
 } from '@ancs/contracts';
 import {
+  createExportPackage,
   getPublication,
+  listExportPackages,
   listProjectPublications,
   reconcilePublication,
   requestPublication,
@@ -98,6 +103,51 @@ export function registerPublicationRoutes(app: FastifyInstance, deps: AuthDeps, 
         projectId: request.params.projectId,
         publicationId: request.params.publicationId,
       });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/export-packages',
+    {
+      schema: {
+        tags: ['publications'],
+        summary: '创建 P4 导出包（视频+封面+文案+披露+平台手工清单；**最后一步由用户完成**——本系统不代发）',
+        params: projectParamsSchema,
+        body: createExportPackageRequestSchema,
+        response: { 200: exportPackageRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return createExportPackage(domain, {
+        workspaceId: request.params.id,
+        projectId: request.params.projectId,
+        platformId: request.body.platformId,
+        projectVersionId: request.body.projectVersionId,
+        outputAssetId: request.body.outputAssetId,
+        coverAssetId: request.body.coverAssetId,
+        title: request.body.title,
+        description: request.body.description,
+        tags: request.body.tags,
+        disclosure: request.body.disclosure,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/export-packages',
+    {
+      schema: {
+        tags: ['publications'],
+        summary: '导出包列表（新→旧；P4 平台包——绝不显示为 Published）',
+        params: projectParamsSchema,
+        response: { 200: exportPackageListSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      const items = await listExportPackages(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+      return { items };
     },
   );
 

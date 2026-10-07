@@ -22,7 +22,7 @@ export class MockDistributionProvider implements DistributionProvider {
     this.providerId = options.providerId ?? 'mock.platform';
     this.#capabilities = distributionCapabilitiesSchema.parse({
       tier: 'P1_DIRECT_PUBLISH',
-      capabilities: options.capabilities ?? ['DIRECT_PUBLISH', 'DELETE_REMOTE', 'UPDATE_METADATA', 'ANALYTICS'],
+      capabilities: options.capabilities ?? ['DIRECT_PUBLISH', 'UPLOAD_DRAFT', 'DELETE_REMOTE', 'UPDATE_METADATA', 'ANALYTICS'],
       notes: 'Mock 平台（确定性；真实平台接入 BLOCKED 凭据）',
     });
   }
@@ -52,6 +52,16 @@ export class MockDistributionProvider implements DistributionProvider {
       state: 'PUBLISHED' as const,
       remoteId,
       remoteUrl: `https://mock.platform/watch/${remoteId}`,
+    };
+  }
+
+  async uploadDraft(req: PublicationRequest) {
+    // 确定性 Draft：transferId 由幂等键派生（Draft 不显示为 Published——状态由核心记 DRAFT）
+    const transferId = `mock-draft-${req.publicationKey.platformId}-${req.publicationKey.outputAssetId}`;
+    return {
+      transferId,
+      openUrl: `https://mock.platform/draft/${transferId}`,
+      instructions: '已上传为平台草稿：请在平台内检查并手动发布。',
     };
   }
 

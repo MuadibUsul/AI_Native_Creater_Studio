@@ -50,6 +50,9 @@ import {
   publicationRequestSchema,
   publicationListSchema,
   publicationRecordSchema,
+  exportPackageRecordSchema,
+  exportPackageListSchema,
+  createExportPackageRequestSchema,
   podcastEpisodeSchema,
   podcastEpisodeListSchema,
   podcastValidationResultSchema,
@@ -271,6 +274,9 @@ import {
   type PublicationResponse,
   type PublicationList,
   type PublicationRecord,
+  type ExportPackageRecord,
+  type ExportPackageList,
+  type CreateExportPackageRequestInput,
   type PodcastEpisode,
   type PodcastEpisodeList,
   type PodcastValidationResult,
@@ -644,6 +650,11 @@ export interface AncsClient {
     get(workspaceId: string, projectId: string, publicationId: string): Promise<PublicationRecord>;
     /** 对账（结果未知先查询；以 Provider getStatus 为准——不自动重发） */
     reconcile(workspaceId: string, projectId: string, publicationId: string, options?: MutationOptions): Promise<PublicationRecord>;
+  };
+  /** P4 导出包（P13-04）：视频+封面+文案+披露+平台手工清单；最后一步由用户完成（不代发） */
+  exportPackages: {
+    create(workspaceId: string, projectId: string, input: CreateExportPackageRequestInput, options?: MutationOptions): Promise<ExportPackageRecord>;
+    list(workspaceId: string, projectId: string): Promise<ExportPackageList>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1229,6 +1240,16 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}/reconcile`, publicationRecordSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+    exportPackages: {
+      create: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/export-packages`, exportPackageRecordSchema, {
+          body: input,
+          bodySchema: createExportPackageRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/export-packages`, exportPackageListSchema),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>

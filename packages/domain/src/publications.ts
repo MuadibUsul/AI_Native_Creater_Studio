@@ -50,6 +50,7 @@ const toRecordDto = (row: typeof publications.$inferSelect): PublicationRecord =
     scheduledAt: row.scheduledAt?.toISOString() ?? null,
     disclosure: row.disclosure,
     lastError: row.lastError,
+    transferInstructions: row.transferInstructions,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   });
@@ -91,10 +92,10 @@ export async function getPublication(
 }
 
 /**
- * 批准闸门（未批准版本不能发布）：
+ * 批准闸门（未批准版本不能发布/打包）：
  * 输出资产必须属于该版本的某个 Render，且该 Render 最新批准 = APPROVED + manifestHash 一致 + 版本一致。
  */
-async function assertApproved(
+export async function assertPublicationApproval(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; projectVersionId: string; outputAssetId: string },
 ): Promise<void> {
@@ -159,7 +160,7 @@ export async function requestPublication(
   }
 
   // 1) 批准闸门
-  await assertApproved(deps, {
+  await assertPublicationApproval(deps, {
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     projectVersionId: body.publicationKey.projectVersionId,
@@ -175,12 +176,19 @@ export async function requestPublication(
     });
   }
   const capabilities: DistributionCapabilities = await provider.capabilities({ workspaceId: input.workspaceId, providerConnectionId: null });
-  if (!capabilities.capabilities.includes('DIRECT_PUBLISH')) {
-    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, `平台 ${body.publicationKey.platformId} 能力不含 DIRECT_PUBLISH（tier=${capabilities.tier}）——能力分级与真实 capability 一致`, 422, {
-      reason: PUBLICATION_ERROR_REASONS.CAPABILITY_MISSING,
-      platformId: body.publicationKey.platformId,
-      tier: capabilities.tier,
-    });
+  // 能力闸门按投递方式取值（P13-04）：DRAFT → UPLOAD_DRAFT；PUBLISH → DIRECT_PUBLISH
+  const requiredCapability = body.deliveryMode === 'DRAFT' ? 'UPLOAD_DRAFT' : 'DIRECT_PUBLISH';
+  if (!capabilities.capabilities.includes(requiredCapability)) {
+    throw new ApiFailure(
+      ERROR_CODES.VALIDATION_FAILED,
+      `平台 ${body.publicationKey.platformId} 能力不含 ${requiredCapability}（tier=${capabilities.tier}）——能力分级与真实 capability 一致`,
+      422,
+      {
+        reason: body.deliveryMode === 'DRAFT' ? PUBLICATION_ERROR_REASONS.DRAFT_NOT_SUPPORTED : PUBLICATION_ERROR_REASONS.CAPABILITY_MISSING,
+        platformId: body.publicationKey.platformId,
+        tier: capabilities.tier,
+      },
+    );
   }
 
   // 3) 幂等落库（唯一索引四元组；冲突 → 返回既有行）
@@ -239,6 +247,30 @@ export async function requestPublication(
       issues: validation.issues,
       publicationId: row.id,
     });
+  }
+
+  // 5a) Send to Draft（P13-04 P3 路径）：uploadDraft → **状态记 DRAFT（不显示为 Published）**
+  if (body.deliveryMode === 'DRAFT') {
+    if (provider.uploadDraft === undefined) {
+      throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'Provider 未实现 uploadDraft（能力分级声明与实现不一致）', 501, {
+        reason: PUBLICATION_ERROR_REASONS.DRAFT_NOT_SUPPORTED,
+      });
+    }
+    const draft = await provider.uploadDraft(body);
+    const draftRows = await deps.db
+      .update(publications)
+      .set({
+        state: 'DRAFT',
+        remoteId: draft.transferId,
+        remoteUrl: draft.openUrl,
+        transferInstructions: draft.instructions,
+        updatedAt: new Date(),
+      })
+      .where(eq(publications.id, row.id))
+      .returning();
+    const draftRow = draftRows[0];
+    if (draftRow === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'draft publication update failed', 500);
+    return { publication: toRecordDto(draftRow), deduped: false };
   }
 
   // 5) publish（失败 → FAILED + lastError；不自动重发）
