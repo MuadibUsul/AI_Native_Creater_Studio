@@ -53,6 +53,9 @@ import {
   exportPackageRecordSchema,
   exportPackageListSchema,
   createExportPackageRequestSchema,
+  handoffRecordSchema,
+  handoffListSchema,
+  createHandoffRequestSchema,
   podcastEpisodeSchema,
   podcastEpisodeListSchema,
   podcastValidationResultSchema,
@@ -277,6 +280,9 @@ import {
   type ExportPackageRecord,
   type ExportPackageList,
   type CreateExportPackageRequestInput,
+  type HandoffRecord,
+  type HandoffList,
+  type CreateHandoffRequest,
   type PodcastEpisode,
   type PodcastEpisodeList,
   type PodcastValidationResult,
@@ -655,6 +661,14 @@ export interface AncsClient {
   exportPackages: {
     create(workspaceId: string, projectId: string, input: CreateExportPackageRequestInput, options?: MutationOptions): Promise<ExportPackageRecord>;
     list(workspaceId: string, projectId: string): Promise<ExportPackageList>;
+  };
+  /** Handoff（P13-05）：可撤销、限时、绑定账号与 Artifact 的跨端交接 */
+  handoffs: {
+    create(workspaceId: string, projectId: string, input: CreateHandoffRequest, options?: MutationOptions): Promise<HandoffRecord>;
+    list(workspaceId: string, projectId: string): Promise<HandoffList>;
+    get(workspaceId: string, projectId: string, handoffId: string): Promise<HandoffRecord>;
+    claim(workspaceId: string, projectId: string, handoffId: string, claimedBy: string, options?: MutationOptions): Promise<HandoffRecord>;
+    cancel(workspaceId: string, projectId: string, handoffId: string, options?: MutationOptions): Promise<HandoffRecord>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1250,6 +1264,27 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       list: (workspaceId, projectId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/export-packages`, exportPackageListSchema),
+    },
+    handoffs: {
+      create: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs`, handoffRecordSchema, {
+          body: input,
+          bodySchema: createHandoffRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs`, handoffListSchema),
+      get: (workspaceId, projectId, handoffId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs/${handoffId}`, handoffRecordSchema),
+      claim: (workspaceId, projectId, handoffId, claimedBy, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs/${handoffId}/claim`, handoffRecordSchema, {
+          body: { claimedBy },
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      cancel: (workspaceId, projectId, handoffId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/handoffs/${handoffId}/cancel`, handoffRecordSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>

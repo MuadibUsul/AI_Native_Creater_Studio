@@ -163,6 +163,59 @@ export const handoffDescriptorSchema = z.object({
 
 export type HandoffDescriptor = z.infer<typeof handoffDescriptorSchema>;
 
+/* ---------- Handoff 记录（P13-05 / §42.3；计划 §8 P13）---------- */
+
+/** Handoff 完整记录（Web 创建/取消/查看；跨租户或过期访问失败——claim 由移动端 P15-06 消费） */
+export const handoffRecordSchema = z.object({
+  handoffId: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  state: z.enum(HANDOFF_STATES),
+  artifactIds: z.array(opaqueIdIdCompat()).min(1),
+  targetPlatform: z.string().nullable().default(null),
+  createdBy: opaqueIdSchema.nullable().default(null),
+  claimedBy: opaqueIdSchema.nullable().default(null),
+  claimedAt: isoDateTimeSchema.nullable().default(null),
+  revokedAt: isoDateTimeSchema.nullable().default(null),
+  /** 读取时计算（expiresAt 已过 = true）——过期 handoff 不可领取（P13-05） */
+  isExpired: z.boolean(),
+  expiresAt: isoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+});
+
+export type HandoffRecord = z.infer<typeof handoffRecordSchema>;
+
+function opaqueIdIdCompat() {
+  return opaqueIdSchema;
+}
+
+export const createHandoffRequestSchema = z.object({
+  artifactIds: z.array(opaqueIdSchema).min(1).max(20),
+  targetPlatform: z.string().min(1).max(80).nullable().default(null),
+  /** TTL 秒（缺省 24h；上限 7 天——限时性） */
+  ttlSeconds: z.number().int().positive().max(7 * 24 * 3600).optional(),
+});
+
+export type CreateHandoffRequest = z.infer<typeof createHandoffRequestSchema>;
+
+export const handoffListSchema = z.object({
+  items: z.array(handoffRecordSchema),
+});
+
+export type HandoffList = z.infer<typeof handoffListSchema>;
+
+export const HANDOFF_ERROR_REASONS = {
+  NOT_FOUND: 'NOT_FOUND',
+  /** Artifact 不属于该项目（绑定必须真实） */
+  ARTIFACT_NOT_TRACEABLE: 'ARTIFACT_NOT_TRACEABLE',
+  /** 过期 handoff 不可领取（过期访问失败） */
+  HANDOFF_EXPIRED: 'HANDOFF_EXPIRED',
+  /** 状态机不允许（REVOKED/COMPLETED 不可领取；取消仅 PENDING/CLAIMED） */
+  INVALID_STATE: 'INVALID_STATE',
+} as const;
+
+export type HandoffErrorReason = (typeof HANDOFF_ERROR_REASONS)[keyof typeof HANDOFF_ERROR_REASONS];
+
 /** 能力可用性（未安装的能力明确返回不可用 + 原因，而不是静默缺失） */
 export const capabilityAvailabilitySchema = z.object({
   format: z.string().min(1),

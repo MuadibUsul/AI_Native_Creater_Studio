@@ -27,6 +27,7 @@ import { registerNarrationAudioRoutes } from './routes/narration-audio.js';
 import { registerMultilingualRoutes } from './routes/multilingual.js';
 import { registerPodcastRoutes } from './routes/podcast.js';
 import { registerPublicationRoutes } from './routes/publications.js';
+import { registerHandoffRoutes } from './routes/handoffs.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
@@ -224,6 +225,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerPublicationRoutes(instance, authDeps, {
           distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider(), ...createPlatformStubProviders()],
         });
+        registerHandoffRoutes(instance, authDeps);
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

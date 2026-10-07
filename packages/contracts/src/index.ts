@@ -941,6 +941,20 @@ export {
   platformCapabilityMatrixEntrySchema,
   PLATFORM_CAPABILITY_MATRIX,
 } from './publishing.js';
+
+// Handoff 记录契约（P13-05 / §42.3）
+export {
+  handoffRecordSchema,
+  createHandoffRequestSchema,
+  handoffListSchema,
+  HANDOFF_ERROR_REASONS,
+} from './extensions.js';
+export type {
+  HandoffRecord,
+  CreateHandoffRequest,
+  HandoffList,
+  HandoffErrorReason,
+} from './extensions.js';
 export type {
   PublishCapabilityTier,
   DistributionCapability,

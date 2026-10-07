@@ -13,6 +13,7 @@ export { narrationTranslations, terminologyEntries } from './multilingual.js';
 export { podcastEpisodes } from './podcast.js';
 export { publications } from './publications.js';
 export { exportPackages } from './export-packages.js';
+export { handoffs } from './handoffs.js';
 export {
   avatarIdentities,
   brandIdentities,

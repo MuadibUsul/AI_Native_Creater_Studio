@@ -145,6 +145,7 @@ export {
 export { createMockDistributionProvider, MockDistributionProvider } from './mock-distribution.js';
 export { createPlatformStubProviders, PlatformStubProvider } from './platform-stubs.js';
 export { createExportPackage, listExportPackages } from './export-packages.js';
+export { cancelHandoff, claimHandoff, createHandoff, getHandoff, listProjectHandoffs } from './handoffs.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,
