@@ -143,6 +143,7 @@ export {
   requestPublication,
 } from './publications.js';
 export { createMockDistributionProvider, MockDistributionProvider } from './mock-distribution.js';
+export { createPlatformStubProviders, PlatformStubProvider } from './platform-stubs.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,

@@ -41,7 +41,7 @@ import { registerContentCoreRoutes } from './routes/content-core.js';
 import { registerAtomRoutes } from './routes/atoms.js';
 import { registerPackRoutes } from './routes/packs.js';
 import { registerLineageRoutes } from './routes/lineage.js';
-import { createMockDistributionProvider, createShortsAnalyzerPlugin, createSocialVisualPlugin, createTextPackPlugin } from '@ancs/domain';
+import { createMockDistributionProvider, createPlatformStubProviders, createShortsAnalyzerPlugin, createSocialVisualPlugin, createTextPackPlugin } from '@ancs/domain';
 import { registerPlanRoutes } from './routes/plans.js';
 import { registerPaymentRoutes, type PaymentRouteDeps } from './routes/payments.js';
 import { createAdminDeps, registerAdminGuard, type AdminDeps } from './plugins/admin.js';
@@ -222,7 +222,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
         });
         registerPublicationRoutes(instance, authDeps, {
-          distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider()],
+          distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider(), ...createPlatformStubProviders()],
         });
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {

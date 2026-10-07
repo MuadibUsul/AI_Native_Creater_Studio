@@ -931,6 +931,10 @@ export {
   publicationResponseSchema,
   publicationListSchema,
   PUBLICATION_ERROR_REASONS,
+  PLATFORM_VERIFICATION_STATUSES,
+  platformVerificationStatusSchema,
+  platformCapabilityMatrixEntrySchema,
+  PLATFORM_CAPABILITY_MATRIX,
 } from './publishing.js';
 export type {
   PublishCapabilityTier,
@@ -955,6 +959,8 @@ export type {
   PublicationResponse,
   PublicationList,
   PublicationErrorReason,
+  PlatformVerificationStatus,
+  PlatformCapabilityMatrixEntry,
 } from './publishing.js';
 
 // 主题 / Channel / 身份 / SpeechProfile 契约（P01-04）

@@ -172,6 +172,8 @@ export const PUBLICATION_ERROR_REASONS = {
   PROVIDER_PUBLISH_FAILED: 'PROVIDER_PUBLISH_FAILED',
   /** 对账不可用（Provider 未实现 getStatus 或发布无远端引用） */
   RECONCILE_UNAVAILABLE: 'RECONCILE_UNAVAILABLE',
+  /** 平台未完成实测核验（P13-03 stub：fail-closed——生效能力为空） */
+  PLATFORM_NOT_VERIFIED: 'PLATFORM_NOT_VERIFIED',
   NOT_FOUND: 'NOT_FOUND',
 } as const;
 
@@ -238,3 +240,65 @@ export const distributionProviderRegistrationSchema = z.object({
 });
 
 export type DistributionProviderRegistration = z.infer<typeof distributionProviderRegistrationSchema>;
+
+/* ---------- 平台能力矩阵（P13-03 / §42.2；计划 §8 P13）---------- */
+
+/** 平台核验状态（"UI 与真实 capability 一致"的依据：生效能力 = 声明 ∩ 已核验） */
+export const PLATFORM_VERIFICATION_STATUSES = ['UNVERIFIED_CREDENTIALS_REQUIRED', 'VERIFIED_TEST_ACCOUNT', 'DEGRADED'] as const;
+export const platformVerificationStatusSchema = z.enum(PLATFORM_VERIFICATION_STATUSES);
+export type PlatformVerificationStatus = z.infer<typeof platformVerificationStatusSchema>;
+
+/**
+ * 平台能力矩阵条目（**数据而非代码分支**）：
+ * - declared = 公开平台文档口径的预期能力（**未实测**——不作为可用依据）；
+ * - verification = 实测核验状态（P13-03 全部 UNVERIFIED_CREDENTIALS_REQUIRED——核验 BLOCKED 平台账号）；
+ * - 各平台 tier/能力不同（不假设每个平台支持相同能力）。
+ */
+export const platformCapabilityMatrixEntrySchema = z.object({
+  platformId: z.string().min(1).max(80),
+  tier: publishCapabilityTierSchema,
+  declaredCapabilities: z.array(distributionCapabilitySchema).min(1),
+  verification: platformVerificationStatusSchema,
+  notes: z.string().min(1).max(300),
+});
+
+export type PlatformCapabilityMatrixEntry = z.infer<typeof platformCapabilityMatrixEntrySchema>;
+
+/** 逐平台矩阵（公开文档口径；**全部待实测核验**——实测后更新 verification 与 notes，不在此编造） */
+export const PLATFORM_CAPABILITY_MATRIX: readonly PlatformCapabilityMatrixEntry[] = [
+  {
+    platformId: 'TIKTOK',
+    tier: 'P1_DIRECT_PUBLISH',
+    declaredCapabilities: ['DIRECT_PUBLISH', 'AIGC_DISCLOSURE', 'CAPTION_DESCRIPTION', 'UPDATE_METADATA', 'ANALYTICS'],
+    verification: 'UNVERIFIED_CREDENTIALS_REQUIRED',
+    notes: '公开文档：Content Posting API（Direct Post）支持直发与 AIGC 声明；实测待平台账号授权核验',
+  },
+  {
+    platformId: 'DOUYIN',
+    tier: 'P4_EXPORT_PACKAGE',
+    declaredCapabilities: ['EXPORT_PACKAGE', 'AIGC_DISCLOSURE'],
+    verification: 'UNVERIFIED_CREDENTIALS_REQUIRED',
+    notes: '公开文档：开放平台视频发布受强准入限制——按 P4（导出包 + 用户手动发布）归类；实测待核验',
+  },
+  {
+    platformId: 'BILIBILI',
+    tier: 'P2_AUTHORIZED_PUBLISH',
+    declaredCapabilities: ['CONFIRM_TO_PUBLISH', 'CAPTION_DESCRIPTION', 'UPDATE_METADATA', 'ANALYTICS'],
+    verification: 'UNVERIFIED_CREDENTIALS_REQUIRED',
+    notes: '公开文档：创作中心 API 需二次确认发布；实测待平台账号授权核验',
+  },
+  {
+    platformId: 'LINKEDIN',
+    tier: 'P2_AUTHORIZED_PUBLISH',
+    declaredCapabilities: ['CONFIRM_TO_PUBLISH', 'CAPTION_DESCRIPTION', 'ANALYTICS'],
+    verification: 'UNVERIFIED_CREDENTIALS_REQUIRED',
+    notes: '公开文档：API 支持 UGC 帖（按应用审核范围）；实测待核验',
+  },
+  {
+    platformId: 'X',
+    tier: 'P4_EXPORT_PACKAGE',
+    declaredCapabilities: ['EXPORT_PACKAGE', 'CAPTION_DESCRIPTION'],
+    verification: 'UNVERIFIED_CREDENTIALS_REQUIRED',
+    notes: '公开文档：API 媒体上传受套餐限制且时长受限——按 P4（导出包）归类；实测待核验',
+  },
+];
