@@ -2,7 +2,7 @@
 
 - **交接时点**：2026-10-07（P14 阶段 5/5 全部完成；按用户指令暂停验收）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **P14 交付提交**：`06c979e` `feat(p14): Analytics Director 与 Finance Pack Web 闭环`；本地 `pnpm verify` 全绿，等待最终 CI run ID 回填
+- **P14 交付提交**：`06c979e` `feat(p14): Analytics Director 与 Finance Pack Web 闭环`；最终功能/验收头 `34b68c4`；GitHub CI run `37611980360` 全绿
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
@@ -72,7 +72,7 @@
 - **P14-03 学习建议**：节奏/Scene 类型/Avatar 比例三类解释性建议；可查看/接受/禁用/恢复；channelMutationApplied 固定 false，Channel Style 不被静默修改。
 - **P14-04 Finance Pack**：Candle/Yield Curve/Policy Path/Supply Chain/Trade Route/Scenario Tree 六类结构化产物；单位/币种/时区/调整口径/来源强制可追溯；缺失值 422 fail closed。
 - **P14-05 数据与模板**：许可来源、事务串行的模板版本、产物内嵌来源许可证和模板快照；创建 v2 不改变历史 v1 产物。Web 完成来源/模板/产物操作面。
-- **证据**：docs/verification/P14-01.md—P14-05.md；pnpm verify 14 步全绿，810 项真实断言；最新迁移 0050。
+- **证据**：docs/verification/P14-01.md—P14-05.md；pnpm verify 14 步全绿，810 项真实断言；GitHub CI run 37611980360 全绿；最新迁移 0050。
 - **外部边界**：Analytics 使用脚本化 Provider，真实平台 OAuth 核验仍需凭据；Finance 使用 fixture 与许可元数据，没有冒充真实收费数据源实测。
 - **当前门槛**：P14 5/5 已完成，立即暂停。等待用户检查 Web 与测试；明确确认后才可选择 P15-01。
 
