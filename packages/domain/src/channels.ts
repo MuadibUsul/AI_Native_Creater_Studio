@@ -26,6 +26,7 @@ import type {
   PlatformCredentialRegistry,
   ProviderTestHook,
   ResultFetcher,
+  CmsWritebackSender,
 } from '@ancs/contracts';
 import type { BillingPolicy } from './billing.js';
 import type { RetryPolicy } from './jobs.js';
@@ -71,6 +72,8 @@ export interface DomainDeps {
   resultFetcher?: ResultFetcher;
   /** 文章抓取器（P04-01）：URL 输入归一化的 I/O（逐跳 SSRF 校验由实现方保证） */
   articleFetcher?: ArticleFetcher;
+  /** CMS 回写发送器（P13-07）：真实 HTTP 由 Worker 注入；domain 只消费接口。 */
+  cmsWritebackSender?: CmsWritebackSender;
   /** LLM 适配器（P04-03）：叙事/导演等结构化生成（真实适配器 P06-01；Mock 见 providers/mock-llm） */
   llm?: LlmAdapter;
   /** TTS 适配器（P06-03）：逐段语音合成（必须带词级时间戳或配置 aligner；Mock 见 providers/mock-tts） */

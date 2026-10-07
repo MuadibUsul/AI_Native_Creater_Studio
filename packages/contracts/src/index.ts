@@ -942,7 +942,7 @@ export {
   PLATFORM_CAPABILITY_MATRIX,
 } from './publishing.js';
 
-// CMS 输入契约（P13-06 / §88）
+// CMS 输入/回写契约（P13-06/P13-07 / §88）
 export {
   CMS_SOURCES,
   cmsSourceSchema,
@@ -953,6 +953,22 @@ export {
   cmsIngestionRecordSchema,
   ingestCmsEventResponseSchema,
   cmsIngestionListSchema,
+  CMS_WRITEBACK_JOB_TYPE,
+  CMS_WRITEBACK_EVENT_TYPE,
+  CMS_WRITEBACK_SIGNATURE_HEADER,
+  CMS_WRITEBACK_TIMESTAMP_HEADER,
+  CMS_WRITEBACK_DELIVERY_HEADER,
+  CMS_WRITEBACK_EVENT_HEADER,
+  CMS_WRITEBACK_TARGET_STATUSES,
+  cmsWritebackTargetStatusSchema,
+  CMS_WRITEBACK_ATTEMPT_STATUSES,
+  cmsWritebackAttemptStatusSchema,
+  cmsWritebackTargetSchema,
+  upsertCmsWritebackTargetRequestSchema,
+  cmsWritebackPayloadSchema,
+  cmsWritebackAttemptSchema,
+  cmsWritebackAttemptListSchema,
+  retryCmsWritebackResponseSchema,
   CMS_ERROR_REASONS,
 } from './cms.js';
 export type {
@@ -963,6 +979,15 @@ export type {
   CmsIngestionRecord,
   IngestCmsEventResponse,
   CmsIngestionList,
+  CmsWritebackTargetStatus,
+  CmsWritebackAttemptStatus,
+  CmsWritebackTarget,
+  UpsertCmsWritebackTargetRequest,
+  CmsWritebackPayload,
+  CmsWritebackAttempt,
+  CmsWritebackAttemptList,
+  RetryCmsWritebackResponse,
+  CmsWritebackSender,
   CmsErrorReason,
 } from './cms.js';
 

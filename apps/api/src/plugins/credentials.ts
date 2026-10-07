@@ -1,5 +1,5 @@
-import { createHmac } from 'node:crypto';
 import type { CredentialCipher, PlatformCredentialRegistry, ProviderTestHook } from '@ancs/contracts';
+import { createCredentialVaultFromEnv, LocalCredentialVault } from '@ancs/providers-credential-vault-local';
 
 /**
  * 凭据依赖注入（P03-04）。
@@ -53,27 +53,14 @@ export function createCredentialDeps(options: { localKeys: string; platformKeys?
 
 // 说明：为避免 apps/api 直接依赖 providers/*（R7 允许，但此处保持轻度耦合），
 // 由调用方（index.ts/测试）注入具体实现；createCredentialDeps 仅为便捷包装。
-import { LocalCredentialVault } from '@ancs/providers-credential-vault-local';
-
 function createLocalVault(keys: string): CredentialCipher {
   return new LocalCredentialVault({ keys });
 }
 
 /** 便捷：从环境变量构造（服务端/Worker 启动路径使用） */
 export function credentialDepsFromEnv(env: NodeJS.ProcessEnv = process.env): CredentialDeps {
-  const localKeys = env['ANCS_CREDENTIAL_KEYS'] ?? '';
-  const fallbackBase = env['BETTER_AUTH_SECRET'];
-  const effectiveKeys =
-    localKeys.trim() !== ''
-      ? localKeys
-      : fallbackBase !== undefined && fallbackBase.length >= 16
-        ? `v1:${createHmac('sha256', fallbackBase).update('credential-vault-v1').digest('base64')}`
-        : '';
-  if (effectiveKeys === '') {
-    throw new Error('启动失败：ANCS_CREDENTIAL_KEYS（或 BETTER_AUTH_SECRET 派生）未配置——凭据保险库 fail-closed');
-  }
   return {
-    cipher: createLocalVault(effectiveKeys),
+    cipher: createCredentialVaultFromEnv(env),
     platformCredentials: parsePlatformCredentials(env['ANCS_PLATFORM_PROVIDER_KEYS']),
   };
 }

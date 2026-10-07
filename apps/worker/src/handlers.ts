@@ -10,6 +10,7 @@ import type { MotionValidator, RenderExecutor, RenderMediaProbe } from '@ancs/co
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
+import { cmsWritebackHandler } from './cms-writeback-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -112,7 +113,7 @@ export interface DefaultRegistryOptions {
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
-  const handlers = [noopHandler, retentionSweepHandler, notificationDispatchHandler];
+  const handlers = [noopHandler, retentionSweepHandler, notificationDispatchHandler, cmsWritebackHandler];
   if (options.renderExecutor !== undefined) {
     handlers.push(createRenderExecutionHandler({ executor: options.renderExecutor }));
   }

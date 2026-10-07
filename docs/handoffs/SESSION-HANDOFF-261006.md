@@ -1,15 +1,15 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 6/7，仅剩 P13-07）
+- **交接时点**：2026-10-07（P13 阶段 7/7 全部完成；下一任务 P14-01）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`abc8985` feat(p13-06) CMS 输入 —— **本地 verify 797 全绿；CI run 37596079383 交接时仍在运行（接手后先 `gh run list` 确认，失败按日志修复重跑）**——下一任务 P13-07
+- **P13-07 交付提交**：`feat(p13-07): CMS 签名回写与可恢复重试`；提交后必须检查 GitHub CI 全绿——下一任务 P14-01
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
 
 ## 1. 总体进度
 
-**104 项计划任务：72 项已交付（≈69%），全部有 `docs/verification/<taskId>.md` 证据 + `docs/handoffs/<taskId>.md` 交接 + RTM 更新，`pnpm verify` 14 步全绿。**
+**104 项计划任务：73 项已交付（≈70%），P13 已收尾；`pnpm verify` 14 步全绿。**
 
 | 阶段 | 任务数 | 状态 |
 |---|---|---|
@@ -18,11 +18,11 @@
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
 | P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
 | P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ 全部交付（768/771/774/777/780；各 Pack analyze/generate/validate 完整链路） |
-| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783）+ P13-02 YouTube ✅（786；真实远端 BLOCKED）+ P13-03 平台矩阵 ✅（789；平台实测 BLOCKED）+ P13-04 P3/P4 体验 ✅（791）+ P13-05 Handoff ✅（794）+ P13-06 CMS 输入 ✅（797；事件幂等/来源版本化）｜**仅剩 P13-07 CMS 回写** |
-| P14–P16 | 28 | ⬜ 未开始（P14 5 / P15 8 / P16 9；凭据阻塞：P06-02/P06-04/P08-05 + P13-02 真实远端 + P13-03 平台实测） |
+| P13（Publishing/Handoff/CMS） | 7 | ✅ 7/7 全部交付：P13-07 CMS 回写完成（803；签名、SSRF、有限重试、崩溃恢复、失败不改 Render） |
+| P14–P16 | 22 | ⬜ 未开始（P14 5 / P15 8 / P16 9；P14 完成后按用户要求暂停验收，未经确认不进入 P15/P16） |
 
-- 测试规模：**797**（unit 341 · web 70 · motion 19 · integration 323 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0045**（cms_ingestions 事件幂等唯一索引）；下一迁移为 0046
+- 测试规模：**803 项真实断言**（unit 343 · web 70 · motion 19 · integration 328 · security 22 · render 6 · golden 15；contract/e2e 为显式 `[PLANNED]`）
+- 迁移最新编号：**0046**（cms_writeback_targets + cms_writeback_attempts）；下一迁移为 0047
 - **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
@@ -56,7 +56,13 @@
 - **P13-04 P3/P4 体验**：deliveryMode（PUBLISH|DRAFT——Draft 状态 publishedAt 恒 null **不显示为 Published** + transferInstructions）；P4 导出包（export_packages 表；矩阵声明 EXPORT_PACKAGE 才可打包；批准闸门与发布同源；PLATFORM_EXPORT_CHECKLISTS 数据驱动、**末步=由用户完成 finalStepByUser=true**）；能力闸门模式感知（DRAFT→UPLOAD_DRAFT）。
 - **P13-05 Handoff**：handoffs 表；创建（Artifact 逐个校验真实归属 422）/claim（**过期 410 HANDOFF_EXPIRED**（isExpired 读取时计算）；并发领取条件更新；REVOKED/COMPLETED 409）/cancel（可撤销）/get/list（**跨租户 404 反枚举**）；TTL 上限 7 天；claim 端点为 P15-06 移动端预留。
 - **P13-06 CMS 输入**：cms_ingestions 表（**事件幂等唯一索引 workspace+source+externalId+contentHash**）；ingestCmsEvent（contentHash=内容字节 sha256——URL 先抓取再哈希；重放 deduped 不重复建项目；**正文变化 → 同项目新 ContentDocument 新来源版本（旧版本保留）**；机器路径复用人工链路 P04-01 URL 抓取/P10-01 HTML 导入；并发重放 onConflictDoNothing 兜底）；client.cms.{ingest,list}。
-- **P13-07 设计要点（下一任务，P13 收尾）**：视频就绪（Render READY）后向 CMS 注册的回调 URL 发送**签名回调**（HMAC-SHA256 + 时间戳防重放——复用 P03-06 webhook_events 范式）；保存尝试/响应/重试记录（append-only）；**回写失败不影响成片**（回调失败仅记录，Render 状态不变）；**重复回调可安全处理**（deliveryId 幂等）；**URL 遵守 SSRF 规则**（复用 P04-01 SSRF 守卫——拒绝内网/非 http(s)）。端点：配置回写目标（workspace 级）+ 手动重发 + 尝试列表。迁移 0046（cms_writeback_targets + cms_writeback_attempts）。落地顺序：契约 → 迁移 → domain → API → SDK → tests → docs。
+- **P13-07 CMS 回写（P13 收尾）**：Render QA→READY 同事务创建 delivery/首 attempt/SYSTEM Job；固定事件表示等待人工批准；HMAC-SHA256 `timestamp.rawBody`；Secret 密文且只回掩码；原生 HTTP Sender 在 DNS 全解析后拒绝私网/保留地址并固定 IP 连接；最多四次自动发送；3xx/其余 4xx/SSRF 最终失败；崩溃旧 PENDING→UNKNOWN；自动/人工重发复用 deliveryId/occurredAt/规范正文；失败不改 Render；API/SDK 与跨租户 404。证据：docs/verification/P13-07.md。
+
+## 4c. 用户验收暂停门槛（2026-10-07）
+
+- 继续推进 P14-01—P14-05，直到 Web 端计划全部 VERIFIED。
+- P14 全部完成后立即暂停，让用户检查和测试。
+- 未收到用户明确验收确认前，禁止开始 P15（Desktop/Mobile）或 P16（Marketplace/Enterprise）。
 
 ## 5. 本仓库工作模式与已踩过的坑（新会话必读）
 
@@ -95,8 +101,8 @@ docker ps | grep ancs                         # 本地 DB/Redis（55432）
 
 ## 6. 交接时仓库状态
 
-- 工作树**干净**（全部已提交推送）；P11-01/P11-02 已完成。
+- P13-07 完成后应保持工作树干净；下一任务为 P14-01。
 - 若新会话发现未提交变更：为上一会话中断的部分实现——先 `git status`/`git diff` 评估，按 §4 的任务定义继续或干净丢弃（勿盲目提交）。
 - `.artifacts/` 为 gitignore 的本地产物目录（渲染 PNG/测试存储），可随时清理。
 
-— 交接完毕。接手后从 **§4 P11-01** 开始，按 AGENTS.md 启动步骤先复核本文件与最新 `docs/handoffs/`。
+— 交接完毕。接手后从 **P14-01** 开始。完成 P14-01—P14-05 后必须暂停，等待用户检查测试；未经用户明确确认不得开始 P15 或 P16。

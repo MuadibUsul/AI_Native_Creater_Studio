@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { encryptedSecretSchema, type CredentialCipher, type EncryptedSecret } from '@ancs/contracts';
 
 /**
@@ -90,4 +90,20 @@ export class LocalCredentialVault implements CredentialCipher {
     const tail = secret.slice(-4);
     return `••••${tail}`;
   }
+}
+
+/** API/Worker 共用的环境装配；显式密钥优先，否则从服务端主密钥做用途隔离派生。 */
+export function createCredentialVaultFromEnv(env: NodeJS.ProcessEnv = process.env): LocalCredentialVault {
+  const configured = env['ANCS_CREDENTIAL_KEYS'] ?? '';
+  const baseSecret = env['BETTER_AUTH_SECRET'];
+  const keys =
+    configured.trim() !== ''
+      ? configured
+      : baseSecret !== undefined && baseSecret.length >= 16
+        ? `v1:${createHmac('sha256', baseSecret).update('credential-vault-v1').digest('base64')}`
+        : '';
+  if (keys === '') {
+    throw new Error('启动失败：ANCS_CREDENTIAL_KEYS（或 BETTER_AUTH_SECRET 派生）未配置——凭据保险库 fail-closed');
+  }
+  return new LocalCredentialVault({ keys });
 }

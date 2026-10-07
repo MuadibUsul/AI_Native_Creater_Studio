@@ -14,6 +14,7 @@ import {
 import { assetVersions, masterNarrations, projectVersions, renderEvents, renders } from '@ancs/db';
 import { loadProjectRow } from './projects.js';
 import { createJobInTx } from './jobs.js';
+import { scheduleCmsWritebackInTx } from './cms.js';
 import { assertRenderProfileAllowed, resolveRenderPriority } from './plans.js';
 import { createProjectVersionInTx } from './versions.js';
 import type { DomainDeps } from './channels.js';
@@ -234,7 +235,19 @@ export async function transitionRender(
     const updated = await tx.update(renders).set({ status: input.to, updatedAt: now }).where(eq(renders.id, input.renderId)).returning();
     const updatedRow = updated[0];
     if (updatedRow === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'render transition failed', 500);
-    return toRenderDto(updatedRow);
+    const dto = toRenderDto(updatedRow);
+    if (input.to === 'READY') {
+      await scheduleCmsWritebackInTx(tx, {
+        workspaceId: dto.workspaceId,
+        projectId: dto.projectId,
+        projectVersionId: dto.input.projectVersionId,
+        renderId: dto.id,
+        manifestHash: dto.manifestHash,
+        outputAssetIds: dto.outputAssetIds,
+        occurredAt: now,
+      });
+    }
+    return dto;
   });
 }
 

@@ -205,6 +205,8 @@ export interface CreateJobInput {
   priority?: number;
   maxAttempts?: number;
   createdBy?: string | null;
+  /** SYSTEM 为非成本性内部维护/通知任务；默认 COSTED，受工作区滥用限制闸门约束。 */
+  classification?: 'COSTED' | 'SYSTEM';
 }
 
 /**
@@ -233,7 +235,7 @@ export async function createJob(deps: DomainDeps, input: CreateJobInput): Promis
 
     // 滥用限制闸门（P09-05）：RESTRICTED 工作区的新任务被阻止（已入队/运行中任务不受影响）
     const abuseRows = await tx.select({ abuseState: workspaces.abuseState }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
-    if (abuseRows[0]?.abuseState === 'RESTRICTED') {
+    if (input.classification !== 'SYSTEM' && abuseRows[0]?.abuseState === 'RESTRICTED') {
       throw workspaceRestrictedFailure();
     }
 
@@ -275,6 +277,8 @@ export interface CreateJobTxInput {
   priority?: number;
   maxAttempts?: number;
   createdBy?: string | null;
+  /** SYSTEM 为非成本性内部维护/通知任务；默认 COSTED。 */
+  classification?: 'COSTED' | 'SYSTEM';
 }
 
 /**
@@ -289,7 +293,7 @@ export async function createJobInTx(
 ): Promise<Job> {
   // 滥用限制闸门（P09-05）：RESTRICTED 工作区的新任务被阻止（已入队/运行中任务不受影响）
   const abuseRows = await tx.select({ abuseState: workspaces.abuseState }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
-  if (abuseRows[0]?.abuseState === 'RESTRICTED') {
+  if (input.classification !== 'SYSTEM' && abuseRows[0]?.abuseState === 'RESTRICTED') {
     throw workspaceRestrictedFailure();
   }
   const now = new Date();

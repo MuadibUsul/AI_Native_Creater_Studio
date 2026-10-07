@@ -255,6 +255,9 @@ importers:
       '@ancs/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@ancs/providers-credential-vault-local':
+        specifier: workspace:*
+        version: link:../../packages/providers/credential-vault-local
       '@ancs/providers-mock-provider':
         specifier: workspace:*
         version: link:../../packages/providers/mock-provider

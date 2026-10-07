@@ -35,16 +35,16 @@
 | LED-77-21 | 有 per-generation cost 记录 | REQ-25-01 | P03-05（P03） | VERIFIED（2026-10-05 对账回填：provider_generations（估算/实际/延迟/重试/凭证模式）+ 账本结算幂等（P03-05）；**真实成本数值**随真实 Provider 凭据写入） |
 | LED-77-22 | 有 Workspace 数据隔离测试 | REQ-43-01/REQ-51-06 | P01-03（P01） | VERIFIED（2026-10-05 对账回填：security 套件 22 项跨租户全拒绝（含资产/任务/渲染/审批/QA/Admin）+ Signed URL 作用域 + Provider 凭据隔离（Mock 路径，P03-04）；真实凭据隔离随凭据阶段复验） |
 | LED-77-23 | 后端 API 可独立于 Web 被调用 | REQ-29-02 | P01-05（P01） | VERIFIED（2026-10-04：示例与 CI 均在不启动 Web 下完成授权读写） |
-| LED-77-24 | Shared SDK 可以被未来 Native Client 使用 | REQ-29-04/REQ-63-01 | P01-05（P01） | VERIFIED（2026-10-05 对账回填：@ancs/sdk 全量资源面（含 P07/P08 新增 renders/qa/approval/admin/customMotion）+ 双认证模式 + 独立示例与 CI 工作流（P01-05，后续阶段持续扩充）） |
+| LED-77-24 | Shared SDK 可以被未来 Native Client 使用 | REQ-29-04/REQ-63-01 | P01-05（P01） | VERIFIED（2026-10-07 持续扩充：@ancs/sdk 覆盖 CMS writeback 目标配置、attempt 查询与人工重发；全量资源面 + 双认证模式 + 独立示例与 CI 工作流） |
 
 ## 2. §78 Definition of Done — Multi-Client Readiness（11 项）
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|
-| LED-78-01 | 所有业务能力有 REST API | REQ-32-01 | P01-05 起各阶段（P01+） | VERIFIED（2026-10-05 对账回填：业务能力全量 REST（/api/v1；P01 起各阶段；P05—P08 新增编辑/渲染/QA/审批/Admin/自定义组件）+ OpenAPI 同源生成 + SDK 覆盖） |
+| LED-78-01 | 所有业务能力有 REST API | REQ-32-01 | P01-05 起各阶段（P01+） | VERIFIED（2026-10-07 持续扩充：CMS writeback 目标 GET/PUT、attempt 列表、delivery retry 均为 `/api/v1` REST；OpenAPI 同源生成 + SDK 覆盖） |
 | LED-78-02 | API 有版本 | REQ-29-03（DEC-01：/api/v1） | P01-05（P01） | VERIFIED（2026-10-04：全路由 /api/v1 + 客户端标头） |
 | LED-78-03 | Auth 可以支持 Native token flow | REQ-30-03 | P01-02（P01） | VERIFIED（2026-10-05 对账回填：PKCE S256 + 轮换令牌原生流程真实测试；证据：docs/verification/P01-02.md） |
-| LED-78-04 | 所有 DTO 有 shared schema | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-04：全部 DTO 位于 @ancs/contracts，api/sdk/testing 共用） |
+| LED-78-04 | 所有 DTO 有 shared schema | REQ-29-04 | P01-01（P01） | VERIFIED（2026-10-07 持续扩充：CMS writeback target/payload/attempt/retry DTO 与 Sender seam 位于 @ancs/contracts，API/SDK/Worker/testing 共用） |
 | LED-78-05 | Asset 上传流程不依赖 browser-only logic | REQ-26-02 | P02-04（P02） | VERIFIED（2026-10-05 对账回填：上传=意图 + 直传 PUT + 确认（纯 HTTP/标准客户端；集成测试与基线脚本均非浏览器路径）；证据：P02-04/P08-04） |
 | LED-78-06 | Job progress 有通用事件协议 | REQ-29-06 | P02-06（P02） | VERIFIED（2026-10-05 对账回填：job.* 事件协议（Outbox + SSE，单调 seq 游标）；证据：docs/verification/P02-06.md） |
 | LED-78-07 | Project/Scene 使用 server revision | REQ-29-05 | P02-02（P02） | VERIFIED（2026-10-05 对账回填：条件更新（base/expected revision）+ 409 刷新信息；证据：docs/verification/P02-02.md） |
@@ -177,6 +177,8 @@
 | LED-96-COM-04 | BYOK 用户可以绕过平台托管 Provider 用量，但仍通过统一 Router/Adapter | REQ-17-02/REQ-73-04 | P03-04/P06-02（P03/P06） | VERIFIED（2026-10-05 对账回填：BYOK 绕过平台用量但仍经统一 Router/Adapter（P03-04 决策路径测试）；真实 BYOK 凭据随凭据阶段） |
 
 ### 4.4 Publishing（5）
+
+> P13-07 增量核验（2026-10-07）：CMS READY 回写已通过共享契约、REST/SDK、签名、SSRF、有限重试与崩溃恢复矩阵；回写失败不修改 Render，证据见 `docs/verification/P13-07.md`。
 
 | ID | 条目 | 关联 REQ | 任务（阶段） | 状态 |
 |---|---|---|---|---|

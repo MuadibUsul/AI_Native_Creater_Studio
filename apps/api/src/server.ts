@@ -229,6 +229,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerHandoffRoutes(instance, authDeps);
         registerCmsRoutes(instance, authDeps, {
           ...(contentDeps?.articleFetcher !== undefined ? { articleFetcher: contentDeps.articleFetcher } : {}),
+          ...(credentialDeps?.cipher !== undefined ? { credentialCipher: credentialDeps.cipher } : {}),
         });
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {

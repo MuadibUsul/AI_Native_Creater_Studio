@@ -59,6 +59,10 @@ import {
   ingestCmsEventRequestSchema,
   ingestCmsEventResponseSchema,
   cmsIngestionListSchema,
+  cmsWritebackTargetSchema,
+  cmsWritebackAttemptListSchema,
+  retryCmsWritebackResponseSchema,
+  upsertCmsWritebackTargetRequestSchema,
   podcastEpisodeSchema,
   podcastEpisodeListSchema,
   podcastValidationResultSchema,
@@ -289,6 +293,10 @@ import {
   type IngestCmsEventRequest,
   type IngestCmsEventResponse,
   type CmsIngestionList,
+  type CmsWritebackTarget,
+  type CmsWritebackAttemptList,
+  type RetryCmsWritebackResponse,
+  type UpsertCmsWritebackTargetRequest,
   type PodcastEpisode,
   type PodcastEpisodeList,
   type PodcastValidationResult,
@@ -676,10 +684,14 @@ export interface AncsClient {
     claim(workspaceId: string, projectId: string, handoffId: string, claimedBy: string, options?: MutationOptions): Promise<HandoffRecord>;
     cancel(workspaceId: string, projectId: string, handoffId: string, options?: MutationOptions): Promise<HandoffRecord>;
   };
-  /** CMS 输入（P13-06）：机器摄取事件（重放幂等；正文变化 → 新来源版本） */
+  /** CMS 输入与回写（P13-06/P13-07） */
   cms: {
     ingest(workspaceId: string, input: IngestCmsEventRequest, options?: MutationOptions): Promise<IngestCmsEventResponse>;
     list(workspaceId: string): Promise<CmsIngestionList>;
+    getWritebackTarget(workspaceId: string): Promise<CmsWritebackTarget>;
+    upsertWritebackTarget(workspaceId: string, input: UpsertCmsWritebackTargetRequest, options?: MutationOptions): Promise<CmsWritebackTarget>;
+    listWritebackAttempts(workspaceId: string, query?: { deliveryId?: string; renderId?: string; limit?: number }): Promise<CmsWritebackAttemptList>;
+    retryWriteback(workspaceId: string, deliveryId: string, options?: MutationOptions): Promise<RetryCmsWritebackResponse>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1306,6 +1318,26 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       list: (workspaceId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/cms/ingest`, cmsIngestionListSchema),
+      getWritebackTarget: (workspaceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/cms/writeback-target`, cmsWritebackTargetSchema),
+      upsertWritebackTarget: (workspaceId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/cms/writeback-target`, cmsWritebackTargetSchema, {
+          body: input,
+          bodySchema: upsertCmsWritebackTargetRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listWritebackAttempts: (workspaceId, query) => {
+        const search = new URLSearchParams();
+        if (query?.deliveryId !== undefined) search.set('deliveryId', query.deliveryId);
+        if (query?.renderId !== undefined) search.set('renderId', query.renderId);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
+        return request('GET', `/api/v1/workspaces/${workspaceId}/cms/writeback-attempts${suffix}`, cmsWritebackAttemptListSchema);
+      },
+      retryWriteback: (workspaceId, deliveryId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/cms/writeback-deliveries/${deliveryId}/retry`, retryCmsWritebackResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>

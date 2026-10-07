@@ -7,6 +7,7 @@ import { createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigratio
 import { ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import type { ArticleFetcher } from '@ancs/contracts';
+import { LocalCredentialVault } from '@ancs/providers-credential-vault-local';
 import { buildServer } from './server.js';
 
 /**
@@ -22,6 +23,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let llm: MockLlmAdapter;
+let vault: LocalCredentialVault;
 const PASSWORD = 'password-1234';
 const deps = (): DomainDeps => ({ db: handle.db });
 
@@ -48,9 +50,11 @@ beforeAll(async () => {
   await runMigrations(handle);
   auth = createAuth({ db: handle.db, secret: 'cms-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   llm = new MockLlmAdapter();
+  vault = new LocalCredentialVault({ keys: `v1:${Buffer.alloc(32, 6).toString('base64')}` });
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     content: { articleFetcher: fetcher, llm },
+    credentials: { cipher: vault },
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
@@ -178,4 +182,24 @@ describe('CMS 输入（P13-06）', () => {
     expect(other.deduped).toBe(false);
     expect(other.projectId).not.toBe(first.projectId);
   }, 120_000);
+
+  it('P13-07 回写目标 API：Secret 只回掩码；私网 URL 拒绝；跨租户反枚举', async () => {
+    const owner = await newClient('cms-writeback-owner');
+    const outsider = await newClient('cms-writeback-outsider');
+    const { workspaceId } = await makeWorkspaceWithChannel(owner);
+    await makeWorkspaceWithChannel(outsider);
+    const configured = await owner.cms.upsertWritebackTarget(workspaceId, {
+      callbackUrl: 'https://cms.example/callback',
+      signingSecret: 'cms-api-test-secret-1234', // secrets:check-ignore：测试专用假密钥
+    });
+    expect(configured.maskedSecret).toBe('••••1234');
+    expect(configured).not.toHaveProperty('signingSecret');
+    expect((await owner.cms.getWritebackTarget(workspaceId)).id).toBe(configured.id);
+    expect((await owner.cms.listWritebackAttempts(workspaceId)).items).toEqual([]);
+    await expect(owner.cms.upsertWritebackTarget(workspaceId, { callbackUrl: 'http://127.0.0.1/callback' })).rejects.toMatchObject({ status: 403 });
+    await expect(outsider.cms.getWritebackTarget(workspaceId)).rejects.toMatchObject({ status: 404 });
+    await expect(outsider.cms.upsertWritebackTarget(workspaceId, { enabled: false })).rejects.toMatchObject({ status: 404 });
+    await expect(outsider.cms.listWritebackAttempts(workspaceId)).rejects.toMatchObject({ status: 404 });
+    await expect(outsider.cms.retryWriteback(workspaceId, 'cmsd_foreign')).rejects.toMatchObject({ status: 404 });
+  });
 });

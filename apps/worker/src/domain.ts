@@ -3,10 +3,12 @@ import { resolve } from 'node:path';
 import type { createDb } from '@ancs/db';
 import type { DomainDeps } from '@ancs/domain';
 import { MAINTENANCE_DISPATCH_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, NOOP_JOB_TYPE } from '@ancs/domain';
-import { MOTION_GENERATE_JOB_TYPE, RENDER_FINAL_JOB_TYPE, RENDER_QA_JOB_TYPE } from '@ancs/contracts';
+import { CMS_WRITEBACK_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_FINAL_JOB_TYPE, RENDER_QA_JOB_TYPE } from '@ancs/contracts';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { BullMqJobQueue } from '@ancs/providers-queue-bullmq';
 import { createHttpResultFetcher } from './fetcher.js';
+import { createCredentialVaultFromEnv } from '@ancs/providers-credential-vault-local';
+import { createHttpCmsWritebackSender } from './cms-writeback-sender.js';
 
 /**
  * Worker 进程（P03-01 / 计划 §5.5）。
@@ -38,7 +40,13 @@ export function createDomainDeps(handle: ReturnType<typeof createDb>): DomainDep
     (process.env['BETTER_AUTH_SECRET'] !== undefined
       ? createHmac('sha256', process.env['BETTER_AUTH_SECRET']).update('storage-local-v1').digest('hex')
       : undefined);
-  const deps: DomainDeps = { db: handle.db, retention: {}, resultFetcher: createHttpResultFetcher() };
+  const deps: DomainDeps = {
+    db: handle.db,
+    retention: {},
+    resultFetcher: createHttpResultFetcher(),
+    credentials: createCredentialVaultFromEnv(),
+    cmsWritebackSender: createHttpCmsWritebackSender(),
+  };
   if (storageSecret !== undefined && storageSecret.length >= 16) {
     deps.storage = new LocalObjectStorage({
       rootDir: resolve(process.env['ANCS_STORAGE_LOCAL_DIR'] ?? '.storage'),
@@ -53,4 +61,4 @@ export function createDomainDeps(handle: ReturnType<typeof createDb>): DomainDep
   return deps;
 }
 
-export const workerHandlerTypes = [NOOP_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, MAINTENANCE_DISPATCH_JOB_TYPE, RENDER_FINAL_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_QA_JOB_TYPE] as const;
+export const workerHandlerTypes = [NOOP_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, MAINTENANCE_DISPATCH_JOB_TYPE, RENDER_FINAL_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_QA_JOB_TYPE, CMS_WRITEBACK_JOB_TYPE] as const;

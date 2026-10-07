@@ -73,10 +73,135 @@ export const cmsIngestionListSchema = z.object({
 
 export type CmsIngestionList = z.infer<typeof cmsIngestionListSchema>;
 
+/** ---------- CMS 回写（P13-07 / §88） ---------- */
+
+export const CMS_WRITEBACK_JOB_TYPE = 'CMS_WRITEBACK';
+export const CMS_WRITEBACK_EVENT_TYPE = 'creator_video.render.ready_for_review';
+export const CMS_WRITEBACK_SIGNATURE_HEADER = 'x-ancs-signature';
+export const CMS_WRITEBACK_TIMESTAMP_HEADER = 'x-ancs-timestamp';
+export const CMS_WRITEBACK_DELIVERY_HEADER = 'x-ancs-delivery-id';
+export const CMS_WRITEBACK_EVENT_HEADER = 'x-ancs-event';
+
+export const CMS_WRITEBACK_TARGET_STATUSES = ['ACTIVE', 'DISABLED'] as const;
+export const cmsWritebackTargetStatusSchema = z.enum(CMS_WRITEBACK_TARGET_STATUSES);
+export type CmsWritebackTargetStatus = z.infer<typeof cmsWritebackTargetStatusSchema>;
+
+export const CMS_WRITEBACK_ATTEMPT_STATUSES = ['PENDING', 'SUCCEEDED', 'FAILED_RETRYABLE', 'FAILED_FINAL', 'UNKNOWN'] as const;
+export const cmsWritebackAttemptStatusSchema = z.enum(CMS_WRITEBACK_ATTEMPT_STATUSES);
+export type CmsWritebackAttemptStatus = z.infer<typeof cmsWritebackAttemptStatusSchema>;
+
+export const cmsWritebackTargetSchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  callbackUrl: z.string().url().max(2048),
+  status: cmsWritebackTargetStatusSchema,
+  maskedSecret: z.string().min(1).max(64),
+  keyVersion: z.string().min(1).max(32),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+  rotatedAt: isoDateTimeSchema.nullable().default(null),
+});
+export type CmsWritebackTarget = z.infer<typeof cmsWritebackTargetSchema>;
+
+export const upsertCmsWritebackTargetRequestSchema = z
+  .object({
+    callbackUrl: z.string().min(1).max(2048).optional(),
+    /** 仅入站；服务端立即加密且永不回显。 */
+    signingSecret: z.string().min(16).max(4096).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .refine((value) => value.callbackUrl !== undefined || value.signingSecret !== undefined || value.enabled !== undefined, {
+    message: '至少提供 callbackUrl、signingSecret 或 enabled 之一',
+  });
+export type UpsertCmsWritebackTargetRequest = z.infer<typeof upsertCmsWritebackTargetRequestSchema>;
+
+export const cmsWritebackPayloadSchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  eventType: z.literal(CMS_WRITEBACK_EVENT_TYPE),
+  deliveryId: opaqueIdSchema,
+  occurredAt: isoDateTimeSchema,
+  workspaceId: opaqueIdSchema,
+  source: z.object({
+    type: cmsSourceSchema,
+    externalId: z.string().min(1).max(200),
+  }),
+  artifact: z.object({
+    projectId: opaqueIdSchema,
+    projectVersionId: opaqueIdSchema,
+    renderId: opaqueIdSchema,
+    renderStatus: z.literal('READY'),
+    approvalRequired: z.literal(true),
+    manifestHash: z.string().min(1),
+    outputAssetIds: z.array(opaqueIdSchema),
+  }),
+});
+export type CmsWritebackPayload = z.infer<typeof cmsWritebackPayloadSchema>;
+
+export const cmsWritebackAttemptSchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  targetId: opaqueIdSchema,
+  ingestionId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  renderId: opaqueIdSchema,
+  jobId: opaqueIdSchema,
+  deliveryId: opaqueIdSchema,
+  attemptNumber: z.number().int().positive(),
+  jobAttempt: z.number().int().positive(),
+  status: cmsWritebackAttemptStatusSchema,
+  requestUrl: z.string().url().max(2048),
+  requestPayload: cmsWritebackPayloadSchema,
+  requestBodySha256: z.string().regex(/^[0-9a-f]{64}$/),
+  signatureKeyVersion: z.string().min(1).max(32).nullable().default(null),
+  responseStatus: z.number().int().min(100).max(599).nullable().default(null),
+  responseHeaders: z.record(z.string(), z.string()).default({}),
+  responseBodyPreview: z.string().max(16_384).nullable().default(null),
+  responseTruncated: z.boolean().default(false),
+  errorReason: z.string().max(100).nullable().default(null),
+  errorMessage: z.string().max(500).nullable().default(null),
+  startedAt: isoDateTimeSchema.nullable().default(null),
+  completedAt: isoDateTimeSchema.nullable().default(null),
+  createdAt: isoDateTimeSchema,
+});
+export type CmsWritebackAttempt = z.infer<typeof cmsWritebackAttemptSchema>;
+
+export const cmsWritebackAttemptListSchema = z.object({ items: z.array(cmsWritebackAttemptSchema) });
+export type CmsWritebackAttemptList = z.infer<typeof cmsWritebackAttemptListSchema>;
+
+export const retryCmsWritebackResponseSchema = z.object({
+  deliveryId: opaqueIdSchema,
+  jobId: opaqueIdSchema,
+  status: z.literal('QUEUED'),
+});
+export type RetryCmsWritebackResponse = z.infer<typeof retryCmsWritebackResponseSchema>;
+
+export interface CmsWritebackSender {
+  readonly kind: string;
+  send(input: {
+    url: string;
+    headers: Readonly<Record<string, string>>;
+    body: string;
+    timeoutMs: number;
+    maxResponseBytes: number;
+  }): Promise<{
+    status: number;
+    headers: Readonly<Record<string, string>>;
+    body: string;
+    truncated: boolean;
+  }>;
+}
+
 export const CMS_ERROR_REASONS = {
   CHANNEL_NOT_FOUND: 'CHANNEL_NOT_FOUND',
   EMPTY_CONTENT: 'EMPTY_CONTENT',
   FETCH_FAILED: 'FETCH_FAILED',
+  WRITEBACK_TARGET_NOT_CONFIGURED: 'WRITEBACK_TARGET_NOT_CONFIGURED',
+  WRITEBACK_TARGET_DISABLED: 'WRITEBACK_TARGET_DISABLED',
+  WRITEBACK_DELIVERY_NOT_FOUND: 'WRITEBACK_DELIVERY_NOT_FOUND',
+  WRITEBACK_NOT_RETRYABLE: 'WRITEBACK_NOT_RETRYABLE',
+  WRITEBACK_BLOCKED_TARGET: 'WRITEBACK_BLOCKED_TARGET',
+  WRITEBACK_HTTP_ERROR: 'WRITEBACK_HTTP_ERROR',
+  WRITEBACK_NETWORK_ERROR: 'WRITEBACK_NETWORK_ERROR',
 } as const;
 
 export type CmsErrorReason = (typeof CMS_ERROR_REASONS)[keyof typeof CMS_ERROR_REASONS];

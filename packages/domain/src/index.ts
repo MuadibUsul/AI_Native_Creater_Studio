@@ -146,7 +146,17 @@ export { createMockDistributionProvider, MockDistributionProvider } from './mock
 export { createPlatformStubProviders, PlatformStubProvider } from './platform-stubs.js';
 export { createExportPackage, listExportPackages } from './export-packages.js';
 export { cancelHandoff, claimHandoff, createHandoff, getHandoff, listProjectHandoffs } from './handoffs.js';
-export { ingestCmsEvent, listCmsIngestions } from './cms.js';
+export {
+  canonicalizeCmsWritebackPayload,
+  executeCmsWritebackAttempt,
+  getCmsWritebackTarget,
+  ingestCmsEvent,
+  listCmsIngestions,
+  listCmsWritebackAttempts,
+  retryCmsWriteback,
+  scheduleCmsWritebackInTx,
+  upsertCmsWritebackTarget,
+} from './cms.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,
