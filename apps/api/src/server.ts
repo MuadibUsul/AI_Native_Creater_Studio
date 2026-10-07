@@ -29,6 +29,7 @@ import { registerPodcastRoutes } from './routes/podcast.js';
 import { registerPublicationRoutes } from './routes/publications.js';
 import { registerHandoffRoutes } from './routes/handoffs.js';
 import { registerCmsRoutes } from './routes/cms.js';
+import { registerFinanceRoutes } from './routes/finance.js';
 import { registerMixdownRoutes } from './routes/mixdown.js';
 import { registerSceneGenerationRoutes } from './routes/scene-generation.js';
 import { registerCustomMotionRoutes } from './routes/custom-motion.js';
@@ -231,6 +232,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           ...(contentDeps?.articleFetcher !== undefined ? { articleFetcher: contentDeps.articleFetcher } : {}),
           ...(credentialDeps?.cipher !== undefined ? { credentialCipher: credentialDeps.cipher } : {}),
         });
+        registerFinanceRoutes(instance, authDeps);
         registerSpeechPlanRoutes(instance, authDeps);
         if (storageDeps !== undefined) {
           registerAssetRoutes(instance, authDeps, storageDeps);

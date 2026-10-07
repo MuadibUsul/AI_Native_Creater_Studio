@@ -18,16 +18,18 @@ import {
 export class MockDistributionProvider implements DistributionProvider {
   readonly providerId: string;
 
-  constructor(options: { providerId?: string; capabilities?: DistributionCapabilities['capabilities'] } = {}) {
+  constructor(options: { providerId?: string; capabilities?: DistributionCapabilities['capabilities']; analyticsMetrics?: Record<string, unknown> } = {}) {
     this.providerId = options.providerId ?? 'mock.platform';
     this.#capabilities = distributionCapabilitiesSchema.parse({
       tier: 'P1_DIRECT_PUBLISH',
       capabilities: options.capabilities ?? ['DIRECT_PUBLISH', 'UPLOAD_DRAFT', 'DELETE_REMOTE', 'UPDATE_METADATA', 'ANALYTICS'],
       notes: 'Mock 平台（确定性；真实平台接入 BLOCKED 凭据）',
     });
+    this.#analyticsMetrics = options.analyticsMetrics ?? {};
   }
 
   #capabilities: DistributionCapabilities;
+  #analyticsMetrics: Record<string, unknown>;
 
   async capabilities(_ctx: ProviderContext): Promise<DistributionCapabilities> {
     return this.#capabilities;
@@ -75,8 +77,7 @@ export class MockDistributionProvider implements DistributionProvider {
   }
 
   async fetchAnalytics(_req: { remoteId: string; from: string | null; to: string | null }) {
-    // 缺失数据保持未知（不写零，§41）：Mock 返回空口径 + fetchedAt
-    return { platformId: this.providerId, fetchedAt: new Date().toISOString(), metrics: {} };
+    return { platformId: this.providerId, fetchedAt: new Date().toISOString(), metrics: this.#analyticsMetrics };
   }
 }
 

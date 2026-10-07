@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  collectPublicationAnalyticsRequestSchema,
   createExportPackageRequestSchema,
   errorEnvelopeSchema,
   exportPackageListSchema,
@@ -11,13 +12,26 @@ import {
   publicationRecordSchema,
   publicationRequestSchema,
   publicationResponseSchema,
+  videoPerformanceListSchema,
+  videoPerformanceRecordSchema,
+  scenePerformanceListSchema,
+  creatorLearningActionSchema,
+  creatorLearningListSchema,
+  creatorLearningSchema,
   type DistributionProvider,
 } from '@ancs/contracts';
 import {
+  collectPublicationAnalytics,
+  attributeScenePerformance,
   createExportPackage,
   getPublication,
   listExportPackages,
   listProjectPublications,
+  listPublicationAnalytics,
+  listScenePerformance,
+  actOnCreatorLearning,
+  generateCreatorLearnings,
+  listCreatorLearnings,
   reconcilePublication,
   requestPublication,
   type DomainDeps,
@@ -34,6 +48,8 @@ import type { AuthDeps } from '../plugins/auth.js';
 
 const projectParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
 const publicationParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema, publicationId: opaqueIdSchema });
+const performanceParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema, performanceId: opaqueIdSchema });
+const learningParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema, learningId: opaqueIdSchema });
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema, 501: errorEnvelopeSchema, 502: errorEnvelopeSchema };
 
 export interface PublicationRouteDeps {
@@ -46,6 +62,105 @@ export function registerPublicationRoutes(app: FastifyInstance, deps: AuthDeps, 
     db: deps.db,
     ...(provider.distributionProviders !== undefined ? { distributionProviders: provider.distributionProviders } : {}),
   };
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/analytics/learnings/generate',
+    {
+      schema: { tags: ['analytics'], summary: '生成可解释、可撤销的 Creator 学习建议（不改写 Channel）', params: projectParamsSchema, response: { 200: creatorLearningListSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return { items: await generateCreatorLearnings(domain, { workspaceId: request.params.id, projectId: request.params.projectId }) };
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/analytics/learnings',
+    {
+      schema: { tags: ['analytics'], summary: '读取 Creator 学习建议', params: projectParamsSchema, response: { 200: creatorLearningListSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      return { items: await listCreatorLearnings(domain, { workspaceId: request.params.id, projectId: request.params.projectId }) };
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/analytics/learnings/:learningId/action',
+    {
+      schema: { tags: ['analytics'], summary: '停用、接受或恢复学习建议；不会静默修改 Channel', params: learningParamsSchema, body: creatorLearningActionSchema, response: { 200: creatorLearningSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return actOnCreatorLearning(domain, { workspaceId: request.params.id, projectId: request.params.projectId, learningId: request.params.learningId, action: request.body.action });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/analytics/performance/:performanceId/attribute-scenes',
+    {
+      schema: { tags: ['analytics'], summary: '将留存时间映射到发布时冻结 Scene Graph（仅相关性）', params: performanceParamsSchema, response: { 200: scenePerformanceListSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return { items: await attributeScenePerformance(domain, { workspaceId: request.params.id, projectId: request.params.projectId, videoPerformanceId: request.params.performanceId }) };
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/analytics/performance/:performanceId/scenes',
+    {
+      schema: { tags: ['analytics'], summary: '读取 Scene 表现归因（仅相关性）', params: performanceParamsSchema, response: { 200: scenePerformanceListSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      return { items: await listScenePerformance(domain, { workspaceId: request.params.id, projectId: request.params.projectId, videoPerformanceId: request.params.performanceId }) };
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/publications/:publicationId/analytics/collect',
+    {
+      schema: {
+        tags: ['analytics'],
+        summary: '采集发布表现（缺失指标保持 unknown/null；授权撤销后停止）',
+        params: publicationParamsSchema,
+        body: collectPublicationAnalyticsRequestSchema,
+        response: { 200: videoPerformanceRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return collectPublicationAnalytics(domain, {
+        workspaceId: request.params.id,
+        projectId: request.params.projectId,
+        publicationId: request.params.publicationId,
+        request: request.body,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/publications/:publicationId/analytics',
+    {
+      schema: {
+        tags: ['analytics'],
+        summary: '读取发布表现采样（含平台与采样口径）',
+        params: publicationParamsSchema,
+        response: { 200: videoPerformanceListSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:read');
+      return {
+        items: await listPublicationAnalytics(domain, {
+          workspaceId: request.params.id,
+          projectId: request.params.projectId,
+          publicationId: request.params.publicationId,
+        }),
+      };
+    },
+  );
 
   typed.post(
     '/workspaces/:id/projects/:projectId/publications',

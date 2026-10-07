@@ -5,7 +5,7 @@ import { useParams, usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 /**
- * 项目工作区（P05-03）：Script / Storyboard / Editor / Assets / History / Render 导航。
+ * 项目工作区：创作、交付与发布后学习入口共用项目路由上下文。
  * 路由参数由 URL 承载（workspaceId/projectId），页面组件不复制权威状态。
  */
 
@@ -16,6 +16,7 @@ const TABS = [
   { segment: 'assets', label: 'Assets' },
   { segment: 'history', label: 'History' },
   { segment: 'render', label: 'Render' },
+  { segment: 'analytics', label: 'Analytics' },
 ] as const;
 
 export default function ProjectLayout({ children }: { children: ReactNode }) {

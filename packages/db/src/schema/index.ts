@@ -15,6 +15,8 @@ export { publications } from './publications.js';
 export { exportPackages } from './export-packages.js';
 export { handoffs } from './handoffs.js';
 export { cmsIngestions, cmsWritebackAttempts, cmsWritebackTargets } from './cms.js';
+export { analyticsEvents, videoPerformance, scenePerformance, creatorLearnings } from './analytics.js';
+export { financeDataSources, financeTemplates, financeArtifacts } from './finance.js';
 export {
   avatarIdentities,
   brandIdentities,

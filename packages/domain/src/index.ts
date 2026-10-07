@@ -157,6 +157,8 @@ export {
   scheduleCmsWritebackInTx,
   upsertCmsWritebackTarget,
 } from './cms.js';
+export { actOnCreatorLearning, attributeScenePerformance, collectPublicationAnalytics, generateCreatorLearnings, listCreatorLearnings, listPublicationAnalytics, listScenePerformance } from './analytics.js';
+export { createFinanceDataSource, createFinanceTemplate, generateFinanceArtifact, listFinanceArtifacts, listFinanceDataSources, listFinanceTemplates } from './finance.js';
 export { approveDerivation, listProjectDerivations } from './lineage.js';
 export {
   createAtom,

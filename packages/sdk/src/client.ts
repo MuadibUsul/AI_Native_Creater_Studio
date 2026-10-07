@@ -53,6 +53,22 @@ import {
   exportPackageRecordSchema,
   exportPackageListSchema,
   createExportPackageRequestSchema,
+  collectPublicationAnalyticsRequestSchema,
+  videoPerformanceRecordSchema,
+  videoPerformanceListSchema,
+  scenePerformanceListSchema,
+  creatorLearningActionSchema,
+  creatorLearningListSchema,
+  creatorLearningSchema,
+  createFinanceDataSourceSchema,
+  createFinanceTemplateSchema,
+  financeArtifactListSchema,
+  financeArtifactSchema,
+  financeDataSourceListSchema,
+  financeDataSourceSchema,
+  financeTemplateListSchema,
+  financeTemplateSchema,
+  generateFinanceArtifactRequestSchema,
   handoffRecordSchema,
   handoffListSchema,
   createHandoffRequestSchema,
@@ -287,6 +303,17 @@ import {
   type ExportPackageRecord,
   type ExportPackageList,
   type CreateExportPackageRequestInput,
+  type CollectPublicationAnalyticsRequestInput,
+  type VideoPerformanceRecord,
+  type ScenePerformanceRecord,
+  type CreatorLearning,
+  type CreatorLearningAction,
+  type CreateFinanceDataSource,
+  type CreateFinanceTemplate,
+  type FinanceArtifact,
+  type FinanceDataSource,
+  type FinanceTemplate,
+  type GenerateFinanceArtifactRequestInput,
   type HandoffRecord,
   type HandoffList,
   type CreateHandoffRequest,
@@ -670,6 +697,8 @@ export interface AncsClient {
     get(workspaceId: string, projectId: string, publicationId: string): Promise<PublicationRecord>;
     /** 对账（结果未知先查询；以 Provider getStatus 为准——不自动重发） */
     reconcile(workspaceId: string, projectId: string, publicationId: string, options?: MutationOptions): Promise<PublicationRecord>;
+    collectAnalytics(workspaceId: string, projectId: string, publicationId: string, input?: CollectPublicationAnalyticsRequestInput, options?: MutationOptions): Promise<VideoPerformanceRecord>;
+    listAnalytics(workspaceId: string, projectId: string, publicationId: string): Promise<{ items: VideoPerformanceRecord[] }>;
   };
   /** P4 导出包（P13-04）：视频+封面+文案+披露+平台手工清单；最后一步由用户完成（不代发） */
   exportPackages: {
@@ -692,6 +721,21 @@ export interface AncsClient {
     upsertWritebackTarget(workspaceId: string, input: UpsertCmsWritebackTargetRequest, options?: MutationOptions): Promise<CmsWritebackTarget>;
     listWritebackAttempts(workspaceId: string, query?: { deliveryId?: string; renderId?: string; limit?: number }): Promise<CmsWritebackAttemptList>;
     retryWriteback(workspaceId: string, deliveryId: string, options?: MutationOptions): Promise<RetryCmsWritebackResponse>;
+  };
+  analytics: {
+    attributeScenes(workspaceId: string, projectId: string, performanceId: string, options?: MutationOptions): Promise<{ items: ScenePerformanceRecord[] }>;
+    listScenes(workspaceId: string, projectId: string, performanceId: string): Promise<{ items: ScenePerformanceRecord[] }>;
+    generateLearnings(workspaceId: string, projectId: string, options?: MutationOptions): Promise<{ items: CreatorLearning[] }>;
+    listLearnings(workspaceId: string, projectId: string): Promise<{ items: CreatorLearning[] }>;
+    actOnLearning(workspaceId: string, projectId: string, learningId: string, action: CreatorLearningAction, options?: MutationOptions): Promise<CreatorLearning>;
+  };
+  finance: {
+    createDataSource(workspaceId: string, input: CreateFinanceDataSource, options?: MutationOptions): Promise<FinanceDataSource>;
+    listDataSources(workspaceId: string): Promise<{ items: FinanceDataSource[] }>;
+    createTemplate(workspaceId: string, input: CreateFinanceTemplate, options?: MutationOptions): Promise<FinanceTemplate>;
+    listTemplates(workspaceId: string): Promise<{ items: FinanceTemplate[] }>;
+    generateArtifact(workspaceId: string, input: GenerateFinanceArtifactRequestInput, options?: MutationOptions): Promise<FinanceArtifact>;
+    listArtifacts(workspaceId: string): Promise<{ items: FinanceArtifact[] }>;
   };
   /** Podcast（P12-05）：纯音频改写（视觉指涉移除披露）→ PODCAST 变体合成 → 章节/混音/元数据/署名 */
   podcast: {
@@ -1277,6 +1321,14 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}/reconcile`, publicationRecordSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      collectAnalytics: (workspaceId, projectId, publicationId, input = {}, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}/analytics/collect`, videoPerformanceRecordSchema, {
+          body: input,
+          bodySchema: collectPublicationAnalyticsRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listAnalytics: (workspaceId, projectId, publicationId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/publications/${publicationId}/analytics`, videoPerformanceListSchema),
     },
     exportPackages: {
       create: (workspaceId, projectId, input, mutation) =>
@@ -1338,6 +1390,32 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/cms/writeback-deliveries/${deliveryId}/retry`, retryCmsWritebackResponseSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+    analytics: {
+      attributeScenes: (workspaceId, projectId, performanceId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/performance/${performanceId}/attribute-scenes`, scenePerformanceListSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listScenes: (workspaceId, projectId, performanceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/performance/${performanceId}/scenes`, scenePerformanceListSchema),
+      generateLearnings: (workspaceId, projectId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/learnings/generate`, creatorLearningListSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      listLearnings: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/learnings`, creatorLearningListSchema),
+      actOnLearning: (workspaceId, projectId, learningId, action, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/learnings/${learningId}/action`, creatorLearningSchema, {
+          body: action,
+          bodySchema: creatorLearningActionSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+    finance: {
+      createDataSource: (workspaceId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/finance/data-sources`, financeDataSourceSchema, { body: input, bodySchema: createFinanceDataSourceSchema, idempotencyKey: mutation?.idempotencyKey }),
+      listDataSources: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/finance/data-sources`, financeDataSourceListSchema),
+      createTemplate: (workspaceId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/finance/templates`, financeTemplateSchema, { body: input, bodySchema: createFinanceTemplateSchema, idempotencyKey: mutation?.idempotencyKey }),
+      listTemplates: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/finance/templates`, financeTemplateListSchema),
+      generateArtifact: (workspaceId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/finance/artifacts`, financeArtifactSchema, { body: input, bodySchema: generateFinanceArtifactRequestSchema, idempotencyKey: mutation?.idempotencyKey }),
+      listArtifacts: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/finance/artifacts`, financeArtifactListSchema),
     },
     multilingual: {
       translate: (workspaceId, projectId, planId, input, mutation) =>

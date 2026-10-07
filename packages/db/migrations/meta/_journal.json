@@ -330,6 +330,34 @@
       "when": 1791364728763,
       "tag": "0046_soft_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791368532671,
+      "tag": "0047_keen_vapor",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791368719403,
+      "tag": "0048_hesitant_northstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791368796353,
+      "tag": "0049_lucky_leopardon",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791368902195,
+      "tag": "0050_classy_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

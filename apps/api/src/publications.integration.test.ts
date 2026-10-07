@@ -3,11 +3,11 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { createDb, plans, publications, redactDatabaseUrl, renderApprovals, renders, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
+import { channelStyleVersions, createDb, plans, providerConnections, publications, redactDatabaseUrl, renderApprovals, renders, resolveTestDatabaseUrl, runMigrations, scenes, videoPerformance, workspaces, type DbHandle } from '@ancs/db';
 import { createMockDistributionProvider, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { and, eq } from 'drizzle-orm';
-import type { ArticleFetcher } from '@ancs/contracts';
+import { FINANCE_VISUALIZATION_TYPES, type ArticleFetcher, type FinanceArtifact } from '@ancs/contracts';
 import { buildServer } from './server.js';
 
 /**
@@ -55,7 +55,10 @@ beforeAll(async () => {
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     content: { articleFetcher: fetcher, llm },
-    distribution: { providers: [createMockDistributionProvider(), createMockDistributionProvider({ providerId: 'mock.p4', capabilities: ['EXPORT_PACKAGE', 'UPLOAD_DRAFT'] })] },
+    distribution: { providers: [
+      createMockDistributionProvider({ analyticsMetrics: { views: 1250, ctr: 0.125, watchTimeMs: 90_000, retention: [{ positionMs: 0, rate: 1 }, { positionMs: 30_000, rate: 0.62 }] } }),
+      createMockDistributionProvider({ providerId: 'mock.p4', capabilities: ['EXPORT_PACKAGE', 'UPLOAD_DRAFT'] }),
+    ] },
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
@@ -97,6 +100,11 @@ async function makeProjectWithRender(client: AncsClient, options: { approve: boo
   await client.evidence.extract(workspace.id, project.id, record.document.id);
   llm.scriptNext('valid');
   await client.narrative.generate(workspace.id, project.id, record.document.id, { targetDurationMs: 60_000 });
+
+  await handle.db.insert(scenes).values([
+    { id: `scn_${randomUUID()}`, workspaceId: workspace.id, projectId: project.id, position: 0, startMs: 0, durationMs: 30_000, semanticType: 'HOST_STATEMENT', sceneType: 'HOST_FULL' },
+    { id: `scn_${randomUUID()}`, workspaceId: workspace.id, projectId: project.id, position: 1, startMs: 30_000, durationMs: 30_000, semanticType: 'TREND', sceneType: 'LINE_CHART' },
+  ]);
 
   const version = await client.projects.versions.create(project.id, { reason: 'FINAL_RENDER' });
   const outputAssetId = `ast_out_${randomUUID().slice(0, 8)}`;
@@ -247,5 +255,92 @@ describe('发布核心（P13-01）', () => {
       501,
       'PROVIDER_UNREGISTERED',
     );
+  }, 120_000);
+
+  it('P14-01 采集发布表现：保存采样口径、缺失指标为 null；授权撤销后停止调用', async () => {
+    const client = await newClient('analytics-collect');
+    const { workspaceId, projectId, versionId, outputAssetId } = await makeProjectWithRender(client, { approve: true });
+    const created = await client.publications.request(workspaceId, projectId, {
+      publicationKey: { platformId: 'mock.platform', accountId: 'acc-analytics', projectVersionId: versionId, outputAssetId },
+      title: 'Analytics 样本',
+    });
+    const sample = await client.publications.collectAnalytics(workspaceId, projectId, created.publication.id, {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+      granularity: 'DAY',
+      timezone: 'Asia/Shanghai',
+    });
+    expect(sample.metrics.views).toBe(1250);
+    expect(sample.metrics.clickThroughRate).toBe(0.125);
+    expect(sample.metrics.impressions).toBeNull();
+    expect(sample.metrics.averageWatchTimeMs).toBeNull();
+    expect(sample.metrics.retention[1]).toEqual({ positionMs: 30_000, rate: 0.62 });
+    expect(sample.sampling).toMatchObject({ granularity: 'DAY', timezone: 'Asia/Shanghai', source: 'mock.platform:fetchAnalytics' });
+    expect((await client.publications.listAnalytics(workspaceId, projectId, created.publication.id)).items).toHaveLength(1);
+    expect(await handle.db.select().from(videoPerformance).where(eq(videoPerformance.publicationId, created.publication.id))).toHaveLength(1);
+    const attributed = await client.analytics.attributeScenes(workspaceId, projectId, sample.id);
+    expect(attributed.items.map((item) => item.retentionRate)).toEqual([1, 0.62]);
+    expect(attributed.items.every((item) => item.interpretation === 'CORRELATION_ONLY')).toBe(true);
+    expect((await client.analytics.listScenes(workspaceId, projectId, sample.id)).items).toHaveLength(2);
+    const styleCountBefore = (await handle.db.select().from(channelStyleVersions)).length;
+    const learnings = await client.analytics.generateLearnings(workspaceId, projectId);
+    expect(new Set(learnings.items.map((item) => item.kind))).toEqual(new Set(['RHYTHM', 'SCENE_TYPE', 'AVATAR_RATIO']));
+    expect(learnings.items.every((item) => item.channelMutationApplied === false && item.evidence.interpretation === 'CORRELATION_ONLY')).toBe(true);
+    const accepted = await client.analytics.actOnLearning(workspaceId, projectId, learnings.items[0]!.id, { action: 'ACCEPT' });
+    expect(accepted.status).toBe('ACCEPTED');
+    expect((await client.analytics.actOnLearning(workspaceId, projectId, accepted.id, { action: 'RESTORE' })).status).toBe('REVERTED');
+    const disabled = await client.analytics.actOnLearning(workspaceId, projectId, learnings.items[1]!.id, { action: 'DISABLE' });
+    expect(disabled.status).toBe('DISABLED');
+    expect((await client.analytics.actOnLearning(workspaceId, projectId, disabled.id, { action: 'RESTORE' })).status).toBe('ACTIVE');
+    expect((await handle.db.select().from(channelStyleVersions)).length).toBe(styleCountBefore);
+
+    await handle.db.insert(providerConnections).values({
+      id: 'acc-analytics', workspaceId, providerId: 'mock.platform', kind: 'DISTRIBUTION', label: 'revoked',
+      maskedToken: '••••test', keyVersion: 'v1', status: 'REVOKED', revokedAt: new Date(),
+    });
+    await expectApiError(client.publications.collectAnalytics(workspaceId, projectId, created.publication.id), 409, 'AUTHORIZATION_REVOKED');
+  }, 120_000);
+
+  it('P14-04/05 Finance Pack：六类产物冻结许可证与模板版本，缺失值拒绝且跨租户不可枚举', async () => {
+    const client = await newClient('finance-pack');
+    const outsider = await newClient('finance-outsider');
+    const workspace = await client.workspaces.create({ name: `Finance-${randomUUID().slice(0, 8)}` });
+    const source = await client.finance.createDataSource(workspace.id, {
+      name: 'Licensed Macro Feed',
+      sourceUrl: 'https://data.example/macro',
+      license: { licenseId: 'license-macro-v1', name: 'Macro Commercial License', url: 'https://data.example/license', allowedUse: '视频与图表再发布', effectiveAt: '2026-10-01T00:00:00.000Z' },
+    });
+
+    const createdArtifacts: FinanceArtifact[] = [];
+    for (const visualizationType of FINANCE_VISUALIZATION_TYPES) {
+      const key = `finance-${visualizationType.toLowerCase().replaceAll('_', '-')}`;
+      const template = await client.finance.createTemplate(workspace.id, { key, name: `${visualizationType} template`, visualizationType, config: { theme: 'dark' } });
+      const artifact = await client.finance.generateArtifact(workspace.id, {
+        visualizationType,
+        title: `${visualizationType} evidence`,
+        dataSourceId: source.id,
+        templateId: template.id,
+        data: [{ label: '2026-10-01', value: 4.25, unit: '%', currency: null, timezone: 'UTC', adjustment: 'UNADJUSTED', sourceId: source.id, observedAt: '2026-10-01T00:00:00.000Z', dimensions: { tenor: '10Y' } }],
+        relations: visualizationType === 'SUPPLY_CHAIN' || visualizationType === 'TRADE_ROUTE' || visualizationType === 'SCENARIO_TREE'
+          ? [{ from: 'A', to: 'B', label: 'flows to', sourceId: source.id }]
+          : [],
+      });
+      expect(artifact.visualizationType).toBe(visualizationType);
+      expect(artifact.dataSourceSnapshot.license.licenseId).toBe('license-macro-v1');
+      expect(artifact.templateSnapshot.version).toBe(1);
+      createdArtifacts.push(artifact);
+    }
+    expect((await client.finance.listArtifacts(workspace.id)).items).toHaveLength(6);
+
+    const candleV2 = await client.finance.createTemplate(workspace.id, { key: 'finance-candle', name: 'CANDLE template revised', visualizationType: 'CANDLE', config: { theme: 'light' } });
+    expect(candleV2.version).toBe(2);
+    const originalCandle = (await client.finance.listArtifacts(workspace.id)).items.find((item) => item.id === createdArtifacts[0]!.id);
+    expect(originalCandle?.templateSnapshot.version).toBe(1);
+
+    await expectApiError(client.finance.generateArtifact(workspace.id, {
+      visualizationType: 'CANDLE', title: 'missing must stay unknown', dataSourceId: source.id, templateId: candleV2.id,
+      data: [{ label: 'unknown', value: null, unit: '%', currency: null, timezone: 'UTC', adjustment: 'UNADJUSTED', sourceId: source.id, observedAt: '2026-10-01T00:00:00.000Z', dimensions: {} }], relations: [],
+    }), 422, 'MISSING_DATA');
+    await expectApiError(outsider.finance.listArtifacts(workspace.id), 404);
   }, 120_000);
 });
