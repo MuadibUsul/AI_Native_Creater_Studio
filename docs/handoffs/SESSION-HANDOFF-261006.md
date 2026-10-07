@@ -1,8 +1,8 @@
 # 会话交接文档（Session Handoff）
 
-- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 3/7）
+- **交接时点**：2026-10-07（P12 阶段全部完成；P13 已完成 5/7）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
-- **最后已推送提交**：`93a4367` feat(p13-03) 其他平台能力矩阵（CI 绿 run 37551593318）——下一任务 P13-04
+- **最后已推送提交**：`d55ea5b` feat(p13-05) Handoff（CI 绿 run 37574170902）——下一任务 P13-06
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
 ---
@@ -18,11 +18,11 @@
 | P10（输入/声音/素材/组件/输出/检索） | 6 | ✅ 全部交付（真实克隆/素材/Runway BLOCKED 凭据——seam 与验收矩阵就位） |
 | P11（Content Core 与官方 Pack） | 4 | ✅ 全部交付（756/759/762/765；LED-96-PLUGIN-02/03 闭合） |
 | P12（Shorts/Social/Text/多语言/Podcast） | 5 | ✅ 全部交付（768/771/774/777/780；各 Pack analyze/generate/validate 完整链路） |
-| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783）+ P13-02 YouTube ✅（786；**真实远端 BLOCKED OAuth 凭据**——Mock 同构）+ P13-03 平台矩阵 ✅（789；TikTok=P1/抖音=P4/Bilibili=P2/LinkedIn=P2/X=P4 数据驱动 + fail-closed Stub；**平台实测 BLOCKED 账号凭据**）｜P13-04..07 未开始 |
-| P14–P16 | 28 | ⬜ 未开始（P14 5 / P15 8 / P16 9；另含 3 项凭据阻塞：P06-02/P06-04/P08-05 + P13-02 真实远端 + P13-03 平台实测） |
+| P13（Publishing/Handoff/CMS） | 7 | P13-01 发布核心 ✅（783）+ P13-02 YouTube ✅（786；真实远端 BLOCKED）+ P13-03 平台矩阵 ✅（789；平台实测 BLOCKED）+ P13-04 P3/P4 体验 ✅（791；Draft 不显示 Published/末步由用户）+ P13-05 Handoff ✅（794；过期 410/跨租户 404）｜P13-06/07 未开始 |
+| P14–P16 | 28 | ⬜ 未开始（P14 5 / P15 8 / P16 9；凭据阻塞：P06-02/P06-04/P08-05 + P13-02 真实远端 + P13-03 平台实测） |
 
-- 测试规模：**789**（unit 341 · web 70 · motion 19 · integration 316 · security 22 · render 6 · golden 15）
-- 迁移最新编号：**0042**（publications 幂等键四元组唯一）；下一迁移为 0043
+- 测试规模：**794**（unit 341 · web 70 · motion 19 · integration 321 · security 22 · render 6 · golden 15）
+- 迁移最新编号：**0044**（handoffs）；下一迁移为 0045
 - **事故记录（诚实披露）**：P12-05 验收中发生过一次编造验收记录事故（未完成验证即写出虚构结果文档）——已删除并以真实运行证据重写；P12-03 修复的种子竞态曾致 P12-01/02 CI 失败（后续提交全绿）。两起均在对应 verification 文档中留档。
 
 ## 2. 每阶段一句话备忘（详见 docs/verification/ 对应文件）
