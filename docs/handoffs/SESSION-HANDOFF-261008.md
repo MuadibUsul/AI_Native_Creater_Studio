@@ -15,7 +15,7 @@
 
 ## 验证和环境
 
-- 精确隔离 DB 的最新完整 `pnpm verify` 于 2026-10-08 17:44 退出 **0**：Unit 364、Web 156、Motion 19、Integration 353、Security 24、Render 6、Golden 15，合计 **937/937**。879、893、916、929、933 是更早基线。`test:contract`、`test:e2e` 为 `[PLANNED]`、0 断言。该运行包含 N00-06 素材、N16 全局界面、N15-03 0053—0055 及新增安全读投影；测试数不等于尚在途产品门关闭。
+- 精确隔离 DB 的最新完整 `pnpm verify` 于 2026-10-08 19:01 退出 **0**：Unit 364、Web 158、Motion 19、Integration 353、Security 24、Render 6、Golden 15，合计 **939/939**。937、879、893、916、929、933 是更早基线。`test:contract`、`test:e2e` 为 `[PLANNED]`、0 断言。该运行包含 N00-06 素材、N16 全局界面、N15-03 0053—0055 及新增安全读投影；测试数不等于尚在途产品门关闭。
 - `scripts/verification/n16-01-browser-smoke.mjs` 在最终 Next 构建重启后，用 Playwright Chromium 对公开 `/design-system` 做明暗按钮、状态卡、顶部栏、hover、375px 侧栏和粗指针命中尺寸断言，退出 0；两个图标按钮宽度和 10 个可见按钮高度实际为 44px，两张全页截图和 hash 在 `docs/verification/evidence/N16-01/` 与验证文档。浏览器脚本未覆盖真实项目、开关、21 路由矩阵或媒体播放。
 - **数据库隔离**：历史开发库数据恢复由用户明确要求暂缓。此后运行真实 DB 测试时只使用 `ANCS_TEST_DATABASE_URL` 指向隔离的 `ancs_quiet_frame_test_261007`，并移除当前命令环境的 `DATABASE_URL`；不要清理或重建 `ancs_dev`。浏览器现有工作区记录已丢失，不能据此声称应用功能故障或恢复完成。
 - N00-04 已收到横屏与竖屏两段用户明确指定的本地 MP4，原片没有入库或推送；竖屏是 13.89 秒、9:16 VFR，但含可识别人脸/账号且不能证明手机原始采集。用户另指定 Pexels：三段免费许可参考下载到 Git 忽略目录，实际为 9:16 25 fps、80 秒 30000/1001、120 秒 25 fps，3/3 完整解码通过；本仓库只记录页链、创作者、许可、哈希和流。新增匿名浏览器对公开 `/design-system` 的 4.84 秒 VP8 录屏；从 Pexels 80 秒原片及音轨重复派生 20 分钟本地压力片，长时间轴完整解码、递增 PTS 和末端 seek 通过，但不是连续实拍。详见 `docs/verification/N00-04.md`、各媒体 manifest。Web 素材库现在可上传小型 MP4 并在项目内播放；N00-06 已在精确隔离库用合成 CFR 样本、真实签名存储和两租户权限回归验证。尚未证明手机原始 VFR、长视频、最终成片或完整编辑链路。
@@ -27,9 +27,15 @@
 
 - 用户要求现有 Web 全部按 v0.4 黑白标准完成后暂停，先由用户检查，再继续旧 P15/P16。本轮已统一公开入口、Workspace、Studio、项目交付/分析、账单、团队和 Ops；媒体/作品内容保留原色，欢迎页与 Dashboard 不再展示虚构图表或假封面。
 - N15-03 新增 workspace 限定项目/存储和 principal+ticket 限定支持授权安全投影，真实运营 MFA 浏览器脚本通过双 scope 拒绝、支持审计/Outbox、深浅主题、390 窄屏与原生 200%。仍缺生产独立复核/发布，因此保持 `IN_PROGRESS`。
-- 最终 `pnpm verify` 于 17:44 exit 0：937/937 已实现断言；contract/e2e 仍为 `[PLANNED]`。全局 Web 证据见 `docs/verification/N16-global-web.md`，最终技术截图在 `.artifacts/global-ui-final/` 与 `.artifacts/n15-03-ops-ui/`。
+- 最终 `pnpm verify` 于 19:01 exit 0：939/939 已实现断言；contract/e2e 仍为 `[PLANNED]`。全局 Web 证据见 `docs/verification/N16-global-web.md`，最终技术截图在 `.artifacts/global-ui-final/`、`.artifacts/n15-03-ops-ui/` 与 `.artifacts/n16-route-audit/`。
 - 本机最终生产 Web 运行于 `http://127.0.0.1:4200/welcome` 供检查。后续首次动作应先收集用户 UI 反馈；不要跨过验收直接推进旧 P15/P16。
 
-1. 以最新 **937/937** 已实现测试的 `pnpm verify` 和逐项验证文档为基线；879、893、916、929、933 是更早的对照数，不是当前进度。最终全量构建已在 4200 重启供用户验收；若以后再次重建 `.next`，需重新核对并重启旧进程。
+### 2026-10-08 19:01 全路由验收补充
+
+- `scripts/verification/n16-02-real-session.mjs` 已扩展到公开 3 路由与登录后 18 路由，在 1440×900 浅色、1280×800 深色和 390×844 窄屏共完成 63 次页面检查；页面错误、告警、横向溢出和可见控件越界为 0，窄屏小于 32px 的可见触控目标为 0。移动导航与 Studio Inspector 共 5 次真实开合通过。
+- 修复了窄屏创作输入越界、移动导航关闭与长账户信息、身份空态、最后一名 OWNER 保护和版本历史中文标题。人工查看 `.artifacts/n16-route-audit/authenticated-narrow-390/workspace-navigation.png` 与 `project-editor-inspector.png`，未发现新的裁切或重叠。
+- 最终 `pnpm verify` 于 19:01 退出 0：Unit 364、Web 158、Motion 19、Integration 353、Security 24、Render 6、Golden 15，共 **939/939** 已实现断言。contract/e2e 仍为 `[PLANNED]`、0 断言。现有 Web 已到用户检查点；整个 v0.4、D0/D1 和依赖未闭合的 N16 任务没有被标为完成。
+
+1. 以最新 **939/939** 已实现测试的 `pnpm verify` 和逐项验证文档为基线；937、879、893、916、929、933 是更早的对照数，不是当前进度。最终全量构建需在 4200 重启供用户验收；若以后再次重建 `.next`，需重新核对并重启旧进程。
 2. 继续补齐 N00-04 所需的手机原始 VFR 来源与授权；公共页面录屏、Pexels 参考和 20 分钟重复压力片已备。N00-06 的授权项目小型合成 MP4 播放和限定清理已验，仍需真实手机 VFR 与后续长片/跨浏览器媒体能力。把 N01-01 接入 ProjectDocument/DB/API/SDK 的后续任务。用户需配合的近端与后续事项集中在 `docs/handoffs/USER-ACTIONS-261008.md`，不重复逐项追问。保持旧毫秒项目只读兼容，严禁精度静默丢失。
 3. N16-02 账号偏好契约、持久化、Web 首屏和真实会话已验；N16-10 单色图表、320px 滚动与真实媒体同帧主题隔离已通过定向浏览器检查，现有 ProjectDetail/SceneGraph 派生哈希和非空生成输入在主题前后相同，但 N01-02 权威 ProjectDocument hash 尚无，故任务仍 `IN_PROGRESS`。N16-03 继续图标权利/替代方案、macOS 与受保护路由缩放证据，D0/D1 未关闭。N15-02 独立身份/MFA 已验；N15-03 已有 0053—0055 权限与安全投影切片，生产旧 `/admin` 读写全关闭，独立复核和发布等剩余见单项交接。用户需晚间确认真实生产操作者、可信同人别名来源与独立复核人；旧 P15/P16 的暂停不能直接映射为新 N15/N16 状态。

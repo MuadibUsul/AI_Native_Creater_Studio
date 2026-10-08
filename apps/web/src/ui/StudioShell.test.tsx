@@ -45,6 +45,17 @@ describe('Quiet Frame 工作台外壳', () => {
     expect(sdk.notifications.list).toHaveBeenCalledWith({ workspaceId: 'ws_1', limit: 20 });
   });
 
+  it('窄屏导航提供抽屉内关闭入口并恢复导航语义', async () => {
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await screen.findByRole('link', { name: /真实作品/ });
+    await userEvent.click(screen.getByRole('button', { name: '打开导航' }));
+    expect(screen.getByRole('dialog', { name: '主导航' })).toBeTruthy();
+    const closeButtons = screen.getAllByRole('button', { name: '关闭导航' });
+    await userEvent.click(closeButtons[0]!);
+    expect(screen.queryByRole('dialog', { name: '主导航' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: '主导航' })).toBeTruthy();
+  });
+
   it('命令搜索支持快捷键、过滤、Esc 关闭与焦点返回', async () => {
     renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
     const trigger = screen.getByRole('button', { name: /快速搜索/ });

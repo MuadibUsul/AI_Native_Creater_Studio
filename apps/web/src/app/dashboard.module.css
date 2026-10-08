@@ -53,3 +53,22 @@
 .dashboard :global(.project-card:focus-visible) .projectPreview {
   border-color: var(--ui-border-control);
 }
+
+@media (max-width: 760px) {
+  .dashboard :global(.composer-footer) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard :global(.composer-tools) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .dashboard :global(.composer-tools .btn),
+  .dashboard :global(.composer-footer > .primary) {
+    width: 100%;
+    min-width: 0;
+  }
+}

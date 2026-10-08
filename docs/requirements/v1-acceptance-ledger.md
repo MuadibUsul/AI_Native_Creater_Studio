@@ -4,7 +4,7 @@
 
 - 任务：P00-01（计划 §12 覆盖索引要求"验收清单 附录 C、96 → P00 逐项建账，阶段门逐项关闭"）
 - 用途：G4（内部生产可用）与 G8（全规范覆盖）的逐项关闭清单；P08-06 对账依据。
-- 2026-10-08 界面验收备注：Quiet Frame Web 重构的页面覆盖、视觉差异和本地功能回归单独记录于 `docs/verification/QUIET-FRAME-REBUILD.md`；演示夹具与 Mock 不改变本表原有条目状态。按用户要求，Web 人工检查前不推进 P15/P16。
+- 2026-10-08 界面验收备注：Quiet Frame Web 重构的页面覆盖、视觉差异和本地功能回归记录于 `docs/verification/QUIET-FRAME-REBUILD.md` 与 `docs/verification/N16-global-web.md`；现有 21 路由已完成 63 次真实页面检查，演示夹具与 Mock 不改变本表原有条目状态。按用户要求，Web 人工检查前不推进 P15/P16。
 - 规则：
   1. 每项初始 `TODO`；关闭时须有可执行证据（测试、脚本输出、账号截图、人工评审记录），记录在 `docs/verification/`。
   2. Mock 验证通过不等于真实 Provider 验证通过；接口存在不等于功能交付。

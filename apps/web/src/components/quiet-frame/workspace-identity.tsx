@@ -185,6 +185,11 @@ export function WorkspaceIdentity({ workspaceId }: { workspaceId: string }) {
       <label className="label">身份名称<input className="field" value={name} onChange={(event) => setName(event.target.value)} placeholder="填写你的创作者身份名称" maxLength={80} /></label>
       {identity ? <span className="small muted">身份 {identity.id} · 更新于 {new Date(identity.updatedAt).toLocaleDateString('zh-CN')}</span> : <span className="small muted">先创建身份，再配置声音、表达和品牌。</span>}
     </form>
+    {!identities.isPending && !identities.isError && !identity ? <section className="panel qf-identity-onboarding mt32" aria-label="创作者身份配置步骤">
+      <div className="qf-identity-step"><span className="qf-identity-step-index">1</span><strong>先命名身份</strong><p>用你能识别的名称保存身份。保存后才会开放声音、表达风格和品牌配置。</p></div>
+      <div className="qf-identity-step"><span className="qf-identity-step-index">2</span><strong>按需配置声音</strong><p>声音克隆需要单独授权和音频样本。没有授权时仍可使用普通系统声音。</p></div>
+      <div className="qf-identity-step"><span className="qf-identity-step-index">3</span><strong>复用表达与品牌</strong><p>为后续作品保存语速、语气、专有名词和品牌外观，并保留版本记录。</p></div>
+    </section> : null}
     {identity ? <div className="identity-grid mt32">
       <section className="panel qf-voice-panel">
         <div className="voice-hero"><div className="row between"><h3>你的旁白声音</h3><span className="badge green">{identity.voiceIdentity?.status === 'ACTIVE' ? '已绑定' : '尚未绑定'}</span></div><div className="voice-sphere" aria-hidden="true" /><div className="row between"><div><h2>{identity.voiceIdentity?.provider ?? '系统声音示意'}</h2><p className="small muted mt8">{identity.voiceIdentity?.languageProfile ?? '尚无已授权的专属声音'}</p></div><button type="button" className="btn icononly primary" aria-label="试听系统示例声音" onClick={speak}>▶</button></div><p className="sample-note mt24">试听使用浏览器系统语音，不代表供应商或克隆音质。</p></div>

@@ -10,6 +10,8 @@ import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
+import { LocalCredentialVault } from '../../packages/providers/credential-vault-local/dist/index.js';
+import { parsePlatformCredentials } from '../../apps/api/dist/plugins/credentials.js';
 
 // This script is intentionally gated by resolveTestDatabaseUrl: it may never write to ancs_dev.
 const testDatabaseUrl = resolveTestDatabaseUrl();
@@ -224,11 +226,113 @@ async function verifyAuthenticatedNativeZoom({ email, workspaceId, projectId, pr
   }
 }
 
+async function auditRoutes(context, { workspaceId, projectId, sceneId, theme, width, height, scope = 'authenticated', routes: requestedRoutes }) {
+  const evidenceDir = resolve('.artifacts/n16-route-audit', `${scope}-${theme}-${String(width)}`);
+  await mkdir(evidenceDir, { recursive: true });
+  const routes = requestedRoutes ?? [
+    { name: 'workspace', path: '/' },
+    { name: 'new-project', path: `/w/${workspaceId}/new` },
+    { name: 'workspace-assets', path: `/w/${workspaceId}/assets` },
+    { name: 'workspace-settings', path: `/w/${workspaceId}/settings` },
+    { name: 'workspace-team', path: `/w/${workspaceId}/team` },
+    { name: 'workspace-identity', path: `/w/${workspaceId}/identity` },
+    { name: 'workspace-billing', path: `/w/${workspaceId}/billing` },
+    { name: 'workspace-extensions', path: `/w/${workspaceId}/extensions` },
+    { name: 'project-script', path: `/w/${workspaceId}/p/${projectId}/script` },
+    { name: 'project-storyboard', path: `/w/${workspaceId}/p/${projectId}/storyboard` },
+    { name: 'project-editor', path: `/w/${workspaceId}/p/${projectId}/editor` },
+    { name: 'project-scene', path: `/w/${workspaceId}/p/${projectId}/editor/${sceneId}` },
+    { name: 'project-assets', path: `/w/${workspaceId}/p/${projectId}/assets` },
+    { name: 'project-analytics', path: `/w/${workspaceId}/p/${projectId}/analytics` },
+    { name: 'project-history', path: `/w/${workspaceId}/p/${projectId}/history` },
+    { name: 'project-render', path: `/w/${workspaceId}/p/${projectId}/render` },
+    { name: 'project-publish', path: `/w/${workspaceId}/p/${projectId}/publish` },
+    { name: 'ops-denied', path: '/admin' },
+  ];
+  const results = [];
+  let mobileInteractionChecks = 0;
+  for (const route of routes) {
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height });
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    const response = await page.goto(`${webBase}${route.path}`, { waitUntil: 'load' });
+    assert.equal(response?.status(), 200, `${theme}/${route.name}`);
+    await page.locator('body').waitFor({ state: 'visible' });
+    await page.waitForTimeout(350);
+    const metrics = await page.evaluate(() => {
+      const visible = (element) => {
+        const css = globalThis.getComputedStyle(element);
+        return element.getClientRects().length > 0 && css.visibility === 'visible' && css.display !== 'none' && Number(css.opacity) > 0 &&
+          !(window.innerWidth <= 760 && element.closest('.sidebar:not(.mobile-open)'));
+      };
+      const inHorizontalScroller = (element) => {
+        for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          const css = globalThis.getComputedStyle(parent);
+          if (/auto|scroll/.test(css.overflowX) && parent.scrollWidth > parent.clientWidth + 1) return true;
+        }
+        return false;
+      };
+      const controls = [...document.querySelectorAll('button, input, select, textarea, a[href]')]
+        .filter((element) => visible(element) && !element.classList.contains('skiplink') && !inHorizontalScroller(element))
+        .map((element) => {
+          const box = element.getBoundingClientRect();
+          return { label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 48) || element.tagName, left: box.left, right: box.right, width: box.width, height: box.height };
+        });
+      const bodyText = document.body.innerText;
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth,
+        outsideControls: controls.filter((control) => control.left < -1 || control.right > window.innerWidth + 1),
+        undersizedTouchControls: controls.filter((control) => control.width > 0 && control.height > 0 && (control.width < 32 || control.height < 32)).slice(0, 20),
+        heading: document.querySelector('h1')?.textContent?.trim() ?? null,
+        alerts: [...document.querySelectorAll('[role="alert"]')].filter(visible).map((element) => element.textContent?.trim().slice(0, 180)),
+        loadingVisible: /正在加载|加载中…/.test(bodyText),
+      };
+    });
+    await page.screenshot({ path: resolve(evidenceDir, `${route.name}.png`), fullPage: true });
+    if (width <= 760 && route.name === 'workspace') {
+      const navigationTrigger = page.getByRole('button', { name: '打开导航' });
+      await navigationTrigger.click();
+      await page.getByRole('dialog', { name: '主导航' }).waitFor({ state: 'visible' });
+      await page.screenshot({ path: resolve(evidenceDir, 'workspace-navigation.png'), fullPage: true });
+      await page.getByRole('button', { name: '关闭导航' }).first().click();
+      await page.getByRole('dialog', { name: '主导航' }).waitFor({ state: 'hidden' });
+      mobileInteractionChecks += 2;
+    }
+    if (width <= 760 && route.name === 'project-editor') {
+      const inspectorTrigger = page.getByRole('button', { name: '设置' });
+      await inspectorTrigger.click();
+      assert.equal(await inspectorTrigger.getAttribute('aria-expanded'), 'true', 'mobile inspector reports expanded state');
+      await page.getByRole('complementary', { name: '当前场景设置' }).waitFor({ state: 'visible' });
+      await page.screenshot({ path: resolve(evidenceDir, 'project-editor-inspector.png'), fullPage: true });
+      await inspectorTrigger.click();
+      assert.equal(await inspectorTrigger.getAttribute('aria-expanded'), 'false', 'mobile inspector closes');
+      mobileInteractionChecks += 3;
+    }
+    results.push({ ...route, pageErrors, ...metrics });
+    await page.close();
+  }
+  await writeFile(resolve(evidenceDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`);
+  assert.deepEqual(results.flatMap((entry) => entry.pageErrors), [], `${theme}/${String(width)} page errors`);
+  assert.equal(results.some((entry) => entry.documentWidth > entry.viewportWidth + 1), false, `${theme}/${String(width)} document overflow`);
+  assert.deepEqual(results.flatMap((entry) => entry.outsideControls), [], `${theme}/${String(width)} outside controls`);
+  if (width <= 760) assert.deepEqual(results.flatMap((entry) => entry.undersizedTouchControls), [], `${theme}/${String(width)} touch targets`);
+  return { theme, width, height, routes: results.length, alerts: results.reduce((sum, entry) => sum + entry.alerts.length, 0), undersizedTouchControls: results.reduce((sum, entry) => sum + entry.undersizedTouchControls.length, 0), mobileInteractionChecks };
+}
+
 try {
   await runMigrations(handle);
   const auth = createAuth({ db: handle.db, secret: 'appearance-browser-test-secret-0123456789abcdef', baseUrl: apiBase }); // secrets:check-ignore: test-only dummy
   const storage = new LocalObjectStorage({ rootDir: storageRoot, publicBaseUrl: apiBase, signingSecret: `test-only-storage-secret-${runId}` }); // secrets:check-ignore: test-only dummy
-  app = await buildServer({ auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage) });
+  app = await buildServer({
+    auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
+    storage: createStorageDeps(storage),
+    credentials: {
+      cipher: new LocalCredentialVault({ keys: 'v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }), // secrets:check-ignore: test-only dummy
+      platformCredentials: parsePlatformCredentials(undefined),
+    },
+  });
   await app.listen({ port: apiPort, host: '127.0.0.1' });
   userA = await createInternalUser(auth, { email: emailA, name: 'Appearance A', password });
   userB = await createInternalUser(auth, { email: emailB, name: 'Appearance B', password });
@@ -256,6 +360,16 @@ try {
       await route.fulfill({ response });
     });
   }
+  const publicRoutes = [
+    { name: 'welcome', path: '/welcome' },
+    { name: 'sign-in', path: '/sign-in' },
+    { name: 'design-system', path: '/design-system' },
+  ];
+  const publicRouteAudit = [
+    await auditRoutes(first, { theme: 'light', width: 1440, height: 900, scope: 'public', routes: publicRoutes }),
+    await auditRoutes(second, { theme: 'dark', width: 1280, height: 800, scope: 'public', routes: publicRoutes }),
+    await auditRoutes(first, { theme: 'narrow', width: 390, height: 844, scope: 'public', routes: publicRoutes }),
+  ];
   await signIn(first, userA.email);
   await signIn(second, userA.email);
   await signIn(anotherUser, userB.email);
@@ -277,6 +391,12 @@ try {
   const beforeGenerationInputs = generationInputs(beforeProject, beforeGraph);
   assert.equal(beforeGenerationInputs.scenes.length, 2);
   assert(beforeGenerationInputs.scenes.every((scene) => scene.prompt.length > 0 && scene.providerRequirement?.constraints?.style === 'editorial'));
+
+  const routeAudit = [
+    await auditRoutes(first, { workspaceId: workspace.id, projectId: project.id, sceneId: beforeGraph.scenes[0].id, theme: 'light', width: 1440, height: 900 }),
+    await auditRoutes(second, { workspaceId: workspace.id, projectId: project.id, sceneId: beforeGraph.scenes[0].id, theme: 'dark', width: 1280, height: 800 }),
+    await auditRoutes(first, { workspaceId: workspace.id, projectId: project.id, sceneId: beforeGraph.scenes[0].id, theme: 'narrow', width: 390, height: 844 }),
+  ];
 
   const initial = [await firstPaint(first, 'system', false), await firstPaint(second, 'system', true)];
   const settings = await first.newPage();
@@ -339,7 +459,7 @@ try {
   await firstPaint(anonymous, 'system', false, '/sign-in');
   assert.deepEqual(hydrationErrors, []);
   const authenticatedNativeZoom = await verifyAuthenticatedNativeZoom({ email: userA.email, workspaceId: workspace.id, projectId: project.id, projectTitle });
-  result = { realAuthSessions: 3, realApi: apiBase, web: webBase, initial, synchronized, signInHydrationPreserved: true, localOverride, projectAndLedgerUnchanged: true, observedProjectSnapshotSha256: beforeHash, nonEmptyGenerationPromptCount: beforeGenerationInputs.scenes.length, generationInputsUnchanged: true, selectionAndPlayerPreserved: true, observablePlaybackSeconds: { before: beforeSeconds, after: afterSeconds, continued: continuedSeconds }, authenticatedNativeZoom, isolated, signedOut, hydrationErrors };
+  result = { realAuthSessions: 3, realApi: apiBase, web: webBase, publicRouteAudit, routeAudit, initial, synchronized, signInHydrationPreserved: true, localOverride, projectAndLedgerUnchanged: true, observedProjectSnapshotSha256: beforeHash, nonEmptyGenerationPromptCount: beforeGenerationInputs.scenes.length, generationInputsUnchanged: true, selectionAndPlayerPreserved: true, observablePlaybackSeconds: { before: beforeSeconds, after: afterSeconds, continued: continuedSeconds }, authenticatedNativeZoom, isolated, signedOut, hydrationErrors };
 } catch (error) {
   failure = error;
 } finally {

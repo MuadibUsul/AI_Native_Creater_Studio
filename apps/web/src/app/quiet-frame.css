@@ -58,6 +58,21 @@
 .qf-file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .qf-file-input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .qf-mobile-backdrop{display:none}
+.qf-sidebar-head{display:flex;align-items:center;justify-content:space-between;width:100%}
+.qf-sidebar-close{display:none}
+
+@media(max-width:760px){
+  .sidebar.mobile-open{overflow-y:auto}
+  .sidebar.mobile-open .qf-sidebar-close{display:inline-flex;min-width:40px;min-height:40px}
+  .sidebar.mobile-open .workspace-switch .grow{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sidebar.mobile-open .userrow .grow{display:block;overflow:hidden}
+  .sidebar.mobile-open .userrow .grow>*{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .project-tabs button{min-height:40px;padding:8px 12px}
+  .chip{min-height:40px;padding:8px 12px}
+  .suggestions button{min-height:40px;padding:8px 5px}
+  .searchbox{padding-block:0}
+  .searchbox input{min-height:40px}
+}
 
 /* N16-03: UI type roles only; project media and canvas typography stay untouched. */
 .badge,.kbd,.data-table,.metriccard .value,.qf-metric-row h2,.player-bar,.timeline-head,.qf-type-numeric,.qf-technical-id{font-variant-numeric:tabular-nums}
@@ -90,7 +105,7 @@
 .project-tabs a{display:inline-flex;align-items:center;background:none;border:0;font-size:12px;color:var(--muted);padding:7px 13px;border-radius:7px;text-decoration:none;white-space:nowrap}
 .project-tabs a.active{background:#eef2ec;color:var(--text)}
 .theme-dark .project-tabs a.active{background:#3d4936}
-@media(max-width:760px){.project-tabs a{padding:6px 12px}}
+@media(max-width:760px){.project-tabs a{min-height:40px;padding:8px 12px}.prompt-dock input{min-height:40px}}
 
 /* At 320 CSS px, preserve every public CTA and design sample within the viewport. */
 @media(max-width:640px){

@@ -208,7 +208,10 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
   return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, accountAppearanceMode, deviceOverride, appearancePending: session.isPending || (userId !== null && accountAppearance.isPending), appearanceError: accountAppearance.isError, refetchAppearance: () => { void accountAppearance.refetch(); }, setAccountAppearance, setDeviceOverride, toggleTheme, openHelp: () => open('help') }}>
     <div className="app">
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="主导航" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen ? 'true' : undefined}>
-        <Brand href={homeHref} />
+        <div className="qf-sidebar-head">
+          <Brand href={homeHref} />
+          <button type="button" className="btn icononly ghost qf-sidebar-close" aria-label="关闭导航" onClick={() => setMobileOpen(false)}><QuietIcon name="close" /></button>
+        </div>
         <button type="button" className="workspace-switch" onClick={() => open('workspace')} aria-label="切换工作区">
           <span className="circle">{initial}</span><span className="grow small">{workspaceName}</span><QuietIcon name="down" />
         </button>

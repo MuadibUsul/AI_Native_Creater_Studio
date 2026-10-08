@@ -99,7 +99,7 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
   const doRemove = useMutation({
     mutationFn: (userId: string) => client.workspaces.members.remove(workspaceId, userId),
     onSuccess: async () => {
-      setNotice('成员已移除：其访问**立即失效**（下一请求即 404）。');
+      setNotice('成员已移除：其访问立即失效（下一次请求会返回未找到）。');
       await invalidateTeam();
     },
     onError: (error: unknown) => setNotice(`移除失败：${errorText(error)}（不得移除最后一名 OWNER）`),
@@ -130,6 +130,7 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
   }
 
   const currentTier = workspace.data.privacyTier;
+  const ownerCount = members.data.filter((member) => member.role === 'OWNER').length;
 
   return (
     <section data-testid="team-management" className="flex flex-col gap-4">
@@ -166,7 +167,8 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
               <div className="flex items-center gap-2">
                 <select
                   aria-label={`角色-${member.email}`}
-                  disabled={!canManage || doRole.isPending}
+                  disabled={!canManage || doRole.isPending || (member.role === 'OWNER' && ownerCount === 1)}
+                  title={member.role === 'OWNER' && ownerCount === 1 ? '工作区必须保留至少一名所有者' : undefined}
                   value={member.role}
                   onChange={(event) => doRole.mutate({ userId: member.userId, role: event.target.value as WorkspaceRole })}
                   className={ui['field']}
@@ -179,7 +181,8 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
                 </select>
                 <button
                   type="button"
-                  disabled={!canManage || doRemove.isPending}
+                  disabled={!canManage || doRemove.isPending || (member.role === 'OWNER' && ownerCount === 1)}
+                  title={member.role === 'OWNER' && ownerCount === 1 ? '不能移除工作区最后一名所有者' : undefined}
                   onClick={() => doRemove.mutate(member.userId)}
                   className={ui['dangerButton']}
                 >
