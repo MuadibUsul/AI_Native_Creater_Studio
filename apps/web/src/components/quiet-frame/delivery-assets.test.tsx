@@ -143,6 +143,34 @@ describe('Quiet Frame asset flow', () => {
     expect(screen.getByRole('link', { name: '下载原文件' })).toBeTruthy();
   });
 
+  it('plays the standard proxy while keeping the original download and source PTS mapping visible', async () => {
+    const asset = { id: 'ast_proxy', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'vfr.mp4' }, license: { type: 'USER_OWNED' } };
+    const mediaProbe = {
+      status: 'READY',
+      streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 3600, denominator: 143 }, cadence: 'VARIABLE' }],
+      capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE', reasons: [] },
+    };
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_source', versions: [{ id: 'av_source', mimeType: 'video/mp4', probeStatus: 'READY', mediaProbe }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/original.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+        playbackUrl: vi.fn().mockResolvedValue({
+          assetId: asset.id, sourceVersionId: 'av_source', rendition: 'PROXY', renditionVersionId: 'av_proxy', mimeType: 'video/mp4',
+          url: 'https://storage.local/proxy.mp4', expiresAt: '2099-01-01T00:00:00.000Z', proxyStatus: 'READY', proxyProfileKey: 'web-edit-video-720p-v1',
+          timeMappings: [{ schemaVersion: '1.0', kind: 'PTS_AFFINE', streamType: 'VIDEO', sourceStreamIndex: 0, proxyStreamIndex: 0, sourceTimeBase: { numerator: 1, denominator: 15360 }, proxyTimeBase: { numerator: 1, denominator: 90000 }, sourceOriginPts: '0', proxyOriginPts: '0', sourceDurationTicks: '61440', proxyDurationTicks: '360000', anchors: [{ position: 'START', sourcePts: '0', proxyPts: '0' }, { position: 'END', sourcePts: '61440', proxyPts: '360000' }] }],
+          message: null,
+        }),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 vfr.mp4' }));
+    expect((await screen.findByLabelText('预览视频 vfr.mp4')).getAttribute('src')).toBe('https://storage.local/proxy.mp4');
+    expect(screen.getByRole('region', { name: '编辑代理' }).textContent).toContain('视频 PTS 映射');
+    expect(screen.getByRole('link', { name: '下载原文件' }).getAttribute('href')).toBe('https://storage.local/original.mp4');
+  });
+
   it('keeps asset dialog keyboard focus inside and restores the selected card on Escape', async () => {
     const asset = { id: 'ast_1', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
     const client = mockClient({

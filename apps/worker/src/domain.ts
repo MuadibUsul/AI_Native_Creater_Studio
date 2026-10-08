@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { createDb } from '@ancs/db';
 import type { DomainDeps } from '@ancs/domain';
 import { MAINTENANCE_DISPATCH_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, NOOP_JOB_TYPE } from '@ancs/domain';
-import { CMS_WRITEBACK_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_FINAL_JOB_TYPE, RENDER_QA_JOB_TYPE } from '@ancs/contracts';
+import { CMS_WRITEBACK_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_FINAL_JOB_TYPE, RENDER_QA_JOB_TYPE } from '@ancs/contracts';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { BullMqJobQueue } from '@ancs/providers-queue-bullmq';
 import { createHttpResultFetcher } from './fetcher.js';
@@ -61,4 +61,4 @@ export function createDomainDeps(handle: ReturnType<typeof createDb>): DomainDep
   return deps;
 }
 
-export const workerHandlerTypes = [NOOP_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, MAINTENANCE_DISPATCH_JOB_TYPE, RENDER_FINAL_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_QA_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, CMS_WRITEBACK_JOB_TYPE] as const;
+export const workerHandlerTypes = [NOOP_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, MAINTENANCE_DISPATCH_JOB_TYPE, RENDER_FINAL_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_QA_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, CMS_WRITEBACK_JOB_TYPE] as const;

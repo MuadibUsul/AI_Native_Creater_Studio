@@ -9,6 +9,7 @@ import {
   completeUploadPartRequestSchema,
   createUploadIntentRequestSchema,
   downloadUrlResponseSchema,
+  mediaPlaybackResponseSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
@@ -22,11 +23,13 @@ import {
   completeUploadPart,
   createUploadPartTarget,
   createAssetDownloadUrl,
+  createAssetPlaybackUrl,
   createUploadIntent,
   getAsset,
   getUploadIntentStatus,
   listAssets,
   restoreAsset,
+  rebuildMediaProxy,
   softDeleteAsset,
   type DomainDeps,
 } from '@ancs/domain';
@@ -227,6 +230,38 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return createAssetDownloadUrl(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/playback-url',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '签发当前可用播放地址（优先标准代理；代理未就绪时仅在原件可直接预览时回退）',
+        params: assetParamsSchema,
+        response: { 200: mediaPlaybackResponseSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return createAssetPlaybackUrl(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/proxy/rebuild',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '重新生成失败或丢失的编辑代理（原件与 checksum 保持不变）',
+        params: assetParamsSchema,
+        response: { 200: mediaPlaybackResponseSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return rebuildMediaProxy(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
     },
   );
 

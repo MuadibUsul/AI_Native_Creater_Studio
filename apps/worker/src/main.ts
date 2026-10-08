@@ -10,6 +10,7 @@ import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 
 /**
  * Worker 主循环（P03-01）。见 domain.ts 的说明。
@@ -61,16 +62,18 @@ const heartbeatIntervalMs = Number(process.env['ANCS_WORKER_HEARTBEAT_MS'] ?? Ma
 const handle = createDb(databaseUrl);
 const deps = createDomainDeps(handle);
 const sourceMediaProbe = createFfmpegSourceMediaProbe();
+const sourceMediaTranscoder = createFfmpegMediaProxyTranscoder();
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =
   process.env['ANCS_DISABLE_RENDER'] === '1'
-    ? createDefaultRegistry({ sourceMediaProbe })
+    ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder })
     : createDefaultRegistry({
         renderExecutor: createProcessRenderExecutor(),
         motionValidator: createProcessMotionValidator(),
         mediaProbe: createProcessMediaProbe(),
         sourceMediaProbe,
+        sourceMediaTranscoder,
       });
 
 let stopping = false;

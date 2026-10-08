@@ -116,6 +116,26 @@ export {
 } from './media-source.js';
 export type { MediaDerivative, MediaSourceView, ClipInstanceView, LegacyClipProjection } from './media-source.js';
 export {
+  MEDIA_PROXY_PROFILE_KEYS,
+  MEDIA_PROXY_PLAYBACK_STATUSES,
+  mediaProxyProfileKeySchema,
+  mediaProxyTimeAnchorSchema,
+  mediaProxyStreamTimeMapSchema,
+  mediaProxyTranscodeResultSchema,
+  mediaProxyJobInputSchema,
+  mediaPlaybackResponseSchema,
+  mapSourcePtsToProxyPts,
+  mapProxyPtsToSourcePts,
+} from './media-proxy.js';
+export type {
+  MediaProxyProfileKey,
+  MediaProxyStreamTimeMap,
+  MediaProxyTranscodeResult,
+  MediaProxyJobInput,
+  MediaPlaybackResponse,
+  SourceMediaTranscoder,
+} from './media-proxy.js';
+export {
   TRACK_KINDS,
   trackKindSchema,
   clipTimeMappingSchema,
@@ -1018,6 +1038,7 @@ export {
   MOTION_GENERATE_JOB_TYPE,
   RENDER_QA_JOB_TYPE,
   MEDIA_PROBE_JOB_TYPE,
+  MEDIA_PROXY_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,

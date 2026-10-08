@@ -38,6 +38,7 @@ export const RENDER_QA_JOB_TYPE = 'RENDER_QA';
  * 完整解码检查。任务只保存对象引用，不在 Job input 中复制媒体字节。
  */
 export const MEDIA_PROBE_JOB_TYPE = 'MEDIA_PROBE';
+export const MEDIA_PROXY_JOB_TYPE = 'MEDIA_PROXY';
 
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',

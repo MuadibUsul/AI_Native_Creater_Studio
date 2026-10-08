@@ -770,6 +770,7 @@ export async function listAssets(
   const conditions = [
     eq(assets.workspaceId, input.workspaceId),
     input.trashed === true ? isNotNull(assets.deletedAt) : isNull(assets.deletedAt),
+    sql`coalesce(${assets.metadata}->>'internalDerivative', 'false') <> 'true'`,
   ];
   if (input.projectId !== undefined) conditions.push(eq(assets.projectId, input.projectId));
   if (input.assetType !== undefined) conditions.push(eq(assets.assetType, input.assetType));

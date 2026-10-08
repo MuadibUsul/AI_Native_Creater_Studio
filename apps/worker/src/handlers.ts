@@ -6,12 +6,13 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaProbe } from '@ancs/contracts';
+import type { MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaProbe, SourceMediaTranscoder } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
 import { cmsWritebackHandler } from './cms-writeback-handler.js';
 import { createAssetMediaProbeHandler } from './media-probe-handler.js';
+import { createMediaProxyHandler } from './media-proxy-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -113,6 +114,8 @@ export interface DefaultRegistryOptions {
   mediaProbe?: RenderMediaProbe;
   /** 源素材能力探测（N02-02）；与 Final QA probe 分离，结果写回 AssetVersion。 */
   sourceMediaProbe?: SourceMediaProbe;
+  /** 标准编辑代理转码（N02-03）；真实实现使用隔离 ffmpeg/ffprobe 子进程。 */
+  sourceMediaTranscoder?: SourceMediaTranscoder;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -128,6 +131,9 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   }
   if (options.sourceMediaProbe !== undefined) {
     handlers.push(createAssetMediaProbeHandler({ probe: options.sourceMediaProbe }));
+  }
+  if (options.sourceMediaTranscoder !== undefined) {
+    handlers.push(createMediaProxyHandler({ transcoder: options.sourceMediaTranscoder }));
   }
   return new JobHandlerRegistry(handlers);
 }

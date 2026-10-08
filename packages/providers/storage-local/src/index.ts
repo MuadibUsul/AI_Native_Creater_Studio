@@ -222,6 +222,19 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     }
   }
 
+  async persistFile(input: { sourcePath: string; destinationKey: string; contentType: string }): Promise<void> {
+    const destination = this.resolveKeyPath(input.destinationKey);
+    await mkdir(dirname(destination), { recursive: true });
+    const partial = `${destination}.partial`;
+    try {
+      await pipeline(createReadStream(input.sourcePath), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, destination);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
   async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<void> {
     if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
     const destination = this.resolveKeyPath(input.destinationKey);

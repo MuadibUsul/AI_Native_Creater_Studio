@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { ApiFailure, ERROR_CODES, sourceMediaProbeResultSchema, type SourceMediaProbeResult } from '@ancs/contracts';
 import { assetVersions, assets } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { scheduleMediaProxyInTx } from './media-proxies.js';
 
 export async function beginAssetMediaProbe(
   deps: DomainDeps,
@@ -89,6 +90,15 @@ export async function completeAssetMediaProbe(
       .update(assets)
       .set({ status, currentVersionId: input.assetVersionId, updatedAt: new Date() })
       .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId), eq(assets.currentVersionId, input.assetVersionId)));
+    if (status === 'READY') {
+      await scheduleMediaProxyInTx(tx, {
+        workspaceId: input.workspaceId,
+        projectId: row.asset.projectId,
+        sourceAsset: row.asset,
+        sourceVersion: row.version,
+        probe: result,
+      });
+    }
     return { status, durationMs, width: video?.width ?? null, height: video?.height ?? null };
   });
 }

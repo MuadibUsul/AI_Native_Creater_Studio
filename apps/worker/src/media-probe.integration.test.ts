@@ -4,10 +4,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_PROBE_JOB_TYPE } from '@ancs/contracts';
-import { claimJob, confirmUpload, createUploadIntent, getAsset, type DomainDeps } from '@ancs/domain';
+import { MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts } from '@ancs/contracts';
+import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, rebuildMediaProxy, type DomainDeps } from '@ancs/domain';
 import {
   assetVersions,
+  mediaDerivatives,
   createDb,
   jobs,
   redactDatabaseUrl,
@@ -20,6 +21,7 @@ import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createDefaultRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 
 let handle: DbHandle;
 let storageRoot: string;
@@ -89,6 +91,20 @@ async function executeProbe(workspaceId: string): Promise<void> {
   expect(persisted?.status).toBe('SUCCEEDED');
 }
 
+async function executeProxy(workspaceId: string): Promise<void> {
+  const claimed = await claimJob(deps(), { workerId: 'media-proxy-worker', leaseSeconds: 120, types: [MEDIA_PROXY_JOB_TYPE] });
+  expect(claimed).not.toBeNull();
+  const outcome = await executeJob(
+    deps(),
+    createDefaultRegistry({ sourceMediaTranscoder: createFfmpegMediaProxyTranscoder({ timeoutMs: 60_000 }) }),
+    { workerId: 'media-proxy-worker', leaseSeconds: 120, heartbeatIntervalMs: 30_000 },
+    claimed!,
+  );
+  expect(outcome).toBe('succeeded');
+  const persisted = (await handle.db.select().from(jobs).where(and(eq(jobs.id, claimed!.id), eq(jobs.workspaceId, workspaceId))).limit(1))[0];
+  expect(persisted?.status).toBe('SUCCEEDED');
+}
+
 describe('N02-02 media probe worker', () => {
   it('upload confirmation and probe job are atomic; real VFR probe makes the asset READY', { timeout: 60_000 }, async () => {
     const bytes = await readFile(join(fixtures, 'clip-d-synthetic-vfr.mp4'));
@@ -118,5 +134,37 @@ describe('N02-02 media probe worker', () => {
     expect(version.mediaProbe?.decodeCheck.errorCode).toBe('INVALID_OR_UNSUPPORTED_MEDIA');
     expect(version.mediaProbe?.capabilities.preview).toBe('UNAVAILABLE');
     expect((await storage.probeObject(version.storageKey)).exists).toBe(true);
+  });
+
+  it('generates a VFR editing proxy, preserves the source and rebuilds a missing derivative', { timeout: 120_000 }, async () => {
+    const bytes = await readFile(join(fixtures, 'clip-d-synthetic-vfr.mp4'));
+    const created = await uploadObject(bytes, 'vfr-source.mp4');
+    const sourceBefore = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, created.versionId)).limit(1))[0]!;
+    await executeProbe(created.workspaceId);
+    expect(await handle.db.select().from(jobs).where(eq(jobs.type, MEDIA_PROXY_JOB_TYPE))).toHaveLength(1);
+    await executeProxy(created.workspaceId);
+
+    const derivative = (await handle.db.select().from(mediaDerivatives).where(eq(mediaDerivatives.sourceAssetVersionId, created.versionId)).limit(1))[0]!;
+    expect(derivative).toMatchObject({ kind: 'PROXY', profileKey: 'web-edit-video-720p-v1', status: 'READY', sourceChecksumSha256: sourceBefore.checksumSha256 });
+    const playback = await createAssetPlaybackUrl(deps(), { workspaceId: created.workspaceId, assetId: created.assetId });
+    expect(playback).toMatchObject({ rendition: 'PROXY', proxyStatus: 'READY', mimeType: 'video/mp4' });
+    expect((await listAssets(deps(), { workspaceId: created.workspaceId })).map((asset) => asset.id)).toEqual([created.assetId]);
+    const videoMapping = playback.timeMappings.find((mapping) => mapping.streamType === 'VIDEO')!;
+    expect(videoMapping.sourceTimeBase).toEqual({ numerator: 1, denominator: 15_360 });
+    for (const anchor of videoMapping.anchors) {
+      expect(mapSourcePtsToProxyPts(videoMapping, anchor.sourcePts)).toBe(anchor.proxyPts);
+      expect(mapProxyPtsToSourcePts(videoMapping, anchor.proxyPts)).toBe(anchor.sourcePts);
+    }
+    const output = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, derivative.derivativeAssetVersionId!)).limit(1))[0]!;
+    await storage.deleteObject(output.storageKey);
+    const missing = await createAssetPlaybackUrl(deps(), { workspaceId: created.workspaceId, assetId: created.assetId });
+    expect(missing).toMatchObject({ rendition: 'ORIGINAL', proxyStatus: 'MISSING' });
+    const queued = await rebuildMediaProxy(deps(), { workspaceId: created.workspaceId, assetId: created.assetId });
+    expect(queued).toMatchObject({ rendition: 'ORIGINAL', proxyStatus: 'PENDING' });
+    await executeProxy(created.workspaceId);
+    expect(await createAssetPlaybackUrl(deps(), { workspaceId: created.workspaceId, assetId: created.assetId })).toMatchObject({ rendition: 'PROXY', proxyStatus: 'READY' });
+    const sourceAfter = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, created.versionId)).limit(1))[0]!;
+    expect(sourceAfter).toMatchObject({ storageKey: sourceBefore.storageKey, checksumSha256: sourceBefore.checksumSha256, sizeBytes: sourceBefore.sizeBytes });
+    expect((await storage.probeObject(sourceAfter.storageKey)).exists).toBe(true);
   });
 });

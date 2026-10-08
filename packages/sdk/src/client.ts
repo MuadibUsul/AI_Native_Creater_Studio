@@ -123,6 +123,7 @@ import {
   completeUploadPartRequestSchema,
   confirmUploadRequestSchema,
   downloadUrlResponseSchema,
+  mediaPlaybackResponseSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
   uploadPartTargetResponseSchema,
@@ -378,6 +379,7 @@ import {
   type CompleteUploadPartRequest,
   type CreateUploadIntentInput,
   type DownloadUrlResponse,
+  type MediaPlaybackResponse,
   type Project,
   type ProjectDetail,
   type ProjectEditEventPage,
@@ -735,6 +737,10 @@ export interface AncsClient {
     get(workspaceId: string, assetId: string): Promise<AssetDetail>;
     /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
     downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
+    /** 播放 Signed URL：优先标准代理，必要时明确回退原件或返回尚未就绪状态。 */
+    playbackUrl(workspaceId: string, assetId: string): Promise<MediaPlaybackResponse>;
+    /** 重新生成失败或丢失的代理；原件不变。 */
+    rebuildProxy(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaPlaybackResponse>;
     /**
      * 一体化上传：意图（客户端预计算 SHA-256 以支持去重）→ 直传 → 确认。
      * 命中去重时直接返回既有资产（不重复上传字节）。
@@ -2029,6 +2035,12 @@ export function createClient(options: ClientOptions): AncsClient {
       get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),
+      playbackUrl: (workspaceId, assetId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/playback-url`, mediaPlaybackResponseSchema),
+      rebuildProxy: (workspaceId, assetId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/proxy/rebuild`, mediaPlaybackResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
       upload: async (workspaceId, input, mutation) =>
         uploadResumableImpl(
           workspaceId,

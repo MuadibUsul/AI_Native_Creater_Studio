@@ -70,6 +70,11 @@ export interface ObjectStorageAdapter {
    */
   materializeObject?(input: { key: string; destinationPath: string }): Promise<void>;
   /**
+   * 将 Worker 产生的本地文件流式写回对象存储。实现必须先写临时对象再原子发布，
+   * 不得将完整代理或渲染产物一次读入内存。
+   */
+  persistFile?(input: { sourcePath: string; destinationKey: string; contentType: string }): Promise<void>;
+  /**
    * 将同一上传意图的分片按给定顺序合成为最终对象。实现必须流式复制，不能把所有分片
    * 同时读入内存；目标写入失败时不得暴露半成品对象。
    */

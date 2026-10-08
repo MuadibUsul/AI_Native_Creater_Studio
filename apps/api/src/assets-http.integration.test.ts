@@ -347,6 +347,10 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(getFailure).toMatchObject({ status: 404 });
     const downloadFailure = await stranger.assets.downloadUrl(workspaceId, asset.id).catch((error: unknown) => error);
     expect(downloadFailure).toMatchObject({ status: 404 });
+    const playbackFailure = await stranger.assets.playbackUrl(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(playbackFailure).toMatchObject({ status: 404 });
+    const rebuildFailure = await stranger.assets.rebuildProxy(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(rebuildFailure).toMatchObject({ status: 404 });
     const listFailure = await stranger.assets.list(workspaceId).catch((error: unknown) => error);
     expect(listFailure).toMatchObject({ status: 404 });
   });
