@@ -3,6 +3,29 @@ import { user } from './auth.js';
 import { channelStyleVersions, channels } from './creator.js';
 import { workspaces } from './workspaces.js';
 
+const LEGACY_PROJECT_POLICY_DEFAULT = {
+  mode: 'GENERATIVE',
+  allowGeneratedVideo: true,
+  allowGeneratedImage: true,
+  allowGeneratedSpeech: true,
+  allowVoiceReplacement: false,
+  allowScriptRewrite: true,
+  allowGeneratedMusic: true,
+  allowGeneratedSfx: true,
+  allowProceduralGraphics: true,
+  allowCaptions: true,
+  allowGenerativeFill: true,
+  allowFrameInterpolation: true,
+  allowExternalStock: true,
+  allowExternalAnalysis: true,
+  preserveOriginalSpeech: false,
+  preserveOriginalChronology: false,
+  allowedProviderIds: [],
+  privacyClass: 'STANDARD',
+  perProposalBudgetCredits: null,
+  projectBudgetCredits: null,
+};
+
 /**
  * Project / Scene 规范化表（P02-01 / 规范 §22.3、§22.4；计划 §4.3 不变量 1—3）。
  *
@@ -35,6 +58,10 @@ export const projects = pgTable(
     resolution: text('resolution').notNull(),
     fps: integer('fps').notNull().default(30),
     targetDurationMs: integer('target_duration_ms'),
+    /** N01-02: ProjectDocument metadata stays on the normalized project aggregate. */
+    documentSchemaVersion: text('document_schema_version').notNull().default('1.0'),
+    brief: jsonb('brief').notNull().default({}),
+    productionPolicy: jsonb('production_policy').notNull().default(LEGACY_PROJECT_POLICY_DEFAULT),
     /**
      * 当前项目版本（P02-03 起：指向不可变快照；restore 只产生新版本，不改写旧版本）。
      * 有意不建立指向 project_versions 的 FK：与 project_versions.project_id 的 FK 形成

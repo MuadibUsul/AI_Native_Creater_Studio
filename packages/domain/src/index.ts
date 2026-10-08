@@ -380,6 +380,12 @@ export {
   setWorkspaceFeaturePreference,
 } from './workspace-features.js';
 export {
+  projectDocumentFromSceneGraph,
+  assembleProjectDocument,
+  getProjectProductionPolicy,
+  assertProjectGenerationAllowed,
+} from './project-document.js';
+export {
   createConnection,
   getConnection,
   listConnections,

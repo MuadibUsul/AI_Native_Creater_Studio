@@ -76,6 +76,30 @@ export type {
 } from './scene-graph.js';
 
 export {
+  PROJECT_DOCUMENT_SCHEMA_VERSION,
+  PROJECT_MODES,
+  projectModeSchema,
+  projectBriefSchema,
+  productionPolicySchema,
+  productionPolicyOverridesSchema,
+  defaultProductionPolicy,
+  semanticSceneSchema,
+  semanticPlanSchema,
+  compositionObjectSchema,
+  projectCompositionSchema,
+  projectDocumentSchema,
+  GENERATION_POLICY_FIELDS,
+} from './project-document.js';
+export type {
+  ProjectMode,
+  ProjectBrief,
+  ProductionPolicy,
+  ProductionPolicyOverrides,
+  ProjectDocument,
+  GovernedGenerationCapability,
+} from './project-document.js';
+
+export {
   contentDocumentSchema,
   contentBlockSchema,
   claimSchema,

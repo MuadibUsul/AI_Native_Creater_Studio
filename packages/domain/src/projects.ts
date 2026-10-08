@@ -5,8 +5,11 @@ import {
   ApiFailure,
   channelStyleDefaultsSchema,
   createSceneRequestSchema,
+  defaultProductionPolicy,
   editRequestSchema,
   ERROR_CODES,
+  projectBriefSchema,
+  productionPolicySchema,
   sceneGraphSchema,
   V1_DEFAULT_FORMAT,
   type CreateProjectRequest,
@@ -116,6 +119,12 @@ export async function createProject(
 
   const now = new Date();
   const projectId = newId('prj');
+  const mode = input.input.mode ?? 'GENERATIVE';
+  const productionPolicy = productionPolicySchema.parse({
+    ...defaultProductionPolicy(mode),
+    ...(input.input.productionPolicy ?? {}),
+    mode,
+  });
   await deps.db.insert(projects).values({
     id: projectId,
     workspaceId: input.workspaceId,
@@ -129,6 +138,9 @@ export async function createProject(
     resolution,
     fps: V1_DEFAULT_FORMAT.fps,
     targetDurationMs,
+    documentSchemaVersion: '1.0',
+    brief: projectBriefSchema.parse(input.input.brief ?? {}),
+    productionPolicy,
     createdBy: input.createdBy ?? null,
     createdAt: now,
     updatedAt: now,
