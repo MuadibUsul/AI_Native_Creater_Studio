@@ -788,12 +788,19 @@ async function applyEditsInTransaction(
             throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip sequence range exceeds sequence bounds', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
           }
           if (candidate.assetVersionId !== null) {
-            const sourceRows = await tx.select({ durationMs: assetVersions.durationMs, status: assetVersions.status }).from(assetVersions).where(and(
+            const sourceRows = await tx.select({
+              durationMs: assetVersions.durationMs,
+              status: assetVersions.status,
+              checksumSha256: assetVersions.checksumSha256,
+            }).from(assetVersions).where(and(
               eq(assetVersions.id, candidate.assetVersionId), eq(assetVersions.workspaceId, input.workspaceId),
             )).limit(1);
             const source = sourceRows[0];
             if (!source) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset version not found', 404);
             if (source.status !== 'READY' || source.durationMs === null) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version is not ready with known duration', 409);
+            if (source.checksumSha256 === null) {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version has no immutable checksum', 409, { reason: 'SOURCE_CHECKSUM_MISSING' });
+            }
             if (compareMediaTime(candidate.sourceRange.start, { ticks: '0', timebase: candidate.sourceRange.start.timebase }) < 0 || compareMediaTime(candidate.sourceRange.end, legacyMillisecondsToMediaTime(source.durationMs)) > 0) {
               throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds asset duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
             }

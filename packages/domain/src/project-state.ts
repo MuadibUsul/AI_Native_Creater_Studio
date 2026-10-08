@@ -12,6 +12,7 @@ import {
 import { editEvents, projectObjectLocks, projects } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assembleProjectDocument } from './project-document.js';
+import { listProjectMediaViews } from './media-sources.js';
 
 export function assertProjectApiSchemaVersion(schemaVersion?: string): void {
   if (schemaVersion !== undefined && schemaVersion !== PROJECT_API_SCHEMA_VERSION) {
@@ -35,7 +36,7 @@ export async function getProjectState(
   input: { workspaceId: string; projectId: string; schemaVersion?: string },
 ): Promise<ProjectState> {
   assertProjectApiSchemaVersion(input.schemaVersion);
-  const [document, rows, seqRows] = await Promise.all([
+  const [document, rows, seqRows, media] = await Promise.all([
     assembleProjectDocument(deps, input),
     deps.db.select().from(projectObjectLocks).where(and(
       eq(projectObjectLocks.workspaceId, input.workspaceId), eq(projectObjectLocks.projectId, input.projectId),
@@ -43,11 +44,14 @@ export async function getProjectState(
     deps.db.select({ max: sql<number>`coalesce(max(${editEvents.seq}), 0)` }).from(editEvents).where(and(
       eq(editEvents.workspaceId, input.workspaceId), eq(editEvents.projectId, input.projectId),
     )),
+    listProjectMediaViews(deps, input),
   ]);
   return projectStateSchema.parse({
     schemaVersion: PROJECT_API_SCHEMA_VERSION,
     document,
     locks: rows.map((row) => objectLockSchema.parse({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() })),
+    mediaSources: media.mediaSources,
+    clipInstances: media.clipInstances,
     eventSeq: Number(seqRows[0]?.max ?? 0),
   });
 }

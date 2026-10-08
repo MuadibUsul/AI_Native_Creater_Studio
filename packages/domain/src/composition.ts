@@ -232,6 +232,7 @@ export async function createClip(
       id: assetVersions.id,
       durationMs: assetVersions.durationMs,
       status: assetVersions.status,
+      checksumSha256: assetVersions.checksumSha256,
     }).from(assetVersions).where(and(
       eq(assetVersions.id, request.assetVersionId),
       eq(assetVersions.workspaceId, input.workspaceId),
@@ -239,6 +240,9 @@ export async function createClip(
     const source = versions[0];
     if (!source) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset version not found', 404);
     if (source.status !== 'READY') throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version is not ready', 409);
+    if (source.checksumSha256 === null) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version has no immutable checksum', 409, { reason: 'SOURCE_CHECKSUM_MISSING' });
+    }
     if (source.durationMs === null) {
       throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'asset duration is unknown', 422, { reason: 'SOURCE_DURATION_UNKNOWN' });
     }

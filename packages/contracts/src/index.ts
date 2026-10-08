@@ -107,6 +107,15 @@ export {
 } from './project-api.js';
 export type { ProjectState, ProjectEditEvent, ProjectEditEventPage } from './project-api.js';
 export {
+  MEDIA_DERIVATIVE_KINDS,
+  MEDIA_DERIVATIVE_STATUSES,
+  mediaDerivativeSchema,
+  mediaSourceViewSchema,
+  clipInstanceViewSchema,
+  legacyClipProjectionSchema,
+} from './media-source.js';
+export type { MediaDerivative, MediaSourceView, ClipInstanceView, LegacyClipProjection } from './media-source.js';
+export {
   TRACK_KINDS,
   trackKindSchema,
   clipTimeMappingSchema,

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { legacyMillisecondsToMediaTime } from '@ancs/contracts';
 import {
   assets,
@@ -134,6 +135,12 @@ describe('N01-03 normalized Sequence / Track / Clip', () => {
       workspaceId: f.workspaceId, projectId: f.projectId, sequenceId: sequence.id,
       input: { trackId: track.id, assetVersionId: other.assetVersionId, sourceRange: range(0, 4_000), sequenceRange: range(0, 4_000), timeMapping: linear },
     })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await handle.db.update(assetVersions).set({ checksumSha256: null }).where(eq(assetVersions.id, f.assetVersionId));
+    await expect(createClip(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, sequenceId: sequence.id,
+      input: { trackId: track.id, assetVersionId: f.assetVersionId, sourceRange: range(0, 4_000), sequenceRange: range(0, 4_000), timeMapping: linear },
+    })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', details: { reason: 'SOURCE_CHECKSUM_MISSING' } });
   });
 
   it('rejects direct and indirect nested sequence cycles', async () => {

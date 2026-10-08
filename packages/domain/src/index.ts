@@ -398,6 +398,7 @@ export {
   assertProjectGenerationAllowed,
 } from './project-document.js';
 export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
+export { clipInstanceToLegacyProjection, compileLegacyClipProjectionUpdate, listProjectMediaViews, upsertMediaDerivativeState } from './media-sources.js';
 export {
   createSequence,
   createTrack,

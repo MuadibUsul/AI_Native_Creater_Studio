@@ -246,11 +246,15 @@ describe('编辑事务（HTTP / SDK）', () => {
     const initial = await client.projects.state(projectId, { schemaVersion: '1.0' });
     expect(initial.document.composition.clips).toMatchObject([{ id: clip.id, assetVersionId }]);
     expect(initial.document.assetVersionIds).toEqual([assetVersionId]);
+    expect(initial.mediaSources).toMatchObject([{ sourceAssetVersionId: assetVersionId, checksumSha256: '9'.repeat(64) }]);
+    expect(initial.clipInstances).toMatchObject([{ clipId: clip.id, sourceKind: 'MEDIA_SOURCE', sourceId: assetVersionId }]);
 
     // 旧 Scene 写入口仍可兼容使用，但不得丢失规范化 Composition 字段。
     await client.projects.addScene(projectId, { sceneType: 'SUMMARY', semanticType: 'SUMMARY', durationMs: 1_000 });
     const afterLegacyWrite = await client.projects.state(projectId);
     expect(afterLegacyWrite.document.composition.clips).toEqual(initial.document.composition.clips);
+    expect(afterLegacyWrite.mediaSources).toEqual(initial.mediaSources);
+    expect(afterLegacyWrite.clipInstances).toEqual(initial.clipInstances);
 
     const idempotencyKey = `idem_n01_09_${randomUUID()}`;
     const request: EditRequest = {
