@@ -74,6 +74,39 @@ describe('Quiet Frame asset flow', () => {
     expect(image.querySelector('img')).toBeNull();
   });
 
+  it('plays only the authorized current video version while its signed URL is valid', async () => {
+    const asset = { id: 'ast_video', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'source.mp4' }, license: { type: 'USER_OWNED' } };
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_video', versions: [{ id: 'av_old', mimeType: 'image/png' }, { id: 'av_video', mimeType: 'video/mp4' }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/signed-source.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 source.mp4' }));
+    const video = await screen.findByLabelText('预览视频 source.mp4');
+    expect(video.getAttribute('src')).toBe('https://storage.local/signed-source.mp4');
+    expect(video.getAttribute('controls')).not.toBeNull();
+  });
+
+  it('does not expose an expired signed URL as a playable video', async () => {
+    const asset = { id: 'ast_video', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'source.mp4' }, license: { type: 'USER_OWNED' } };
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_video', versions: [{ id: 'av_video', mimeType: 'video/mp4' }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/expired.mp4', expiresAt: '2000-01-01T00:00:00.000Z' }),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 source.mp4' }));
+    expect(await screen.findByText(/签名下载链接已到期/)).toBeTruthy();
+    expect(screen.queryByLabelText('预览视频 source.mp4')).toBeNull();
+  });
+
   it('keeps asset dialog keyboard focus inside and restores the selected card on Escape', async () => {
     const asset = { id: 'ast_1', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
     const client = mockClient({

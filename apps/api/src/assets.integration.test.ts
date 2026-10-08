@@ -141,6 +141,7 @@ describe('资产上传链路（§26.1：意图 → 直传 → 确认）', () => 
     const detail = await confirmUpload(deps(), { workspaceId, assetId: intent.asset.id, input: {} });
     expect(detail.status).toBe('READY');
     expect(detail.retentionClass).toBe('KEEP_USER_SOURCE');
+    expect(detail.metadata['filename']).toBe('cover.png');
     expect(detail.license.type).toBe('USER_OWNED');
     expect(detail.versions).toHaveLength(1);
     const version = detail.versions[0];

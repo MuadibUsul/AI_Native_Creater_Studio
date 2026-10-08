@@ -273,7 +273,7 @@ export async function createUploadIntent(
       status: 'PENDING_UPLOAD',
       retentionClass: ASSET_DEFAULT_RETENTION[request.assetType],
       license,
-      metadata: {},
+      metadata: { filename: request.filename },
       createdBy: userId,
     });
     await tx.insert(assetVersions).values({
@@ -498,7 +498,12 @@ export async function confirmUpload(
         status: 'READY',
         currentVersionId: intent.assetVersionId,
         updatedAt: now,
-        metadata: duplicate ? { deduplicatedFrom: duplicate.asset.id } : {},
+        metadata: {
+          ...(asset.metadata !== null && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+            ? asset.metadata
+            : {}),
+          ...(duplicate ? { deduplicatedFrom: duplicate.asset.id } : {}),
+        },
       })
       .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)));
     await tx

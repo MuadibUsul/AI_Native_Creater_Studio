@@ -1,4 +1,7 @@
 .assetPreview { position:relative; background:#e8eee9; }
+.assetMediaPreview { margin-top:16px; border-radius:12px; overflow:hidden; background:var(--ui-media-matte); }
+.assetMediaPreview video { display:block; width:100%; max-height:50vh; object-fit:contain; }
+.assetMediaPreview audio { display:block; width:100%; }
 .previewTitle { display:-webkit-box; max-width:calc(100% - 40px); overflow:hidden; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
 .previewDisclosure { position:absolute; z-index:2; left:12px; bottom:10px; padding:4px 7px; border-radius:5px; background:#fffdf1e8; color:#34483a; font-size:10px; font-weight:600; line-height:1.4; }
 .genericPreview { position:absolute; inset:0; display:grid; place-items:center; background:linear-gradient(135deg,#d6e4da,#7e9988); color:#31523d; }
