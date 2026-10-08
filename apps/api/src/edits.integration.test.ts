@@ -176,4 +176,44 @@ describe('编辑事务（HTTP / SDK）', () => {
     });
     expect(envelope.error.details['plannedPhase']).toBe('P04（Script/ContentBlock 模型）');
   });
+
+  it('N01-07 SDK 透传对象锁；无 sceneId 的重排仍执行间接影响检查', async () => {
+    const client = await newSignedInClient();
+    const { projectId, sceneId, revision } = await makeProjectWithScene(client);
+    const second = await client.projects.addScene(projectId, {
+      sceneType: 'SUMMARY',
+      semanticType: 'SUMMARY',
+      durationMs: 4_000,
+    });
+    expect(second.project.revision).toBe(revision + 1);
+
+    const contentLocked = await client.projects.edit(projectId, {
+      baseProjectRevision: second.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: sceneId, dimensions: ['CONTENT'], locked: true }],
+      idempotencyKey: `idem_lock_content_${randomUUID()}`,
+    });
+    const moved = await client.projects.edit(projectId, {
+      baseProjectRevision: contentLocked.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [second.scene.id, sceneId] }],
+      idempotencyKey: `idem_lock_move_${randomUUID()}`,
+    });
+    expect(moved.scenes.map((scene) => scene.id)).toEqual([second.scene.id, sceneId]);
+
+    const positionLocked = await client.projects.edit(projectId, {
+      baseProjectRevision: moved.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: sceneId, dimensions: ['POSITION'], locked: true }],
+      idempotencyKey: `idem_lock_position_${randomUUID()}`,
+    });
+    const failure = await client.projects.edit(projectId, {
+      baseProjectRevision: positionLocked.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [sceneId, second.scene.id] }],
+      idempotencyKey: `idem_lock_block_${randomUUID()}`,
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AncsApiError);
+    expect(failure).toMatchObject({ status: 409, code: 'PRECONDITION_FAILED', details: { reason: 'EDIT_IMPACT_LOCKED' } });
+  });
 });

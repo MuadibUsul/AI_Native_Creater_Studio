@@ -7,15 +7,31 @@ import {
   editRequestSchema,
   editResponseSchema,
   ERROR_CODES,
+  OBJECT_LOCK_DIMENSIONS,
   projectVersionSnapshotSchema,
   versionConflictDetailsSchema,
   type EditOperation,
   type EditRequest,
   type EditResponse,
+  type ObjectLockDimension,
+  type ObjectLockKind,
   type Scene,
   type SceneChanges,
 } from '@ancs/contracts';
-import { editEvents, outboxEvents, projectVersions, projects, scenes } from '@ancs/db';
+import {
+  compositionAudioRegions,
+  compositionCaptionSpans,
+  compositionVisualObjects,
+  editEvents,
+  outboxEvents,
+  projectObjectLocks,
+  projectSequences,
+  projectVersions,
+  projects,
+  scenes,
+  sequenceClips,
+  sequenceTracks,
+} from '@ancs/db';
 import { assertAssetBindable } from './assets.js';
 import type { DomainDeps } from './channels.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
@@ -231,6 +247,49 @@ interface EventDraft {
   patch: Record<string, unknown>;
 }
 
+const parseLockDimensions = (value: unknown): ObjectLockDimension[] =>
+  Array.isArray(value)
+    ? OBJECT_LOCK_DIMENSIONS.filter((dimension) => value.includes(dimension))
+    : [];
+
+async function assertNonSceneLockTargetsExist(
+  db: NodePgDatabase,
+  input: Pick<ProcessEditsInput, 'workspaceId' | 'projectId'>,
+  operations: readonly EditOperation[],
+): Promise<void> {
+  for (const operation of operations) {
+    if (operation.op !== 'set_object_lock' || operation.objectKind === 'PROJECT' || operation.objectKind === 'SCENE') continue;
+    let exists = false;
+    switch (operation.objectKind) {
+      case 'SEQUENCE':
+        exists = (await db.select({ id: projectSequences.id }).from(projectSequences).where(and(eq(projectSequences.id, operation.objectId), eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+      case 'TRACK':
+        exists = (await db.select({ id: sequenceTracks.id }).from(sequenceTracks).where(and(eq(sequenceTracks.id, operation.objectId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+      case 'CLIP':
+        exists = (await db.select({ id: sequenceClips.id }).from(sequenceClips).where(and(eq(sequenceClips.id, operation.objectId), eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+      case 'VISUAL_OBJECT':
+        exists = (await db.select({ id: compositionVisualObjects.id }).from(compositionVisualObjects).where(and(eq(compositionVisualObjects.id, operation.objectId), eq(compositionVisualObjects.workspaceId, input.workspaceId), eq(compositionVisualObjects.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+      case 'CAPTION':
+        exists = (await db.select({ id: compositionCaptionSpans.id }).from(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.id, operation.objectId), eq(compositionCaptionSpans.workspaceId, input.workspaceId), eq(compositionCaptionSpans.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+      case 'AUDIO_REGION':
+        exists = (await db.select({ id: compositionAudioRegions.id }).from(compositionAudioRegions).where(and(eq(compositionAudioRegions.id, operation.objectId), eq(compositionAudioRegions.workspaceId, input.workspaceId), eq(compositionAudioRegions.projectId, input.projectId))).limit(1)).length > 0;
+        break;
+    }
+    if (!exists) {
+      throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'lock target not found', 404, {
+        reason: 'EDIT_LOCK_TARGET_MISSING',
+        objectKind: operation.objectKind,
+        objectId: operation.objectId,
+      });
+    }
+  }
+}
+
 /** 事务内最终校验 + 应用 + 落盘（新状态/revision/EditEvent/Outbox/自动快照同事务）。 */
 async function applyEditsInTransaction(
   deps: DomainDeps,
@@ -260,10 +319,22 @@ async function applyEditsInTransaction(
       .orderBy(scenes.position);
     const byId = new Map<string, SceneRow>(sceneRows.map((row) => [row.id, row]));
 
-    validateEditOperationCandidate({
+    const lockRows = await tx
+      .select()
+      .from(projectObjectLocks)
+      .where(and(eq(projectObjectLocks.projectId, input.projectId), eq(projectObjectLocks.workspaceId, input.workspaceId)));
+    await assertNonSceneLockTargetsExist(tx as unknown as NodePgDatabase, input, request.operations);
+    const candidateResult = validateEditOperationCandidate({
       scenes: sceneRows.map((row) => ({ id: row.id, durationMs: row.durationMs, locked: row.locked })),
       operations: request.operations,
       actorType: input.actor.type,
+      projectId: input.projectId,
+      locks: lockRows.map((row) => ({
+        objectKind: row.objectKind as ObjectLockKind,
+        objectId: row.objectId,
+        dimensions: parseLockDimensions(row.dimensions),
+        reason: row.reason,
+      })),
     });
 
     // 应用前状态（AI 重编导快照用）
@@ -285,6 +356,11 @@ async function applyEditsInTransaction(
     const ordered: SceneRow[] = [...sceneRows];
     const eventDrafts: EventDraft[] = [];
     const affectedSceneIds = new Set<string>();
+    const touchedObjectLocks = new Map<string, { objectKind: ObjectLockKind; objectId: string }>();
+    const runtimeObjectLocks = new Map(lockRows.map((row) => [
+      `${row.objectKind}:${row.objectId}`,
+      { dimensions: parseLockDimensions(row.dimensions), reason: row.reason },
+    ]));
     let restoreSnapshotReason: 'RESTORE' | null = null;
 
     const requireExpectedOnce = (sceneId: string): void => {
@@ -547,6 +623,32 @@ async function applyEditsInTransaction(
           break;
         }
 
+        case 'set_object_lock': {
+          const key = `${operation.objectKind}:${operation.objectId}`;
+          touchedObjectLocks.set(key, { objectKind: operation.objectKind, objectId: operation.objectId });
+          if (operation.objectKind === 'SCENE') affectedSceneIds.add(operation.objectId);
+          const current = runtimeObjectLocks.get(key);
+          const before = current === undefined ? null : { dimensions: [...current.dimensions], reason: current.reason };
+          const dimensions = operation.locked
+            ? OBJECT_LOCK_DIMENSIONS.filter((dimension) => [...(current?.dimensions ?? []), ...operation.dimensions].includes(dimension))
+            : (current?.dimensions ?? []).filter((dimension) => !operation.dimensions.includes(dimension));
+          const after = dimensions.length === 0
+            ? null
+            : { dimensions, reason: operation.reason !== undefined ? operation.reason : (current?.reason ?? null) };
+          if (after === null) runtimeObjectLocks.delete(key);
+          else runtimeObjectLocks.set(key, after);
+          eventDrafts.push({
+            action: 'SET_OBJECT_LOCK',
+            sceneId: operation.objectKind === 'SCENE' ? operation.objectId : null,
+            patch: {
+              ...operation,
+              before,
+              after,
+            },
+          });
+          break;
+        }
+
         case 'restore_scene': {
           requireExpectedOnce(operation.sceneId);
           const row = byId.get(operation.sceneId);
@@ -728,6 +830,34 @@ async function applyEditsInTransaction(
     }
 
     const now = new Date();
+
+    // Persist only lock targets touched by this request. Candidate simulation has
+    // already applied the complete ordered batch, including explicit unlocks.
+    for (const target of touchedObjectLocks.values()) {
+      const finalLock = candidateResult.locks.find((lock) => lock.objectKind === target.objectKind && lock.objectId === target.objectId);
+      if (finalLock === undefined) {
+        await tx.delete(projectObjectLocks).where(and(
+          eq(projectObjectLocks.projectId, input.projectId),
+          eq(projectObjectLocks.objectKind, target.objectKind),
+          eq(projectObjectLocks.objectId, target.objectId),
+        ));
+      } else {
+        await tx.insert(projectObjectLocks).values({
+          id: `lck_${randomUUID()}`,
+          workspaceId: input.workspaceId,
+          projectId: input.projectId,
+          objectKind: finalLock.objectKind,
+          objectId: finalLock.objectId,
+          dimensions: finalLock.dimensions,
+          reason: finalLock.reason ?? null,
+          createdAt: now,
+          updatedAt: now,
+        }).onConflictDoUpdate({
+          target: [projectObjectLocks.projectId, projectObjectLocks.objectKind, projectObjectLocks.objectId],
+          set: { dimensions: finalLock.dimensions, reason: finalLock.reason ?? null, updatedAt: now },
+        });
+      }
+    }
 
     // 1) 脏 Scene 的条件更新（WHERE revision = 事务内读取值；行锁下必中，作为最终防线）
     for (const sceneId of dirtySceneIds) {
@@ -935,10 +1065,25 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
 
   // Fast candidate pass; the same simulation runs again under the project row lock.
-  const candidateRows = await deps.db.select({ id: scenes.id, durationMs: scenes.durationMs, locked: scenes.locked })
-    .from(scenes)
-    .where(and(eq(scenes.projectId, input.projectId), eq(scenes.workspaceId, input.workspaceId)));
-  validateEditOperationCandidate({ scenes: candidateRows, operations: request.operations, actorType: input.actor.type });
+  const [candidateRows, candidateLockRows] = await Promise.all([
+    deps.db.select({ id: scenes.id, durationMs: scenes.durationMs, locked: scenes.locked })
+      .from(scenes)
+      .where(and(eq(scenes.projectId, input.projectId), eq(scenes.workspaceId, input.workspaceId))),
+    deps.db.select().from(projectObjectLocks)
+      .where(and(eq(projectObjectLocks.projectId, input.projectId), eq(projectObjectLocks.workspaceId, input.workspaceId))),
+  ]);
+  validateEditOperationCandidate({
+    scenes: candidateRows,
+    operations: request.operations,
+    actorType: input.actor.type,
+    projectId: input.projectId,
+    locks: candidateLockRows.map((row) => ({
+      objectKind: row.objectKind as ObjectLockKind,
+      objectId: row.objectId,
+      dimensions: parseLockDimensions(row.dimensions),
+      reason: row.reason,
+    })),
+  });
 
   const result = await applyEditsInTransaction(deps, input, request);
 

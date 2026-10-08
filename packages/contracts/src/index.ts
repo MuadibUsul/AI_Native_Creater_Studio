@@ -266,6 +266,16 @@ export {
 } from './edits.js';
 export type { EditRequest, EditOperation, EditOperationType, EditExecutionBackend, EditOperationDefinition, ProjectChanges, SceneChanges } from './edits.js';
 
+export {
+  OBJECT_LOCK_DIMENSIONS,
+  OBJECT_LOCK_KINDS,
+  objectLockDimensionSchema,
+  objectLockKindSchema,
+  objectLockSchema,
+  setObjectLockOperationSchema,
+} from './object-locks.js';
+export type { ObjectLockDimension, ObjectLockKind, ObjectLock } from './object-locks.js';
+
 // 认证契约（P01-02）
 export {
   authUserSchema,

@@ -7,10 +7,11 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6 列出的全部 14 类', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(14);
+  it('操作类型覆盖 §4.6 与 N01-07 对象锁的全部 15 类', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(15);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
+    expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
   });
 
   it('N01-06 注册表对每种操作恰有一项完整定义', () => {
@@ -77,6 +78,22 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(editRequestSchema.safeParse({
       ...request,
       operations: [{ op: 'insert_scene', afterSceneId: null, createdSceneId: 'scn_a', restoreSceneId: 'scn_b', sceneDraft }],
+    }).success).toBe(false);
+  });
+
+  it('对象锁要求明确目标和至少一个合法维度，支持显式解锁', () => {
+    const request = editRequestSchema.parse(raw);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: 'scn_1', dimensions: ['CONTENT'], locked: false }],
+    }).success).toBe(true);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: 'scn_1', dimensions: [], locked: true }],
+    }).success).toBe(false);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: 'scn_1', dimensions: ['UNKNOWN'], locked: true }],
     }).success).toBe(false);
   });
 });

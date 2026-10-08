@@ -11,6 +11,7 @@ import {
   sceneTransitionSchema,
   sourceBindingSchema,
 } from './scene-graph.js';
+import { setObjectLockOperationSchema } from './object-locks.js';
 
 /**
  * 编辑协议契约（计划 §4.6）：客户端不得提交任意数据库补丁，只能提交显式类型的操作。
@@ -36,6 +37,7 @@ export const EDIT_OPERATION_TYPES = [
   'update_caption',
   'update_audio_track',
   'set_scene_lock',
+  'set_object_lock',
   'restore_scene',
   'restore_project_version',
 ] as const;
@@ -89,6 +91,7 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   update_caption: { ...common, operation: 'update_caption', availability: 'PLANNED', plannedPhase: 'P06-06（字幕）', structural: false, readSet: ['CAPTION_SPAN'], writeSet: ['CAPTION_SPAN'], preconditions: ['CAPTION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
   update_audio_track: { ...common, operation: 'update_audio_track', availability: 'PLANNED', plannedPhase: 'P06-06（混音）', structural: false, readSet: ['AUDIO_REGION'], writeSet: ['AUDIO_REGION'], preconditions: ['AUDIO_REGION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
   set_scene_lock: { ...common, operation: 'set_scene_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE.LOCK'], preconditions: ['SCENE_EXISTS', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_object_lock: { ...common, operation: 'set_object_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['OBJECT_LOCK'], writeSet: ['OBJECT_LOCK'], preconditions: ['LOCK_TARGET_EXISTS'], postconditions: ['LOCK_STATE_UPDATED'], invalidates: [], compensation: 'PLANNED' },
   restore_scene: { ...common, operation: 'restore_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'EDIT_EVENT'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'TARGET_REVISION_REPLAYABLE'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   restore_project_version: { ...common, operation: 'restore_project_version', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT_VERSION'], writeSet: ['PROJECT', 'SCENE', 'SCENE_ORDER'], preconditions: ['EXCLUSIVE_BATCH', 'PROJECT_VERSION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES', 'TIMELINE_RECOMPUTED'], compensation: 'SNAPSHOT_RESTORE' },
 };
@@ -276,6 +279,7 @@ export const editOperationSchema = z.discriminatedUnion('op', [
   updateCaptionOperationSchema,
   updateAudioTrackOperationSchema,
   setSceneLockOperationSchema,
+  setObjectLockOperationSchema,
   restoreSceneOperationSchema,
   restoreProjectVersionOperationSchema,
 ]);

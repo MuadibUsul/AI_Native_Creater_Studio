@@ -5,6 +5,7 @@ import {
   createDb,
   editEvents,
   outboxEvents,
+  projectObjectLocks,
   scenes,
   redactDatabaseUrl,
   resolveTestDatabaseUrl,
@@ -18,6 +19,8 @@ import {
   assembleSceneGraph,
   createChannel,
   createProject,
+  createSequence,
+  createTrack,
   getProject,
   processEdits,
   type DomainDeps,
@@ -237,6 +240,93 @@ describe('编辑事务（§4.6）', () => {
       operations: [{ op: 'update_scene', sceneId, changes: { narration: '合法修改' } }],
     }));
     expect(afterUnlock.response.scenes.find((s) => s.id === sceneId)?.narration).toBe('合法修改');
+  });
+
+  it('N01-07 内容锁允许移动，时位锁阻止无 sceneId 的重排；同批显式解锁后可继续', async () => {
+    const fixture = await makeFixture();
+    const [a, b, c] = fixture.sceneIds as [string, string, string];
+
+    const contentLocked = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['CONTENT'], locked: true, reason: '用户保护文案' }],
+    }));
+    const moved = await edit(fixture, makeRequest({
+      baseProjectRevision: contentLocked.response.project.revision,
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [c, b, a] }],
+    }));
+    expect(moved.response.scenes.map((scene) => scene.id)).toEqual([c, b, a]);
+
+    const positionLocked = await edit(fixture, makeRequest({
+      baseProjectRevision: moved.response.project.revision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['POSITION'], locked: true }],
+    }));
+    const beforeBlockedRevision = positionLocked.response.project.revision;
+    const blocked = await edit(fixture, makeRequest({
+      baseProjectRevision: beforeBlockedRevision,
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [a, b, c] }],
+    })).catch((error: unknown) => error as { code?: string; details?: { reason?: string; blockedDimensions?: string[] } });
+    expect(blocked).toMatchObject({ code: 'PRECONDITION_FAILED', details: { reason: 'EDIT_IMPACT_LOCKED', blockedDimensions: ['POSITION'] } });
+    expect((await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId })).revision).toBe(beforeBlockedRevision);
+
+    const unlockedAndMoved = await edit(fixture, makeRequest({
+      baseProjectRevision: beforeBlockedRevision,
+      operations: [
+        { op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['POSITION'], locked: false },
+        { op: 'reorder_scenes', orderedSceneIds: [a, b, c] },
+      ],
+    }));
+    expect(unlockedAndMoved.response.scenes.map((scene) => scene.id)).toEqual([a, b, c]);
+    expect(unlockedAndMoved.response.editEvents.map((event) => event.action)).toEqual(['SET_OBJECT_LOCK', 'REORDER_SCENES']);
+    const persisted = await handle.db.select().from(projectObjectLocks).where(eq(projectObjectLocks.projectId, fixture.projectId));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.dimensions).toEqual(['CONTENT']);
+  });
+
+  it('N01-07 时长涟漪命中后续时位锁时整批回滚', async () => {
+    const fixture = await makeFixture();
+    const [a, b] = fixture.sceneIds as [string, string, string];
+    const locked = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: b, dimensions: ['POSITION'], locked: true }],
+    }));
+    const base = locked.response.project.revision;
+    const failure = await edit(fixture, makeRequest({
+      baseProjectRevision: base,
+      expectedSceneRevisions: { [a]: 1 },
+      operations: [
+        { op: 'update_project', changes: { title: '不应提交' } },
+        { op: 'update_scene', sceneId: a, changes: { durationMs: 8_000 } },
+      ],
+    })).catch((error: unknown) => error as { code?: string; details?: { reason?: string; impact?: { objectId?: string; direct?: boolean } } });
+    expect(failure).toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      details: { reason: 'EDIT_IMPACT_LOCKED', impact: { objectId: b, direct: false } },
+    });
+    const fresh = await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId });
+    expect(fresh.revision).toBe(base);
+    expect(fresh.title).toBe('编辑项目');
+    const graph = await assembleSceneGraph(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId });
+    expect(graph.scenes[0]?.durationMs).toBe(5_000);
+  });
+
+  it('N01-07 非场景锁目标按工作区和项目隔离', async () => {
+    const fixture = await makeFixture();
+    const other = await makeFixture();
+    const sequence = await createSequence(deps(), {
+      workspaceId: other.workspaceId,
+      projectId: other.projectId,
+      input: { name: '其他项目序列', frameRate: { num: 30, den: 1 }, duration: { ticks: '10000', timebase: { num: 1, den: 1_000 } } },
+    });
+    const track = await createTrack(deps(), {
+      workspaceId: other.workspaceId,
+      projectId: other.projectId,
+      sequenceId: sequence.id,
+      input: { kind: 'VIDEO', position: 0, name: 'V1' },
+    });
+    await expect(edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'TRACK', objectId: track.id, dimensions: ['TRACK'], locked: true }],
+    }))).rejects.toMatchObject({ code: 'NOT_FOUND', httpStatus: 404, details: { reason: 'EDIT_LOCK_TARGET_MISSING' } });
   });
 
   it('缺失 expectedSceneRevisions → 400；同一请求对同一 Scene 的多个操作按顺序应用（预期只校验一次）', async () => {

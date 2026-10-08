@@ -36,7 +36,13 @@ export {
   requireEditOperationDefinition,
   validateEditOperationCandidate,
 } from './edit-operation-registry.js';
-export type { EditCandidateScene, EditCandidateResult } from './edit-operation-registry.js';
+export type {
+  EditCandidateLock,
+  EditCandidateResult,
+  EditCandidateScene,
+  EditImpact,
+  EditImpactDependency,
+} from './edit-operation-registry.js';
 export {
   AUTO_SNAPSHOT_INTERVAL,
   buildSnapshotPayload,

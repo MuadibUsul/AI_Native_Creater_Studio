@@ -560,7 +560,7 @@ export function validateDirectorPlanForApply(
  * 应用 Director 计划 = 编辑协议的一次**原子**请求（insert_scene × N）。
  *
  * - 仅允许**空项目**（已有场景的项目走编辑协议，避免覆盖作者工作）；
- * - 逆序插入（每次插到最前）保证最终顺序 = 规划顺序（编辑协议不预知新场景 id）；
+ * - 使用规划的稳定 sceneId 顺序追加；已锁定的早期 Scene 不会被后续插入间接位移；
  * - 幂等键由 (planId, narrativePlanRevision) 派生：同计划重复应用由编辑幂等保证不重复插入；
  * - 锁定旁白 → 锁定场景（sceneDraft.locked；作者仍可显式 set_scene_lock 解锁）；
  * - 来源绑定：Scene.sourceBindings 按 Claim 的来源分组（携带 claimIds/datasetIds），
@@ -607,8 +607,8 @@ export async function applyDirectorPlan(
           .where(and(eq(claimsTable.workspaceId, input.workspaceId), inArray(claimsTable.id, allClaimIds)));
   const sourcesByClaim = new Map(claimRows.map((row) => [row.id, row.sourceIds as string[]]));
 
-  // 逆序插入：每次插到项目最前 → 最终顺序即规划顺序
-  const operations = [...plan.scenes].reverse().map((scene) => {
+  // N01-06 起批内创建 ID 是公共契约；顺序追加避免后续 insert 移动已锁定 Scene。
+  const operations = plan.scenes.map((scene, index) => {
     const bySource = new Map<string, string[]>();
     for (const claimId of scene.claimIds) {
       for (const sourceId of sourcesByClaim.get(claimId) ?? []) {
@@ -619,7 +619,8 @@ export async function applyDirectorPlan(
     }
     return {
       op: 'insert_scene' as const,
-      afterSceneId: null,
+      afterSceneId: index === 0 ? null : (plan.scenes[index - 1]?.sceneId ?? null),
+      createdSceneId: scene.sceneId,
       sceneDraft: {
         sceneType: scene.sceneType,
         semanticType: scene.semanticType,
