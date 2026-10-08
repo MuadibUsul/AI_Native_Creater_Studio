@@ -58,6 +58,25 @@
 .qf-file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .qf-file-input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .qf-mobile-backdrop{display:none}
+
+/* N16-03: UI type roles only; project media and canvas typography stay untouched. */
+.badge,.kbd,.data-table,.metriccard .value,.qf-metric-row h2,.player-bar,.timeline-head,.qf-type-numeric,.qf-technical-id{font-variant-numeric:tabular-nums}
+.sectionhead h1,.sectionhead h2,.page-head h1,.page-head h2,.logotext,html[lang^="zh"] .qf-type-title,html[lang^="zh"] .qf-ai-drawer h2{letter-spacing:normal}
+.sectionhead h1,.page-head h1{font-size:var(--ui-type-page-title);line-height:2.25rem}
+.sectionhead h2,.page-head h2,.type-spec .qf-type-heading{font-size:var(--ui-type-section-title);line-height:1.625rem}
+.type-spec .qf-type-title{font-size:var(--ui-type-page-title);line-height:2.25rem}
+.type-spec .qf-type-subheading,.type-spec .qf-type-body{font-size:var(--ui-type-body);line-height:1.5rem}
+.qf-type-metadata{font-size:var(--ui-type-metadata);line-height:1.125rem}
+.btn,.btn.small,.textbtn,.navitem,.field,.setting-nav button{font-size:var(--ui-type-control);line-height:1.375rem}
+.icon{width:20px;height:20px}
+.qf-technical-id{font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:var(--ui-type-control);line-height:1.375rem;overflow-wrap:anywhere}
+.qf-long-text{min-width:0;overflow-wrap:anywhere;word-break:normal}
+.type-spec>*{min-width:0}
+.type-spec .spec-line{min-width:0;gap:1rem}
+.type-spec .spec-line>:first-child{min-width:0;overflow-wrap:anywhere}
+.type-spec .spec-line>.sample-note{flex:none}
+@media(max-width:960px){.type-spec{grid-template-columns:minmax(0,1fr)}.type-spec .spec-line{flex-wrap:wrap}}
+@media(max-width:760px){.sectionhead h1,.page-head h1,.type-spec .qf-type-title{font-size:1.5rem;line-height:2rem}}
 @media(min-width:761px) and (max-width:1050px){
   .sidebar .workspace-switch{display:flex;width:46px;margin-left:auto;margin-right:auto;justify-content:center;padding:8px}
   .sidebar .workspace-switch .grow,.sidebar .workspace-switch .icon{display:none}
