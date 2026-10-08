@@ -63,6 +63,13 @@ export const mediaRangeSchema = z.object({
 
 export type MediaRange = z.infer<typeof mediaRangeSchema>;
 
+/** Range contents are [start, end); the end may only be used as a boundary. */
+export function isMediaTimeInRange(time: MediaTime, range: MediaRange): boolean {
+  const input = mediaTimeSchema.parse(time);
+  const span = mediaRangeSchema.parse(range);
+  return compareMediaTime(input, span.start) >= 0 && compareMediaTime(input, span.end) < 0;
+}
+
 export const MEDIA_ROUNDING_MODES = ['floor', 'ceil', 'towardZero', 'nearest'] as const;
 export const mediaRoundingSchema = z.enum(MEDIA_ROUNDING_MODES);
 export type MediaRounding = z.infer<typeof mediaRoundingSchema>;
@@ -116,6 +123,13 @@ export function mediaTimeToFrameIndex(time: MediaTime, frameRate: FrameRate, rou
   return rescaleMediaTime(time, normalizeRational(rate.den, rate.num), rounding).ticks;
 }
 
+/** Sequence edit boundaries must land on an output frame, without rounding first. */
+export function isMediaTimeFrameAligned(time: MediaTime, frameRate: FrameRate): boolean {
+  const value = seconds(mediaTimeSchema.parse(time));
+  const rate = frameRateSchema.parse(frameRate);
+  return (value.num * BigInt(rate.num)) % (value.den * BigInt(rate.den)) === 0n;
+}
+
 export function sampleIndexToMediaTime(sampleIndex: string, sampleRate: number): MediaTime {
   componentSchema.parse(sampleRate);
   return mediaTimeSchema.parse({ ticks: mediaTicksSchema.parse(sampleIndex), timebase: { num: 1, den: sampleRate } });
@@ -130,6 +144,18 @@ export function mediaTimeToSampleIndex(time: MediaTime, sampleRate: number, roun
 export function legacyMillisecondsToMediaTime(milliseconds: number): MediaTime {
   if (!Number.isSafeInteger(milliseconds) || milliseconds < 0) throw new RangeError('Legacy milliseconds must be a nonnegative safe integer');
   return checkedTime(BigInt(milliseconds), { num: 1, den: 1000 });
+}
+
+/** Projection into old fields is allowed only when no time precision is lost. */
+export function mediaTimeToLegacyMilliseconds(time: MediaTime): number {
+  const value = seconds(mediaTimeSchema.parse(time));
+  const numerator = value.num * 1000n;
+  if (numerator % value.den !== 0n) throw new RangeError('Time cannot be represented in whole legacy milliseconds');
+  const milliseconds = numerator / value.den;
+  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('Legacy milliseconds must be a nonnegative safe integer');
+  }
+  return Number(milliseconds);
 }
 
 export function legacyFpsToFrameRate(fps: number): FrameRate {

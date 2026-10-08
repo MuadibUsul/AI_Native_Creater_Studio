@@ -5,9 +5,12 @@ import {
   compareMediaTime,
   frameIndexToMediaTime,
   frameRateSchema,
+  isMediaTimeFrameAligned,
+  isMediaTimeInRange,
   legacyFpsToFrameRate,
   legacyMillisecondsToMediaTime,
   mapRangeBoundary,
+  mediaTimeToLegacyMilliseconds,
   mediaRangeSchema,
   mediaRoundingSchema,
   mediaTimeSchema,
@@ -44,6 +47,11 @@ describe('v0.4 MediaTime contract', () => {
     expect(mediaRangeSchema.safeParse({ start: oneSecond, end: oneSecond }).success).toBe(false);
     expect(mediaRangeSchema.safeParse({ start: oneSecond, end: { ticks: '999', timebase: msBase } }).success).toBe(false);
     expect(mediaRangeSchema.parse({ start: { ticks: '-48000', timebase: audioBase }, end: oneSecond })).toBeDefined();
+    const range = { start: { ticks: '0', timebase: audioBase }, end: oneSecond };
+    expect(isMediaTimeInRange(range.start, range)).toBe(true);
+    expect(isMediaTimeInRange({ ticks: '999', timebase: msBase }, range)).toBe(true);
+    expect(isMediaTimeInRange({ ticks: '1000', timebase: msBase }, range)).toBe(false);
+    expect(isMediaTimeInRange({ ticks: '-1', timebase: audioBase }, range)).toBe(false);
   });
 
   it('makes boundary rounding explicit, including negative ties', () => {
@@ -70,6 +78,11 @@ describe('v0.4 MediaTime contract', () => {
     }
     expect(frameIndexToMediaTime('1', { num: 30000, den: 1001 }).timebase).toEqual({ num: 1001, den: 30000 });
     expect(frameRateSchema.safeParse({ num: 30000, den: 0 }).success).toBe(false);
+    const rate = { num: 30000, den: 1001 };
+    expect(isMediaTimeFrameAligned(frameIndexToMediaTime('1', rate), rate)).toBe(true);
+    expect(isMediaTimeFrameAligned({ ticks: '48048', timebase: audioBase }, rate)).toBe(true);
+    expect(isMediaTimeFrameAligned({ ticks: '-48048', timebase: audioBase }, rate)).toBe(true);
+    expect(isMediaTimeFrameAligned({ ticks: '1601', timebase: audioBase }, rate)).toBe(false);
   });
 
   it('keeps 48 kHz audio sample positions exact against fractional frames', () => {
@@ -138,6 +151,10 @@ describe('v0.4 MediaTime contract', () => {
 
   it('preserves old ms/fps exactly and refuses precision loss or overflow', () => {
     expect(legacyMillisecondsToMediaTime(1234)).toEqual({ ticks: '1234', timebase: msBase });
+    expect(mediaTimeToLegacyMilliseconds({ ticks: '48048', timebase: audioBase })).toBe(1001);
+    expect(() => mediaTimeToLegacyMilliseconds(frameIndexToMediaTime('1', { num: 30000, den: 1001 }))).toThrow(RangeError);
+    expect(() => mediaTimeToLegacyMilliseconds({ ticks: '-1', timebase: msBase })).toThrow(RangeError);
+    expect(() => mediaTimeToLegacyMilliseconds({ ticks: '9007199254740992', timebase: msBase })).toThrow(RangeError);
     expect(legacyFpsToFrameRate(30)).toEqual({ num: 30, den: 1 });
     expect(() => legacyMillisecondsToMediaTime(0.5)).toThrow(RangeError);
     expect(() => legacyMillisecondsToMediaTime(-1)).toThrow(RangeError);
