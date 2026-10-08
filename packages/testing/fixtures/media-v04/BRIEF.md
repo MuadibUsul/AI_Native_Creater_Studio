@@ -1,6 +1,6 @@
 # N00-04 媒体样例 Brief
 
-> `manifest.json` 列出的 9 个输入为 **SYNTHETIC TEST DATA ONLY**：其中影像和声音由本机 FFmpeg `lavfi` 生成，字幕、SVG 与元数据为本轮编写。本目录另有 ANCS 公共页面的浏览器录屏和外部本地视频元数据，分别见 `screen-recording-manifest.json`、`local-real-media-manifest.json` 与 `pexels-local-manifest.json`。用户原片与 Pexels 原片不入库。素材存在不等于产品真实导入、播放、编辑能力通过。
+> `manifest.json` 列出的 11 个输入为 **SYNTHETIC TEST DATA ONLY**：其中影像和声音由本机 FFmpeg `lavfi` 生成，字幕、SVG 与元数据为本轮编写。本目录另有 ANCS 公共页面的浏览器录屏和外部本地视频元数据，分别见 `screen-recording-manifest.json`、`local-real-media-manifest.json` 与 `pexels-local-manifest.json`。用户原片与 Pexels 原片不入库。素材存在不等于产品真实导入、播放、编辑能力通过。
 
 ## 目的与来源
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | 纯素材 | A 的源 `[0.5, 2.5)` 秒与 B 的源 `[1, 3)` 秒各形成 Clip；再移动 B，A 的源版本、原声及批准状态不变。独立 WAV 可作另轨同步输入。 | 仅准备素材，尚未跑上传、剪辑、Undo/Redo 或成片。 |
 | 分数帧率 | A/B/C 分别为 24000/1001、30000/1001、60000/1001；边界按有理时间换算，不能逐段浮点舍入积累。 | 这是 FFmpeg 合成图案，不是用户摄影。 |
-| VFR | D 的原始帧 PTS 间隔有 512 和 1024 ticks（时基 1/15360）；检索、裁剪和代理须按实际 PTS。 | **不是手机拍摄**；手机特有旋转、HDR、B 帧和音频起始偏移尚未覆盖。 |
+| VFR 与旋转 | D 的原始帧 PTS 间隔有 512 和 1024 ticks（时基 1/15360）；E 带 +90° display matrix；检索、裁剪和代理须按实际 PTS 与显示矩阵。 | **不是手机拍摄**；手机 HDR、复杂 B 帧和音频起始偏移仍未覆盖。 |
 | 生成与混合 | C 可当作 Mock Provider 已返回的不可变产物，分别与 A 组成纯 Mock 生成/混合结构测试。 | 不能称真实生成质量、真实费用或 Provider 验收。 |
 | 图形与长时序 | SVG 是内容层矢量对象；JSON 记录 24 小时的 48 kHz ticks、负源 PTS 与 30000/1001。 | 没有 24 小时实体音视频，不能验证长片真实解码/同步。 |
 | 派生长时间轴 | `generate-long-local.ps1` 把获许可的 Pexels 稻田片及原音循环、缩小并重编码到本机忽略目录，形成 20 分钟、30000/1001 的音视频压力样本；`long-local-manifest.json` 记录来源与哈希。 | 这是 80 秒源片的重复派生，不是连续 20 分钟实拍或 24 小时媒体；未跑浏览器播放/编辑性能。 |

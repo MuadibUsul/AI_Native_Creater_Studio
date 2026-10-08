@@ -69,6 +69,8 @@ export const assetVersions = pgTable(
     width: integer('width'),
     height: integer('height'),
     status: text('status').notNull().default('UPLOADING'),
+    probeStatus: text('probe_status').notNull().default('NOT_REQUIRED'),
+    mediaProbe: jsonb('media_probe'),
     metadata: jsonb('metadata').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -102,7 +102,7 @@ describe('Assets', () => {
     });
     renderWithClient(<AssetsPage />, client);
     expect(await screen.findByText('SOURCE_IMAGE')).toBeTruthy();
-    expect(screen.getByText('READY')).toBeTruthy();
+    expect(screen.getByText('可用')).toBeTruthy();
   });
 });
 

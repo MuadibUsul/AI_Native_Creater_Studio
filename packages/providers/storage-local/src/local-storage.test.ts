@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -123,5 +123,13 @@ describe('本地对象存储适配器', () => {
     });
     expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/uploads/combined.bin') ?? new Uint8Array())).toBe('alpha-beta');
     expect((await storage.probeObject('workspaces/ws_1/uploads/combined.bin')).sizeBytes).toBe(10);
+  });
+
+  it('以流式临时文件物化对象供隔离媒体工具读取', async () => {
+    const key = 'workspaces/ws_1/uploads/probe-source.bin';
+    const destination = join(rootDir, 'worker-temp', 'source.bin');
+    await storage.putObject(key, new TextEncoder().encode('bounded-source'));
+    await storage.materializeObject({ key, destinationPath: destination });
+    expect((await readFile(destination)).toString('utf8')).toBe('bounded-source');
   });
 });

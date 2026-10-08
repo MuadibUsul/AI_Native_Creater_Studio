@@ -65,6 +65,11 @@ export interface ObjectStorageAdapter {
   /** 对象 SHA-256（十六进制小写）；对象不存在返回 null */
   computeObjectSha256(key: string): Promise<string | null>;
   /**
+   * 将对象以流式方式物化到 Worker 的临时文件。媒体探测与转码使用此 seam，避免
+   * `getObject()` 把数 GiB 原件一次读入内存。实现不得暴露底层永久路径。
+   */
+  materializeObject?(input: { key: string; destinationPath: string }): Promise<void>;
+  /**
    * 将同一上传意图的分片按给定顺序合成为最终对象。实现必须流式复制，不能把所有分片
    * 同时读入内存；目标写入失败时不得暴露半成品对象。
    */

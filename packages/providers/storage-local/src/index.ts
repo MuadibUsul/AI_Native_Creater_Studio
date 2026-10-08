@@ -210,6 +210,18 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     return hash.digest('hex');
   }
 
+  async materializeObject(input: { key: string; destinationPath: string }): Promise<void> {
+    await mkdir(dirname(input.destinationPath), { recursive: true });
+    const partial = `${input.destinationPath}.partial`;
+    try {
+      await pipeline(createReadStream(this.resolveKeyPath(input.key)), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, input.destinationPath);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
   async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<void> {
     if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
     const destination = this.resolveKeyPath(input.destinationKey);

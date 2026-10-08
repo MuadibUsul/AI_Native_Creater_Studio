@@ -6,11 +6,12 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MotionValidator, RenderExecutor, RenderMediaProbe } from '@ancs/contracts';
+import type { MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaProbe } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
 import { cmsWritebackHandler } from './cms-writeback-handler.js';
+import { createAssetMediaProbeHandler } from './media-probe-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -110,6 +111,8 @@ export interface DefaultRegistryOptions {
    * "未知类型 → FAILED_FINAL"（明确失败，不静默吞）。
    */
   mediaProbe?: RenderMediaProbe;
+  /** 源素材能力探测（N02-02）；与 Final QA probe 分离，结果写回 AssetVersion。 */
+  sourceMediaProbe?: SourceMediaProbe;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -122,6 +125,9 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   }
   if (options.mediaProbe !== undefined) {
     handlers.push(createRenderQaHandler({ probe: options.mediaProbe }));
+  }
+  if (options.sourceMediaProbe !== undefined) {
+    handlers.push(createAssetMediaProbeHandler({ probe: options.sourceMediaProbe }));
   }
   return new JobHandlerRegistry(handlers);
 }

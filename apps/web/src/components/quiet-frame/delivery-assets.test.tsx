@@ -115,6 +115,34 @@ describe('Quiet Frame asset flow', () => {
     expect(screen.queryByLabelText('预览视频 source.mp4')).toBeNull();
   });
 
+  it('shows upload, decode, preview and export capability states with a recovery reason', async () => {
+    const asset = { id: 'ast_failed', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'FAILED', metadata: { filename: 'damaged.mp4' }, license: { type: 'USER_OWNED' } };
+    const mediaProbe = {
+      status: 'FAILED',
+      streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 1920, height: 1080, averageFrameRate: { numerator: 30000, denominator: 1001 }, cadence: 'UNKNOWN' }],
+      capabilities: {
+        upload: 'AVAILABLE', decode: 'UNAVAILABLE', preview: 'UNAVAILABLE', export: 'UNAVAILABLE',
+        reasons: [{ code: 'DECODE_FAILED', message: '文件无法完整解码。', nextAction: '修复或转封装后重新上传。' }],
+      },
+    };
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_failed', versions: [{ id: 'av_failed', mimeType: 'video/mp4', probeStatus: 'FAILED', mediaProbe }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/damaged.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 damaged.mp4' }));
+    const capabilityRegion = await screen.findByRole('region', { name: '媒体能力' });
+    expect(capabilityRegion.textContent).toContain('上传可直接使用');
+    expect(capabilityRegion.textContent).toContain('解码不可用');
+    expect(screen.getByText(/修复或转封装后重新上传/)).toBeTruthy();
+    expect(screen.queryByLabelText('预览视频 damaged.mp4')).toBeNull();
+    expect(screen.getByRole('link', { name: '下载原文件' })).toBeTruthy();
+  });
+
   it('keeps asset dialog keyboard focus inside and restores the selected card on Escape', async () => {
     const asset = { id: 'ast_1', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
     const client = mockClient({

@@ -241,6 +241,7 @@ export { listOpsProjects } from './ops-project.js';
 export { getOpsWorkspaceStorageSummary } from './ops-storage.js';
 export { listOpsSupportGrantsForTicket } from './ops-support-grants.js';
 export { createJobInTx } from './jobs.js';
+export { beginAssetMediaProbe, completeAssetMediaProbe } from './media-probes.js';
 export {
   assertDependenciesAllowed,
   buildMotionDesignPrompts,

@@ -9,6 +9,7 @@ import {
   DEFAULT_UPLOAD_PART_SIZE_BYTES,
   ERROR_CODES,
   MAX_UPLOAD_PARTS,
+  MEDIA_PROBE_JOB_TYPE,
   MAX_SIGNED_URL_TTL_SECONDS,
   MULTIPART_UPLOAD_INTENT_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
@@ -37,6 +38,7 @@ import {
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, scenes, uploadIntents, uploadParts } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { createJobInTx } from './jobs.js';
 import { assertStorageQuota } from './plans.js';
 
 /**
@@ -139,6 +141,8 @@ const toVersionDto = (row: typeof assetVersions.$inferSelect) =>
     width: row.width,
     height: row.height,
     status: row.status,
+    probeStatus: row.probeStatus,
+    mediaProbe: row.mediaProbe,
     metadata: row.metadata,
     createdAt: row.createdAt.toISOString(),
   });
@@ -289,7 +293,7 @@ export async function createUploadIntent(
       status: 'PENDING_UPLOAD',
       retentionClass: ASSET_DEFAULT_RETENTION[request.assetType],
       license,
-      metadata: { filename: request.filename },
+      metadata: { filename: request.filename, mimeType: request.contentType },
       createdBy: userId,
     });
     await tx.insert(assetVersions).values({
@@ -652,6 +656,7 @@ export async function confirmUpload(
 
   // 探测元数据（真实可探测的字段以探测为准；其余按确认请求声明记录）
   const probedDimensions = probeImageDimensions(prefix, sniffed);
+  const requiresMediaProbe = intent.expectedMimeType.startsWith('video/') || intent.expectedMimeType.startsWith('audio/');
   const declared = {
     ...(input.input.durationMs !== undefined ? { durationMs: input.input.durationMs } : {}),
     ...(input.input.width !== undefined ? { width: input.input.width } : {}),
@@ -693,6 +698,8 @@ export async function confirmUpload(
       .update(assetVersions)
       .set({
         status: 'READY',
+        probeStatus: duplicate ? duplicate.version.probeStatus : requiresMediaProbe ? 'PENDING' : 'NOT_REQUIRED',
+        mediaProbe: duplicate?.version.mediaProbe ?? null,
         checksumSha256: actualSha,
         sizeBytes: probe.sizeBytes,
         mimeType: intent.expectedMimeType,
@@ -710,7 +717,7 @@ export async function confirmUpload(
     await tx
       .update(assets)
       .set({
-        status: 'READY',
+        status: duplicate ? 'READY' : requiresMediaProbe ? 'PROCESSING' : 'READY',
         currentVersionId: intent.assetVersionId,
         updatedAt: now,
         metadata: {
@@ -725,6 +732,22 @@ export async function confirmUpload(
       .update(uploadIntents)
       .set({ status: 'COMPLETED', completedAt: now })
       .where(and(eq(uploadIntents.id, intent.id), eq(uploadIntents.workspaceId, workspaceId)));
+    if (requiresMediaProbe && duplicate === undefined) {
+      await createJobInTx(tx, {
+        workspaceId,
+        projectId: asset.projectId,
+        type: MEDIA_PROBE_JOB_TYPE,
+        input: {
+          assetId,
+          assetVersionId: intent.assetVersionId,
+          storageKey: intent.storageKey,
+          declaredMimeType: intent.expectedMimeType,
+        },
+        maxAttempts: 2,
+        createdBy: intent.createdBy,
+        classification: 'SYSTEM',
+      });
+    }
     deletedDuplicateObject = duplicate !== undefined;
   });
 
@@ -777,7 +800,7 @@ export async function createAssetDownloadUrl(
 ): Promise<DownloadUrlResponse> {
   const storage = requireStorage(deps);
   const asset = await loadAssetRow(deps, input.workspaceId, input.assetId);
-  if (asset.status !== 'READY' || asset.currentVersionId === null) {
+  if (!['READY', 'PROCESSING', 'FAILED'].includes(asset.status) || asset.currentVersionId === null) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '资产尚未就绪（不可下载）', 409, { status: asset.status });
   }
   const versionRows = await deps.db
@@ -787,6 +810,9 @@ export async function createAssetDownloadUrl(
     .limit(1);
   const version = versionRows[0];
   if (!version) throw new ApiFailure(ERROR_CODES.INTERNAL, 'asset current version missing（数据不一致）', 500);
+  if (version.status !== 'READY') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '资产原件尚未完成上传（不可下载）', 409, { status: version.status });
+  }
 
   const ttlSeconds = Math.min(input.ttlSeconds ?? DOWNLOAD_URL_TTL_SECONDS, MAX_SIGNED_URL_TTL_SECONDS);
   const target = await storage.createDownloadUrl({

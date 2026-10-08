@@ -65,6 +65,98 @@ export const ASSET_VERSION_STATUSES = ['UPLOADING', 'READY', 'FAILED', 'SUPERSED
 export const assetVersionStatusSchema = z.enum(ASSET_VERSION_STATUSES);
 export type AssetVersionStatus = z.infer<typeof assetVersionStatusSchema>;
 
+export const MEDIA_PROBE_STATUSES = ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'READY', 'FAILED'] as const;
+export const mediaProbeStatusSchema = z.enum(MEDIA_PROBE_STATUSES);
+export type MediaProbeStatus = z.infer<typeof mediaProbeStatusSchema>;
+
+export const MEDIA_CAPABILITY_STATES = ['AVAILABLE', 'PROXY_REQUIRED', 'TRANSCODE_REQUIRED', 'UNAVAILABLE', 'UNKNOWN'] as const;
+export const mediaCapabilityStateSchema = z.enum(MEDIA_CAPABILITY_STATES);
+export type MediaCapabilityState = z.infer<typeof mediaCapabilityStateSchema>;
+
+const integerStringSchema = z.string().regex(/^-?\d+$/);
+export const mediaRationalSchema = z.object({
+  numerator: z.number().int(),
+  denominator: z.number().int().positive(),
+});
+export type MediaRational = z.infer<typeof mediaRationalSchema>;
+
+export const mediaStreamProbeSchema = z.object({
+  index: z.number().int().nonnegative(),
+  type: z.enum(['VIDEO', 'AUDIO', 'SUBTITLE', 'DATA', 'ATTACHMENT', 'UNKNOWN']),
+  codecName: z.string().nullable(),
+  codecLongName: z.string().nullable(),
+  profile: z.string().nullable(),
+  timeBase: mediaRationalSchema.nullable(),
+  startPts: integerStringSchema.nullable(),
+  durationTicks: integerStringSchema.nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  rotationDegrees: z.number().int().min(-360).max(360).nullable(),
+  pixelFormat: z.string().nullable(),
+  colorRange: z.string().nullable(),
+  colorSpace: z.string().nullable(),
+  colorTransfer: z.string().nullable(),
+  colorPrimaries: z.string().nullable(),
+  nominalFrameRate: mediaRationalSchema.nullable(),
+  averageFrameRate: mediaRationalSchema.nullable(),
+  frameCount: integerStringSchema.nullable(),
+  sampleRate: z.number().int().positive().nullable(),
+  channels: z.number().int().positive().nullable(),
+  channelLayout: z.string().nullable(),
+  cadence: z.enum(['CONSTANT', 'VARIABLE', 'UNKNOWN']),
+  sampledPacketCount: z.number().int().nonnegative(),
+  sampledPtsDeltaTicks: z.array(integerStringSchema).max(32),
+});
+export type MediaStreamProbe = z.infer<typeof mediaStreamProbeSchema>;
+
+export const mediaCapabilitySummarySchema = z.object({
+  upload: mediaCapabilityStateSchema,
+  decode: mediaCapabilityStateSchema,
+  preview: mediaCapabilityStateSchema,
+  export: mediaCapabilityStateSchema,
+  reasons: z.array(
+    z.object({
+      code: z.string().min(1).max(80),
+      message: z.string().min(1).max(500),
+      nextAction: z.string().min(1).max(500).nullable(),
+    }),
+  ),
+});
+export type MediaCapabilitySummary = z.infer<typeof mediaCapabilitySummarySchema>;
+
+export const sourceMediaProbeResultSchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  status: z.enum(['READY', 'FAILED']),
+  formatNames: z.array(z.string().min(1)).max(20),
+  formatLongName: z.string().nullable(),
+  startTimeMs: z.number().int().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  bitRate: z.number().int().nonnegative().nullable(),
+  streams: z.array(mediaStreamProbeSchema).max(128),
+  decodeCheck: z.object({
+    status: z.enum(['PASSED', 'FAILED']),
+    errorCode: z.string().max(80).nullable(),
+    message: z.string().max(500).nullable(),
+  }),
+  capabilities: mediaCapabilitySummarySchema,
+});
+export type SourceMediaProbeResult = z.infer<typeof sourceMediaProbeResultSchema>;
+
+export const mediaProbeJobInputSchema = z.object({
+  assetId: opaqueIdSchema,
+  assetVersionId: opaqueIdSchema,
+  storageKey: z.string().min(1).max(512),
+  declaredMimeType: z.string().min(3).max(120),
+});
+export type MediaProbeJobInput = z.infer<typeof mediaProbeJobInputSchema>;
+
+/** Worker I/O seam；实现必须在隔离子进程中探测，不让解析器在 API/domain 进程内执行。 */
+export interface SourceMediaProbe {
+  readonly kind: string;
+  probe(input: { filePath: string; declaredMimeType: string }): Promise<SourceMediaProbeResult>;
+}
+
 /** Scene 资产绑定角色（与 assetBindingSchema.role 对齐；P02-04 定稿） */
 export const ASSET_ROLES = ['visual', 'audio', 'avatar', 'broll', 'music', 'thumbnail', 'voice_sample', 'source', 'chart', 'subtitle'] as const;
 export const assetRoleSchema = z.enum(ASSET_ROLES);
@@ -157,6 +249,8 @@ export const assetVersionSchema = z.object({
   width: z.number().int().positive().nullable().default(null),
   height: z.number().int().positive().nullable().default(null),
   status: assetVersionStatusSchema,
+  probeStatus: mediaProbeStatusSchema.default('NOT_REQUIRED'),
+  mediaProbe: sourceMediaProbeResultSchema.nullable().default(null),
   metadata: z.record(z.string(), z.unknown()).default({}),
   createdAt: isoDateTimeSchema,
 });

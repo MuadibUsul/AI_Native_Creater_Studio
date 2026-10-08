@@ -33,6 +33,12 @@ export const MOTION_GENERATE_JOB_TYPE = 'MOTION_GENERATE';
  */
 export const RENDER_QA_JOB_TYPE = 'RENDER_QA';
 
+/**
+ * 源媒体探测任务（N02-02）：上传对象通过大小、MIME 和 checksum 后异步执行 ffprobe 与
+ * 完整解码检查。任务只保存对象引用，不在 Job input 中复制媒体字节。
+ */
+export const MEDIA_PROBE_JOB_TYPE = 'MEDIA_PROBE';
+
 export const JOB_STATUSES = [
   'WAITING_DEPENDENCY',
   'QUEUED',

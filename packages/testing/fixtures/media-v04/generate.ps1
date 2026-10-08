@@ -38,9 +38,17 @@ New-Sample 'clip-d-synthetic-vfr.mp4' @(
   '-c:v','libx264','-preset','ultrafast','-crf','34','-pix_fmt','yuv420p',
   '-threads','1','-an','-movflags','+faststart','-map_metadata','-1'
 )
+New-Sample 'clip-e-rotation-90.mp4' @(
+  '-display_rotation','90','-i',(Join-Path $OutputDirectory 'clip-b-30000-1001.mp4'),
+  '-map','0:v:0','-c','copy','-map_metadata','-1'
+)
 New-Sample 'independent-48k-stereo.wav' @(
   '-f','lavfi','-i','sine=frequency=880:sample_rate=48000:duration=4',
   '-f','lavfi','-i','sine=frequency=1320:sample_rate=48000:duration=4',
   '-filter_complex','[0:a][1:a]amerge=inputs=2[a]','-map','[a]',
   '-c:a','pcm_s16le','-ar','48000','-ac','2','-map_metadata','-1'
+)
+New-Sample 'multichannel-48k-5.1.wav' @(
+  '-f','lavfi','-i','anullsrc=channel_layout=5.1:sample_rate=48000',
+  '-t','1','-c:a','pcm_s16le','-ar','48000','-ac','6','-map_metadata','-1'
 )
