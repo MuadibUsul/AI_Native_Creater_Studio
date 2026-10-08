@@ -7,6 +7,7 @@ export {
   updateChannel,
 } from './channels.js';
 export type { DomainDeps } from './channels.js';
+export { getUserAppearance, setUserAppearance } from './appearance.js';
 export {
   createCreatorIdentity,
   getCreatorIdentity,

@@ -41,7 +41,7 @@ describe('运营界面（P08-02）', () => {
       },
     });
     renderWithClient(<AdminPage />, client);
-    expect(await screen.findByText(/无权限访问（或不存在）/)).toBeTruthy();
+    expect(await screen.findByText('需要运营身份与多因素验证')).toBeTruthy();
     expect(screen.queryByTestId('ops-summary')).toBeNull();
   });
 

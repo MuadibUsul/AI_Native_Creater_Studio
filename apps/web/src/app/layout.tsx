@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { cookies, headers } from 'next/headers';
-import { sessionInfoSchema } from '@ancs/contracts';
+import { userAppearancePreferenceSchema } from '@ancs/contracts';
 import './globals.css';
 import './quiet-frame.css';
 import './ui-tokens.css';
 import { Providers } from '@/app/providers';
 import { StudioShell } from '@/ui/StudioShell';
-import { APPEARANCE_COOKIE, initialAppearance, parseAppearanceCookie, type AppearanceMode } from '@/lib/appearance';
+import { APPEARANCE_COOKIE, initialAppearance, type AppearanceMode } from '@/lib/appearance';
 
 export const metadata: Metadata = {
   title: 'Creator Studio · ANCS',
@@ -19,17 +19,16 @@ const appearanceBootScript = "(()=>{try{const b=document.body;const m=b.dataset.
 
 async function serverAppearance(): Promise<AppearanceMode> {
   const cookieValue = (await cookies()).get(APPEARANCE_COOKIE)?.value;
-  if (!parseAppearanceCookie(cookieValue)) return 'system';
   try {
     const requestCookies = (await headers()).get('cookie');
     if (!requestCookies) return 'system';
     const apiOrigin = (process.env['ANCS_API_INTERNAL_URL'] ?? 'http://localhost:3001').replace(/\/+$/, '');
-    const response = await fetch(`${apiOrigin}/api/v1/auth/session`, {
+    const response = await fetch(`${apiOrigin}/api/v1/users/me/appearance`, {
       headers: { cookie: requestCookies }, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(2000),
     });
     if (!response.ok) return 'system';
-    const session = sessionInfoSchema.safeParse(await response.json());
-    return initialAppearance(cookieValue, session.success ? session.data.user.id : null);
+    const preference = userAppearancePreferenceSchema.safeParse(await response.json());
+    return initialAppearance(cookieValue, preference.success ? preference.data : null);
   } catch {
     return 'system';
   }

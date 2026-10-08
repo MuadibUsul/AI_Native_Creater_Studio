@@ -7,8 +7,8 @@ import { isoDateTimeSchema } from './common/time.js';
  *
  * 纪律：
  * - **平台管理员与普通用户角色严格分离**（REQ-67-02：不复用 workspace 角色）：
- *   管理员名单来自部署配置（`ANCS_PLATFORM_ADMINS`，user_id 列表），非管理员访问 `/api/v1/admin/*`
- *   → 404（反枚举；与跨租户同一约定）；
+ *   N15-02 起由独立 admin_principals、role_grants 和 TOTP 后签发的运营会话判定，
+ *   非管理员访问 `/api/v1/admin/*` → 404（反枚举）；历史白名单不再授予权限；
  * - 运营面为**只读聚合 + 人工重试**：重试走既有任务服务（天然遵守预算/幂等/版本规则，§67 验收）。
  */
 

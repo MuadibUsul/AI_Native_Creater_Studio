@@ -44,6 +44,18 @@ try {
       fixedPaint.push({ cookieUser, ...result });
       await context.close();
     }
+    const accountContext = await browser.newContext({ colorScheme: 'light' });
+    await accountContext.addCookies([
+      { name: 'appearance-test-session', value: 'usr_test', url: baseUrl },
+      { name: 'appearance-test-account', value: 'dark', url: baseUrl },
+    ]);
+    const accountPage = await accountContext.newPage();
+    await accountPage.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, (route) => route.abort());
+    assert.equal((await accountPage.goto(`${baseUrl}/design-system`, { waitUntil: 'domcontentloaded' }))?.status(), 200);
+    const accountResult = await accountPage.evaluate(() => ({ mode: document.body.dataset['appearanceMode'], dark: document.body.classList.contains('theme-dark') }));
+    assert.deepEqual(accountResult, { mode: 'dark', dark: true });
+    fixedPaint.push({ source: 'account', ...accountResult });
+    await accountContext.close();
   }
 
   const context = await browser.newContext({ colorScheme: 'dark' });

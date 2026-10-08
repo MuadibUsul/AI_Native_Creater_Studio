@@ -155,6 +155,7 @@ export {
   sessionInfoSchema,
   signInRequestSchema,
   signInResponseSchema,
+  verifyTotpRequestSchema,
   nativeAuthorizeQuerySchema,
   authorizationCodeGrantSchema,
   refreshTokenGrantSchema,
@@ -171,6 +172,9 @@ export type {
   TokenResponse,
   RevokeTokenRequest,
 } from './auth.js';
+
+export { OPS_ENVIRONMENTS, opsEnvironmentSchema, OPS_ROLES, opsRoleSchema, opsSessionSchema, opsMfaEnrollmentRequestSchema, opsMfaEnrollmentSchema, opsRevokeSessionRequestSchema } from './ops-auth.js';
+export type { OpsEnvironment, OpsRole, OpsSession } from './ops-auth.js';
 
 // 编辑历史与版本契约（P02-02/P02-03 / §23、§24）
 export {
@@ -1571,3 +1575,12 @@ export type {
   TranslateNarrationRequest,
   MultilingualErrorReason,
 } from './multilingual.js';
+
+// N16-02 user-level UI appearance preference (separate from project theme tokens).
+export {
+  APPEARANCE_MODES,
+  appearanceModeSchema,
+  userAppearancePreferenceSchema,
+  setUserAppearancePreferenceRequestSchema,
+} from './appearance.js';
+export type { AppearanceMode, UserAppearancePreference, SetUserAppearancePreferenceRequest } from './appearance.js';

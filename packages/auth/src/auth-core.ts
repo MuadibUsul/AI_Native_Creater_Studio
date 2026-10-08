@@ -1,7 +1,8 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { twoFactor as twoFactorPlugin } from 'better-auth/plugins';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { account, session, user, verification } from '@ancs/db';
+import { account, session, user, verification, twoFactor } from '@ancs/db';
 
 /**
  * Better Auth 集成（计划 §3.1 / 规范 §30）。
@@ -26,7 +27,7 @@ export function createAuth(options: AuthCoreOptions) {
   return betterAuth({
     database: drizzleAdapter(options.db, {
       provider: 'pg',
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, twoFactor },
     }),
     secret: options.secret,
     baseURL: options.baseUrl,
@@ -38,6 +39,11 @@ export function createAuth(options: AuthCoreOptions) {
       expiresIn: options.sessionTtlSeconds ?? 60 * 60 * 24 * 30,
       updateAge: options.sessionUpdateAgeSeconds ?? 60 * 60 * 24,
     },
+    plugins: [twoFactorPlugin({
+      issuer: 'ANCS Platform Ops',
+      trustDeviceMaxAge: 0,
+      backupCodeOptions: { storeBackupCodes: 'encrypted' },
+    })],
   });
 }
 

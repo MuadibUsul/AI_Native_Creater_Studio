@@ -182,7 +182,16 @@ const app = await buildServer({
     },
   },
   storage: storageDeps,
-  admin: createAdminDeps(config.ANCS_PLATFORM_ADMINS),
+  admin: createAdminDeps(config.ANCS_OPS_ENVIRONMENT === undefined ? undefined : {
+    db: handle.db,
+    environment: config.ANCS_OPS_ENVIRONMENT,
+    fingerprintKey: createHmac('sha256', secret).update('ops-fingerprint-v1').digest('hex'),
+    policy: {
+      idleSeconds: config.ANCS_OPS_IDLE_SECONDS,
+      absoluteSeconds: config.ANCS_OPS_ABSOLUTE_SECONDS,
+      reauthSeconds: config.ANCS_OPS_REAUTH_SECONDS,
+    },
+  }),
   payments: paymentDeps,
 });
 

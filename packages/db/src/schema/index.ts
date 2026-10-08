@@ -1,4 +1,6 @@
-export { account, session, user, verification } from './auth.js';
+export { account, session, user, verification, twoFactor } from './auth.js';
+export { userAppearancePreferences } from './appearance.js';
+export { adminPrincipals, adminRoleGrants, adminSessions } from './ops-auth.js';
 export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './auth-native.js';
 export { idempotencyKeys } from './idempotency.js';
 export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';

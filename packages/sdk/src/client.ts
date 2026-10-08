@@ -136,8 +136,15 @@ import {
   revokeTokenRequestSchema,
   sceneGraphSchema,
   sessionInfoSchema,
+  userAppearancePreferenceSchema,
+  setUserAppearancePreferenceRequestSchema,
   signInRequestSchema,
   signInResponseSchema,
+  verifyTotpRequestSchema,
+  opsSessionSchema,
+  opsMfaEnrollmentRequestSchema,
+  opsMfaEnrollmentSchema,
+  opsRevokeSessionRequestSchema,
   speechProfileSchema,
   tokenRequestSchema,
   tokenResponseSchema,
@@ -209,6 +216,8 @@ import {
   type ClientType,
   type HealthResponse,
   type SessionInfo,
+  type UserAppearancePreference,
+  type SetUserAppearancePreferenceRequest,
   type SignInResponse,
   type SpeechProfile,
   type TokenResponse,
@@ -286,6 +295,7 @@ import {
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
+  type OpsSession,
   type OpsAuditEntry,
   type RenderStatus,
   type EditPlan,
@@ -447,8 +457,11 @@ export interface AncsClient {
   health(): Promise<HealthResponse>;
   auth: {
     signIn(input: { email: string; password: string }): Promise<SignInResponse>;
+    verifyTotp(input: { code: string }): Promise<SignInResponse>;
     signOut(): Promise<void>;
     session(): Promise<SessionInfo>;
+    getAppearance(): Promise<UserAppearancePreference>;
+    setAppearance(input: SetUserAppearancePreferenceRequest): Promise<UserAppearancePreference>;
     authorize(input: {
       clientId: string;
       redirectUri: string;
@@ -721,6 +734,12 @@ export interface AncsClient {
     upsertWritebackTarget(workspaceId: string, input: UpsertCmsWritebackTargetRequest, options?: MutationOptions): Promise<CmsWritebackTarget>;
     listWritebackAttempts(workspaceId: string, query?: { deliveryId?: string; renderId?: string; limit?: number }): Promise<CmsWritebackAttemptList>;
     retryWriteback(workspaceId: string, deliveryId: string, options?: MutationOptions): Promise<RetryCmsWritebackResponse>;
+  };
+  ops: {
+    session(): Promise<OpsSession>;
+    enrollTotp(input: { password: string }): Promise<{ totpUri: string; backupCodes: string[] }>;
+    reauthenticate(input: { code: string }): Promise<OpsSession>;
+    revokeSession(input: { sessionId: string }): Promise<void>;
   };
   analytics: {
     attributeScenes(workspaceId: string, projectId: string, performanceId: string, options?: MutationOptions): Promise<{ items: ScenePerformanceRecord[] }>;
@@ -1011,8 +1030,8 @@ export interface AncsClient {
     retry(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
   };
   /**
-   * 最小运营（P08-02 / §67）：仅**平台管理员**可用（部署配置 ANCS_PLATFORM_ADMINS；
-   * 非管理员调用 → 404 反枚举——与普通用户角色严格分离）。
+   * 运营 API：独立 principal、TOTP 验证后的 ops cookie 与环境绑定；
+   * 非管理员调用 → 404 反枚举，与普通工作区角色分离。
    */
   admin: {
     overview(): Promise<OpsOverview>;
@@ -1203,11 +1222,15 @@ export function createClient(options: ClientOptions): AncsClient {
     auth: {
       signIn: (input) =>
         request('POST', '/api/v1/auth/sign-in', signInResponseSchema, { body: input, bodySchema: signInRequestSchema }),
+      verifyTotp: (input) =>
+        request('POST', '/api/v1/auth/verify-totp', signInResponseSchema, { body: input, bodySchema: verifyTotpRequestSchema }),
       signOut: async () => {
         await request('POST', '/api/v1/auth/sign-out', emptySchema);
         cookieJar.clear();
       },
       session: () => request('GET', '/api/v1/auth/session', sessionInfoSchema),
+      getAppearance: () => request('GET', '/api/v1/users/me/appearance', userAppearancePreferenceSchema),
+      setAppearance: (input) => request('PUT', '/api/v1/users/me/appearance', userAppearancePreferenceSchema, { body: input, bodySchema: setUserAppearancePreferenceRequestSchema }),
       authorize: async (input) => {
         const query = nativeAuthorizeQuerySchema.parse({
           responseType: 'code',
@@ -1390,6 +1413,21 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/cms/writeback-deliveries/${deliveryId}/retry`, retryCmsWritebackResponseSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+    },
+
+    ops: {
+      session: () => request('GET', '/api/v1/ops/session', opsSessionSchema),
+      enrollTotp: (input) => request('POST', '/api/v1/ops/mfa/enroll', opsMfaEnrollmentSchema, {
+        body: input, bodySchema: opsMfaEnrollmentRequestSchema,
+      }),
+      reauthenticate: (input) => request('POST', '/api/v1/ops/reauth', opsSessionSchema, {
+        body: input, bodySchema: verifyTotpRequestSchema,
+      }),
+      revokeSession: async (input) => {
+        await request('POST', '/api/v1/ops/sessions/revoke', emptySchema, {
+          body: input, bodySchema: opsRevokeSessionRequestSchema,
+        });
+      },
     },
     analytics: {
       attributeScenes: (workspaceId, projectId, performanceId, mutation) =>

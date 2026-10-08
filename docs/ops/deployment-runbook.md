@@ -59,6 +59,8 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_QUEUE_DRIVER` | `db` | `db` 轮询（权威状态即队列）或 `bullmq`（需 `REDIS_URL`） |
 | `REDIS_URL` | — | `ANCS_QUEUE_DRIVER=bullmq` 时必填 |
 | `ANCS_NATIVE_CLIENTS` | — | 原生客户端注册（JSON 数组） |
+| `ANCS_OPS_ENVIRONMENT` | 未配置则运营面关闭 | 开发可显式设 `DEVELOPMENT`；生产进程必须显式设 `PRODUCTION`；`TEST` principal 不可登录生产运营面 |
+| `ANCS_OPS_IDLE_SECONDS` / `ANCS_OPS_ABSOLUTE_SECONDS` / `ANCS_OPS_REAUTH_SECONDS` | `900` / `28800` / `300` | 独立运营会话空闲、绝对和敏感操作重验时限（秒） |
 | `ANCS_WEBHOOK_SECRETS` | — | Provider 回调验签密钥（JSON） |
 | `REMOTION_BROWSER_EXECUTABLE` | 自动检测 | 指定 Chrome/Headless Shell 可执行文件 |
 
@@ -131,7 +133,7 @@ node scripts/launch-gate-check.mjs --live   # 放行判定：任一人工条件�
 
 - **机器条件**（`ANCS_SAAS_MODE=live` 时 API 启动强制，见 `crossCheckApiEnv`）：
   `ANCS_DEFAULT_PLAN=FREE`、`ANCS_PAYMENTS_DRIVER=stripe`、`ANCS_STORAGE_DRIVER≠local`、
-  `BETTER_AUTH_URL=https://…`、`ANCS_PLATFORM_ADMINS` 非空。
+  `BETTER_AUTH_URL=https://…`、`ANCS_OPS_ENVIRONMENT=PRODUCTION`（且 `NODE_ENV=production`）。
 - **人工条件台账**：`docs/ops/launch-gate.md`（LG-01…LG-14：Provider 条款/白标许可/协议/Consent/
   Content·Abuse·Privacy·ToS·DPA/主体税务/正式支付开通/Remotion 授权/政策上线/保留口径）——
   现状**全部 BLOCKED**（需人工：法务/商务/财务）；`APPROVED` 必须附可核对证据。

@@ -1,0 +1,182 @@
+/* global AbortSignal, document, window */
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { chromium } from 'playwright';
+import { createAuth, createInternalUser, createWorkspace, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
+import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
+import { buildServer } from '../../apps/api/dist/server.js';
+
+// This script is intentionally gated by resolveTestDatabaseUrl: it may never write to ancs_dev.
+const testDatabaseUrl = resolveTestDatabaseUrl();
+const apiPort = 4501;
+const webPort = 4300;
+const apiBase = `http://127.0.0.1:${apiPort}`;
+const webBase = `http://127.0.0.1:${webPort}`;
+const password = 'appearance-browser-test-pass-123'; // secrets:check-ignore: test-only dummy
+const handle = createDb(testDatabaseUrl);
+let app;
+let web;
+let browser;
+const webLogs = [];
+
+async function waitForWeb() {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (web?.exitCode !== null) throw new Error(`Web exited early: ${webLogs.slice(-15).join('')}`);
+    try {
+      const response = await fetch(`${webBase}/design-system`, { signal: AbortSignal.timeout(1000) });
+      if (response.ok) return;
+    } catch { /* Next is starting. */ }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Web did not start: ${webLogs.slice(-15).join('')}`);
+}
+
+async function signIn(context, email) {
+  const response = await context.request.post(`${apiBase}/api/v1/auth/sign-in`, { data: { email, password } });
+  assert.equal(response.status(), 200, await response.text());
+  assert.equal((await response.json()).user.email, email);
+}
+
+async function apiJson(context, method, path, data) {
+  const response = await context.request.fetch(`${apiBase}/api/v1${path}`, { method, ...(data === undefined ? {} : { data }) });
+  assert.ok(response.ok(), `${method} ${path}: ${response.status()} ${await response.text()}`);
+  return response.json();
+}
+
+async function firstPaint(context, expectedMode, expectedDark, path = '/design-system') {
+  const page = await context.newPage();
+  await page.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, (route) => route.abort());
+  const response = await page.goto(`${webBase}${path}`, { waitUntil: 'domcontentloaded' });
+  assert.equal(response?.status(), 200);
+  const actual = await page.evaluate(() => ({ mode: document.body.dataset.appearanceMode, dark: document.body.classList.contains('theme-dark') }));
+  assert.deepEqual(actual, { mode: expectedMode, dark: expectedDark });
+  await page.close();
+  return actual;
+}
+
+async function playerElapsedSeconds(player) {
+  // Remotion 4.0.532 renders this label from Timeline.useTimelinePosition().
+  const label = await player.locator('div').filter({ hasText: /^\d+:\d{2} \/ \d+:\d{2}$/ }).last().textContent();
+  const match = /^(\d+):(\d{2}) \/ /.exec(label?.trim() ?? '');
+  assert.ok(match, `Remotion time label unavailable: ${label}`);
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+async function waitForPlayerTime(player, minimum, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const elapsed = await playerElapsedSeconds(player);
+    if (elapsed >= minimum) return elapsed;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Player did not reach ${minimum}s`);
+}
+
+try {
+  await runMigrations(handle);
+  const auth = createAuth({ db: handle.db, secret: 'appearance-browser-test-secret-0123456789abcdef', baseUrl: apiBase }); // secrets:check-ignore: test-only dummy
+  app = await buildServer({ auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } } });
+  await app.listen({ port: apiPort, host: '127.0.0.1' });
+  const userA = await createInternalUser(auth, { email: `appearance-browser-a-${randomUUID()}@test.local`, name: 'Appearance A', password });
+  const userB = await createInternalUser(auth, { email: `appearance-browser-b-${randomUUID()}@test.local`, name: 'Appearance B', password });
+  const workspace = await createWorkspace({ db: handle.db }, { userId: userA.id, name: 'Appearance browser test' });
+
+  web = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(webPort)], {
+    cwd: resolve('apps/web'), env: { ...process.env, NODE_ENV: 'production', ANCS_API_INTERNAL_URL: apiBase }, windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  web.stdout.on('data', (chunk) => webLogs.push(String(chunk)));
+  web.stderr.on('data', (chunk) => webLogs.push(String(chunk)));
+  await waitForWeb();
+  browser = await chromium.launch({ headless: true });
+  const first = await browser.newContext({ colorScheme: 'light' });
+  const second = await browser.newContext({ colorScheme: 'dark' });
+  const anotherUser = await browser.newContext({ colorScheme: 'light' });
+  // The checked-in production build points its browser rewrite at the normal API.
+  // Route browser API traffic to the in-process isolated API; SSR uses the runtime env above.
+  for (const context of [first, second, anotherUser]) {
+    await context.route('**/api/v1/**', async (route) => {
+      const url = new URL(route.request().url());
+      const response = await route.fetch({ url: `${apiBase}${url.pathname}${url.search}` });
+      await route.fulfill({ response });
+    });
+  }
+  await signIn(first, userA.email);
+  await signIn(second, userA.email);
+  await signIn(anotherUser, userB.email);
+  const channel = await apiJson(first, 'POST', `/workspaces/${workspace.id}/channels`, { name: 'Appearance test channel' });
+  const project = await apiJson(first, 'POST', `/workspaces/${workspace.id}/projects`, { title: 'Appearance invariant project', channelId: channel.id });
+  for (const title of ['Scene One', 'Scene Two']) {
+    await apiJson(first, 'POST', `/projects/${project.id}/scenes`, { sceneType: 'CHAPTER_TITLE', semanticType: title, durationMs: 12000, props: { title } });
+  }
+  const beforeProject = await apiJson(first, 'GET', `/projects/${project.id}`);
+  const beforeGraph = await apiJson(first, 'GET', `/projects/${project.id}/graph`);
+  const beforeLedger = await apiJson(first, 'GET', `/workspaces/${workspace.id}/billing/ledger`);
+
+  const initial = [await firstPaint(first, 'system', false), await firstPaint(second, 'system', true)];
+  const settings = await first.newPage();
+  const hydrationErrors = [];
+  settings.on('pageerror', (error) => { if (/hydration|did not match/i.test(error.message)) hydrationErrors.push(error.message); });
+  assert.equal((await settings.goto(`${webBase}/w/${workspace.id}/settings`, { waitUntil: 'load' }))?.status(), 200);
+  await settings.getByRole('button', { name: '外观与偏好' }).click();
+  const accountSelect = settings.getByLabel('账号外观');
+  await accountSelect.waitFor({ state: 'visible' });
+  const save = settings.waitForResponse((response) => response.url().endsWith('/api/v1/users/me/appearance') && response.request().method() === 'PUT');
+  await accountSelect.selectOption('dark');
+  assert.equal((await save).status(), 200);
+  await settings.waitForFunction(() => document.body.classList.contains('theme-dark'));
+  const synchronized = [await firstPaint(first, 'dark', true), await firstPaint(second, 'dark', true)];
+  const signInPage = await second.newPage();
+  assert.equal((await signInPage.goto(`${webBase}/sign-in`, { waitUntil: 'load' }))?.status(), 200);
+  await signInPage.waitForTimeout(200);
+  assert.deepEqual(await signInPage.evaluate(() => ({ mode: document.body.dataset.appearanceMode, dark: document.body.classList.contains('theme-dark') })), { mode: 'dark', dark: true });
+  await signInPage.close();
+
+  await settings.getByLabel('设备外观').selectOption('light');
+  await settings.waitForFunction(() => document.body.dataset.appearanceMode === 'light');
+  const localOverride = [await firstPaint(first, 'light', false), await firstPaint(second, 'dark', true)];
+
+  const director = await first.newPage();
+  assert.equal((await director.goto(`${webBase}/w/${workspace.id}/p/${project.id}/storyboard`, { waitUntil: 'load' }))?.status(), 200);
+  const sceneButtons = director.locator('.scene-rail .scene-card');
+  await sceneButtons.nth(1).waitFor({ state: 'visible' });
+  await sceneButtons.nth(1).click();
+  assert.equal(await sceneButtons.nth(1).getAttribute('aria-pressed'), 'true');
+  await director.getByRole('button', { name: '播放完整预览' }).click();
+  const player = director.getByTestId('preview-player');
+  await player.waitFor({ state: 'visible' });
+  await player.evaluate((node) => { window.__appearancePlayerNode = node; });
+  await player.hover();
+  await player.locator('button[aria-label="Play video"]').click();
+  const beforeSeconds = await waitForPlayerTime(player, 2);
+  await director.getByRole('button', { name: '切换浅深色' }).click();
+  assert.equal(await sceneButtons.nth(1).getAttribute('aria-pressed'), 'true');
+  assert.equal(await player.evaluate((node) => node === window.__appearancePlayerNode), true);
+  assert.equal(await director.getByRole('button', { name: '返回当前分镜' }).isVisible(), true);
+  const afterSeconds = await playerElapsedSeconds(player);
+  assert.ok(afterSeconds >= beforeSeconds, `Playback position reset across theme change: ${beforeSeconds}s → ${afterSeconds}s`);
+  assert.equal(await player.locator('button[aria-label="Pause video"]').count(), 1);
+  const continuedSeconds = await waitForPlayerTime(player, afterSeconds + 1, 4000);
+  const afterProject = await apiJson(first, 'GET', `/projects/${project.id}`);
+  const afterGraph = await apiJson(first, 'GET', `/projects/${project.id}/graph`);
+  const afterLedger = await apiJson(first, 'GET', `/workspaces/${workspace.id}/billing/ledger`);
+  assert.deepEqual(afterProject, beforeProject);
+  assert.deepEqual(afterGraph, beforeGraph);
+  assert.deepEqual(afterLedger, beforeLedger);
+
+  await anotherUser.addCookies([{ name: 'ancs-qf-appearance', value: `${userA.id}.dark`, url: webBase }]);
+  const isolated = await firstPaint(anotherUser, 'system', false);
+  const anonymous = await browser.newContext({ colorScheme: 'light' });
+  await anonymous.addCookies([{ name: 'ancs-qf-appearance', value: `${userA.id}.dark`, url: webBase }]);
+  const signedOut = await firstPaint(anonymous, 'system', false);
+  await firstPaint(anonymous, 'system', false, '/sign-in');
+  assert.deepEqual(hydrationErrors, []);
+  process.stdout.write(`${JSON.stringify({ result: 'PASS', realAuthSessions: 3, realApi: apiBase, web: webBase, initial, synchronized, signInHydrationPreserved: true, localOverride, projectAndLedgerUnchanged: true, selectionAndPlayerPreserved: true, observablePlaybackSeconds: { before: beforeSeconds, after: afterSeconds, continued: continuedSeconds }, isolated, signedOut, hydrationErrors }, null, 2)}\n`);
+} finally {
+  await browser?.close();
+  if (web && web.exitCode === null) web.kill();
+  await app?.close();
+  await handle.close();
+}

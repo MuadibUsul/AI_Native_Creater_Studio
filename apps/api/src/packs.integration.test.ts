@@ -9,6 +9,7 @@ import { packManifestSchema, type PackPlugin, type RestrictedPluginContext } fro
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import type { ArticleFetcher } from '@ancs/contracts';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P11-03 验收（真实 DB）：
@@ -25,6 +26,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let adminEmail = '';
+let adminTotpUri = '';
 let llm: MockLlmAdapter;
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
@@ -56,15 +58,17 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'packs-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `packs-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'packs-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   llm = new MockLlmAdapter();
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     content: { articleFetcher: fetcher, llm },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -88,7 +92,7 @@ async function newClient(tag: string): Promise<AncsClient> {
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 

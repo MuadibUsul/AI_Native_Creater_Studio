@@ -7,11 +7,12 @@ import { describeError } from '@/lib/errors';
 import { useAdminAudit, useAdminJobs, useAdminOverview } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
 import { SecurityOps } from '@/ui/SecurityOps';
+import { OpsEnrollmentPanel, OpsSessionPanel } from '@/ui/OpsSessionPanel';
 import styles from '@/components/quiet-frame/legacy.module.css';
 
 /**
  * 最小运营界面（P08-02 / §67）：`/admin`
- * - 仅**平台管理员**可见（部署配置 ANCS_PLATFORM_ADMINS；非管理员/未登录 → 无权限块——不显示任何运营数据）；
+ * - 仅独立运营 principal 的已验证会话可见；非管理员/未登录 → 无权限块。
  * - 队列与失败任务（人工重试：复用任务服务，预算/幂等/版本规则不变）、成本、Provider 生成状态、
  *   QA/审批概览、审计视图（job 事件 + 渲染迁移 + 审批）。
  */
@@ -62,9 +63,10 @@ export default function AdminPage() {
         <div className="eyebrow">PLATFORM / OPERATIONS</div><h1>运营</h1>
         <StateBlock
           variant="info"
-          title={unauthenticated ? '需要登录' : '无权限访问（或不存在）'}
-          description="运营面无公开入口：仅部署配置中登记的平台管理员可访问（普通用户角色不适用）。"
+          title={unauthenticated ? '需要登录' : '需要运营身份与多因素验证'}
+          description="运营权限与普通工作区角色分离；已获授权的人员需先配置验证器，再重新登录。"
         />
+        {!unauthenticated ? <OpsEnrollmentPanel /> : null}
       </section>
     );
   }
@@ -72,6 +74,7 @@ export default function AdminPage() {
   return (
     <section className={`page ${styles['surface']} flex flex-col gap-4`}>
       <div className="eyebrow">PLATFORM / OPERATIONS</div><h1>运营</h1>
+      <OpsSessionPanel />
       {notice !== null ? <p role="status" className="text-xs text-amber-300">{notice}</p> : null}
 
       {overview.isPending ? <p className="text-sm text-slate-400">正在加载运营总览…</p> : null}

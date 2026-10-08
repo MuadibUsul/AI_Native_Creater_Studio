@@ -40,9 +40,12 @@ export const signInRequestSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
-export const signInResponseSchema = z.object({
-  user: authUserSchema,
-});
+export const signInResponseSchema = z.union([
+  z.object({ user: authUserSchema }),
+  z.object({ twoFactorRequired: z.literal(true), methods: z.array(z.literal('totp')).min(1) }),
+]);
+
+export const verifyTotpRequestSchema = z.object({ code: z.string().regex(/^\d{6}$/, '需要 6 位验证码') });
 
 export type SignInResponse = z.infer<typeof signInResponseSchema>;
 

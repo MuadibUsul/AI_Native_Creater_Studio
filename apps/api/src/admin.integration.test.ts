@@ -7,6 +7,7 @@ import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthI
 import { createDb, jobs, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { claimJob, createJob, failJob, type DomainDeps } from '@ancs/domain';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P08-02 验收（真实 DB；**平台管理员与普通用户角色严格分离**——REQ-67-02）：
@@ -21,6 +22,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let adminEmail = '';
+let adminTotpUri = '';
 const PASSWORD = 'password-1234';
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 
@@ -41,16 +43,18 @@ beforeAll(async () => {
     secret: 'admin-ops-secret-0123456789', // secrets:check-ignore：测试专用假密钥
     baseUrl: 'http://localhost:3001',
   });
-  // 管理员名单来自**部署配置**（此处注入测试名单）：先建用户拿 id，再以其 id 构建 admin 守卫
+  // 独立运营 principal + TOTP，会话由真实 API 二次挑战签发。
   adminEmail = `ops-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'ops-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -72,7 +76,7 @@ async function newClient(tag: string): Promise<AncsClient> {
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 

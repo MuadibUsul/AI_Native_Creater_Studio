@@ -3,14 +3,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { applyAppearance, deviceAppearance, saveDeviceAppearance, type AppearanceMode } from '@/lib/appearance';
 import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from './QuietIcon';
 
-type WorkspaceSelection = { workspaceId: string | null; selectWorkspace: (id: string) => void; appearanceMode: AppearanceMode; setAppearanceMode: (mode: AppearanceMode) => void; toggleTheme: () => void; openHelp: () => void };
-const WorkspaceSelectionContext = createContext<WorkspaceSelection>({ workspaceId: null, selectWorkspace: () => undefined, appearanceMode: 'system', setAppearanceMode: () => undefined, toggleTheme: () => undefined, openHelp: () => undefined });
+type WorkspaceSelection = {
+  workspaceId: string | null; selectWorkspace: (id: string) => void;
+  appearanceMode: AppearanceMode; accountAppearanceMode: AppearanceMode; deviceOverride: AppearanceMode | null;
+  appearancePending: boolean; appearanceError: boolean;
+  refetchAppearance: () => void;
+  setAccountAppearance: (mode: AppearanceMode) => Promise<void>;
+  setDeviceOverride: (mode: AppearanceMode | null) => void;
+  toggleTheme: () => void; openHelp: () => void;
+};
+const WorkspaceSelectionContext = createContext<WorkspaceSelection>({
+  workspaceId: null, selectWorkspace: () => undefined, appearanceMode: 'system', accountAppearanceMode: 'system', deviceOverride: null,
+  appearancePending: false, appearanceError: false, refetchAppearance: () => undefined, setAccountAppearance: async () => undefined, setDeviceOverride: () => undefined,
+  toggleTheme: () => undefined, openHelp: () => undefined,
+});
 export const useWorkspaceSelection = () => useContext(WorkspaceSelectionContext);
 
 const LABELS: Record<string, string> = {
@@ -29,13 +41,22 @@ function Brand({ href = '/' }: { href?: string }) {
 
 function PrivateShell({ children, pathname }: { children: ReactNode; pathname: string }) {
   const client = useAncsClient();
+  const queryClient = useQueryClient();
   const session = useSession();
+  const userId = session.data?.user?.id ?? null;
+  const accountAppearance = useQuery({
+    queryKey: ['user', userId, 'appearance'],
+    queryFn: () => client.auth.getAppearance(),
+    enabled: userId !== null,
+  });
   const workspaces = useWorkspaces();
   const [chosenWorkspaceId, setChosenWorkspaceId] = useState<string | null>(null);
   const [panel, setPanel] = useState<'workspace' | 'command' | 'notifications' | 'help' | null>(null);
   const [command, setCommand] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>('system');
+  const [deviceOverride, setDeviceOverrideState] = useState<AppearanceMode | null>(null);
+  const accountAppearanceMode = accountAppearance.data?.mode ?? 'system';
+  const appearanceMode = deviceOverride ?? accountAppearanceMode;
   const triggerRef = useRef<HTMLElement | null>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -80,10 +101,10 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
   }, []);
   useEffect(() => {
     if (session.isPending) return;
-    const mode = session.data?.user?.id ? deviceAppearance(session.data.user.id) : 'system';
-    setAppearanceModeState(mode);
-    applyAppearance(mode);
-  }, [session.data?.user?.id, session.isPending]);
+    const override = userId ? deviceAppearance(userId) : null;
+    setDeviceOverrideState(override);
+    if (override !== null || !userId || (!accountAppearance.isPending && !accountAppearance.isError)) applyAppearance(override ?? accountAppearanceMode);
+  }, [session.isPending, userId, accountAppearance.isPending, accountAppearance.isError, accountAppearanceMode]);
   useEffect(() => {
     setMobileOpen(false);
     setPanel(null);
@@ -142,12 +163,17 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     setChosenWorkspaceId(id);
     if (pathname === '/') window.history.replaceState(null, '', `/?workspaceId=${encodeURIComponent(id)}`);
   };
-  const setAppearanceMode = (mode: AppearanceMode) => {
-    setAppearanceModeState(mode);
-    applyAppearance(mode);
-    if (session.data?.user?.id) saveDeviceAppearance(session.data.user.id, mode);
+  const setDeviceOverride = (mode: AppearanceMode | null) => {
+    setDeviceOverrideState(mode);
+    applyAppearance(mode ?? accountAppearanceMode);
+    if (userId) saveDeviceAppearance(userId, mode);
   };
-  const toggleTheme = () => setAppearanceMode(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
+  const setAccountAppearance = async (mode: AppearanceMode) => {
+    const saved = await client.auth.setAppearance({ mode });
+    queryClient.setQueryData(['user', userId, 'appearance'], saved);
+    if (deviceOverride === null) applyAppearance(saved.mode);
+  };
+  const toggleTheme = () => setDeviceOverride(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
   const workspaceLinks = workspaceId ? [
     { href: homeHref, label: '创作台', icon: 'grid' },
     { href: `${base}/assets`, label: '素材库', icon: 'folder' },
@@ -171,7 +197,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     ] : []),
   ];
 
-  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, setAppearanceMode, toggleTheme, openHelp: () => open('help') }}>
+  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, accountAppearanceMode, deviceOverride, appearancePending: session.isPending || (userId !== null && accountAppearance.isPending), appearanceError: accountAppearance.isError, refetchAppearance: () => { void accountAppearance.refetch(); }, setAccountAppearance, setDeviceOverride, toggleTheme, openHelp: () => open('help') }}>
     <div className="app">
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="主导航" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen ? 'true' : undefined}>
         <Brand href={homeHref} />

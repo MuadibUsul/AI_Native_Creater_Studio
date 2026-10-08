@@ -6,6 +6,7 @@ import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthI
 import { createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P09-04 验收（真实 DB + HTTP/SDK）：
@@ -24,6 +25,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let adminEmail = '';
+let adminTotpUri = '';
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
 
@@ -42,13 +44,15 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'team-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `team-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'team-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -79,7 +83,7 @@ async function newClientWithEmail(email: string, name = 'invitee'): Promise<Ancs
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 

@@ -8,6 +8,7 @@ import { createDb, creditLedger, plans, redactDatabaseUrl, resolveTestDatabaseUr
 import { assignWorkspacePlan, createPlanVersion, ensureDefaultPlans, grantMonthlyCredits, type DomainDeps } from '@ancs/domain';
 import { MockPaymentProvider } from '@ancs/providers-mock-payments';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P09-03 验收（真实 DB + 脚本化渠道）：
@@ -23,6 +24,7 @@ let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let provider: MockPaymentProvider;
 let adminEmail = '';
+let adminTotpUri = '';
 const MOCK_SECRET = 'mock-credits-signing-secret-0123456789'; // secrets:check-ignore：测试专用假密钥
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
@@ -42,15 +44,17 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'credits-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `credits-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'credits-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   provider = new MockPaymentProvider({ signingSecret: MOCK_SECRET });
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     payments: { provider, successUrlBase: 'http://localhost:3000' },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -74,7 +78,7 @@ async function newClient(tag: string): Promise<AncsClient> {
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 

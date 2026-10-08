@@ -67,6 +67,7 @@ export const baseEnvShape = {
 /** API 服务环境（apps/api）。 */
 export const apiEnvSchema = z.object({
   ...baseEnvShape,
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL（如 https://api.example.com）').optional(),
   /** 存储驱动：V1 仅 local（S3/R2 适配器未实现 → 明确失败，不静默降级） */
@@ -84,8 +85,12 @@ export const apiEnvSchema = z.object({
   ANCS_WEBHOOK_SECRETS: z.string().optional(),
   /** 平台托管 Provider 凭据（JSON；仅后端使用） */
   PLATFORM_PROVIDER_KEYS: z.string().optional(),
-  /** 平台管理员 user_id 列表（逗号分隔；P08-02；与普通用户角色严格分离 REQ-67-02） */
+  /** 历史兼容配置；N15-02 起不再授予运营权限。管理员身份由 admin_principals + role_grants 决定。 */
   ANCS_PLATFORM_ADMINS: z.string().optional(),
+  ANCS_OPS_ENVIRONMENT: z.enum(['DEVELOPMENT', 'TEST', 'STAGING', 'PRODUCTION']).optional(),
+  ANCS_OPS_IDLE_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  ANCS_OPS_ABSOLUTE_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
+  ANCS_OPS_REAUTH_SECONDS: z.coerce.number().int().min(30).max(1800).default(300),
   /** 未订阅 workspace 的默认套餐（P09-01；预上线默认 ENTERPRISE；**SaaS 上线门（P09-06）要求 FREE**） */
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
   /** 收款驱动（P09-02）：mock=脚本化（仅开发/测试，警告）；stripe 需凭据（未实现→启动失败）；缺省=未配置（收款端点 501 fail-closed） */
@@ -106,6 +111,12 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
   const issues: EnvIssue[] = [];
+  if (value.NODE_ENV === 'production' && value.ANCS_OPS_ENVIRONMENT !== 'PRODUCTION') {
+    issues.push({ variable: 'ANCS_OPS_ENVIRONMENT', message: '生产进程必须显式配置 PRODUCTION 运营环境' });
+  }
+  if (value.NODE_ENV !== 'production' && value.ANCS_OPS_ENVIRONMENT === 'PRODUCTION') {
+    issues.push({ variable: 'ANCS_OPS_ENVIRONMENT', message: '非生产进程不得签发 PRODUCTION 运营会话' });
+  }
   if (value.ANCS_SAAS_MODE === 'live') {
     if (value.ANCS_DEFAULT_PLAN !== 'FREE') {
       issues.push({
@@ -128,8 +139,8 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
     if (value.BETTER_AUTH_URL === undefined || !value.BETTER_AUTH_URL.startsWith('https://')) {
       issues.push({ variable: 'BETTER_AUTH_URL', message: 'live 模式的 BETTER_AUTH_URL 必须是 https 完整 URL' });
     }
-    if (value.ANCS_PLATFORM_ADMINS === undefined || value.ANCS_PLATFORM_ADMINS.trim() === '') {
-      issues.push({ variable: 'ANCS_PLATFORM_ADMINS', message: 'live 模式必须配置平台管理员名单（运营面不可缺席）' });
+    if (value.ANCS_OPS_ENVIRONMENT !== 'PRODUCTION') {
+      issues.push({ variable: 'ANCS_OPS_ENVIRONMENT', message: 'live 模式的运营会话必须标记 PRODUCTION' });
     }
   }
   return issues;

@@ -24,6 +24,8 @@ export type {
 } from './native-tokens.js';
 export { findUserById, resolveAuthContext } from './session.js';
 export type { AuthContext, RequestAuthHeaders, SessionDeps } from './session.js';
+export { DEFAULT_OPS_SESSION_POLICY, eligibleOpsPrincipal, activateOpsSession, resolveOpsSession, revokeOwnOpsSession, assertOpsReauthAllowed, recordOpsReauthFailure, markOpsReauthenticated } from './ops.js';
+export type { OpsSessionPolicy, OpsAuthDeps } from './ops.js';
 export {
   authorizeWorkspace,
   getMembership,
