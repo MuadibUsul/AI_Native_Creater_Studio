@@ -171,6 +171,36 @@ describe('Quiet Frame asset flow', () => {
     expect(screen.getByRole('link', { name: '下载原文件' }).getAttribute('href')).toBe('https://storage.local/original.mp4');
   });
 
+  it('uses the source PTS map when an index interval starts playback and exposes pagination', async () => {
+    const asset = { id: 'ast_index', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'indexed.mp4' }, license: { type: 'USER_OWNED' } };
+    const mediaProbe = { status: 'READY', streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 24, denominator: 1 }, cadence: 'CONSTANT' }], capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE', reasons: [] } };
+    const mediaIndex = vi.fn().mockResolvedValue({
+      runId: 'mix_1', sourceAssetVersionId: 'av_source', processorVersion: 'source-index-v1', status: 'READY', coveragePermille: 1000, checkpointMs: 4000, errorSummary: null, nextCursor: '2',
+      items: [{ id: 'mie_1', kind: 'THUMBNAIL', ordinal: 0, sourceStartPts: '15360', sourceEndPts: '30720', timeBase: { numerator: 1, denominator: 15360 }, confidencePermille: 1000, payload: { sourceStartMs: 1000, sourceEndMs: 2000 }, previewUrl: 'https://storage.local/thumb.jpg', previewExpiresAt: '2099-01-01T00:00:00.000Z' }],
+    });
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_source', versions: [{ id: 'av_source', mimeType: 'video/mp4', probeStatus: 'READY', mediaProbe }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+        playbackUrl: vi.fn().mockResolvedValue({ assetId: asset.id, sourceVersionId: 'av_source', rendition: 'PROXY', renditionVersionId: 'av_proxy', mimeType: 'video/mp4', url: 'https://storage.local/proxy.mp4', expiresAt: '2099-01-01T00:00:00.000Z', proxyStatus: 'READY', proxyProfileKey: 'web-edit-video-720p-v1', timeMappings: [{ schemaVersion: '1.0', kind: 'PTS_AFFINE', streamType: 'VIDEO', sourceStreamIndex: 0, proxyStreamIndex: 0, sourceTimeBase: { numerator: 1, denominator: 15360 }, proxyTimeBase: { numerator: 1, denominator: 90000 }, sourceOriginPts: '0', proxyOriginPts: '0', sourceDurationTicks: '61440', proxyDurationTicks: '360000', anchors: [{ position: 'START', sourcePts: '0', proxyPts: '0' }, { position: 'END', sourcePts: '61440', proxyPts: '360000' }] }], message: null }),
+        mediaIndex,
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 indexed.mp4' }));
+    const interval = await screen.findByRole('button', { name: '播放 缩略 00:01 到 00:02' });
+    await userEvent.click(interval);
+    const video = screen.getByLabelText('预览视频 indexed.mp4') as HTMLVideoElement;
+    expect(video.currentTime).toBe(1);
+    expect(play).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() => expect(mediaIndex).toHaveBeenLastCalledWith('ws_1', 'ast_index', { kind: 'THUMBNAIL', cursor: '2', limit: 24 }));
+    play.mockRestore();
+  });
+
   it('keeps asset dialog keyboard focus inside and restores the selected card on Escape', async () => {
     const asset = { id: 'ast_1', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
     const client = mockClient({

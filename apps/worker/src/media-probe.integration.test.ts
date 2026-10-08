@@ -4,11 +4,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts } from '@ancs/contracts';
-import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, rebuildMediaProxy, type DomainDeps } from '@ancs/domain';
+import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts, type SourceMediaIndexer } from '@ancs/contracts';
+import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, listMediaIndex, rebuildMediaIndex, rebuildMediaProxy, type DomainDeps } from '@ancs/domain';
 import {
   assetVersions,
   mediaDerivatives,
+  mediaIndexEntries,
+  mediaIndexRuns,
   createDb,
   jobs,
   redactDatabaseUrl,
@@ -22,6 +24,7 @@ import { createDefaultRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
+import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 
 let handle: DbHandle;
 let storageRoot: string;
@@ -105,6 +108,20 @@ async function executeProxy(workspaceId: string): Promise<void> {
   expect(persisted?.status).toBe('SUCCEEDED');
 }
 
+async function executeIndex(workspaceId: string, indexer: SourceMediaIndexer = createFfmpegMediaIndexer({ timeoutMs: 60_000 })): Promise<'succeeded' | 'failed' | 'cancelled' | 'cancel_failed'> {
+  const claimed = await claimJob(deps(), { workerId: 'media-index-worker', leaseSeconds: 120, types: [MEDIA_INDEX_JOB_TYPE] });
+  expect(claimed).not.toBeNull();
+  const outcome = await executeJob(
+    deps(),
+    createDefaultRegistry({ sourceMediaIndexer: indexer }),
+    { workerId: 'media-index-worker', leaseSeconds: 120, heartbeatIntervalMs: 30_000 },
+    claimed!,
+  );
+  const persisted = (await handle.db.select().from(jobs).where(and(eq(jobs.id, claimed!.id), eq(jobs.workspaceId, workspaceId))).limit(1))[0];
+  expect(persisted).toBeDefined();
+  return outcome;
+}
+
 describe('N02-02 media probe worker', () => {
   it('upload confirmation and probe job are atomic; real VFR probe makes the asset READY', { timeout: 60_000 }, async () => {
     const bytes = await readFile(join(fixtures, 'clip-d-synthetic-vfr.mp4'));
@@ -166,5 +183,37 @@ describe('N02-02 media probe worker', () => {
     const sourceAfter = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, created.versionId)).limit(1))[0]!;
     expect(sourceAfter).toMatchObject({ storageKey: sourceBefore.storageKey, checksumSha256: sourceBefore.checksumSha256, sizeBytes: sourceBefore.sizeBytes });
     expect((await storage.probeObject(sourceAfter.storageKey)).exists).toBe(true);
+  });
+
+  it('builds a paginated source-time index and keeps playable media intact when a rebuild fails', { timeout: 150_000 }, async () => {
+    const bytes = await readFile(join(fixtures, 'clip-a-24000-1001.mp4'));
+    const created = await uploadObject(bytes, 'indexed-source.mp4');
+    await executeProbe(created.workspaceId);
+    expect(await handle.db.select().from(jobs).where(eq(jobs.type, MEDIA_INDEX_JOB_TYPE))).toHaveLength(1);
+    expect(await executeIndex(created.workspaceId)).toBe('succeeded');
+    expect(await handle.db.select().from(mediaIndexRuns).where(eq(mediaIndexRuns.sourceAssetVersionId, created.versionId))).toHaveLength(1);
+    const persistedEntries = await handle.db.select().from(mediaIndexEntries);
+    expect(persistedEntries.some((entry) => entry.kind === 'THUMBNAIL' && entry.storageKey !== null)).toBe(true);
+    expect(persistedEntries.some((entry) => entry.kind === 'WAVEFORM')).toBe(true);
+    expect(persistedEntries.some((entry) => entry.kind === 'SHOT')).toBe(true);
+
+    const first = await listMediaIndex(deps(), { workspaceId: created.workspaceId, assetId: created.assetId, kind: 'THUMBNAIL', limit: 1 });
+    expect(first).toMatchObject({ status: 'READY', items: [{ kind: 'THUMBNAIL', previewUrl: expect.stringContaining('/api/v1/storage/download?token=') }] });
+    expect(first.items[0]).not.toHaveProperty('storageKey');
+    const otherWorkspaceId = `ws_${randomUUID()}`;
+    await handle.db.insert(workspaces).values({ id: otherWorkspaceId, name: '其他租户' });
+    await expect(listMediaIndex(deps(), { workspaceId: otherWorkspaceId, assetId: created.assetId })).rejects.toThrow('asset not found');
+    if (first.nextCursor !== null) {
+      const second = await listMediaIndex(deps(), { workspaceId: created.workspaceId, assetId: created.assetId, kind: 'THUMBNAIL', cursor: Number(first.nextCursor), limit: 1 });
+      expect(second.items[0]?.id).not.toBe(first.items[0]?.id);
+    }
+
+    await rebuildMediaIndex(deps(), { workspaceId: created.workspaceId, assetId: created.assetId });
+    const failing: SourceMediaIndexer = { kind: 'scripted-failure', async index() { throw new Error('decoder failed with secret path'); } };
+    expect(await executeIndex(created.workspaceId, failing)).toBe('failed');
+    const failed = await listMediaIndex(deps(), { workspaceId: created.workspaceId, assetId: created.assetId, limit: 1 });
+    expect(failed.status).toBe('FAILED');
+    expect(await createAssetPlaybackUrl(deps(), { workspaceId: created.workspaceId, assetId: created.assetId })).toMatchObject({ rendition: 'ORIGINAL' });
+    expect((await storage.probeObject((await getAsset(deps(), { workspaceId: created.workspaceId, assetId: created.assetId })).versions[0]!.storageKey)).exists).toBe(true);
   });
 });

@@ -124,6 +124,7 @@ import {
   confirmUploadRequestSchema,
   downloadUrlResponseSchema,
   mediaPlaybackResponseSchema,
+  mediaIndexPageSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
   uploadPartTargetResponseSchema,
@@ -280,6 +281,7 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type MediaIndexPage,
   type BillingStatus,
   type CatalogResponse,
   type ChartBindingCheck,
@@ -741,6 +743,10 @@ export interface AncsClient {
     playbackUrl(workspaceId: string, assetId: string): Promise<MediaPlaybackResponse>;
     /** 重新生成失败或丢失的代理；原件不变。 */
     rebuildProxy(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaPlaybackResponse>;
+    /** 分页读取源时间媒体索引。 */
+    mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
+    /** 重新生成索引；原件与代理不变。 */
+    rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
     /**
      * 一体化上传：意图（客户端预计算 SHA-256 以支持去重）→ 直传 → 确认。
      * 命中去重时直接返回既有资产（不重复上传字节）。
@@ -2041,6 +2047,15 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/proxy/rebuild`, mediaPlaybackResponseSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      mediaIndex: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams();
+        if (query?.kind !== undefined) search.set('kind', query.kind);
+        if (query?.cursor !== undefined) search.set('cursor', query.cursor);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index${search.size > 0 ? `?${search.toString()}` : ''}`, mediaIndexPageSchema);
+      },
+      rebuildMediaIndex: (workspaceId, assetId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
       upload: async (workspaceId, input, mutation) =>
         uploadResumableImpl(
           workspaceId,

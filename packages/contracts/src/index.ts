@@ -127,6 +127,21 @@ export {
   mapSourcePtsToProxyPts,
   mapProxyPtsToSourcePts,
 } from './media-proxy.js';
+export {
+  MEDIA_INDEX_JOB_TYPE,
+  MEDIA_INDEX_PROCESSOR_VERSION,
+  MEDIA_INDEX_STATUSES,
+  MEDIA_INDEX_KINDS,
+  mediaIndexStatusSchema,
+  mediaIndexKindSchema,
+  mediaIndexJobInputSchema,
+  generatedMediaIndexEntrySchema,
+  generatedMediaIndexSchema,
+  mediaIndexEntrySchema,
+  mediaIndexPageSchema,
+  mediaIndexQuerySchema,
+} from './media-index.js';
+export type { MediaIndexJobInput, GeneratedMediaIndexEntry, GeneratedMediaIndex, MediaIndexEntry, MediaIndexPage, SourceMediaIndexer } from './media-index.js';
 export type {
   MediaProxyProfileKey,
   MediaProxyStreamTimeMap,

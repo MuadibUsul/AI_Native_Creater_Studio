@@ -4,6 +4,8 @@ export { createAssetMediaProbeHandler } from './media-probe-handler.js';
 export { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 export { createMediaProxyHandler } from './media-proxy-handler.js';
 export { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
+export { createMediaIndexHandler } from './media-index-handler.js';
+export { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 export { createDomainDeps, workerHandlerTypes } from './domain.js';
 export { executeJob } from './runner.js';
 export { createHttpResultFetcher } from './fetcher.js';

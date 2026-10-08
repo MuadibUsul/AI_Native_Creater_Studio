@@ -510,6 +510,14 @@ export {
 } from './retention.js';
 export type { RetentionConfig, RetentionSweepReport } from './retention.js';
 export {
+  beginMediaIndex,
+  completeMediaIndex,
+  failMediaIndex,
+  listMediaIndex,
+  rebuildMediaIndex,
+  scheduleMediaIndexInTx,
+} from './media-index.js';
+export {
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,

@@ -44,6 +44,7 @@ export {
 export { editEvents, outboxEvents } from './history.js';
 export { assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
 export { mediaDerivatives } from './media-derivatives.js';
+export { mediaIndexEntries, mediaIndexRuns } from './media-index.js';
 export { notifications } from './notifications.js';
 export { jobDependencies, jobs } from './jobs.js';
 export { providerCatalogVersions } from './providers.js';

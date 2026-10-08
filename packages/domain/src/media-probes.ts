@@ -3,6 +3,7 @@ import { ApiFailure, ERROR_CODES, sourceMediaProbeResultSchema, type SourceMedia
 import { assetVersions, assets } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { scheduleMediaProxyInTx } from './media-proxies.js';
+import { scheduleMediaIndexInTx } from './media-index.js';
 
 export async function beginAssetMediaProbe(
   deps: DomainDeps,
@@ -92,6 +93,13 @@ export async function completeAssetMediaProbe(
       .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId), eq(assets.currentVersionId, input.assetVersionId)));
     if (status === 'READY') {
       await scheduleMediaProxyInTx(tx, {
+        workspaceId: input.workspaceId,
+        projectId: row.asset.projectId,
+        sourceAsset: row.asset,
+        sourceVersion: row.version,
+        probe: result,
+      });
+      await scheduleMediaIndexInTx(tx, {
         workspaceId: input.workspaceId,
         projectId: row.asset.projectId,
         sourceAsset: row.asset,

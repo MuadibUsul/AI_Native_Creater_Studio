@@ -10,6 +10,8 @@ import {
   createUploadIntentRequestSchema,
   downloadUrlResponseSchema,
   mediaPlaybackResponseSchema,
+  mediaIndexPageSchema,
+  mediaIndexQuerySchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
@@ -30,6 +32,8 @@ import {
   listAssets,
   restoreAsset,
   rebuildMediaProxy,
+  listMediaIndex,
+  rebuildMediaIndex,
   softDeleteAsset,
   type DomainDeps,
 } from '@ancs/domain';
@@ -84,6 +88,39 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         input: request.body,
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/media-index',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '分页读取绑定源 AssetVersion 的缩略、波形、镜头和质量索引',
+        params: assetParamsSchema,
+        querystring: mediaIndexQuerySchema,
+        response: { 200: mediaIndexPageSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listMediaIndex(domain, { workspaceId: request.params.id, assetId: request.params.assetId, ...request.query });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/media-index/rebuild',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '重新生成失败、过期或已完成的源媒体索引；不修改原件和代理',
+        params: assetParamsSchema,
+        response: { 200: mediaIndexPageSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return rebuildMediaIndex(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
     },
   );
 
