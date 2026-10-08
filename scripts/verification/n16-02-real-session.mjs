@@ -2,14 +2,19 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import { chromium } from 'playwright';
 import { createAuth, createInternalUser, createWorkspace, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
+import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
+import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 
 // This script is intentionally gated by resolveTestDatabaseUrl: it may never write to ancs_dev.
 const testDatabaseUrl = resolveTestDatabaseUrl();
+assert.equal(decodeURIComponent(new URL(testDatabaseUrl).pathname), '/ancs_quiet_frame_test_261007', 'Use only the named isolated test database');
+assert.equal(process.env.DATABASE_URL, undefined, 'DATABASE_URL must be unset for this browser test');
 const apiPort = 4501;
 const webPort = 4300;
 const apiBase = `http://127.0.0.1:${apiPort}`;
@@ -17,6 +22,7 @@ const webBase = `http://127.0.0.1:${webPort}`;
 const password = 'appearance-browser-test-pass-123'; // secrets:check-ignore: test-only dummy
 const handle = createDb(testDatabaseUrl);
 const runId = randomUUID();
+const storageRoot = resolve('.artifacts/n16-03-layout', `storage-${runId}`);
 const emailA = `appearance-browser-a-${runId}@test.local`;
 const emailB = `appearance-browser-b-${runId}@test.local`;
 const workspaceNameA = `Appearance browser test A ${runId}`;
@@ -127,10 +133,102 @@ async function waitForPlayerTime(player, minimum, timeoutMs = 8000) {
   throw new Error(`Player did not reach ${minimum}s`);
 }
 
+async function verifyAuthenticatedNativeZoom({ email, workspaceId, projectId, projectTitle }) {
+  const evidenceDir = resolve('.artifacts/n16-03-layout');
+  await mkdir(evidenceDir, { recursive: true });
+  const profile = await mkdtemp(resolve(evidenceDir, 'chrome-real-'));
+  assert.ok(profile.startsWith(`${evidenceDir}${sep}`));
+  await mkdir(resolve(profile, 'Default'), { recursive: true });
+  await writeFile(resolve(profile, 'Default/Preferences'), JSON.stringify({
+    partition: { default_zoom_level: { x: Math.log(2) / Math.log(1.2) } },
+  }));
+  let zoomContext;
+  try {
+    zoomContext = await chromium.launchPersistentContext(profile, {
+      channel: 'chrome', headless: true, viewport: null, args: ['--window-size=1440,900'],
+    });
+    await zoomContext.route('**/api/v1/**', async (route) => {
+      const url = new URL(route.request().url());
+      const response = await route.fetch({ url: `${apiBase}${url.pathname}${url.search}` });
+      await route.fulfill({ response });
+    });
+    await signIn(zoomContext, email);
+    const scenarios = [
+      { name: 'workspace', path: '/', ready: '.project-card' },
+      { name: 'studio', path: `/w/${workspaceId}/p/${projectId}/storyboard`, ready: '.scene-rail .scene-card' },
+      { name: 'assets', path: `/w/${workspaceId}/p/${projectId}/assets`, ready: 'button:has-text("上传素材")' },
+      { name: 'billing', path: `/w/${workspaceId}/billing`, ready: '[data-testid="credits-balance"]' },
+      { name: 'ops-denied', path: '/admin', ready: 'text=需要运营身份与多因素验证' },
+    ];
+    const results = [];
+    for (const scenario of scenarios) {
+      const page = await zoomContext.newPage();
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      const response = await page.goto(`${webBase}${scenario.path}`, { waitUntil: 'networkidle' });
+      assert.equal(response?.status(), 200, scenario.name);
+      try {
+        await page.locator(scenario.ready).first().waitFor({ state: 'visible', timeout: 15_000 });
+      } catch (error) {
+        const body = (await page.locator('body').innerText()).slice(0, 1200);
+        throw new Error(`${scenario.name} failed to show ${scenario.ready} at ${page.url()}: ${body}`, { cause: error });
+      }
+      const cdp = await zoomContext.newCDPSession(page);
+      const metrics = await cdp.send('Page.getLayoutMetrics');
+      const layout = await page.evaluate((expectedTitle) => {
+        const visible = (element) => {
+          const css = globalThis.getComputedStyle(element);
+          return element.getClientRects().length > 0 && css.visibility === 'visible' && css.display !== 'none' &&
+            !element.closest('.sidebar:not(.mobile-open)');
+        };
+        const inScroller = (element) => {
+          for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+            const css = globalThis.getComputedStyle(parent);
+            if (/auto|scroll/.test(css.overflowX) && parent.scrollWidth > parent.clientWidth + 1) return true;
+          }
+          return false;
+        };
+        const outsideControls = [...document.querySelectorAll('button, input, select, textarea, a[href]')]
+          .filter((element) => visible(element) && !element.classList.contains('skiplink') && !inScroller(element))
+          .map((element) => ({ label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 40), box: element.getBoundingClientRect() }))
+          .filter(({ box }) => box.left < -1 || box.right > window.innerWidth + 1)
+          .map(({ label, box }) => ({ label, left: box.left, right: box.right }));
+        const main = document.querySelector('main');
+        return {
+          cssWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          mainOverflow: main ? main.scrollWidth - main.clientWidth : null,
+          outsideControls,
+          projectTitleVisible: document.body.textContent?.includes(expectedTitle) ?? false,
+          creditsBalanceVisible: [...document.querySelectorAll('[data-testid="credits-balance"]')].some(visible),
+        };
+      }, projectTitle);
+      const result = { scenario: scenario.name, chromeZoom: metrics.cssVisualViewport.zoom, errors, ...layout };
+      assert.equal(result.chromeZoom, 2, scenario.name);
+      assert.ok(result.cssWidth >= 700 && result.cssWidth <= 740, scenario.name);
+      assert.ok(result.documentWidth <= result.cssWidth + 1, scenario.name);
+      assert.ok((result.mainOverflow ?? 0) <= 1, scenario.name);
+      assert.deepEqual(result.outsideControls, [], scenario.name);
+      assert.deepEqual(result.errors, [], scenario.name);
+      if (scenario.name === 'workspace') assert.equal(result.projectTitleVisible, true);
+      if (scenario.name === 'billing') assert.equal(result.creditsBalanceVisible, true);
+      results.push(result);
+      await page.close();
+    }
+    await writeFile(resolve(evidenceDir, 'real-auth-native-200-results.json'), `${JSON.stringify(results, null, 2)}\n`);
+    return { cases: results.length, zoom: 2, projectTitle };
+  } finally {
+    await zoomContext?.close();
+    assert.ok(profile.startsWith(`${evidenceDir}${sep}`));
+    await rm(profile, { recursive: true, force: true });
+  }
+}
+
 try {
   await runMigrations(handle);
   const auth = createAuth({ db: handle.db, secret: 'appearance-browser-test-secret-0123456789abcdef', baseUrl: apiBase }); // secrets:check-ignore: test-only dummy
-  app = await buildServer({ auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } } });
+  const storage = new LocalObjectStorage({ rootDir: storageRoot, publicBaseUrl: apiBase, signingSecret: `test-only-storage-secret-${runId}` }); // secrets:check-ignore: test-only dummy
+  app = await buildServer({ auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage) });
   await app.listen({ port: apiPort, host: '127.0.0.1' });
   userA = await createInternalUser(auth, { email: emailA, name: 'Appearance A', password });
   userB = await createInternalUser(auth, { email: emailB, name: 'Appearance B', password });
@@ -162,7 +260,8 @@ try {
   await signIn(second, userA.email);
   await signIn(anotherUser, userB.email);
   const channel = await apiJson(first, 'POST', `/workspaces/${workspace.id}/channels`, { name: 'Appearance test channel' });
-  const project = await apiJson(first, 'POST', `/workspaces/${workspace.id}/projects`, { title: 'Appearance invariant project', channelId: channel.id });
+  const projectTitle = '跨市场观察与长期债券分析 · Long English Project Title 2026';
+  const project = await apiJson(first, 'POST', `/workspaces/${workspace.id}/projects`, { title: projectTitle, channelId: channel.id });
   for (const [index, title] of ['Scene One', 'Scene Two'].entries()) {
     await apiJson(first, 'POST', `/projects/${project.id}/scenes`, {
       sceneType: 'CHAPTER_TITLE', semanticType: title, durationMs: 12000,
@@ -239,7 +338,8 @@ try {
   const signedOut = await firstPaint(anonymous, 'system', false);
   await firstPaint(anonymous, 'system', false, '/sign-in');
   assert.deepEqual(hydrationErrors, []);
-  result = { realAuthSessions: 3, realApi: apiBase, web: webBase, initial, synchronized, signInHydrationPreserved: true, localOverride, projectAndLedgerUnchanged: true, observedProjectSnapshotSha256: beforeHash, nonEmptyGenerationPromptCount: beforeGenerationInputs.scenes.length, generationInputsUnchanged: true, selectionAndPlayerPreserved: true, observablePlaybackSeconds: { before: beforeSeconds, after: afterSeconds, continued: continuedSeconds }, isolated, signedOut, hydrationErrors };
+  const authenticatedNativeZoom = await verifyAuthenticatedNativeZoom({ email: userA.email, workspaceId: workspace.id, projectId: project.id, projectTitle });
+  result = { realAuthSessions: 3, realApi: apiBase, web: webBase, initial, synchronized, signInHydrationPreserved: true, localOverride, projectAndLedgerUnchanged: true, observedProjectSnapshotSha256: beforeHash, nonEmptyGenerationPromptCount: beforeGenerationInputs.scenes.length, generationInputsUnchanged: true, selectionAndPlayerPreserved: true, observablePlaybackSeconds: { before: beforeSeconds, after: afterSeconds, continued: continuedSeconds }, authenticatedNativeZoom, isolated, signedOut, hydrationErrors };
 } catch (error) {
   failure = error;
 } finally {
@@ -270,6 +370,10 @@ try {
   }
   if (result) result.cleanup = { deletedWorkspaceA, deletedWorkspaceB, otherTenantPreserved };
   await handle.close().catch((error) => cleanupErrors.push(error));
+  try {
+    assert.ok(storageRoot.startsWith(`${resolve('.artifacts/n16-03-layout')}${sep}`));
+    await rm(storageRoot, { recursive: true, force: true });
+  } catch (error) { cleanupErrors.push(error); }
 }
 if (failure && cleanupErrors.length) throw new AggregateError([failure, ...cleanupErrors], 'Appearance browser run and scoped cleanup failed');
 if (failure) throw failure;
