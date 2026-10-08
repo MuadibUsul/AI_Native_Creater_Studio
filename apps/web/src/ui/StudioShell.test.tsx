@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StudioShell } from './StudioShell';
 import { DesignSystemControls, DesignSystemExampleActions, DesignSystemStatusAction } from '@/components/quiet-frame/DesignSystemControls';
 import { DesignSystemPage } from '@/components/quiet-frame/workspace-public';
@@ -18,7 +18,8 @@ function client() {
 }
 
 describe('Quiet Frame 工作台外壳', () => {
-  beforeEach(() => { window.localStorage.clear(); document.body.classList.remove('theme-dark'); });
+  beforeEach(() => { window.localStorage.clear(); document.cookie = 'ancs-qf-appearance=; Path=/; Max-Age=0'; document.body.classList.remove('theme-dark'); delete document.body.dataset['appearanceMode']; });
+  afterEach(() => vi.unstubAllGlobals());
 
   it('用真实工作区和项目生成导航，通知只从 SDK 读取', async () => {
     const sdk = client();
@@ -49,10 +50,42 @@ describe('Quiet Frame 工作台外壳', () => {
   it('主题切换只改变用户偏好，不触发业务写入', async () => {
     const sdk = client();
     renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);
+    await screen.findByRole('link', { name: /真实作品/ });
     await userEvent.click(screen.getByRole('button', { name: '切换浅深色' }));
     expect(document.body.classList.contains('theme-dark')).toBe(true);
-    expect(window.localStorage.getItem('ancs-qf-theme')).toBe('dark');
+    expect(window.localStorage.getItem('ancs-qf-appearance:usr_1')).toBe('dark');
+    expect(document.cookie).toContain('ancs-qf-appearance=usr_1.dark');
     expect(sdk.projects.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('默认跟随系统变化，固定外观后不受系统变化影响', async () => {
+    const media = Object.assign(new EventTarget(), { matches: true, media: '(prefers-color-scheme: dark)' });
+    vi.stubGlobal('matchMedia', vi.fn(() => media));
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    media.matches = false;
+    media.dispatchEvent(new Event('change'));
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(false));
+    await userEvent.click(screen.getByRole('button', { name: '切换浅深色' }));
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
+    media.matches = true;
+    media.dispatchEvent(new Event('change'));
+    media.matches = false;
+    media.dispatchEvent(new Event('change'));
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
+  });
+
+  it('设备覆盖按用户隔离，旧版全局偏好不被继承', async () => {
+    window.localStorage.setItem('ancs-qf-theme', 'dark');
+    window.localStorage.setItem('ancs-qf-appearance:usr_1', 'dark');
+    const first = renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    first.unmount();
+    const second = client();
+    second.auth.session = vi.fn().mockResolvedValue({ user: { id: 'usr_2', name: '第二人', email: 'b@example.com' } });
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, second);
+    await waitFor(() => expect(document.body.dataset['appearanceMode']).toBe('system'));
+    expect(document.body.classList.contains('theme-dark')).toBe(false);
   });
 
   it('设计系统中的主题与快捷键按钮调用工作台的真实交互', async () => {

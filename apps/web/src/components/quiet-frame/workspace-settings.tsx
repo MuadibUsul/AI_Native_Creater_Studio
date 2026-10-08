@@ -7,6 +7,7 @@ import type { PrivacyTier, ProviderConnection } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { StateBlock } from '@/ui/StateBlock';
+import { useWorkspaceSelection } from '@/ui/StudioShell';
 import './workspace.css';
 
 const tabs = ['模型与连接', '用量与预算', '工作区与成员', '安全与隐私', '外观与偏好'] as const;
@@ -109,10 +110,11 @@ function WorkspaceDetails({ workspaceId, privacyOnly }: { workspaceId: string; p
 
 export function WorkspaceSettings({ workspaceId }: { workspaceId: string }) {
   const [tab, setTab] = useState<SettingsTab>('模型与连接');
+  const { appearanceMode, setAppearanceMode } = useWorkspaceSelection();
   const client = useAncsClient();
   const workspace = useQuery({ queryKey: ['workspaces', workspaceId, 'details'], queryFn: () => client.workspaces.get(workspaceId) });
   const canManage = workspace.data?.role === 'OWNER' || workspace.data?.role === 'ADMIN';
   return <main className="page narrow qf-workspace-page"><div className="page-head"><h1>保持掌控，也保持简单。</h1><p>默认设置服务于创作，技术细节按需展开。</p></div><div className="settings-layout mt32"><aside className="setting-nav qf-setting-nav" aria-label="设置分类">{tabs.map((item) => <button key={item} type="button" className={tab === item ? 'active' : ''} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>{item}</button>)}</aside>
-    {tab === '模型与连接' ? <ProviderSettings workspaceId={workspaceId} canManage={canManage} /> : tab === '用量与预算' ? <BudgetSettings workspaceId={workspaceId} canManage={canManage} /> : tab === '工作区与成员' ? <WorkspaceDetails workspaceId={workspaceId} privacyOnly={false} /> : tab === '安全与隐私' ? <WorkspaceDetails workspaceId={workspaceId} privacyOnly /> : <section className="panel pad qf-settings-content"><h3>外观与偏好</h3><p className="small muted mt8">Quiet Frame 以系统可读性和键盘操作为基础。</p><div className="settings-row mt24"><div><h4>深浅色</h4><p>使用顶部工具栏的外观按钮切换；偏好保存在当前浏览器。</p></div><span className="badge">本地偏好</span></div><div className="settings-row"><div><h4>设计规范</h4><p>查看颜色、字号、组件状态与操作层级。</p></div><Link className="btn small" href="/design-system">查看设计系统</Link></div></section>}
+    {tab === '模型与连接' ? <ProviderSettings workspaceId={workspaceId} canManage={canManage} /> : tab === '用量与预算' ? <BudgetSettings workspaceId={workspaceId} canManage={canManage} /> : tab === '工作区与成员' ? <WorkspaceDetails workspaceId={workspaceId} privacyOnly={false} /> : tab === '安全与隐私' ? <WorkspaceDetails workspaceId={workspaceId} privacyOnly /> : <section className="panel pad qf-settings-content"><h3>外观与偏好</h3><p className="small muted mt8">外观只影响工作台界面，不改变素材或作品画面。</p><div className="settings-row mt24"><div><h4>当前设备外观</h4><p>跟随系统会在设备切换深浅色时自动更新；固定选择仅保存在当前设备和账号下，暂不同步到其他设备。</p></div><label className="label">外观<select className="field select" value={appearanceMode} onChange={(event) => setAppearanceMode(event.target.value as typeof appearanceMode)}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></div><div className="settings-row"><div><h4>设计规范</h4><p>查看颜色、字号、组件状态与操作层级。</p></div><Link className="btn small" href="/design-system">查看设计系统</Link></div></section>}
   </div></main>;
 }

@@ -5,11 +5,12 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
+import { applyAppearance, deviceAppearance, saveDeviceAppearance, type AppearanceMode } from '@/lib/appearance';
 import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from './QuietIcon';
 
-type WorkspaceSelection = { workspaceId: string | null; selectWorkspace: (id: string) => void; toggleTheme: () => void; openHelp: () => void };
-const WorkspaceSelectionContext = createContext<WorkspaceSelection>({ workspaceId: null, selectWorkspace: () => undefined, toggleTheme: () => undefined, openHelp: () => undefined });
+type WorkspaceSelection = { workspaceId: string | null; selectWorkspace: (id: string) => void; appearanceMode: AppearanceMode; setAppearanceMode: (mode: AppearanceMode) => void; toggleTheme: () => void; openHelp: () => void };
+const WorkspaceSelectionContext = createContext<WorkspaceSelection>({ workspaceId: null, selectWorkspace: () => undefined, appearanceMode: 'system', setAppearanceMode: () => undefined, toggleTheme: () => undefined, openHelp: () => undefined });
 export const useWorkspaceSelection = () => useContext(WorkspaceSelectionContext);
 
 const LABELS: Record<string, string> = {
@@ -34,7 +35,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
   const [panel, setPanel] = useState<'workspace' | 'command' | 'notifications' | 'help' | null>(null);
   const [command, setCommand] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>('system');
   const triggerRef = useRef<HTMLElement | null>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -70,14 +71,19 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     if (requested && workspaces.data.some((item) => item.id === requested)) setChosenWorkspaceId(requested);
   }, [pathname, workspaces.data]);
   useEffect(() => {
-    const saved = window.localStorage.getItem('ancs-qf-theme');
-    if (saved === 'dark') setTheme('dark');
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const onSystemChange = () => {
+      if (document.body.dataset['appearanceMode'] === 'system') applyAppearance('system');
+    };
+    media?.addEventListener('change', onSystemChange);
+    return () => media?.removeEventListener('change', onSystemChange);
   }, []);
   useEffect(() => {
-    document.body.classList.toggle('theme-dark', theme === 'dark');
-    window.localStorage.setItem('ancs-qf-theme', theme);
-    return () => document.body.classList.remove('theme-dark');
-  }, [theme]);
+    if (session.isPending) return;
+    const mode = session.data?.user?.id ? deviceAppearance(session.data.user.id) : 'system';
+    setAppearanceModeState(mode);
+    applyAppearance(mode);
+  }, [session.data?.user?.id, session.isPending]);
   useEffect(() => {
     setMobileOpen(false);
     setPanel(null);
@@ -136,6 +142,12 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     setChosenWorkspaceId(id);
     if (pathname === '/') window.history.replaceState(null, '', `/?workspaceId=${encodeURIComponent(id)}`);
   };
+  const setAppearanceMode = (mode: AppearanceMode) => {
+    setAppearanceModeState(mode);
+    applyAppearance(mode);
+    if (session.data?.user?.id) saveDeviceAppearance(session.data.user.id, mode);
+  };
+  const toggleTheme = () => setAppearanceMode(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
   const workspaceLinks = workspaceId ? [
     { href: homeHref, label: '创作台', icon: 'grid' },
     { href: `${base}/assets`, label: '素材库', icon: 'folder' },
@@ -159,7 +171,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     ] : []),
   ];
 
-  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, toggleTheme: () => setTheme((current) => current === 'light' ? 'dark' : 'light'), openHelp: () => open('help') }}>
+  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, setAppearanceMode, toggleTheme, openHelp: () => open('help') }}>
     <div className="app">
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="主导航" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen ? 'true' : undefined}>
         <Brand href={homeHref} />
@@ -182,7 +194,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
       </aside>
       <header className="topbar">
         <div className="row"><button ref={mobileTriggerRef} type="button" className="btn icononly ghost mobile-menu" aria-label={mobileOpen ? '关闭导航' : '打开导航'} onClick={() => setMobileOpen(!mobileOpen)}><QuietIcon name={mobileOpen ? 'close' : 'menu'} /></button><div className="breadcrumb"><span className="desktop-only">工作空间</span><QuietIcon name="chevron" className="desktop-only" /><strong>{title}</strong></div></div>
-        <div className="top-actions"><button type="button" className="btn icononly ghost desktop-only" aria-label="切换浅深色" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}><QuietIcon name="sun" /></button><button type="button" className="btn icononly ghost" aria-label="打开任务通知" onClick={() => open('notifications')}><QuietIcon name="bell" /></button><span className="circle" style={{ width: 28, height: 28 }}>{userName.slice(0, 1).toUpperCase()}</span></div>
+        <div className="top-actions"><button type="button" className="btn icononly ghost desktop-only" aria-label="切换浅深色" onClick={toggleTheme}><QuietIcon name="sun" /></button><button type="button" className="btn icononly ghost" aria-label="打开任务通知" onClick={() => open('notifications')}><QuietIcon name="bell" /></button><span className="circle" style={{ width: 28, height: 28 }}>{userName.slice(0, 1).toUpperCase()}</span></div>
       </header>
       <main id="main" className={pathname.includes('/storyboard') || pathname.includes('/editor') ? 'editor-page' : ''}>{children}</main>
     </div>
