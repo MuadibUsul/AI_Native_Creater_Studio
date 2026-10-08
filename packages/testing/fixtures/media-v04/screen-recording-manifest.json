@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-ancs-browser-recording",
+  "file": "screen-recording-design-system.webm",
+  "sha256": "dd3e6ea0f13dec709a413826744624a704ab3cce9a416be9eae530559facd4d9",
+  "sizeBytes": 301372,
+  "capturedAt": "2026-10-08",
+  "sourceCommit": "9716c4b",
+  "source": "Anonymous Chromium recording of the public ANCS /design-system page at http://127.0.0.1:4000; no account, user project, or database access.",
+  "generationScript": "record-screen-capture.mjs",
+  "reproduction": "The script writes to an ignored .artifacts directory by default. Browser recording timing makes bytes and SHA-256 non-deterministic across runs; validate stream properties and decode for a new capture.",
+  "rights": "The recorded UI is authored within the ANCS project; no third-party media or personal user data is visible.",
+  "expected": {
+    "container": "WebM",
+    "video": "VP8 960x540, 25/1 fps, 121 frames, 4.840 seconds",
+    "audio": "none",
+    "fullDecode": "success"
+  },
+  "brief": "Actual browser screen capture of public design-system interactions: scroll, light/dark toggle, and a status-help dialog.",
+  "notEvidenceFor": [
+    "real user editing workflow",
+    "screen-recording audio or audio/video synchronization",
+    "mobile phone screen capture",
+    "third-party software import",
+    "auth-protected project playback"
+  ]
+}
