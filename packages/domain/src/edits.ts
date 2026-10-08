@@ -8,6 +8,13 @@ import {
   editResponseSchema,
   ERROR_CODES,
   OBJECT_LOCK_DIMENSIONS,
+  animationBindingSchema,
+  audioRegionSchema,
+  clipSchema,
+  compareMediaTime,
+  legacyMillisecondsToMediaTime,
+  mediaRangeSchema,
+  mediaTimeSchema,
   projectVersionSnapshotSchema,
   versionConflictDetailsSchema,
   type EditOperation,
@@ -20,10 +27,13 @@ import {
 } from '@ancs/contracts';
 import {
   compositionAudioRegions,
+  compositionAnimationBindings,
   compositionCaptionSpans,
+  compositionEffectInstances,
   compositionVisualObjects,
   editEvents,
   outboxEvents,
+  assetVersions,
   projectObjectLocks,
   projectSequences,
   projectVersions,
@@ -38,6 +48,7 @@ import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mapp
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
 import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
 import { validateEditOperationCandidate } from './edit-operation-registry.js';
+import { assertAnimationKeyframesWithinTarget } from './composition-objects.js';
 
 /**
  * 编辑事务处理器（P02-02/P02-03 / 计划 §4.6—§4.8；规范 §23）。
@@ -244,8 +255,102 @@ export function replaySceneContent(
 interface EventDraft {
   action: string;
   sceneId: string | null;
+  objectKind?: 'PROJECT' | 'SCENE' | 'SEQUENCE' | 'TRACK' | 'CLIP' | 'VISUAL_OBJECT' | 'EFFECT' | 'ANIMATION' | 'CAPTION' | 'AUDIO_REGION' | 'OBJECT_LOCK';
+  objectId?: string;
   patch: Record<string, unknown>;
 }
+
+const clipSnapshot = (row: typeof sequenceClips.$inferSelect) => clipSchema.parse({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+});
+const animationSnapshot = (row: typeof compositionAnimationBindings.$inferSelect) => animationBindingSchema.parse({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+});
+const audioRegionSnapshot = (row: typeof compositionAudioRegions.$inferSelect) => audioRegionSchema.parse({
+  ...row,
+  gainDb: Number(row.gainDb),
+  pan: Number(row.pan),
+  createdAt: row.createdAt.toISOString(),
+});
+
+async function restoreNormalizedSnapshot(
+  tx: NodePgDatabase,
+  input: Pick<ProcessEditsInput, 'workspaceId' | 'projectId'>,
+  snapshot: ReturnType<typeof projectVersionSnapshotSchema.parse>,
+): Promise<void> {
+  const document = snapshot.document;
+  if (document === undefined) return;
+  if (document.projectId !== input.projectId) {
+    throw new ApiFailure(ERROR_CODES.INTERNAL, 'project version document belongs to another project', 500);
+  }
+  const composition = document.composition;
+  const scoped = [
+    ...composition.sequences,
+    ...composition.tracks,
+    ...composition.clips,
+    ...composition.visualObjects,
+    ...composition.effects,
+    ...composition.animations,
+    ...composition.captions,
+    ...composition.audioRegions,
+  ];
+  if (scoped.some((item) => item.workspaceId !== input.workspaceId || item.projectId !== input.projectId)) {
+    throw new ApiFailure(ERROR_CODES.INTERNAL, 'project version contains cross-scope composition objects', 500);
+  }
+  if (snapshot.locks.some((lock) => lock.workspaceId !== input.workspaceId || lock.projectId !== input.projectId)) {
+    throw new ApiFailure(ERROR_CODES.INTERNAL, 'project version contains cross-scope object locks', 500);
+  }
+
+  await tx.delete(projectObjectLocks).where(and(eq(projectObjectLocks.workspaceId, input.workspaceId), eq(projectObjectLocks.projectId, input.projectId)));
+  await tx.delete(compositionAnimationBindings).where(and(eq(compositionAnimationBindings.workspaceId, input.workspaceId), eq(compositionAnimationBindings.projectId, input.projectId)));
+  await tx.delete(compositionEffectInstances).where(and(eq(compositionEffectInstances.workspaceId, input.workspaceId), eq(compositionEffectInstances.projectId, input.projectId)));
+  await tx.delete(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, input.workspaceId), eq(compositionCaptionSpans.projectId, input.projectId)));
+  await tx.delete(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, input.workspaceId), eq(compositionAudioRegions.projectId, input.projectId)));
+  await tx.delete(compositionVisualObjects).where(and(eq(compositionVisualObjects.workspaceId, input.workspaceId), eq(compositionVisualObjects.projectId, input.projectId)));
+  await tx.delete(sequenceClips).where(and(eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId)));
+  await tx.delete(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId)));
+  await tx.delete(projectSequences).where(and(eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId)));
+
+  if (composition.sequences.length > 0) await tx.insert(projectSequences).values(composition.sequences.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.tracks.length > 0) await tx.insert(sequenceTracks).values(composition.tracks.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.clips.length > 0) await tx.insert(sequenceClips).values(composition.clips.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.visualObjects.length > 0) await tx.insert(compositionVisualObjects).values(composition.visualObjects.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.effects.length > 0) await tx.insert(compositionEffectInstances).values(composition.effects.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.animations.length > 0) await tx.insert(compositionAnimationBindings).values(composition.animations.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.captions.length > 0) await tx.insert(compositionCaptionSpans).values(composition.captions.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
+  if (composition.audioRegions.length > 0) await tx.insert(compositionAudioRegions).values(composition.audioRegions.map((item) => ({
+    ...item,
+    gainDb: String(item.gainDb),
+    pan: String(item.pan),
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.createdAt),
+  })));
+  if (snapshot.locks.length > 0) await tx.insert(projectObjectLocks).values(snapshot.locks.map((item) => ({
+    ...item,
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.updatedAt),
+  })));
+}
+
+type Fraction = { num: bigint; den: bigint };
+const rangeDuration = (range: ReturnType<typeof mediaRangeSchema.parse>): Fraction => ({
+  num: BigInt(range.end.ticks) * BigInt(range.end.timebase.num) * BigInt(range.start.timebase.den)
+    - BigInt(range.start.ticks) * BigInt(range.start.timebase.num) * BigInt(range.end.timebase.den),
+  den: BigInt(range.end.timebase.den) * BigInt(range.start.timebase.den),
+});
+const assertLinearClipMapping = (
+  sourceRange: ReturnType<typeof mediaRangeSchema.parse>,
+  sequenceRange: ReturnType<typeof mediaRangeSchema.parse>,
+  rate: { num: number; den: number },
+): void => {
+  const source = rangeDuration(sourceRange);
+  const sequence = rangeDuration(sequenceRange);
+  if (source.num * sequence.den * BigInt(rate.den) !== BigInt(rate.num) * source.den * sequence.num) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'timeMapping rate does not match source and sequence ranges', 422, { reason: 'TIME_MAPPING_MISMATCH' });
+  }
+};
 
 const parseLockDimensions = (value: unknown): ObjectLockDimension[] =>
   Array.isArray(value)
@@ -640,12 +745,153 @@ async function applyEditsInTransaction(
           eventDrafts.push({
             action: 'SET_OBJECT_LOCK',
             sceneId: operation.objectKind === 'SCENE' ? operation.objectId : null,
+            objectKind: 'OBJECT_LOCK',
+            objectId: operation.objectId,
             patch: {
               ...operation,
               before,
               after,
             },
           });
+          break;
+        }
+
+        case 'update_clip': {
+          const rows = await tx.select().from(sequenceClips).where(and(
+            eq(sequenceClips.id, operation.clipId),
+            eq(sequenceClips.workspaceId, input.workspaceId),
+            eq(sequenceClips.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip not found', 404);
+          const before = clipSnapshot(row);
+          const candidate = clipSnapshot({ ...row, ...operation.changes, updatedAt: new Date() });
+          const trackRows = await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.id, candidate.trackId),
+            eq(sequenceTracks.workspaceId, input.workspaceId),
+            eq(sequenceTracks.projectId, input.projectId),
+            eq(sequenceTracks.sequenceId, row.sequenceId),
+          )).limit(1);
+          const track = trackRows[0];
+          if (!track) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip track not found', 404);
+          if (track.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
+          const sequenceRows = await tx.select().from(projectSequences).where(and(
+            eq(projectSequences.id, row.sequenceId),
+            eq(projectSequences.workspaceId, input.workspaceId),
+            eq(projectSequences.projectId, input.projectId),
+          )).limit(1);
+          const sequence = sequenceRows[0];
+          if (!sequence) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip sequence not found', 404);
+          const zero = { ticks: '0', timebase: candidate.sequenceRange.start.timebase };
+          if (compareMediaTime(candidate.sequenceRange.start, zero) < 0 || compareMediaTime(candidate.sequenceRange.end, mediaTimeSchema.parse(sequence.duration)) > 0) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip sequence range exceeds sequence bounds', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+          }
+          if (candidate.assetVersionId !== null) {
+            const sourceRows = await tx.select({ durationMs: assetVersions.durationMs, status: assetVersions.status }).from(assetVersions).where(and(
+              eq(assetVersions.id, candidate.assetVersionId), eq(assetVersions.workspaceId, input.workspaceId),
+            )).limit(1);
+            const source = sourceRows[0];
+            if (!source) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset version not found', 404);
+            if (source.status !== 'READY' || source.durationMs === null) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version is not ready with known duration', 409);
+            if (compareMediaTime(candidate.sourceRange.start, { ticks: '0', timebase: candidate.sourceRange.start.timebase }) < 0 || compareMediaTime(candidate.sourceRange.end, legacyMillisecondsToMediaTime(source.durationMs)) > 0) {
+              throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds asset duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
+            }
+          } else if (candidate.nestedSequenceId !== null) {
+            const nestedRows = await tx.select({ duration: projectSequences.duration }).from(projectSequences).where(and(
+              eq(projectSequences.id, candidate.nestedSequenceId), eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId),
+            )).limit(1);
+            const nested = nestedRows[0];
+            if (!nested || compareMediaTime(candidate.sourceRange.end, mediaTimeSchema.parse(nested.duration)) > 0) {
+              throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
+            }
+          }
+          if (candidate.parentClipId !== null) {
+            const parent = await tx.select({ id: sequenceClips.id }).from(sequenceClips).where(and(
+              eq(sequenceClips.id, candidate.parentClipId), eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId), eq(sequenceClips.sequenceId, row.sequenceId),
+            )).limit(1);
+            if (!parent[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'parent clip not found', 404);
+          }
+          assertLinearClipMapping(candidate.sourceRange, candidate.sequenceRange, candidate.timeMapping.rate);
+          await tx.update(sequenceClips).set({
+            trackId: candidate.trackId,
+            sourceStreamId: candidate.sourceStreamId,
+            sourceRange: candidate.sourceRange,
+            sequenceRange: candidate.sequenceRange,
+            timeMapping: candidate.timeMapping,
+            avGroupId: candidate.avGroupId,
+            parentClipId: candidate.parentClipId,
+            updatedAt: new Date(),
+          }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after: candidate } });
+          break;
+        }
+
+        case 'update_animation': {
+          const rows = await tx.select().from(compositionAnimationBindings).where(and(
+            eq(compositionAnimationBindings.id, operation.animationId),
+            eq(compositionAnimationBindings.workspaceId, input.workspaceId),
+            eq(compositionAnimationBindings.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'animation binding not found', 404);
+          if (row.targetKind !== operation.targetKind || row.targetId !== operation.targetId) {
+            throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'animation target does not match the stored binding', 409, { reason: 'ANIMATION_TARGET_MISMATCH' });
+          }
+          const before = animationSnapshot(row);
+          const candidate = animationBindingSchema.parse({ ...before, keyframes: operation.keyframes });
+          await assertAnimationKeyframesWithinTarget({ ...deps, db: tx as unknown as NodePgDatabase }, {
+            workspaceId: input.workspaceId,
+            projectId: input.projectId,
+            targetKind: candidate.targetKind,
+            targetId: candidate.targetId,
+            timeBinding: candidate.timeBinding,
+            keyframes: candidate.keyframes,
+          });
+          await tx.update(compositionAnimationBindings).set({ keyframes: candidate.keyframes, updatedAt: new Date() }).where(eq(compositionAnimationBindings.id, row.id));
+          eventDrafts.push({ action: 'UPDATE_ANIMATION', sceneId: null, objectKind: 'ANIMATION', objectId: row.id, patch: { ...operation, before, after: candidate } });
+          break;
+        }
+
+        case 'update_audio_region': {
+          const rows = await tx.select().from(compositionAudioRegions).where(and(
+            eq(compositionAudioRegions.id, operation.audioRegionId),
+            eq(compositionAudioRegions.workspaceId, input.workspaceId),
+            eq(compositionAudioRegions.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'audio region not found', 404);
+          const before = audioRegionSnapshot(row);
+          const candidate = audioRegionSchema.parse({ ...before, ...operation.changes });
+          const tracks = await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.id, candidate.trackId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId), eq(sequenceTracks.sequenceId, row.sequenceId),
+          )).limit(1);
+          const track = tracks[0];
+          if (!track || track.kind !== 'AUDIO') throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'audio track not found', 404);
+          if (track.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
+          const sourceChannels = new Set(candidate.channelMapping.map((item) => item.sourceChannel));
+          if (sourceChannels.size !== candidate.channelMapping.length) throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'each source channel may be mapped once', 422, { reason: 'DUPLICATE_SOURCE_CHANNEL' });
+          const duration = rangeDuration(candidate.localRange);
+          const fade = (time: ReturnType<typeof mediaTimeSchema.parse>): Fraction => ({ num: BigInt(time.ticks) * BigInt(time.timebase.num), den: BigInt(time.timebase.den) });
+          const fadeIn = fade(candidate.fadeIn);
+          const fadeOut = fade(candidate.fadeOut);
+          if ((fadeIn.num * fadeOut.den + fadeOut.num * fadeIn.den) * duration.den > duration.num * fadeIn.den * fadeOut.den) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'audio fades exceed the local region duration', 422, { reason: 'AUDIO_FADE_OUT_OF_BOUNDS' });
+          }
+          await tx.update(compositionAudioRegions).set({
+            trackId: candidate.trackId,
+            timeBinding: candidate.timeBinding,
+            localRange: candidate.localRange,
+            sequenceRange: candidate.sequenceRange,
+            sourceStreamId: candidate.sourceStreamId,
+            channelMapping: candidate.channelMapping,
+            gainDb: String(candidate.gainDb),
+            pan: String(candidate.pan),
+            fadeIn: candidate.fadeIn,
+            fadeOut: candidate.fadeOut,
+            parameters: candidate.parameters,
+            updatedAt: new Date(),
+          }).where(eq(compositionAudioRegions.id, row.id));
+          eventDrafts.push({ action: 'UPDATE_AUDIO_REGION', sceneId: null, objectKind: 'AUDIO_REGION', objectId: row.id, patch: { ...operation, before, after: candidate } });
           break;
         }
 
@@ -702,6 +948,7 @@ async function applyEditsInTransaction(
           if (!versionRow) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project version not found', 404);
           const snapshot = projectVersionSnapshotSchema.parse(versionRow.snapshot);
           const beforeVersionId = project.currentVersionId;
+          await restoreNormalizedSnapshot(txDb, input, snapshot);
           const desiredScenes = snapshot.graph.scenes;
           const desiredIds = new Set(desiredScenes.map((scene) => scene.id));
 
@@ -948,6 +1195,8 @@ async function applyEditsInTransaction(
           workspaceId: input.workspaceId,
           projectId: input.projectId,
           sceneId: draft.sceneId,
+          objectKind: draft.objectKind ?? (draft.sceneId === null ? null : 'SCENE'),
+          objectId: draft.objectId ?? draft.sceneId,
           actorType: input.actor.type,
           actorId: input.actor.id,
           action: `${compensationPrefix}${draft.action}`,
@@ -973,6 +1222,11 @@ async function applyEditsInTransaction(
         revision: bumpedRow.revision,
         operations: request.operations.map((op) => op.op),
         sceneIds: [...affectedSceneIds],
+        objectRefs: eventDrafts.flatMap((draft) => {
+          const objectKind = draft.objectKind ?? (draft.sceneId === null ? null : 'SCENE');
+          const objectId = draft.objectId ?? draft.sceneId;
+          return objectKind === null || objectId === null ? [] : [{ objectKind, objectId }];
+        }),
         // 通知规则需要发起人（不通知本人）与补偿标记（撤销/重做聚合展示）
         actorId: input.actor.id,
         actorType: input.actor.type,
@@ -1095,6 +1349,8 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
       workspaceId: row.workspaceId,
       projectId: row.projectId,
       sceneId: row.sceneId,
+      objectKind: row.objectKind,
+      objectId: row.objectId,
       actorType: row.actorType,
       actorId: row.actorId,
       action: row.action,

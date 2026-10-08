@@ -346,20 +346,35 @@ async function animationTargetContext(
   return { sequenceId: track.sequenceId, binding: timeBindingSchema.parse({ basis: 'SEQUENCE', clipId: null, semanticCueId: null }), range: mediaRangeSchema.parse({ start: sequence.start, end: sequence.duration }) };
 }
 
+export async function assertAnimationKeyframesWithinTarget(
+  deps: DomainDeps,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    targetKind: string;
+    targetId: string;
+    timeBinding: TimeBinding;
+    keyframes: readonly { time: MediaTime }[];
+  },
+): Promise<void> {
+  const context = await animationTargetContext(deps, input);
+  if (JSON.stringify(context.binding) !== JSON.stringify(input.timeBinding)) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'animation time binding must match its target', 422, { reason: 'TIME_BINDING_MISMATCH' });
+  }
+  for (const keyframe of input.keyframes) {
+    if (compareMediaTime(keyframe.time, context.range.start) < 0 || compareMediaTime(keyframe.time, context.range.end) > 0) {
+      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'keyframe lies outside target local range', 422, { reason: 'KEYFRAME_OUT_OF_BOUNDS' });
+    }
+  }
+}
+
 export async function createAnimationBinding(
   deps: DomainDeps,
   input: { workspaceId: string; projectId: string; input: CreateAnimationBindingRequest },
 ): Promise<AnimationBinding> {
   const request = createAnimationBindingRequestSchema.parse(input.input);
   const context = await animationTargetContext(deps, { ...input, ...request });
-  if (JSON.stringify(context.binding) !== JSON.stringify(request.timeBinding)) {
-    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'animation time binding must match its target', 422, { reason: 'TIME_BINDING_MISMATCH' });
-  }
-  for (const keyframe of request.keyframes) {
-    if (compareMediaTime(keyframe.time, context.range.start) < 0 || compareMediaTime(keyframe.time, context.range.end) > 0) {
-      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'keyframe lies outside target local range', 422, { reason: 'KEYFRAME_OUT_OF_BOUNDS' });
-    }
-  }
+  await assertAnimationKeyframesWithinTarget(deps, { ...input, ...request });
   const id = newId('anim');
   const now = new Date();
   await deps.db.insert(compositionAnimationBindings).values({

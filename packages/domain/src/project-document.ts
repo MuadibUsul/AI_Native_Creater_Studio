@@ -22,7 +22,7 @@ import {
   type CaptionSpan,
   type AudioRegion,
 } from '@ancs/contracts';
-import { projects } from '@ancs/db';
+import { projectObjectLocks, projects } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assembleSceneGraph } from './projects.js';
 import { listProjectComposition } from './composition.js';
@@ -46,6 +46,7 @@ export function projectDocumentFromSceneGraph(input: {
     captions?: CaptionSpan[];
     audioRegions?: AudioRegion[];
   };
+  lockedObjectIds?: string[];
 }): ProjectDocument {
   if ((input.documentSchemaVersion ?? PROJECT_DOCUMENT_SCHEMA_VERSION) !== PROJECT_DOCUMENT_SCHEMA_VERSION) {
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'ProjectDocument schema version is not supported', 409, {
@@ -76,7 +77,47 @@ export function projectDocumentFromSceneGraph(input: {
     },
     legacySceneId: scene.id,
   }));
-  const dependencyNodes = [...graph.scenes.map((scene) => scene.id), ...objects.map((object) => object.id)];
+  const composition = {
+    sequences: input.composition?.sequences ?? [],
+    tracks: input.composition?.tracks ?? [],
+    clips: input.composition?.clips ?? [],
+    visualObjects: input.composition?.visualObjects ?? [],
+    effects: input.composition?.effects ?? [],
+    animations: input.composition?.animations ?? [],
+    captions: input.composition?.captions ?? [],
+    audioRegions: input.composition?.audioRegions ?? [],
+  };
+  const assetVersionIds = [...new Set(composition.clips.flatMap((clip) => clip.assetVersionId === null ? [] : [clip.assetVersionId]))];
+  const dependencyNodes = [...new Set([
+    ...graph.scenes.map((scene) => scene.id),
+    ...objects.map((object) => object.id),
+    ...composition.sequences.map((item) => item.id),
+    ...composition.tracks.map((item) => item.id),
+    ...composition.clips.map((item) => item.id),
+    ...composition.visualObjects.map((item) => item.id),
+    ...composition.effects.map((item) => item.id),
+    ...composition.animations.map((item) => item.id),
+    ...composition.captions.map((item) => item.id),
+    ...composition.audioRegions.map((item) => item.id),
+    ...assetVersionIds,
+  ])];
+  const dependencyEdges = [
+    ...objects.map((object) => ({ from: object.id, to: object.legacySceneId, kind: 'REPRESENTS' })),
+    ...composition.tracks.map((item) => ({ from: item.id, to: item.sequenceId, kind: 'BELONGS_TO' })),
+    ...composition.clips.flatMap((item) => [
+      { from: item.id, to: item.trackId, kind: 'PLACED_ON' },
+      ...(item.assetVersionId === null ? [] : [{ from: item.id, to: item.assetVersionId, kind: 'USES_ASSET_VERSION' }]),
+      ...(item.nestedSequenceId === null ? [] : [{ from: item.id, to: item.nestedSequenceId, kind: 'USES_SEQUENCE' }]),
+    ]),
+    ...composition.visualObjects.flatMap((item) => [
+      { from: item.id, to: item.trackId, kind: 'PLACED_ON' },
+      ...(item.parentObjectId === null ? [] : [{ from: item.id, to: item.parentObjectId, kind: 'CHILD_OF' }]),
+    ]),
+    ...composition.effects.map((item) => ({ from: item.id, to: item.targetId, kind: 'APPLIES_TO' })),
+    ...composition.animations.map((item) => ({ from: item.id, to: item.targetId, kind: 'ANIMATES' })),
+    ...composition.captions.map((item) => ({ from: item.id, to: item.trackId, kind: 'PLACED_ON' })),
+    ...composition.audioRegions.map((item) => ({ from: item.id, to: item.trackId, kind: 'PLACED_ON' })),
+  ];
 
   return projectDocumentSchema.parse({
     schemaVersion: PROJECT_DOCUMENT_SCHEMA_VERSION,
@@ -92,24 +133,20 @@ export function projectDocumentFromSceneGraph(input: {
       start: activeSequence?.start ?? legacyMillisecondsToMediaTime(0),
       duration: activeSequence?.duration ?? legacyMillisecondsToMediaTime(graph.timeline.durationMs),
       objects,
-      sequences: input.composition?.sequences ?? [],
-      tracks: input.composition?.tracks ?? [],
-      clips: input.composition?.clips ?? [],
-      visualObjects: input.composition?.visualObjects ?? [],
-      effects: input.composition?.effects ?? [],
-      animations: input.composition?.animations ?? [],
-      captions: input.composition?.captions ?? [],
-      audioRegions: input.composition?.audioRegions ?? [],
+      ...composition,
     },
-    assetVersionIds: [],
+    assetVersionIds,
     sourceReferences: graph.sourceReferences,
     dependencyGraph: {
       nodes: dependencyNodes,
-      edges: objects.map((object) => ({ from: object.id, to: object.legacySceneId, kind: 'REPRESENTS' })),
+      edges: dependencyEdges,
     },
     decisionBindingIds: [],
     approvalBindingIds: [],
-    lockedObjectIds: graph.scenes.filter((scene) => scene.locked).map((scene) => compositionObjectId(scene.id)),
+    lockedObjectIds: [...new Set([
+      ...graph.scenes.filter((scene) => scene.locked).map((scene) => compositionObjectId(scene.id)),
+      ...(input.lockedObjectIds ?? []),
+    ])],
     renderProfile: {
       width: graph.format.width,
       height: graph.format.height,
@@ -135,10 +172,14 @@ export async function assembleProjectDocument(
     .limit(1);
   const project = rows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-  const [graph, composition, compositionObjects] = await Promise.all([
+  const [graph, composition, compositionObjects, lockRows] = await Promise.all([
     assembleSceneGraph(deps, input),
     listProjectComposition(deps, input),
     listProjectCompositionObjects(deps, input),
+    deps.db.select({ objectId: projectObjectLocks.objectId }).from(projectObjectLocks).where(and(
+      eq(projectObjectLocks.workspaceId, input.workspaceId),
+      eq(projectObjectLocks.projectId, input.projectId),
+    )),
   ]);
   return projectDocumentFromSceneGraph({
     graph,
@@ -146,6 +187,7 @@ export async function assembleProjectDocument(
     productionPolicy: project.productionPolicy,
     documentSchemaVersion: project.documentSchemaVersion,
     composition: { ...composition, ...compositionObjects },
+    lockedObjectIds: lockRows.map((row) => row.objectId),
   });
 }
 

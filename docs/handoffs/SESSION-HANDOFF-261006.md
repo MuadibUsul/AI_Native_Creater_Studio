@@ -1,6 +1,6 @@
 # 会话交接文档（Session Handoff）
 
-> **2026-10-09 当前状态优先：** 用户已明确取消旧的 Web 人工验收暂停，要求连续推进全部 v0.4。当前分支 `codex/v04-foundation`；N00-01—07、N01-01—07、N15-01/02、N16-01/02 共 **18/219** 项 VERIFIED。N01-07 已完成六类对象锁、无 `sceneId` 重排与 ripple 的间接影响校验、显式解锁和 AI 禁止解锁；最新迁移 **0061**；`pnpm verify` **977/977**。下一任务 N01-08。以下 P14/main/暂停内容是 2026-10-07 历史交接，若冲突以本段和 v0.4 验收账本为准。
+> **2026-10-09 当前状态优先：** 用户已明确取消旧的 Web 人工验收暂停，要求连续推进全部 v0.4。当前分支 `codex/v04-foundation`；N00-01—07、N01-01—08、N15-01/02、N16-01/02 共 **19/219** 项 VERIFIED。N01-08 已完成对象级 EditEvent、完整 before/after、补偿式 Undo/Redo、并发 CAS 和规范化版本恢复；最新迁移 **0062**；`pnpm verify` **982/982**。下一任务 N01-09。以下 P14/main/暂停内容是 2026-10-07 历史交接，若冲突以本段和 v0.4 验收账本为准。
 
 - **交接时点**：2026-10-07（P14 阶段 5/5 全部完成；按用户指令暂停验收）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）

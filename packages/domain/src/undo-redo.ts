@@ -1,6 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
-import { ApiFailure, ERROR_CODES, assetRoleSchema, type EditOperation, type EditRequest } from '@ancs/contracts';
+import {
+  ApiFailure,
+  ERROR_CODES,
+  animationBindingSchema,
+  assetRoleSchema,
+  audioRegionSchema,
+  clipSchema,
+  objectLockKindSchema,
+  type EditOperation,
+  type EditRequest,
+  type ObjectLockDimension,
+} from '@ancs/contracts';
 import { editEvents, projects, scenes } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { contentToChanges, processEdits, type ProcessEditsResult, type SceneContentSnapshot } from './edits.js';
@@ -23,6 +34,8 @@ interface EventRow {
   seq: number;
   action: string;
   sceneId: string | null;
+  objectKind: string | null;
+  objectId: string | null;
   patch: unknown;
   compensatesEventId: string | null;
 }
@@ -109,6 +122,8 @@ async function loadProjectEvents(deps: DomainDeps, projectId: string): Promise<E
       seq: editEvents.seq,
       action: editEvents.action,
       sceneId: editEvents.sceneId,
+      objectKind: editEvents.objectKind,
+      objectId: editEvents.objectId,
       patch: editEvents.patch,
       compensatesEventId: editEvents.compensatesEventId,
     })
@@ -181,6 +196,51 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
       return { op: 'restore_scene', sceneId: event.sceneId ?? '', toRevision: patch.toRevision as number };
     case 'SET_SCENE_LOCK':
       return { op: 'set_scene_lock', sceneId: event.sceneId ?? '', locked: (patch.after as { locked: boolean }).locked };
+    case 'SET_OBJECT_LOCK': {
+      const after = patch.after as { dimensions: ObjectLockDimension[]; reason: string | null } | null;
+      const dimensions = after?.dimensions ?? (patch.before as { dimensions: ObjectLockDimension[] } | null)?.dimensions ?? [];
+      if (dimensions.length === 0) return undefined;
+      return {
+        op: 'set_object_lock',
+        objectKind: objectLockKindSchema.parse((patch as { objectKind?: unknown }).objectKind),
+        objectId: event.objectId ?? String((patch as { objectId?: unknown }).objectId ?? ''),
+        locked: after !== null,
+        dimensions,
+        ...(after?.reason !== undefined ? { reason: after.reason } : {}),
+      };
+    }
+    case 'UPDATE_CLIP': {
+      const after = clipSchema.parse(patch.after);
+      return { op: 'update_clip', clipId: after.id, changes: {
+        trackId: after.trackId,
+        sourceStreamId: after.sourceStreamId,
+        sourceRange: after.sourceRange,
+        sequenceRange: after.sequenceRange,
+        timeMapping: after.timeMapping,
+        avGroupId: after.avGroupId,
+        parentClipId: after.parentClipId,
+      } };
+    }
+    case 'UPDATE_ANIMATION': {
+      const after = animationBindingSchema.parse(patch.after);
+      return { op: 'update_animation', animationId: after.id, targetKind: after.targetKind, targetId: after.targetId, keyframes: after.keyframes };
+    }
+    case 'UPDATE_AUDIO_REGION': {
+      const after = audioRegionSchema.parse(patch.after);
+      return { op: 'update_audio_region', audioRegionId: after.id, changes: {
+        trackId: after.trackId,
+        timeBinding: after.timeBinding,
+        localRange: after.localRange,
+        sequenceRange: after.sequenceRange,
+        sourceStreamId: after.sourceStreamId,
+        channelMapping: after.channelMapping,
+        gainDb: after.gainDb,
+        pan: after.pan,
+        fadeIn: after.fadeIn,
+        fadeOut: after.fadeOut,
+        parameters: after.parameters,
+      } };
+    }
     case 'INSERT_SCENE':
       return {
         op: 'insert_scene',
@@ -237,6 +297,52 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
       const sceneId = event.sceneId ?? '';
       requireScene(meta, sceneId);
       return [{ op: 'set_scene_lock', sceneId, locked: (patch.before as { locked: boolean }).locked }];
+    }
+
+    case 'SET_OBJECT_LOCK': {
+      const before = patch.before as { dimensions: ObjectLockDimension[]; reason: string | null } | null;
+      const after = patch.after as { dimensions: ObjectLockDimension[]; reason: string | null } | null;
+      const objectKind = objectLockKindSchema.parse((patch as { objectKind?: unknown }).objectKind);
+      const objectId = event.objectId ?? String((patch as { objectId?: unknown }).objectId ?? '');
+      const operations: EditOperation[] = [];
+      if (after !== null) operations.push({ op: 'set_object_lock', objectKind, objectId, locked: false, dimensions: after.dimensions });
+      if (before !== null) operations.push({ op: 'set_object_lock', objectKind, objectId, locked: true, dimensions: before.dimensions, reason: before.reason });
+      return operations;
+    }
+
+    case 'UPDATE_CLIP': {
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'update_clip', clipId: before.id, changes: {
+        trackId: before.trackId,
+        sourceStreamId: before.sourceStreamId,
+        sourceRange: before.sourceRange,
+        sequenceRange: before.sequenceRange,
+        timeMapping: before.timeMapping,
+        avGroupId: before.avGroupId,
+        parentClipId: before.parentClipId,
+      } }];
+    }
+
+    case 'UPDATE_ANIMATION': {
+      const before = animationBindingSchema.parse(patch.before);
+      return [{ op: 'update_animation', animationId: before.id, targetKind: before.targetKind, targetId: before.targetId, keyframes: before.keyframes }];
+    }
+
+    case 'UPDATE_AUDIO_REGION': {
+      const before = audioRegionSchema.parse(patch.before);
+      return [{ op: 'update_audio_region', audioRegionId: before.id, changes: {
+        trackId: before.trackId,
+        timeBinding: before.timeBinding,
+        localRange: before.localRange,
+        sequenceRange: before.sequenceRange,
+        sourceStreamId: before.sourceStreamId,
+        channelMapping: before.channelMapping,
+        gainDb: before.gainDb,
+        pan: before.pan,
+        fadeIn: before.fadeIn,
+        fadeOut: before.fadeOut,
+        parameters: before.parameters,
+      } }];
     }
 
     case 'INSERT_SCENE':

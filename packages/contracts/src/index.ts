@@ -265,6 +265,14 @@ export {
   restoreProjectVersionOperationSchema,
 } from './edits.js';
 export type { EditRequest, EditOperation, EditOperationType, EditExecutionBackend, EditOperationDefinition, ProjectChanges, SceneChanges } from './edits.js';
+export {
+  updateClipChangesSchema,
+  updateClipOperationSchema,
+  updateAnimationOperationSchema,
+  updateAudioRegionChangesSchema,
+  updateAudioRegionOperationSchema,
+} from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,
@@ -322,6 +330,7 @@ export type { OpsPermissionPolicyVersion, OpsEmergencyAction, OpsEmergencyGrant,
 // 编辑历史与版本契约（P02-02/P02-03 / §23、§24）
 export {
   EDIT_ACTOR_TYPES,
+  EDIT_EVENT_OBJECT_KINDS,
   editEventSchema,
   VERSION_REASONS,
   versionReasonSchema,
@@ -332,6 +341,7 @@ export {
 } from './history.js';
 export type {
   EditEvent,
+  EditEventObjectKind,
   VersionReason,
   ProjectVersionSnapshot,
   ProjectVersion,

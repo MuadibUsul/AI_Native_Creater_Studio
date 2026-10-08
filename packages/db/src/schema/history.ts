@@ -24,6 +24,9 @@ export const editEvents = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     sceneId: text('scene_id'),
+    /** Stable normalized target; legacy rows may keep both fields null. */
+    objectKind: text('object_kind'),
+    objectId: text('object_id'),
     actorType: text('actor_type').notNull(),
     actorId: text('actor_id'),
     action: text('action').notNull(),
@@ -40,6 +43,7 @@ export const editEvents = pgTable(
     index('edit_events_project_seq_idx').on(table.projectId, table.seq),
     index('edit_events_project_created_idx').on(table.projectId, table.createdAt),
     index('edit_events_workspace_idx').on(table.workspaceId),
+    index('edit_events_project_object_idx').on(table.projectId, table.objectKind, table.objectId),
   ],
 );
 

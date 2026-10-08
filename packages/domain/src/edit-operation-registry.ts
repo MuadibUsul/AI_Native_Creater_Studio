@@ -158,6 +158,25 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       return ordered.flatMap((scene, index) => operation.orderedSceneIds.indexOf(scene.id) === index ? [] : [sceneImpact(scene.id, ['POSITION'])]);
     case 'replace_asset':
       return [sceneImpact(operation.sceneId, ['ASSET'])];
+    case 'update_clip': {
+      const dimensions: ObjectLockDimension[] = [];
+      if (operation.changes.sourceRange !== undefined || operation.changes.timeMapping !== undefined || operation.changes.sourceStreamId !== undefined) dimensions.push('CONTENT', 'DURATION');
+      if (operation.changes.sequenceRange !== undefined) dimensions.push('POSITION', 'DURATION');
+      if (operation.changes.trackId !== undefined) dimensions.push('TRACK', 'POSITION');
+      return dimensions.length === 0 ? [] : [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(dimensions), direct: true, via: null }];
+    }
+    case 'update_animation': {
+      const objectKind = operation.targetKind === 'VISUAL_OBJECT' ? 'VISUAL_OBJECT' : operation.targetKind === 'AUDIO_REGION' ? 'AUDIO_REGION' : null;
+      return objectKind === null ? [] : [{ objectKind, objectId: operation.targetId, dimensions: ['STYLE'], direct: true, via: operation.animationId }];
+    }
+    case 'update_audio_region': {
+      const dimensions: ObjectLockDimension[] = [];
+      if (operation.changes.trackId !== undefined) dimensions.push('TRACK', 'POSITION');
+      if (operation.changes.sequenceRange !== undefined || operation.changes.localRange !== undefined || operation.changes.timeBinding !== undefined) dimensions.push('POSITION', 'DURATION');
+      if (operation.changes.sourceStreamId !== undefined || operation.changes.channelMapping !== undefined) dimensions.push('ASSET');
+      if (operation.changes.gainDb !== undefined || operation.changes.pan !== undefined || operation.changes.fadeIn !== undefined || operation.changes.fadeOut !== undefined || operation.changes.parameters !== undefined) dimensions.push('STYLE');
+      return dimensions.length === 0 ? [] : [{ objectKind: 'AUDIO_REGION', objectId: operation.audioRegionId, dimensions: uniqueDimensions(dimensions), direct: true, via: null }];
+    }
     case 'restore_scene':
       return [sceneImpact(operation.sceneId, ['CONTENT', 'DURATION', 'ASSET', 'STYLE'])];
     case 'restore_project_version':
@@ -244,7 +263,17 @@ export function validateEditOperationCandidate(input: {
         operation: operation.op,
       });
     }
-    const impacts = expandImpacts(operationImpacts(operation, ordered, input.projectId), input.dependencies ?? []);
+    const directImpacts = operationImpacts(operation, ordered, input.projectId);
+    if (operation.op === 'restore_project_version') {
+      directImpacts.push(...[...lockMap.values()].map((lock) => ({
+        objectKind: lock.objectKind,
+        objectId: lock.objectId,
+        dimensions: [...lock.dimensions],
+        direct: true,
+        via: operation.versionId,
+      })));
+    }
+    const impacts = expandImpacts(directImpacts, input.dependencies ?? []);
     for (const impact of impacts) {
       const lock = lockMap.get(lockKey(impact.objectKind, impact.objectId));
       const legacySceneLocked = impact.objectKind === 'SCENE' && byId.get(impact.objectId)?.locked === true;
@@ -315,6 +344,9 @@ export function validateEditOperationCandidate(input: {
         else lockMap.set(key, { objectKind: operation.objectKind, objectId: operation.objectId, dimensions, reason: operation.reason !== undefined ? operation.reason : current?.reason });
         break;
       }
+      case 'update_clip':
+      case 'update_animation':
+      case 'update_audio_region': break;
       case 'restore_scene': requireUnlocked(requireScene(operation.sceneId, operation), operation); break;
       case 'restore_project_version': break;
       case 'update_script':

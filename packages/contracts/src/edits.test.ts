@@ -7,11 +7,14 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6 与 N01-07 对象锁的全部 15 类', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(15);
+  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 18 类', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(18);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
     expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
+    expect(EDIT_OPERATION_TYPES).toContain('update_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('update_animation');
+    expect(EDIT_OPERATION_TYPES).toContain('update_audio_region');
   });
 
   it('N01-06 注册表对每种操作恰有一项完整定义', () => {
@@ -95,5 +98,30 @@ describe('编辑协议契约（计划 §4.6）', () => {
       ...request,
       operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: 'scn_1', dimensions: ['UNKNOWN'], locked: true }],
     }).success).toBe(false);
+  });
+
+  it('N01-08 接受完整 Clip、关键帧和音频区域编辑，拒绝空变更与乱序关键帧', () => {
+    const request = editRequestSchema.parse(raw);
+    const mt = (ticks: string) => ({ ticks, timebase: { num: 1, den: 1_000 } });
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'update_clip', clipId: 'clp_1', changes: {
+        sourceRange: { start: mt('1000'), end: mt('4000') },
+        sequenceRange: { start: mt('0'), end: mt('3000') },
+        timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true },
+      } }],
+    }).success).toBe(true);
+    expect(editRequestSchema.safeParse({ ...request, operations: [{ op: 'update_clip', clipId: 'clp_1', changes: {} }] }).success).toBe(false);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'update_animation', animationId: 'ani_1', targetKind: 'VISUAL_OBJECT', targetId: 'obj_1', keyframes: [
+        { id: 'key_1', time: mt('1000'), value: 1, interpolation: 'LINEAR' },
+        { id: 'key_2', time: mt('500'), value: 2, interpolation: 'HOLD' },
+      ] }],
+    }).success).toBe(false);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'update_audio_region', audioRegionId: 'aud_1', changes: { gainDb: -6, pan: 0.25 } }],
+    }).success).toBe(true);
   });
 });
