@@ -14,7 +14,11 @@ import {
   createChannelRequestSchema,
   createCreatorIdentityRequestSchema,
   assetDetailSchema,
+  assetLifecycleSchema,
+  assetPrivacyDeletionResultSchema,
   assetSchema,
+  requestAssetPrivacyDeletionSchema,
+  updateAssetRightsRequestSchema,
   billingStatusSchema,
   catalogResponseSchema,
   chartBindingCheckSchema,
@@ -286,6 +290,10 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type AssetLifecycle,
+  type AssetPrivacyDeletionResult,
+  type RequestAssetPrivacyDeletion,
+  type UpdateAssetRightsRequest,
   type MediaIndexPage,
   type MediaRangeTag,
   type MediaSegmentSearchResponse,
@@ -748,6 +756,9 @@ export interface AncsClient {
     /** 从 Trash 恢复资产 */
     restore(workspaceId: string, assetId: string, options?: MutationOptions): Promise<Asset>;
     get(workspaceId: string, assetId: string): Promise<AssetDetail>;
+    lifecycle(workspaceId: string, assetId: string): Promise<AssetLifecycle>;
+    updateRights(workspaceId: string, assetId: string, input: UpdateAssetRightsRequest, options?: MutationOptions): Promise<AssetLifecycle>;
+    requestPrivacyDeletion(workspaceId: string, assetId: string, input: RequestAssetPrivacyDeletion, options?: MutationOptions): Promise<AssetPrivacyDeletionResult>;
     /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
     downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
     /** 播放 Signed URL：优先标准代理，必要时明确回退原件或返回尚未就绪状态。 */
@@ -2060,6 +2071,13 @@ export function createClient(options: ClientOptions): AncsClient {
           idempotencyKey: mutation?.idempotencyKey,
         }),
       get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
+      lifecycle: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/lifecycle`, assetLifecycleSchema),
+      updateRights: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/rights`, assetLifecycleSchema, {
+        body: input, bodySchema: updateAssetRightsRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
+      requestPrivacyDeletion: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/privacy-deletion`, assetPrivacyDeletionResultSchema, {
+        body: input, bodySchema: requestAssetPrivacyDeletionSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),
       playbackUrl: (workspaceId, assetId) =>

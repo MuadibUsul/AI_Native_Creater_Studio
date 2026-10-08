@@ -296,4 +296,40 @@ describe('Quiet Frame asset flow', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(card);
   });
+
+  it('edits real rights, removes only the selected scene reference, and requires typed privacy deletion confirmation', async () => {
+    const asset = { id: 'ast_rights', workspaceId: 'ws_1', projectId: 'prj_1', sceneId: null, assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', retentionClass: 'KEEP_USER_SOURCE', sensitivityClass: 'INTERNAL', privacyDeletionRequestedAt: null, metadata: { filename: 'licensed.png' }, currentVersionId: 'av_1', createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', license: { type: 'USER_OWNED', holder: 'Creator', attribution: null, sourceUrl: null, termsUrl: null, notes: null, confirmedBy: 'usr_1', confirmedAt: '2026-10-09T00:00:00.000Z', userOwnedDeclared: true, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: null } };
+    const reference = { kind: 'SCENE', projectId: 'prj_1', projectTitle: '项目一', projectRevision: 7, sceneId: 'scn_1', sceneRevision: 3, role: 'visual', projectVersionId: null, versionNumber: null, versionReason: null };
+    const lifecycle = { asset, licenseState: 'ACTIVE', references: [reference], derivations: [], gcProtected: true, gcProtectionReasons: ['ACTIVE_SCENE_REFERENCE'] };
+    const lifecycleRead = vi.fn().mockResolvedValueOnce(lifecycle).mockResolvedValue({ ...lifecycle, references: [], gcProtected: false, gcProtectionReasons: [] });
+    const updateRights = vi.fn().mockImplementation(async (_workspaceId, _assetId, input) => ({ ...lifecycle, asset: { ...asset, sensitivityClass: input.sensitivityClass, license: { ...asset.license, ...input } } }));
+    const edit = vi.fn().mockResolvedValue({});
+    const requestPrivacyDeletion = vi.fn().mockResolvedValue({ assetId: asset.id, status: 'SCHEDULED', requestedAt: '2026-10-09T01:00:00.000Z', missingDependencies: [] });
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]), lifecycle: lifecycleRead, updateRights, requestPrivacyDeletion,
+        get: vi.fn().mockResolvedValue({ ...asset, versions: [{ id: 'av_1', assetId: asset.id, versionNumber: 1, storageKey: 'hidden', mimeType: 'image/png', sizeBytes: 10, checksumSha256: null, durationMs: null, width: null, height: null, status: 'READY', probeStatus: 'NOT_REQUIRED', mediaProbe: null, metadata: {}, createdAt: asset.createdAt }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ assetId: asset.id, versionId: 'av_1', url: 'https://storage.local/licensed.png', expiresAt: '2099-01-01T00:00:00.000Z' }),
+      },
+      projects: { edit }, billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 licensed.png' }));
+    expect((await screen.findByRole('region', { name: '来源、许可与媒体生命周期' })).textContent).toContain('原件受保护');
+    await userEvent.click(screen.getByRole('button', { name: '编辑来源与许可' }));
+    await userEvent.selectOptions(screen.getByLabelText('敏感级别'), 'SENSITIVE');
+    await userEvent.click(screen.getByRole('button', { name: '保存许可' }));
+    await waitFor(() => expect(updateRights).toHaveBeenCalledWith('ws_1', asset.id, expect.objectContaining({ sensitivityClass: 'SENSITIVE', permittedUses: ['EDIT', 'PUBLISH'] })));
+    await userEvent.click(screen.getByRole('button', { name: '移除这一处引用' }));
+    await waitFor(() => expect(edit).toHaveBeenCalledWith('prj_1', expect.objectContaining({ baseProjectRevision: 7, expectedSceneRevisions: { scn_1: 3 }, operations: [{ op: 'replace_asset', sceneId: 'scn_1', role: 'visual', newAssetId: null }] })));
+    await userEvent.click(screen.getByText('删除与隐私'));
+    await userEvent.click(screen.getByRole('button', { name: '请求隐私删除' }));
+    const confirm = screen.getByLabelText('输入素材 ID 以确认');
+    await userEvent.type(screen.getByLabelText('删除原因'), '本人要求删除');
+    expect(screen.getByRole('button', { name: '确认隐私删除' }).hasAttribute('disabled')).toBe(true);
+    await userEvent.type(confirm, asset.id);
+    await userEvent.click(screen.getByRole('button', { name: '确认隐私删除' }));
+    await waitFor(() => expect(requestPrivacyDeletion).toHaveBeenCalledWith('ws_1', asset.id, { confirmationAssetId: asset.id, reason: '本人要求删除' }));
+    expect(await screen.findByText(/隐私删除已排入清理/)).toBeTruthy();
+  });
 });

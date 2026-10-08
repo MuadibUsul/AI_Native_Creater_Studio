@@ -1,4 +1,5 @@
-import { bigint, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { user } from './auth.js';
 import { projects, scenes } from './projects.js';
 import { workspaces } from './workspaces.js';
@@ -32,6 +33,9 @@ export const assets = pgTable(
     retentionClass: text('retention_class').notNull(),
     /** LicenseMetadata（授权/来源审计） */
     license: jsonb('license').notNull(),
+    sensitivityClass: text('sensitivity_class').notNull().default('INTERNAL'),
+    privacyDeletionRequestedAt: timestamp('privacy_deletion_requested_at', { withTimezone: true }),
+    privacyDeletionRequestedBy: text('privacy_deletion_requested_by').references(() => user.id, { onDelete: 'set null' }),
     metadata: jsonb('metadata').notNull().default({}),
     /** 当前版本（无 FK，见文件头注释） */
     currentVersionId: text('current_version_id'),
@@ -45,6 +49,7 @@ export const assets = pgTable(
     index('assets_workspace_idx').on(table.workspaceId),
     index('assets_project_idx').on(table.projectId),
     index('assets_workspace_type_idx').on(table.workspaceId, table.assetType),
+    check('assets_sensitivity_class_ck', sql`${table.sensitivityClass} in ('PUBLIC','INTERNAL','SENSITIVE','RESTRICTED')`),
   ],
 );
 
@@ -80,6 +85,27 @@ export const assetVersions = pgTable(
     /** workspace 内哈希去重查询（§26.3） */
     index('asset_versions_workspace_checksum_idx').on(table.workspaceId, table.checksumSha256),
     index('asset_versions_storage_key_idx').on(table.storageKey),
+  ],
+);
+
+export const assetDerivationEdges = pgTable(
+  'asset_derivation_edges',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    sourceAssetId: text('source_asset_id').notNull().references(() => assets.id, { onDelete: 'restrict' }),
+    sourceAssetVersionId: text('source_asset_version_id').notNull().references(() => assetVersions.id, { onDelete: 'restrict' }),
+    derivedAssetId: text('derived_asset_id').notNull().references(() => assets.id, { onDelete: 'cascade' }),
+    derivedAssetVersionId: text('derived_asset_version_id').notNull().references(() => assetVersions.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('asset_derivation_edges_identity_uq').on(table.sourceAssetVersionId, table.derivedAssetVersionId, table.kind),
+    index('asset_derivation_edges_workspace_source_idx').on(table.workspaceId, table.sourceAssetId),
+    index('asset_derivation_edges_workspace_derived_idx').on(table.workspaceId, table.derivedAssetId),
+    check('asset_derivation_edges_distinct_ck', sql`${table.sourceAssetVersionId} <> ${table.derivedAssetVersionId}`),
+    check('asset_derivation_edges_kind_ck', sql`length(btrim(${table.kind})) between 1 and 80`),
   ],
 );
 

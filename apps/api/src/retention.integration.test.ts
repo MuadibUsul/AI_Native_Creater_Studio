@@ -8,6 +8,7 @@ import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import {
   assetVersions,
   assets,
+  auditLog,
   createDb,
   idempotencyKeys,
   projectVersions,
@@ -17,27 +18,32 @@ import {
   runMigrations,
   scenes,
   uploadIntents,
+  user,
   workspaces,
   type DbHandle,
 } from '@ancs/db';
 import {
   addScene,
+  assertProjectVersionAssetRights,
   confirmUpload,
   createChannel,
   createProject,
   createProjectVersion,
   createUploadIntent,
   getAsset,
+  getAssetLifecycle,
   listAssets,
   listProjects,
   listTrashedAssets,
   listTrashedProjects,
   processEdits,
+  requestAssetPrivacyDeletion,
   restoreAsset,
   restoreProject,
   runRetentionSweep,
   softDeleteAsset,
   softDeleteProject,
+  updateAssetRights,
   type DomainDeps,
 } from '@ancs/domain';
 
@@ -401,5 +407,60 @@ describe('TTL 与过期收敛', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.requestHash).toBe('h2');
     void projects;
+  });
+});
+
+describe('N02-07 来源、许可与隐私删除', () => {
+  it('保存权利与引用证据；到期许可阻止发布；隐私删除先报告依赖再清理原件并留审计', async () => {
+    const { workspaceId, projectId, sceneId, revision } = await makeWorkspace();
+    const uploaded = await uploadReadyAsset(workspaceId, projectId, 77);
+    const userId = `usr_${randomUUID()}`;
+    await handle.db.insert(user).values({ id: userId, name: '权利测试用户', email: `${userId}@example.test` });
+    const future = new Date(Date.now() + DAY).toISOString();
+    const rights = await updateAssetRights(deps(), {
+      workspaceId, assetId: uploaded.assetId, userId,
+      request: { type: 'USER_OWNED', holder: '测试权利人', attribution: '© 测试权利人', sourceUrl: null, termsUrl: null, notes: null, userOwnedDeclared: true, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: future, sensitivityClass: 'SENSITIVE' },
+    });
+    expect(rights.asset.sensitivityClass).toBe('SENSITIVE');
+    expect(rights.licenseState).toBe('ACTIVE');
+
+    await processEdits(deps(), {
+      workspaceId, projectId, actor: { type: 'USER', id: userId },
+      request: { baseProjectRevision: revision, expectedSceneRevisions: { [sceneId]: 1 }, operations: [{ op: 'replace_asset', sceneId, role: 'visual', newAssetId: uploaded.assetId }], idempotencyKey: `idem_rights_bind_${randomUUID()}` },
+    });
+    const version = await createProjectVersion(deps(), { workspaceId, projectId, reason: 'PUBLISH' });
+    const lifecycle = await getAssetLifecycle(deps(), { workspaceId, assetId: uploaded.assetId });
+    expect(lifecycle.references.some((reference) => reference.kind === 'SCENE')).toBe(true);
+    expect(lifecycle.references.some((reference) => reference.projectVersionId === version.id)).toBe(true);
+    expect(lifecycle.gcProtected).toBe(true);
+
+    const deferred = await requestAssetPrivacyDeletion(deps(), {
+      workspaceId, assetId: uploaded.assetId, userId,
+      request: { confirmationAssetId: uploaded.assetId, reason: '用户请求删除原始素材' },
+    });
+    expect(deferred.status).toBe('DEFERRED_BY_REFERENCES');
+    expect(deferred.missingDependencies.length).toBeGreaterThanOrEqual(2);
+    expect((await getAsset(deps(), { workspaceId, assetId: uploaded.assetId })).id).toBe(uploaded.assetId);
+    expect(await handle.db.select().from(auditLog).where(eq(auditLog.targetId, uploaded.assetId))).toHaveLength(2);
+
+    await updateAssetRights(deps(), {
+      workspaceId, assetId: uploaded.assetId, userId,
+      request: { type: 'LICENSED', holder: '测试权利人', attribution: null, sourceUrl: null, termsUrl: null, notes: null, userOwnedDeclared: false, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: new Date(Date.now() - DAY).toISOString(), sensitivityClass: 'SENSITIVE' },
+    });
+    await expect(assertProjectVersionAssetRights(deps(), { workspaceId, projectId, projectVersionId: version.id })).rejects.toMatchObject({ details: { reason: 'ASSET_RIGHTS_BLOCK_PUBLICATION' } });
+
+    await processEdits(deps(), {
+      workspaceId, projectId, actor: { type: 'USER', id: userId },
+      request: { baseProjectRevision: revision + 1, expectedSceneRevisions: { [sceneId]: 2 }, operations: [{ op: 'replace_asset', sceneId, role: 'visual', newAssetId: null }], idempotencyKey: `idem_rights_unbind_${randomUUID()}` },
+    });
+    await handle.db.delete(projectVersions).where(eq(projectVersions.id, version.id));
+    const scheduled = await requestAssetPrivacyDeletion(deps(), {
+      workspaceId, assetId: uploaded.assetId, userId,
+      request: { confirmationAssetId: uploaded.assetId, reason: '依赖已解除，执行隐私删除' },
+    });
+    expect(scheduled.status).toBe('SCHEDULED');
+    const sweep = await runRetentionSweep(deps(), { now: new Date() });
+    expect(sweep.trashAssetsPurged).toBe(1);
+    expect((await storage.probeObject(uploaded.storageKey)).exists).toBe(false);
   });
 });

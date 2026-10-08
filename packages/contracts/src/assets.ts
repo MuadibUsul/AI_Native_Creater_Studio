@@ -208,6 +208,10 @@ export const ASSET_DEFAULT_RETENTION: Readonly<Record<AssetType, RetentionClass>
 
 /** 授权元数据（LicenseMetadata）：用于资产来源/授权状态审计（§24、§67） */
 export const LICENSE_TYPES = ['USER_OWNED', 'LICENSED', 'PUBLIC_DOMAIN', 'PROVIDER_TERMS', 'UNKNOWN'] as const;
+export const ASSET_PERMITTED_USES = ['EDIT', 'PUBLISH', 'COMMERCIAL', 'AI_ANALYSIS', 'MODEL_TRAINING'] as const;
+export const assetPermittedUseSchema = z.enum(ASSET_PERMITTED_USES);
+export const ASSET_SENSITIVITY_CLASSES = ['PUBLIC', 'INTERNAL', 'SENSITIVE', 'RESTRICTED'] as const;
+export const assetSensitivityClassSchema = z.enum(ASSET_SENSITIVITY_CLASSES);
 export const licenseMetadataSchema = z.object({
   type: z.enum(LICENSE_TYPES),
   holder: z.string().max(200).nullable().default(null),
@@ -217,6 +221,9 @@ export const licenseMetadataSchema = z.object({
   notes: z.string().max(1000).nullable().default(null),
   confirmedBy: z.string().nullable().default(null),
   confirmedAt: isoDateTimeSchema.nullable().default(null),
+  userOwnedDeclared: z.boolean().default(false),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length).default(['EDIT', 'PUBLISH']),
+  expiresAt: isoDateTimeSchema.nullable().default(null),
 });
 
 export type LicenseMetadata = z.infer<typeof licenseMetadataSchema>;
@@ -229,7 +236,31 @@ export const licenseInputSchema = z.object({
   sourceUrl: z.string().max(2000).optional(),
   termsUrl: z.string().max(2000).optional(),
   notes: z.string().max(1000).optional(),
+  userOwnedDeclared: z.boolean().optional(),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length).optional(),
+  expiresAt: isoDateTimeSchema.nullable().optional(),
 });
+
+export const updateAssetRightsRequestSchema = z.object({
+  type: z.enum(LICENSE_TYPES),
+  holder: z.string().trim().max(200).nullable(),
+  attribution: z.string().trim().max(500).nullable(),
+  sourceUrl: z.string().url().max(2000).nullable(),
+  termsUrl: z.string().url().max(2000).nullable(),
+  notes: z.string().trim().max(1000).nullable(),
+  userOwnedDeclared: z.boolean(),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length),
+  expiresAt: isoDateTimeSchema.nullable(),
+  sensitivityClass: assetSensitivityClassSchema,
+}).strict().superRefine((value, context) => {
+  if (value.type === 'USER_OWNED' && !value.userOwnedDeclared) {
+    context.addIssue({ code: 'custom', path: ['userOwnedDeclared'], message: '自有素材必须明确声明权利' });
+  }
+  if (value.type !== 'USER_OWNED' && value.userOwnedDeclared) {
+    context.addIssue({ code: 'custom', path: ['userOwnedDeclared'], message: '仅自有素材可作自有权利声明' });
+  }
+});
+export type UpdateAssetRightsRequest = z.infer<typeof updateAssetRightsRequestSchema>;
 
 export const assetVersionSchema = z.object({
   id: opaqueIdSchema,
@@ -269,6 +300,8 @@ export const assetSchema = z.object({
   status: assetStatusSchema,
   retentionClass: retentionClassSchema,
   license: licenseMetadataSchema,
+  sensitivityClass: assetSensitivityClassSchema.default('INTERNAL'),
+  privacyDeletionRequestedAt: isoDateTimeSchema.nullable().default(null),
   metadata: z.record(z.string(), z.unknown()).default({}),
   currentVersionId: opaqueIdSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
@@ -282,6 +315,56 @@ export const assetDetailSchema = assetSchema.extend({
 });
 
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
+
+export const assetReferenceSchema = z.object({
+  kind: z.enum(['SCENE', 'PROJECT_VERSION']),
+  projectId: opaqueIdSchema,
+  projectTitle: z.string().min(1),
+  projectRevision: z.number().int().nonnegative(),
+  sceneId: opaqueIdSchema.nullable(),
+  sceneRevision: z.number().int().nonnegative().nullable(),
+  role: assetRoleSchema.nullable(),
+  projectVersionId: opaqueIdSchema.nullable(),
+  versionNumber: z.number().int().positive().nullable(),
+  versionReason: z.string().nullable(),
+});
+export type AssetReference = z.infer<typeof assetReferenceSchema>;
+
+export const assetDerivationSchema = z.object({
+  direction: z.enum(['SOURCE', 'DERIVED']),
+  kind: z.string().min(1).max(80),
+  assetId: opaqueIdSchema,
+  assetVersionId: opaqueIdSchema,
+  relatedAssetId: opaqueIdSchema,
+  relatedAssetVersionId: opaqueIdSchema,
+  createdAt: isoDateTimeSchema,
+});
+export type AssetDerivation = z.infer<typeof assetDerivationSchema>;
+
+export const assetLicenseStateSchema = z.enum(['ACTIVE', 'EXPIRED', 'PUBLISH_NOT_PERMITTED', 'UNCONFIRMED']);
+export const assetLifecycleSchema = z.object({
+  asset: assetSchema,
+  licenseState: assetLicenseStateSchema,
+  references: z.array(assetReferenceSchema),
+  derivations: z.array(assetDerivationSchema),
+  gcProtected: z.boolean(),
+  gcProtectionReasons: z.array(z.enum(['ACTIVE_SCENE_REFERENCE', 'FROZEN_VERSION_REFERENCE', 'DERIVATION_REFERENCE'])),
+});
+export type AssetLifecycle = z.infer<typeof assetLifecycleSchema>;
+
+export const requestAssetPrivacyDeletionSchema = z.object({
+  confirmationAssetId: opaqueIdSchema,
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+export type RequestAssetPrivacyDeletion = z.infer<typeof requestAssetPrivacyDeletionSchema>;
+
+export const assetPrivacyDeletionResultSchema = z.object({
+  assetId: opaqueIdSchema,
+  status: z.enum(['SCHEDULED', 'DEFERRED_BY_REFERENCES']),
+  requestedAt: isoDateTimeSchema,
+  missingDependencies: z.array(assetReferenceSchema),
+});
+export type AssetPrivacyDeletionResult = z.infer<typeof assetPrivacyDeletionResultSchema>;
 
 /** 单文件上限 5 GiB（§26.1：大文件必须直传对象存储，不经 Web App Server） */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;

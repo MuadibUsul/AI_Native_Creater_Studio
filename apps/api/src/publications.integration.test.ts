@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { channelStyleVersions, createDb, plans, providerConnections, publications, redactDatabaseUrl, renderApprovals, renders, resolveTestDatabaseUrl, runMigrations, scenes, videoPerformance, workspaces, type DbHandle } from '@ancs/db';
+import { assetVersions, assets, channelStyleVersions, createDb, plans, providerConnections, publications, redactDatabaseUrl, renderApprovals, renders, resolveTestDatabaseUrl, runMigrations, scenes, videoPerformance, workspaces, type DbHandle } from '@ancs/db';
 import { createMockDistributionProvider, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { and, eq } from 'drizzle-orm';
@@ -144,6 +144,30 @@ async function expectApiError(promise: Promise<unknown>, status: number, reason?
 }
 
 describe('发布核心（P13-01）', () => {
+  it('N02-07：冻结版本使用到期素材时，新发布在调用 Provider 前被阻止', async () => {
+    const client = await newClient('pub-expired-rights');
+    const workspace = await client.workspaces.create({ name: `许可-${randomUUID().slice(0, 8)}` });
+    const channel = await client.channels.create(workspace.id, { name: '栏目' });
+    const project = await client.projects.create(workspace.id, { title: '许可到期项目', channelId: channel.id });
+    const assetId = `ast_${randomUUID()}`;
+    const assetVersionId = `av_${randomUUID()}`;
+    await handle.db.insert(assets).values({
+      id: assetId, workspaceId: workspace.id, projectId: project.id, assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', retentionClass: 'KEEP_USER_SOURCE', currentVersionId: assetVersionId,
+      license: { type: 'LICENSED', holder: 'Expired licensor', attribution: null, sourceUrl: null, termsUrl: null, notes: null, confirmedBy: 'test', confirmedAt: '2026-01-01T00:00:00.000Z', userOwnedDeclared: false, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: '2026-02-01T00:00:00.000Z' },
+    });
+    await handle.db.insert(assetVersions).values({ id: assetVersionId, assetId, workspaceId: workspace.id, versionNumber: 1, storageKey: `tests/${assetVersionId}`, mimeType: 'video/mp4', sizeBytes: 1, status: 'READY' });
+    const sceneId = `scn_${randomUUID()}`;
+    await handle.db.insert(scenes).values({ id: sceneId, workspaceId: workspace.id, projectId: project.id, position: 0, startMs: 0, durationMs: 10_000, semanticType: 'HOST_STATEMENT', sceneType: 'HOST_FULL', assetBindings: [{ assetId, role: 'visual' }] });
+    const version = await client.projects.versions.create(project.id, { reason: 'FINAL_RENDER' });
+    const renderId = `rnd_${randomUUID()}`;
+    const outputAssetId = `ast_out_${randomUUID()}`;
+    await handle.db.insert(renders).values({ id: renderId, workspaceId: workspace.id, projectId: project.id, profile: '1080p', status: 'READY', input: { projectVersionId: version.id }, manifestHash: 'rights-manifest', outputAssetIds: [outputAssetId] });
+    await handle.db.insert(renderApprovals).values({ id: `rapp_${randomUUID()}`, workspaceId: workspace.id, projectId: project.id, renderId, decision: 'APPROVED', manifestHashAtApproval: 'rights-manifest', projectVersionIdAtApproval: version.id, projectRevisionAtApproval: 1 });
+    await expectApiError(client.publications.request(workspace.id, project.id, {
+      publicationKey: { platformId: 'mock.platform', accountId: 'acc-rights', projectVersionId: version.id, outputAssetId }, title: '应被许可闸门阻止',
+    }), 409, 'ASSET_RIGHTS_BLOCK_PUBLICATION');
+  });
+
   it('未批准版本不能发布：无批准 → 409；manifest 漂移 → 409；输出资产不属于该版本 → 422', async () => {
     const client = await newClient('pub-gates');
     // 无批准

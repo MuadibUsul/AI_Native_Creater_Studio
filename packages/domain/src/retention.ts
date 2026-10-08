@@ -9,7 +9,7 @@ import {
   type Project,
   type RetentionClass,
 } from '@ancs/contracts';
-import { assetVersions, assets, idempotencyKeys, projectVersions, projects, scenes, uploadIntents } from '@ancs/db';
+import { assetDerivationEdges, assetVersions, assets, idempotencyKeys, projectVersions, projects, scenes, uploadIntents } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { licenseMetadataSchema } from '@ancs/contracts';
 
@@ -92,6 +92,8 @@ const toAssetDto = (row: typeof assets.$inferSelect): Asset =>
     status: row.status,
     retentionClass: row.retentionClass,
     license: licenseMetadataSchema.parse(row.license),
+    sensitivityClass: row.sensitivityClass,
+    privacyDeletionRequestedAt: row.privacyDeletionRequestedAt?.toISOString() ?? null,
     metadata: row.metadata,
     currentVersionId: row.currentVersionId,
     createdAt: row.createdAt.toISOString(),
@@ -223,6 +225,14 @@ export async function isAssetReferencedByVersionSnapshot(
   return Number(rows[0]?.count ?? 0) > 0;
 }
 
+export async function isAssetReferencedByDerivation(deps: DomainDeps, workspaceId: string, assetId: string): Promise<boolean> {
+  const rows = await deps.db.select({ count: sql<number>`count(*)::int` }).from(assetDerivationEdges).where(and(
+    eq(assetDerivationEdges.workspaceId, workspaceId),
+    eq(assetDerivationEdges.sourceAssetId, assetId),
+  ));
+  return Number(rows[0]?.count ?? 0) > 0;
+}
+
 /** 对象是否仍被其他版本行引用（去重共享时不得删除对象，§26.3）。 */
 async function storageKeyStillReferenced(deps: DomainDeps, key: string, excludedVersionIds: string[]): Promise<boolean> {
   const rows = await deps.db
@@ -297,7 +307,8 @@ export async function runRetentionSweep(
   async function purgeAssetRow(assetRow: typeof assets.$inferSelect): Promise<'purged' | 'skipped' | 'missing'> {
     const bound = await isAssetBoundToScene(deps, assetRow.workspaceId, assetRow.id);
     const inSnapshot = bound ? false : await isAssetReferencedByVersionSnapshot(deps, assetRow.workspaceId, assetRow.id);
-    if (bound || inSnapshot) return 'skipped';
+    const inDerivation = bound || inSnapshot ? false : await isAssetReferencedByDerivation(deps, assetRow.workspaceId, assetRow.id);
+    if (bound || inSnapshot || inDerivation) return 'skipped';
 
     const versionRows = await deps.db
       .select({ id: assetVersions.id, storageKey: assetVersions.storageKey })
@@ -391,7 +402,18 @@ export async function runRetentionSweep(
     }
   }
 
-  // 4) Trash 到期资产
+  // 4) 显式隐私删除：无引用时无需等待普通 Trash TTL；有引用时保留原件并继续报告跳过。
+  const privacyAssets = await deps.db.select().from(assets).where(and(
+    isNotNull(assets.deletedAt),
+    isNotNull(assets.privacyDeletionRequestedAt),
+  )).orderBy(asc(assets.privacyDeletionRequestedAt)).limit(limit);
+  for (const assetRow of privacyAssets) {
+    const outcome = await purgeAssetRow(assetRow);
+    if (outcome === 'purged') report.trashAssetsPurged += 1;
+    if (outcome === 'skipped') report.assetsSkippedByReference += 1;
+  }
+
+  // 5) Trash 到期资产
   const trashedAssets = await deps.db
     .select()
     .from(assets)
@@ -404,7 +426,7 @@ export async function runRetentionSweep(
     if (outcome === 'skipped') report.assetsSkippedByReference += 1;
   }
 
-  // 5) 保留类 TTL 到期资产（未进 Trash 的缓存类，如 DRAFT_RENDER_30D）
+  // 6) 保留类 TTL 到期资产（未进 Trash 的缓存类，如 DRAFT_RENDER_30D）
   const ttlCandidates = await deps.db
     .select()
     .from(assets)

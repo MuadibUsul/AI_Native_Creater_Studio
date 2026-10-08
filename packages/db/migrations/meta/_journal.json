@@ -484,6 +484,13 @@
       "when": 1791496234211,
       "tag": "0068_easy_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1791499449507,
+      "tag": "0069_fluffy_power_pack",
+      "breakpoints": true
     }
   ]
 }

@@ -122,6 +122,8 @@ const toAssetDto = (row: typeof assets.$inferSelect): Asset =>
     status: row.status,
     retentionClass: row.retentionClass,
     license: licenseMetadataSchema.parse(row.license),
+    sensitivityClass: row.sensitivityClass,
+    privacyDeletionRequestedAt: row.privacyDeletionRequestedAt?.toISOString() ?? null,
     metadata: row.metadata,
     currentVersionId: row.currentVersionId,
     createdAt: row.createdAt.toISOString(),
@@ -159,10 +161,19 @@ function defaultLicense(input: CreateUploadIntentInput, origin: AssetOrigin, use
       notes: input.license.notes ?? null,
       confirmedBy: userId,
       confirmedAt: now,
+      userOwnedDeclared: input.license.type === 'USER_OWNED' ? (input.license.userOwnedDeclared ?? true) : false,
+      permittedUses: input.license.permittedUses ?? ['EDIT', 'PUBLISH'],
+      expiresAt: input.license.expiresAt ?? null,
     });
   }
   const fallback = origin === 'PROVIDER_GENERATED' || origin === 'SYSTEM_RENDER' ? 'PROVIDER_TERMS' : 'USER_OWNED';
-  return licenseMetadataSchema.parse({ type: fallback, confirmedBy: userId, confirmedAt: now });
+  return licenseMetadataSchema.parse({
+    type: fallback,
+    confirmedBy: userId,
+    confirmedAt: now,
+    userOwnedDeclared: fallback === 'USER_OWNED',
+    permittedUses: ['EDIT', 'PUBLISH'],
+  });
 }
 
 async function loadAssetRow(

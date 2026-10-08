@@ -3,6 +3,10 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   assetDetailSchema,
+  assetLifecycleSchema,
+  assetPrivacyDeletionResultSchema,
+  requestAssetPrivacyDeletionSchema,
+  updateAssetRightsRequestSchema,
   assetSchema,
   assetTypeSchema,
   confirmUploadRequestSchema,
@@ -36,6 +40,7 @@ import {
   createAssetPlaybackUrl,
   createUploadIntent,
   getAsset,
+  getAssetLifecycle,
   getUploadIntentStatus,
   listAssets,
   restoreAsset,
@@ -51,6 +56,8 @@ import {
   correctTranscriptSegment,
   updateTranscriptTerminology,
   softDeleteAsset,
+  requestAssetPrivacyDeletion,
+  updateAssetRights,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
@@ -364,6 +371,39 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return getAsset(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/lifecycle',
+    {
+      schema: { tags: ['assets'], summary: '读取素材权利、引用保护与派生血缘', params: assetParamsSchema, response: { 200: assetLifecycleSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return getAssetLifecycle(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.put(
+    '/workspaces/:id/assets/:assetId/rights',
+    {
+      schema: { tags: ['assets'], summary: '确认来源、允许用途、署名、敏感级别与许可期限', params: assetParamsSchema, body: updateAssetRightsRequestSchema, response: { 200: assetLifecycleSchema, 422: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return updateAssetRights(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/privacy-deletion',
+    {
+      schema: { tags: ['assets'], summary: '请求隐私删除；存在场景或冻结版本依赖时返回逐项缺失依赖', params: assetParamsSchema, body: requestAssetPrivacyDeletionSchema, response: { 200: assetPrivacyDeletionResultSchema, 422: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return requestAssetPrivacyDeletion(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
     },
   );
 

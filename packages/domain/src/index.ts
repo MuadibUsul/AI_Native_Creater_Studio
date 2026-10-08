@@ -499,6 +499,7 @@ export {
   DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
   isAssetBoundToScene,
   isAssetReferencedByVersionSnapshot,
+  isAssetReferencedByDerivation,
   listTrashedAssets,
   listTrashedProjects,
   restoreAsset,
@@ -528,6 +529,13 @@ export {
   updateTranscriptTerminology,
 } from './media-transcripts.js';
 export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMediaSegments } from './media-search.js';
+export {
+  assertProjectVersionAssetRights,
+  getAssetLifecycle,
+  listAssetReferences,
+  requestAssetPrivacyDeletion,
+  updateAssetRights,
+} from './asset-lifecycle.js';
 export {
   assertAssetBindable,
   buildStorageKey,

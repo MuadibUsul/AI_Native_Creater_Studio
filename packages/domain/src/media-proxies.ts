@@ -16,7 +16,7 @@ import {
   type MediaProxyTranscodeResult,
   type SourceMediaProbeResult,
 } from '@ancs/contracts';
-import { assetVersions, assets, mediaDerivatives } from '@ancs/db';
+import { assetDerivationEdges, assetVersions, assets, mediaDerivatives } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { createJobInTx } from './jobs.js';
 
@@ -85,6 +85,16 @@ export async function scheduleMediaProxyInTx(
     metadata: { internalDerivative: true, sourceAssetVersionId: input.sourceVersion.id, profileKey },
     createdAt: now,
   }).onConflictDoNothing({ target: assetVersions.id });
+  await tx.insert(assetDerivationEdges).values({
+    id: stableId('adl', input.sourceVersion.id, profileKey),
+    workspaceId: input.workspaceId,
+    sourceAssetId: input.sourceAsset.id,
+    sourceAssetVersionId: input.sourceVersion.id,
+    derivedAssetId: outputAssetId,
+    derivedAssetVersionId: outputAssetVersionId,
+    kind: 'MEDIA_PROXY',
+    createdAt: now,
+  }).onConflictDoNothing({ target: [assetDerivationEdges.sourceAssetVersionId, assetDerivationEdges.derivedAssetVersionId, assetDerivationEdges.kind] });
   const inserted = await tx.insert(mediaDerivatives).values({
     id: derivativeId,
     workspaceId: input.workspaceId,
