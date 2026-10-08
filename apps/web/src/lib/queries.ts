@@ -190,9 +190,26 @@ export function useAdminAbuseFlags() {
   return useQuery({ queryKey: ['admin', 'abuse-flags'], queryFn: () => client.admin.abuseFlags({ limit: 50 }), retry: false, refetchInterval: 15000 });
 }
 
-export function useAdminStorage() {
+export function useAdminProjects(workspaceId: string, sessionId: string, request: number) {
   const client = useAncsClient();
-  return useQuery({ queryKey: ['admin', 'storage'], queryFn: () => client.admin.storage({ limit: 10 }), retry: false });
+  return useQuery({
+    queryKey: ['admin', 'projects', sessionId, workspaceId, request],
+    queryFn: () => client.admin.projects({ workspaceId, limit: 50 }),
+    enabled: workspaceId !== '' && sessionId !== '',
+    retry: false,
+    gcTime: 0,
+  });
+}
+
+export function useAdminStorage(workspaceId: string, sessionId: string, request: number) {
+  const client = useAncsClient();
+  return useQuery({
+    queryKey: ['admin', 'storage', sessionId, workspaceId, request],
+    queryFn: () => client.admin.storage({ workspaceId }),
+    enabled: workspaceId !== '' && sessionId !== '',
+    retry: false,
+    gcTime: 0,
+  });
 }
 
 export function useAdminProviderStatus() {
@@ -205,12 +222,13 @@ export function useAdminOpsAuditLog() {
   return useQuery({ queryKey: ['admin', 'audit-log'], queryFn: () => client.admin.auditLog({ limit: 50 }), retry: false, refetchInterval: 15000 });
 }
 
-export function useAdminSupportGrants(workspaceId: string) {
+export function useAdminSupportGrants(workspaceId: string, ticketId: string, sessionId: string, request: number) {
   const client = useAncsClient();
   return useQuery({
-    queryKey: ['admin', 'support-grants', workspaceId],
-    queryFn: () => client.admin.supportGrants(workspaceId),
-    enabled: workspaceId !== '',
+    queryKey: ['admin', 'support-grants', sessionId, workspaceId, ticketId, request],
+    queryFn: () => client.admin.supportGrants(workspaceId, ticketId),
+    enabled: workspaceId !== '' && ticketId !== '' && sessionId !== '',
     retry: false,
+    gcTime: 0,
   });
 }

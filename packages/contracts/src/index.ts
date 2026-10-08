@@ -183,6 +183,12 @@ export {
 export type { OpsAction, OpsScopeKind, OpsResourceKind, OpsPermissionTarget, OpsPermissionDenial, OpsPermissionDecision } from './ops-permissions.js';
 export { opsJobSummarySchema } from './ops.js';
 export type { OpsJobSummary } from './ops.js';
+export { opsProjectSummarySchema, opsProjectListQuerySchema } from './ops-project.js';
+export type { OpsProjectSummary, OpsProjectListQuery } from './ops-project.js';
+export { opsWorkspaceStorageSummarySchema } from './ops-storage.js';
+export type { OpsWorkspaceStorageSummary } from './ops-storage.js';
+export { opsSupportGrantSummarySchema, opsSupportGrantListQuerySchema } from './ops-support-grants.js';
+export type { OpsSupportGrantSummary } from './ops-support-grants.js';
 export { OPS_PERMISSION_POLICY_STATUSES, opsPermissionPolicyStatusSchema, opsPermissionPolicyVersionSchema, OPS_EMERGENCY_ACTIONS, opsEmergencyActionSchema, opsEmergencyTargetKindSchema, opsEmergencyGrantSchema, OPS_EMERGENCY_DENIALS, opsEmergencyEligibilitySchema } from './ops-governance.js';
 export type { OpsPermissionPolicyVersion, OpsEmergencyAction, OpsEmergencyGrant, OpsEmergencyEligibility } from './ops-governance.js';
 

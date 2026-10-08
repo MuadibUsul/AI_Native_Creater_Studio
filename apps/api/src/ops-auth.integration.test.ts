@@ -502,6 +502,9 @@ describe('N15-02 独立运营认证', () => {
        expect(await status(productionClient.admin.overview())).toBe(403);
        expect(await status(productionClient.admin.users())).toBe(403);
        expect(await status(productionClient.admin.jobs({ workspaceId: `ws_${randomUUID()}` }))).toBe(403);
+       expect(await status(productionClient.admin.projects({ workspaceId: `ws_${randomUUID()}` }))).toBe(403);
+       expect(await status(productionClient.admin.storage({ workspaceId: `ws_${randomUUID()}` }))).toBe(403);
+       expect(await status(productionClient.admin.supportGrants(`ws_${randomUUID()}`, 'ticket-production-test'))).toBe(403);
        expect(await status(productionClient.admin.supportView(`ws_${randomUUID()}`, 'ticket-production-test'))).toBe(403);
        expect(await status(productionClient.admin.retryJob('job_missing'))).toBe(403);
        await productionClient.ops.reauthenticate({ code: testTotpCode(fixture.enrollment.totpUri) });

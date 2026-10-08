@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 import { DEFAULT_CHANNEL_STYLE } from '../../packages/contracts/dist/index.js';
 
 const baseUrl = process.env.ANCS_WEB_URL ?? 'http://127.0.0.1:4200';
-const evidenceDir = resolve('.artifacts/n16-03-layout');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? '.artifacts/n16-03-layout');
 await mkdir(evidenceDir, { recursive: true });
 const profile = await mkdtemp(resolve(evidenceDir, 'chrome-protected-'));
 assert.ok(profile.startsWith(`${evidenceDir}${sep}`));
@@ -42,7 +42,7 @@ const routes = new Map([
 const scenarios = [
   { name: 'workspace', path: '/', ready: '.project-card' },
   { name: 'studio', path: `/w/${workspaceId}/p/${projectId}/storyboard`, ready: '.scene-rail .scene-card' },
-  { name: 'ops-denied', path: '/admin', ready: 'text=需要运营身份与多因素验证' },
+  { name: 'ops-denied', path: '/admin', ready: 'text=需要独立运营会话' },
 ];
 
 let context;
@@ -94,6 +94,10 @@ try {
         .map((element) => { const box = element.getBoundingClientRect(); return { label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 40) || element.tagName, left: box.left, right: box.right, inSceneRail: element.closest('.scene-rail') !== null }; });
       const sceneRail = document.querySelector('.scene-rail');
       const projectCardTitle = document.querySelector('.project-card h3');
+      const projectIdentity = document.querySelector('.qf-project-identity');
+      const projectTitle = projectIdentity?.querySelector('.title');
+      const identityBox = projectIdentity?.getBoundingClientRect();
+      const titleBox = projectTitle?.getBoundingClientRect();
       return {
         cssWidth: window.innerWidth,
         documentWidth: document.documentElement.scrollWidth,
@@ -103,9 +107,15 @@ try {
         outsideControls: controls.filter((item) => !item.inSceneRail && (item.left < -1 || item.right > window.innerWidth + 1)),
         sceneRail: sceneRail ? { scrollWidth: sceneRail.scrollWidth, clientWidth: sceneRail.clientWidth, overflowX: getComputedStyle(sceneRail).overflowX } : null,
         projectCardTitleOverflow: projectCardTitle ? projectCardTitle.scrollWidth - projectCardTitle.clientWidth : null,
+        projectIdentity: projectIdentity && projectTitle && identityBox && titleBox ? {
+          right: identityBox.right,
+          titleRight: titleBox.right,
+          titleOverflow: projectTitle.scrollWidth - projectTitle.clientWidth,
+          textOverflow: getComputedStyle(projectTitle).textOverflow,
+        } : null,
         projectCardCount: document.querySelectorAll('.project-card').length,
         sceneCardCount: document.querySelectorAll('.scene-rail .scene-card').length,
-        opsDeniedVisible: document.body.textContent?.includes('需要运营身份与多因素验证') ?? false,
+        opsDeniedVisible: document.body.textContent?.includes('需要独立运营会话') ?? false,
       };
     });
     let lastSceneReachable = null;
@@ -128,11 +138,12 @@ try {
       return sidebar.left >= -1 && sidebar.right <= window.innerWidth + 1 && controls.every((box) => box.left >= -1 && box.right <= window.innerWidth + 1);
     });
     await page.keyboard.press('Escape');
+    await page.screenshot({ path: resolve(evidenceDir, `${scenario.name}-native-200.png`), fullPage: true });
     const result = { scenario: scenario.name, chromeZoom: metrics.cssVisualViewport.zoom, apiRequests: requests, lastSceneReachable, openMobileNavFits, ...layout };
     results.push(result);
     await page.close();
   }
-  const failures = results.filter((item) => item.chromeZoom !== 2 || item.cssWidth < 700 || item.cssWidth > 740 || item.documentWidth > item.cssWidth + 1 || (item.mainOverflow ?? 0) > 1 || item.outsideControls.length > 0 || !item.openMobileNavFits || (item.scenario === 'workspace' && (item.projectCardCount !== 1 || (item.projectCardTitleOverflow ?? 0) > 1)) || (item.scenario === 'studio' && (item.sceneCardCount < 1 || item.sceneRail?.overflowX !== 'auto' || item.lastSceneReachable !== true)) || (item.scenario === 'ops-denied' && !item.opsDeniedVisible));
+  const failures = results.filter((item) => item.chromeZoom !== 2 || item.cssWidth < 700 || item.cssWidth > 740 || item.documentWidth > item.cssWidth + 1 || (item.mainOverflow ?? 0) > 1 || item.outsideControls.length > 0 || !item.openMobileNavFits || (item.scenario === 'workspace' && (item.projectCardCount !== 1 || (item.projectCardTitleOverflow ?? 0) > 1)) || (item.scenario === 'studio' && (item.sceneCardCount < 1 || item.sceneRail?.overflowX !== 'auto' || item.lastSceneReachable !== true || item.projectIdentity === null || item.projectIdentity.right > item.cssWidth + 1 || item.projectIdentity.titleRight > item.projectIdentity.right + 1 || item.projectIdentity.titleOverflow <= 0 || item.projectIdentity.textOverflow !== 'ellipsis')) || (item.scenario === 'ops-denied' && !item.opsDeniedVisible));
   await writeFile(resolve(evidenceDir, 'protected-native-200-results.json'), `${JSON.stringify(results, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ result: failures.length ? 'FAIL' : 'PASS', physicalWindowWidth: 1440, cases: results.length, failures, results }, null, 2)}\n`);
   assert.equal(failures.length, 0);

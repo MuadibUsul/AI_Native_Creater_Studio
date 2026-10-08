@@ -158,7 +158,7 @@ async function verifyAuthenticatedNativeZoom({ email, workspaceId, projectId, pr
       { name: 'studio', path: `/w/${workspaceId}/p/${projectId}/storyboard`, ready: '.scene-rail .scene-card' },
       { name: 'assets', path: `/w/${workspaceId}/p/${projectId}/assets`, ready: 'button:has-text("上传素材")' },
       { name: 'billing', path: `/w/${workspaceId}/billing`, ready: '[data-testid="credits-balance"]' },
-      { name: 'ops-denied', path: '/admin', ready: 'text=需要运营身份与多因素验证' },
+      { name: 'ops-denied', path: '/admin', ready: 'text=需要独立运营会话' },
     ];
     const results = [];
     for (const scenario of scenarios) {

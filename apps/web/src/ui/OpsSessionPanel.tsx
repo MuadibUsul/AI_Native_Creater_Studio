@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { OpsSession } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 
@@ -45,27 +46,24 @@ export function OpsEnrollmentPanel() {
   </section>;
 }
 
-export function OpsSessionPanel() {
+export function OpsSessionPanel({ session }: { session: OpsSession }) {
   const client = useAncsClient();
+  const queryClient = useQueryClient();
   const [code, setCode] = useState('');
-  const session = useQuery({ queryKey: ['ops', 'session'], queryFn: () => client.ops.session(), retry: false });
   const reauth = useMutation({
     mutationFn: () => client.ops.reauthenticate({ code }),
-    onSuccess: async () => { setCode(''); await session.refetch(); },
+    onSuccess: (current) => { setCode(''); queryClient.setQueryData(['ops', 'session'], current); },
   });
   const revoke = useMutation({
-    mutationFn: async () => {
-      if (session.data) await client.ops.revokeSession({ sessionId: session.data.id });
-    },
-    onSuccess: () => { window.location.href = '/admin'; },
+    mutationFn: () => client.ops.revokeSession({ sessionId: session.id }),
+    onSuccess: () => { queryClient.removeQueries({ queryKey: ['admin'] }); window.location.href = '/admin'; },
   });
-  if (!session.data) return null;
   return <section className="panel pad" aria-label="运营会话">
     <div className="flex flex-wrap items-center gap-3" role="status" style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--panel)', paddingBlock: 8 }}>
-      <strong>运营环境：{session.data.environment}</strong>
-      <span className="small muted">角色 {session.data.roles.join('、')} · 绝对到期 {new Date(session.data.absoluteExpiresAt).toLocaleString()}</span>
+      <strong>运营环境：{session.environment}</strong>
+      <span className="small muted">角色 {session.roles.join('、')} · 绝对到期 {new Date(session.absoluteExpiresAt).toLocaleString()}</span>
     </div>
-    {session.data.securityNotice === 'NEW_DEVICE' ? <p role="alert" className="small mt8">检测到新设备登录；如非本人操作，请撤销会话并联系安全管理员。</p> : null}
+    {session.securityNotice === 'NEW_DEVICE' ? <p role="alert" className="small mt8">检测到新设备登录；如非本人操作，请撤销会话并联系安全管理员。</p> : null}
     <form className="flex flex-wrap items-end gap-2 mt16" onSubmit={(event) => { event.preventDefault(); reauth.mutate(); }}>
       <label className="label" htmlFor="ops-reauth-code">敏感操作重新验证
         <input id="ops-reauth-code" className="field mt8" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} />

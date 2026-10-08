@@ -105,7 +105,7 @@ describe('Quiet Frame 工作区与公开页', () => {
     const landing = renderWithClient(<WelcomePage />, client);
     expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/sign-in');
     expect(screen.getByRole('link', { name: /进入工作室/ }).getAttribute('href')).toBe('/sign-in');
-    expect(screen.getByLabelText('静态产品界面示意，不含真实项目数据')).toBeTruthy();
+    expect(screen.getByLabelText('导演工作台布局示意，未载入真实素材或任务')).toBeTruthy();
     landing.unmount();
     renderWithClient(<DesignSystemPage />, client);
     expect(screen.getByText('Quiet Frame · 静框')).toBeTruthy();

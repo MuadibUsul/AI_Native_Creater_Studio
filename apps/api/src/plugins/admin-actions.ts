@@ -53,7 +53,7 @@ export async function resolveLegacyAdminTarget(
   const workspaceId = field(request.params, 'workspaceId') ?? field(request.query, 'workspaceId');
   const empty: OpsPermissionTarget = { workspaceId: null, resourceKind: null, resourceId: null, amountCredits: null, ticketId: null };
   if (action === 'ops.overview.read' || action === 'ops.metrics.read' || action === 'ops.audit.read' ||
-      action === 'ops.provider.status.read' || action === 'ops.storage.summary.read') return empty;
+      action === 'ops.provider.status.read') return empty;
   if (action === 'ops.job.retry') {
     const id = field(request.params, 'jobId');
     const row = id ? (await deps.db.select({ workspaceId: jobs.workspaceId }).from(jobs).where(eq(jobs.id, id)).limit(1))[0] : undefined;
@@ -82,7 +82,7 @@ export async function resolveLegacyAdminTarget(
     resourceKind: null,
     resourceId: null,
     amountCredits: typeof amount === 'number' && Number.isInteger(amount) && amount >= 0 ? amount : null,
-    ticketId: action === 'ops.support.view' ? field(request.query, 'ticketId') :
+    ticketId: action === 'ops.support.view' || action === 'ops.support.grant.list' ? field(request.query, 'ticketId') :
       action === 'ops.support.grant.create' ? field(request.body, 'ticketId') : null,
   };
 }

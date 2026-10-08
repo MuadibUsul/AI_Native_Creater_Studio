@@ -50,6 +50,13 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     enabled: userId !== null,
   });
   const workspaces = useWorkspaces();
+  const opsSession = useQuery({
+    queryKey: ['ops', 'session'],
+    queryFn: () => client.ops.session(),
+    enabled: userId !== null,
+    retry: false,
+    staleTime: 30_000,
+  });
   const [chosenWorkspaceId, setChosenWorkspaceId] = useState<string | null>(null);
   const [panel, setPanel] = useState<'workspace' | 'command' | 'notifications' | 'help' | null>(null);
   const [command, setCommand] = useState('');
@@ -195,6 +202,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
       { href: `${base}/team`, label: '团队', icon: 'voice' },
       { href: `${base}/billing`, label: '账单', icon: 'file' },
     ] : []),
+    ...(opsSession.data ? [{ href: '/admin', label: '运营诊断', icon: 'shield' }] : []),
   ];
 
   return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, accountAppearanceMode, deviceOverride, appearancePending: session.isPending || (userId !== null && accountAppearance.isPending), appearanceError: accountAppearance.isError, refetchAppearance: () => { void accountAppearance.refetch(); }, setAccountAppearance, setDeviceOverride, toggleTheme, openHelp: () => open('help') }}>
@@ -214,6 +222,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
         <div className="sidebottom">
           <button type="button" className="navitem" aria-label="快速搜索" onClick={() => open('command')}><QuietIcon name="search" /><span className="grow">快速搜索</span><span className="kbd">⌘ K</span></button>
           {workspaceId ? <Link href={`${base}/settings`} className={`navitem ${pathname.includes('/settings') ? 'active' : ''}`} aria-label="设置与用量"><QuietIcon name="settings" /><span>设置与用量</span></Link> : null}
+          {opsSession.data ? <Link href="/admin" className={`navitem ${pathname === '/admin' ? 'active' : ''}`} aria-label="运营诊断"><QuietIcon name="shield" /><span>运营诊断</span></Link> : null}
           <button type="button" className="navitem" aria-label="帮助与快捷键" onClick={() => open('help')}><QuietIcon name="help" /><span>帮助与快捷键</span></button>
           <div className="userrow"><span className="circle">{userName.slice(0, 1).toUpperCase()}</span><span className="grow"><strong className="small">{userName}</strong><br /><span className="small muted">{workspaceName}</span></span></div>
         </div>

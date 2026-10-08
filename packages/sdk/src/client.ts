@@ -38,6 +38,9 @@ import {
   exportPackageSchema,
   opsOverviewSchema,
   opsJobSummarySchema,
+  opsProjectSummarySchema,
+  opsWorkspaceStorageSummarySchema,
+  opsSupportGrantSummarySchema,
   opsAuditEntrySchema,
   editPlanSchema,
   masterNarrationSchema,
@@ -209,9 +212,7 @@ import {
   auditLogEntrySchema,
   adminUserSummarySchema,
   adminWorkspaceSummarySchema,
-  adminProjectSummarySchema,
   adminProviderStatusSchema,
-  adminStorageSummarySchema,
   createInvitationRequestSchema,
   setPrivacyTierRequestSchema,
   type ClientType,
@@ -254,9 +255,11 @@ import {
   type AuditLogEntry,
   type AdminUserSummary,
   type AdminWorkspaceSummary,
-  type AdminProjectSummary,
   type AdminProviderStatus,
-  type AdminStorageSummary,
+  type OpsProjectListQuery,
+  type OpsProjectSummary,
+  type OpsWorkspaceStorageSummary,
+  type OpsSupportGrantSummary,
   type PrivacyTier,
   type ChannelWithStyle,
   type ChannelStyleVersion,
@@ -1054,12 +1057,12 @@ export interface AncsClient {
     users(query?: { query?: string; limit?: number }): Promise<AdminUserSummary[]>;
     /** Workspace 列表（套餐/用量/积分/限制状态/未解决标记） */
     workspaces(query?: { query?: string; limit?: number }): Promise<AdminWorkspaceSummary[]>;
-    /** Project 列表（查询标题/按 Workspace） */
-    projects(query?: { query?: string; workspaceId?: string; limit?: number }): Promise<AdminProjectSummary[]>;
+    /** 指定 Workspace 的项目状态摘要；不返回标题或内容。 */
+    projects(query: OpsProjectListQuery): Promise<OpsProjectSummary[]>;
     /** Provider 状态（近 7 天聚合） */
     providerStatus(): Promise<AdminProviderStatus>;
-    /** 存储用量（Top-N + 总量） */
-    storage(query?: { limit?: number }): Promise<AdminStorageSummary>;
+    /** 指定 Workspace 的存储用量，不返回资产名称或存储键。 */
+    storage(query: { workspaceId: string }): Promise<OpsWorkspaceStorageSummary>;
     /** 运营审计表（append-only） */
     auditLog(query?: { workspaceId?: string; action?: string; limit?: number }): Promise<AuditLogEntry[]>;
     /** 指定 Workspace 的 Credits 账单（平台视图） */
@@ -1071,7 +1074,7 @@ export interface AncsClient {
     /** 工作区限制状态（RESTRICTED = 阻止新的成本性任务） */
     setAbuseState(workspaceId: string, input: { abuseState: WorkspaceAbuseState; note: string }, options?: MutationOptions): Promise<{ workspaceId: string; abuseState: WorkspaceAbuseState }>;
     /** 支持访问授权（时限 ≤ 24h；不可无痕：审计 + 工作区可见事件） */
-    supportGrants(workspaceId: string): Promise<SupportAccessGrant[]>;
+    supportGrants(workspaceId: string, ticketId: string): Promise<OpsSupportGrantSummary[]>;
     createSupportGrant(workspaceId: string, input: { purpose: string; ticketId: string; beneficiaryPrincipalId: string; scope: 'SUMMARY_READ'; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
     revokeSupportGrant(grantId: string, options?: MutationOptions): Promise<SupportAccessGrant>;
     /** 支持视图（需有效授权；仅元数据摘要；每次访问留痕） */
@@ -2349,17 +2352,13 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       projects: async (query) => {
         const search = new URLSearchParams();
-        if (query?.query !== undefined) search.set('query', query.query);
-        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
-        if (query?.limit !== undefined) search.set('limit', String(query.limit));
-        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
-        return (await request('GET', `/api/v1/admin/projects${suffix}`, z.object({ items: z.array(adminProjectSummarySchema) }))).items;
+        search.set('workspaceId', query.workspaceId);
+        if (query.status !== undefined) search.set('status', query.status);
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return (await request('GET', `/api/v1/admin/projects?${search.toString()}`, z.object({ items: z.array(opsProjectSummarySchema) }))).items;
       },
       providerStatus: () => request('GET', '/api/v1/admin/provider-status', adminProviderStatusSchema),
-      storage: (query) => {
-        const suffix = query?.limit === undefined ? '' : `?limit=${String(query.limit)}`;
-        return request('GET', `/api/v1/admin/storage${suffix}`, adminStorageSummarySchema);
-      },
+      storage: (query) => request('GET', `/api/v1/admin/storage?workspaceId=${encodeURIComponent(query.workspaceId)}`, opsWorkspaceStorageSummarySchema),
       auditLog: async (query) => {
         const search = new URLSearchParams();
         if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
@@ -2395,8 +2394,8 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: setWorkspaceAbuseStateRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      supportGrants: async (workspaceId) =>
-        (await request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, z.object({ items: z.array(supportAccessGrantSchema) }))).items,
+      supportGrants: async (workspaceId, ticketId) =>
+        (await request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-grants?ticketId=${encodeURIComponent(ticketId)}`, z.object({ items: z.array(opsSupportGrantSummarySchema) }))).items,
       createSupportGrant: (workspaceId, input, mutation) =>
         request('POST', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, supportAccessGrantSchema, {
           body: input,

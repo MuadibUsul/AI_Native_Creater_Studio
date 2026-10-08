@@ -225,6 +225,9 @@ export {
 } from './plans.js';
 export { evaluateOpsAlerts, getOpsOverview, listOpsAudit, listOpsJobs, OPS_ALERT_THRESHOLDS, retryOpsJob } from './ops.js';
 export type { OpsAlert } from './ops.js';
+export { listOpsProjects } from './ops-project.js';
+export { getOpsWorkspaceStorageSummary } from './ops-storage.js';
+export { listOpsSupportGrantsForTicket } from './ops-support-grants.js';
 export { createJobInTx } from './jobs.js';
 export {
   assertDependenciesAllowed,

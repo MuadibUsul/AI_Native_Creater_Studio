@@ -9,7 +9,7 @@ import { adminPermissionPolicyVersions, adminPrincipals, adminRoleGrants, adminR
 import type { OpsAuthDeps } from './ops.js';
 
 /** Compiled policy version; a matching ACTIVE database publication is required at runtime. */
-export const OPS_PERMISSION_POLICY_VERSION = 'n15-03-preview-3';
+export const OPS_PERMISSION_POLICY_VERSION = 'n15-03-preview-4';
 
 type Rule = {
   roles: readonly OpsRole[];
@@ -28,16 +28,16 @@ export const OPS_PERMISSION_RULES: Record<OpsAction, Rule> = {
   'ops.audit.read': { roles: ['AUDITOR', 'SECURITY_ADMIN'], scope: 'PLATFORM', projectionReady: false },
   'ops.user.list': { roles: ['SUPPORT_L1', 'SUPPORT_L2', 'SECURITY_ADMIN'], scope: 'WORKSPACE', projectionReady: false },
   'ops.workspace.list': { roles: ['SUPPORT_L1', 'SUPPORT_L2', 'BILLING_OPERATOR', 'PRODUCTION_OPERATOR'], scope: 'WORKSPACE', projectionReady: false },
-  'ops.project.list': { roles: ['SUPPORT_L2', 'PRODUCTION_OPERATOR', 'CONTENT_REVIEWER'], scope: 'WORKSPACE', projectionReady: false },
+  'ops.project.list': { roles: ['PRODUCTION_OPERATOR'], scope: 'WORKSPACE', projectionReady: true },
   'ops.provider.status.read': { roles: ['PROVIDER_MANAGER', 'PRODUCTION_OPERATOR'], scope: 'PLATFORM', projectionReady: true },
-  'ops.storage.summary.read': { roles: ['PRODUCTION_OPERATOR', 'PRIVACY_OFFICER'], scope: 'PLATFORM', projectionReady: false },
+  'ops.storage.summary.read': { roles: ['PRODUCTION_OPERATOR', 'PRIVACY_OFFICER'], scope: 'WORKSPACE', projectionReady: true },
   'ops.credit.statement.read': { roles: ['BILLING_OPERATOR', 'BILLING_APPROVER', 'AUDITOR'], scope: 'WORKSPACE', projectionReady: false },
   'ops.audit.log.read': { roles: ['AUDITOR', 'SECURITY_ADMIN'], scope: 'WORKSPACE', projectionReady: false },
   'ops.abuse.flag.list': { roles: ['CONTENT_REVIEWER', 'REVIEW_LEAD', 'SECURITY_ADMIN'], scope: 'WORKSPACE', projectionReady: false },
   'ops.abuse.flag.create': { roles: ['CONTENT_REVIEWER'], scope: 'WORKSPACE', projectionReady: false, approvalRequired: true },
   'ops.abuse.flag.resolve': { roles: ['REVIEW_LEAD'], scope: 'WORKSPACE', projectionReady: false, approvalRequired: true },
   'ops.abuse.state.set': { roles: ['PRODUCTION_OPERATOR', 'SECURITY_ADMIN', 'REVIEW_LEAD'], scope: 'WORKSPACE', projectionReady: false, approvalRequired: true },
-  'ops.support.grant.list': { roles: ['SUPPORT_L2', 'SECURITY_ADMIN', 'PRIVACY_OFFICER'], scope: 'WORKSPACE', projectionReady: false },
+  'ops.support.grant.list': { roles: ['SUPPORT_L2'], scope: 'WORKSPACE', projectionReady: true, ticketRequired: true },
   'ops.support.grant.create': { roles: ['SECURITY_ADMIN', 'PRIVACY_OFFICER'], scope: 'WORKSPACE', projectionReady: false, approvalRequired: true, ticketRequired: true },
   'ops.support.grant.revoke': { roles: ['SECURITY_ADMIN', 'PRIVACY_OFFICER'], scope: 'WORKSPACE', projectionReady: false, approvalRequired: true },
   'ops.support.view': { roles: ['SUPPORT_L2'], scope: 'WORKSPACE', projectionReady: true, ticketRequired: true },

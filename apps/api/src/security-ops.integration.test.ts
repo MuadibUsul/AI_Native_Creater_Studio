@@ -268,7 +268,7 @@ describe('SaaS 安全运营（P09-05）', () => {
     await expectApiError(admin.admin.users({ query: 'secops-admin-views' }), 403);
     await expectApiError(admin.admin.workspaces(), 403);
     await expectApiError(admin.admin.projects({ workspaceId: workspace.id }), 403);
-    await expectApiError(admin.admin.storage(), 403);
+    await expectApiError(admin.admin.storage({ workspaceId: workspace.id }), 403);
     await expectApiError(admin.admin.workspaceCredits(workspace.id), 403);
     await expectApiError(admin.admin.auditLog({ workspaceId: workspace.id }), 403);
     const providerStatus = await admin.admin.providerStatus();

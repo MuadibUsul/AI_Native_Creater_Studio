@@ -118,8 +118,8 @@ describe('v0.4 UI token foundation', () => {
     expect(css).toContain('--ui-motion-drawer: 200ms');
     expect(css).toContain('--bg: var(--ui-bg-canvas)');
     expect(css).toMatch(/\.field\s*\{[^}]*border-color:\s*var\(--ui-border-control\)/);
-    expect(css).toMatch(/\.btn\.blue\s*\{[^}]*color:\s*var\(--ui-action-primary-fg\)/);
-    expect(css).toMatch(/\.btn\.blue:hover\s*\{[^}]*background:\s*var\(--ui-action-primary-bg\)/);
+    expect(css).toMatch(/\.btn\.blue\s*\{[^}]*color:\s*var\(--ui-fg-primary\)/);
+    expect(css).toMatch(/\.btn\.blue:hover\s*\{[^}]*background:\s*var\(--ui-bg-hover\)/);
     expect(css).toMatch(/\.switch\[aria-checked="true"\]:after\s*\{[^}]*background:\s*var\(--ui-action-primary-fg\)/);
     expect(css).toMatch(/:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--ui-focus-ring\)/);
     expect(read('apps/web/src/app/layout.tsx')).toMatch(/import ['"]\.\/quiet-frame\.css['"];\s*import ['"]\.\/ui-tokens\.css['"]/);

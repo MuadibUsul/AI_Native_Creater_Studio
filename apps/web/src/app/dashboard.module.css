@@ -1,0 +1,55 @@
+.dashboard :global(.composer) {
+  background: var(--ui-bg-elevated);
+  border-color: var(--ui-border-subtle);
+  box-shadow: none;
+}
+
+.dashboard :global(.composer textarea::placeholder) {
+  color: var(--ui-fg-muted);
+}
+
+.dashboard :global(.composer-tools .btn),
+.dashboard :global(.homeflow) {
+  color: var(--ui-fg-secondary);
+}
+
+.dashboard :global(.composer-tools .qf-mode-active) {
+  background: var(--ui-selection-bg);
+  color: var(--ui-fg-primary) !important;
+}
+
+.projectPreview {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-bg-subtle);
+  color: var(--ui-fg-primary);
+}
+
+.previewLabel,
+.previewNote {
+  font-size: var(--ui-type-metadata);
+  line-height: 1.5;
+  color: var(--ui-fg-secondary);
+}
+
+.previewLabel { letter-spacing: .08em; }
+
+.previewTitle {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.dashboard :global(.project-card:hover) .projectPreview,
+.dashboard :global(.project-card:focus-visible) .projectPreview {
+  border-color: var(--ui-border-control);
+}

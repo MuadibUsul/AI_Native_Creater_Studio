@@ -3,6 +3,7 @@
 import { useState, type ReactElement } from 'react';
 import type { z } from 'zod';
 import { getComponent } from '@ancs/scene-components';
+import ui from './Monochrome.module.css';
 
 /**
  * 属性表单（Scene Editor 用）：字段由**组件协议**推导（defaults 提供键与类型，inputSchema 负责校验），
@@ -61,7 +62,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
   const [feedback, setFeedback] = useState<string | null>(null);
 
   if (definition === null) {
-    return <p data-testid="propform-unregistered" className="text-sm text-amber-200">组件未注册（{sceneType}），无法编辑属性。</p>;
+    return <p data-testid="propform-unregistered" className={`text-sm ${ui['notice']}`}>组件未注册（{sceneType}），无法编辑属性。</p>;
   }
 
   const fields = fieldsFromProps(definition.defaults as Record<string, unknown>);
@@ -103,9 +104,9 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
     >
       {fields.map((field) => (
         <label key={field.name} className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-300">
+          <span className={ui['primaryText']}>
             {FIELD_LABELS[field.name] ?? field.name}
-            <span className="ml-2 text-xs text-slate-500">{FIELD_LABELS[field.name] === undefined ? '技术字段 · ' : ''}{FIELD_KINDS[field.kind]}</span>
+            <span className={`ml-2 text-xs ${ui['mutedText']}`}>{FIELD_LABELS[field.name] === undefined ? '技术字段 · ' : ''}{FIELD_KINDS[field.kind]}</span>
           </span>
           {field.kind === 'boolean' ? (
             <select
@@ -113,7 +114,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
               aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? 'false'}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
+              className={ui['field']}
             >
               <option value="true">true</option>
               <option value="false">false</option>
@@ -125,7 +126,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
               rows={6}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-xs"
+              className={`font-mono text-xs ${ui['field']}`}
             />
           ) : (
             <input
@@ -133,20 +134,20 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
               aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1"
+              className={ui['field']}
             />
           )}
         </label>
       ))}
       {feedback !== null ? (
-        <p data-testid="propform-feedback" className="text-xs text-rose-300">
+        <p data-testid="propform-feedback" role="alert" className={`text-xs ${ui['notice']}`}>
           {feedback}
         </p>
       ) : null}
       <button
         type="submit"
         disabled={disabled}
-        className="self-start rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+        className={`self-start ${ui['primaryButton']}`}
       >
         {submitLabel}
       </button>

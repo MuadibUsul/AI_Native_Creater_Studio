@@ -1,129 +1,102 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { mockClient, renderWithClient } from '@/test-utils.js';
+import type { OpsSession } from '@ancs/contracts';
+import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 import { SecurityOps } from '@/ui/SecurityOps';
 
-/**
- * SaaS 安全运营面板（P09-05）：
- * - 检索（users/workspaces）与 Provider/存储聚合展示；
- * - 滥用标记：创建/解决调用 SDK；限制/解除调用 SDK（提示"阻止新任务"）；
- * - 支持工具界面的工单/受益主体请求形状；API 在 AdminAction 接线前仍拒绝旧直写；
- * - 运营审计（audit_log）列表可见。
- */
+const session = (roles: OpsSession['roles']): OpsSession => ({
+  id: 'opss_test', principalId: 'oppr_test', environment: 'TEST', roles,
+  createdAt: '2026-10-08T08:00:00.000Z', idleExpiresAt: '2026-10-08T09:00:00.000Z',
+  absoluteExpiresAt: '2026-10-08T16:00:00.000Z', reauthenticatedAt: '2026-10-08T08:00:00.000Z', securityNotice: null,
+});
 
-const client = (overrides: Record<string, unknown> = {}) =>
-  mockClient({
-    admin: {
-      users: vi.fn().mockResolvedValue([{ id: 'usr_1', email: 'owner@test.local', name: 'Owner', createdAt: '2026-10-05T10:00:00.000Z', workspaceCount: 2 }]),
-      workspaces: vi.fn().mockResolvedValue([
-        {
-          id: 'ws_1',
-          name: '工作室',
-          privacyTier: 'STANDARD',
-          abuseState: 'RESTRICTED',
-          planKey: 'STUDIO',
-          membersUsed: 3,
-          storageBytesUsed: 512 * 1024 ** 2,
-          creditsBalance: 120,
-          openAbuseFlags: 1,
-          createdAt: '2026-10-05T10:00:00.000Z',
-        },
-      ]),
-      abuseFlags: vi.fn().mockResolvedValue([
-        { id: 'abf_1', workspaceId: 'ws_1', category: 'SPAM', severity: 'HIGH', status: 'OPEN', note: '垃圾项目', createdByUserId: 'usr_a', resolvedByUserId: null, resolvedAt: null, resolutionNote: null, createdAt: '2026-10-05T10:00:00.000Z', updatedAt: '2026-10-05T10:00:00.000Z' },
-      ]),
-      storage: vi.fn().mockResolvedValue({ totalBytes: 512 * 1024 ** 2, items: [{ workspaceId: 'ws_1', workspaceName: '工作室', bytesUsed: 512 * 1024 ** 2, assetCount: 4 }] }),
-      providerStatus: vi.fn().mockResolvedValue({ items: [{ providerId: 'mock-video', byStatus: { SUCCEEDED: 3 }, lastFailureAt: null, lastErrorCategory: null }] }),
-      auditLog: vi.fn().mockResolvedValue([{ id: 'aud_1', actorKind: 'PLATFORM_ADMIN', actorUserId: 'usr_a', action: 'support.view', targetType: 'workspace', targetId: 'ws_1', workspaceId: 'ws_1', details: {}, occurredAt: '2026-10-05T10:00:00.000Z' }]),
-      supportGrants: vi.fn().mockResolvedValue([]),
-      createAbuseFlag: vi.fn().mockResolvedValue({}),
-      resolveAbuseFlag: vi.fn().mockResolvedValue({}),
-      setAbuseState: vi.fn().mockResolvedValue({ workspaceId: 'ws_1', abuseState: 'RESTRICTED' }),
-      createSupportGrant: vi.fn().mockResolvedValue({ id: 'sag_1', workspaceId: 'ws_1', requestedByUserId: 'usr_a', purpose: '排查工单', status: 'ACTIVE', createdAt: '2026-10-05T10:00:00.000Z', expiresAt: '2026-10-05T12:00:00.000Z', revokedByUserId: null, revokedAt: null }),
-      revokeSupportGrant: vi.fn().mockResolvedValue({}),
-      supportView: vi.fn().mockResolvedValue({
-        workspaceId: 'ws_1',
-        name: '工作室',
-        privacyTier: 'STANDARD',
-        abuseState: 'NORMAL',
-        planKey: 'STUDIO',
-        counts: { members: 3, projects: 2, assets: 4, storageBytesUsed: 512 * 1024 ** 2, creditsBalance: 120, renders: {}, jobs: {} },
-        grant: { id: 'sag_1', workspaceId: 'ws_1', requestedByUserId: 'usr_a', purpose: '排查工单', status: 'ACTIVE', createdAt: '2026-10-05T10:00:00.000Z', expiresAt: '2026-10-05T12:00:00.000Z', revokedByUserId: null, revokedAt: null },
-        viewedAt: '2026-10-05T10:05:00.000Z',
-      }),
-      ...overrides,
-    },
-  });
+const project = (workspaceId: string) => ({
+  id: `prj_${workspaceId}`, workspaceId, status: 'DRAFT',
+  createdAt: '2026-10-08T08:00:00.000Z', updatedAt: '2026-10-08T08:10:00.000Z',
+});
 
-describe('SaaS 安全运营面板（P09-05）', () => {
-  it('聚合展示：users/workspaces（限制状态/未解决标记）/Provider/存储/审计', async () => {
-    renderWithClient(<SecurityOps />, client());
-    expect(await screen.findByText(/owner@test\.local · 参与 2 个 Workspace/)).toBeTruthy();
-    expect(screen.getByText(/工作室 · STUDIO · 成员 3/)).toBeTruthy();
-    expect(screen.getByText(/未解决标记 1/)).toBeTruthy();
-    expect(screen.getByText(/mock-video/)).toBeTruthy();
-    expect((await screen.findByTestId('ops-audit-log')).textContent).toMatch(/support\.view/);
-  });
-
-  it('滥用处理：创建标记与限制/解除调用 SDK，提示阻止新任务', async () => {
-    const createAbuseFlag = vi.fn().mockResolvedValue({});
-    const setAbuseState = vi.fn().mockResolvedValue({ workspaceId: 'ws_1', abuseState: 'RESTRICTED' });
-    renderWithClient(<SecurityOps />, client({ createAbuseFlag, setAbuseState }));
-
-    await userEvent.type(await screen.findByLabelText('标记 Workspace ID'), 'ws_1');
-    await userEvent.type(screen.getByLabelText('标记备注'), '批量垃圾内容');
-    await userEvent.click(screen.getByRole('button', { name: '创建标记' }));
-    await waitFor(() => expect(createAbuseFlag).toHaveBeenCalledWith('ws_1', { category: 'OTHER', severity: 'MEDIUM', note: '批量垃圾内容' }));
-
-    await userEvent.click(screen.getByRole('button', { name: '限制（阻止新任务）' }));
-    await waitFor(() => expect(setAbuseState).toHaveBeenCalledWith('ws_1', { abuseState: 'RESTRICTED', note: '运营面板操作（见审计）' }));
-    expect((await screen.findByTestId('secops-notice')).textContent).toMatch(/新的成本性任务将被阻止/);
-  });
-
-  it('支持工具：授权创建提示"成员可见"→ 支持视图展示元数据摘要 → 撤销', async () => {
-    const createSupportGrant = vi.fn().mockResolvedValue({ id: 'sag_1' });
-    const revokeSupportGrant = vi.fn().mockResolvedValue({});
-    renderWithClient(
-      <SecurityOps />,
-      client({
-        createSupportGrant,
-        revokeSupportGrant,
-        supportGrants: vi.fn().mockResolvedValue([
-          { id: 'sag_1', workspaceId: 'ws_1', requestedByUserId: 'usr_a', purpose: '排查工单', status: 'ACTIVE', createdAt: '2026-10-05T10:00:00.000Z', expiresAt: '2026-10-05T12:00:00.000Z', revokedByUserId: null, revokedAt: null },
-        ]),
-      }),
-    );
-
-    await userEvent.type(await screen.findByLabelText('支持 Workspace ID'), 'ws_1');
-    await userEvent.type(screen.getByLabelText('支持目的'), '排查渲染失败工单');
-    await userEvent.type(screen.getByLabelText('支持工单 ID'), 'ticket-42');
-    await userEvent.type(screen.getByLabelText('受益运营主体 ID'), 'oppr_alice');
-    await userEvent.click(screen.getByRole('button', { name: '创建授权（2h）' }));
-    await waitFor(() => expect(createSupportGrant).toHaveBeenCalledWith('ws_1', {
-      purpose: '排查渲染失败工单', ticketId: 'ticket-42', beneficiaryPrincipalId: 'oppr_alice', scope: 'SUMMARY_READ', ttlHours: 2,
+describe('N15-03 限定范围运营诊断', () => {
+  it('运营角色显式提交 workspace 后才查询项目与存储，切换范围立即清理旧结果', async () => {
+    const projects = vi.fn().mockImplementation(({ workspaceId }: { workspaceId: string }) =>
+      workspaceId === 'ws_a' ? Promise.resolve([project('ws_a')]) : new Promise(() => {}));
+    const storage = vi.fn().mockImplementation(({ workspaceId }: { workspaceId: string }) =>
+      workspaceId === 'ws_a' ? Promise.resolve({ workspaceId, bytesUsed: 1048576, assetCount: 2 }) : new Promise(() => {}));
+    const unsafeWrite = vi.fn();
+    renderWithClient(<SecurityOps session={session(['PRODUCTION_OPERATOR'])} />, mockClient({
+      admin: { projects, storage, setAbuseState: unsafeWrite },
     }));
-    expect(screen.getByTestId('secops-notice').textContent).toMatch(/成员可见/);
-    expect((await screen.findByTestId('support-grants')).textContent).toMatch(/排查工单/);
+    expect(projects).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText('工作区 ID'), 'ws_a');
+    expect(projects).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '查询工作区' }));
+    expect(await screen.findByText('prj_ws_a')).toBeTruthy();
+    expect(screen.getByTestId('admin-storage').textContent).toMatch(/1.0 MiB/);
+    expect(projects).toHaveBeenCalledWith({ workspaceId: 'ws_a', limit: 50 });
+    expect(screen.queryByRole('button', { name: /限制|创建标记|撤销/ })).toBeNull();
+    expect(unsafeWrite).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole('button', { name: '打开支持视图' }));
-    expect((await screen.findByTestId('support-view')).textContent).toMatch(/仅元数据；本次访问已留痕并对成员可见/);
-
-    await userEvent.click(screen.getByRole('button', { name: '撤销' }));
-    await waitFor(() => expect(revokeSupportGrant).toHaveBeenCalledWith('sag_1'));
+    await userEvent.clear(screen.getByLabelText('工作区 ID'));
+    await userEvent.type(screen.getByLabelText('工作区 ID'), 'ws_b');
+    expect(screen.getByText('prj_ws_a')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '查询工作区' }));
+    expect(screen.queryByText('prj_ws_a')).toBeNull();
+    expect(screen.getByText(/当前范围/).textContent).toMatch(/ws_b/);
+    expect(projects).toHaveBeenCalledWith({ workspaceId: 'ws_b', limit: 50 });
   });
 
-  it('无有效授权时支持视图被拒：明示 403 与"需先创建时限授权"', async () => {
-    const { AncsApiError } = await import('@ancs/sdk');
-    renderWithClient(
-      <SecurityOps />,
-      client({
-        supportView: vi.fn().mockRejectedValue(new AncsApiError({ status: 403, code: 'FORBIDDEN', message: '无有效支持访问授权', requestId: 'req_1', details: { reason: 'SUPPORT_GRANT_REQUIRED' } })),
-      }),
-    );
-    await userEvent.type(await screen.findByLabelText('支持 Workspace ID'), 'ws_1');
-    await userEvent.type(screen.getByLabelText('支持工单 ID'), 'ticket-42');
-    await userEvent.click(screen.getByRole('button', { name: '打开支持视图' }));
-    expect((await screen.findByTestId('secops-notice')).textContent).toMatch(/需先创建时限授权/);
+  it('403 不显示上一次数据，保留范围并允许手动重试', async () => {
+    const projects = vi.fn().mockRejectedValue(apiError(403, 'FORBIDDEN', '范围未授权'));
+    renderWithClient(<SecurityOps session={session(['PRODUCTION_OPERATOR'])} />, mockClient({
+      admin: { projects, storage: vi.fn().mockResolvedValue({ workspaceId: 'ws_other', bytesUsed: 0, assetCount: 0 }) },
+    }));
+    await userEvent.type(screen.getByLabelText('工作区 ID'), 'ws_other');
+    await userEvent.click(screen.getByRole('button', { name: '查询工作区' }));
+    expect(await screen.findByText('当前范围无权查看')).toBeTruthy();
+    expect(screen.queryByTestId('admin-storage')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '重试查询' }));
+    await waitFor(() => expect(projects).toHaveBeenCalledTimes(2));
+  });
+
+  it('支持人员仅在提交 workspace+ticket 后查当前授权，主动打开摘要并明示留痕', async () => {
+    const supportGrants = vi.fn().mockResolvedValue([{
+      id: 'sag_a', workspaceId: 'ws_a', scope: 'SUMMARY_READ', status: 'ACTIVE',
+      createdAt: '2026-10-08T08:00:00.000Z', expiresAt: '2099-10-08T08:00:00.000Z',
+    }]);
+    const supportView = vi.fn().mockResolvedValue({
+      workspaceId: 'ws_a', viewedAt: '2026-10-08T08:15:00.000Z',
+      counts: { members: 3, projects: 2, assets: 4, storageBytesUsed: 1048576, creditsBalance: 100 },
+    });
+    renderWithClient(<SecurityOps session={session(['SUPPORT_L2'])} />, mockClient({ admin: { supportGrants, supportView } }));
+    expect(screen.queryByRole('heading', { name: '工作区诊断' })).toBeNull();
+    expect(screen.getByText(/oppr_test/)).toBeTruthy();
+    expect(supportGrants).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText('工作区 ID'), 'ws_a');
+    await userEvent.type(screen.getByLabelText('工单 ID'), 'ticket_a');
+    expect(supportGrants).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '查询授权' }));
+    expect(await screen.findByText('sag_a')).toBeTruthy();
+    expect(supportGrants).toHaveBeenCalledWith('ws_a', 'ticket_a');
+    expect(supportView).not.toHaveBeenCalled();
+    expect(screen.getByText(/每次访问都会留痕并对客户可见/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '确认并打开支持摘要' }));
+    expect(await screen.findByTestId('support-view')).toBeTruthy();
+    expect(supportView).toHaveBeenCalledWith('ws_a', 'ticket_a');
+    expect(screen.getByTestId('support-view').textContent).toMatch(/本次访问已留痕/);
+    expect(screen.queryByRole('button', { name: /创建授权|撤销|解决/ })).toBeNull();
+
+    await userEvent.clear(screen.getByLabelText('工单 ID'));
+    await userEvent.type(screen.getByLabelText('工单 ID'), 'ticket_b');
+    await userEvent.click(screen.getByRole('button', { name: '查询授权' }));
+    expect(screen.queryByTestId('support-view')).toBeNull();
+    expect(screen.getByText(/当前范围/).textContent).toMatch(/ticket_b/);
+  });
+
+  it('其他角色不渲染运营查询或旧写入口', () => {
+    const projects = vi.fn();
+    renderWithClient(<SecurityOps session={session(['PLATFORM_OWNER'])} />, mockClient({ admin: { projects } }));
+    expect(screen.getByText('当前角色暂无可用诊断')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(projects).not.toHaveBeenCalled();
   });
 });

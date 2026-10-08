@@ -15,6 +15,8 @@
 ## 实现规则
 
 - 顺序（v0.4 §22）：contracts → migration → domain/service → API → SDK → UI → tests → docs。不涉及的层明确写"不适用"；禁止先在 UI 内实现权威规则再抽取。
+- 每项用户可见功能在编码前填写 `docs/design/features/<taskId>.md` UI 交付卡，按 `docs/design/ui-delivery-contract.md` 完成设计补全、真实业务联调、浏览器操作与截图目检；在 `docs/design/ui-coverage.md` 登记入口、状态和证据。后续 UI 任务必须主动读取该完整规约，不能只看本条链接；纯基础设施项说明 UI 不适用及关联用户切片。
+- 无对应高保真稿时按当前 v0.4 设计系统和现有共享组件自行补齐，不等待新图，不用临时管理模板，不擅自重做本轮未影响的已确认界面。运营读面只显示已授权投影；有副作用的操作走 AdminAction 的预检、授权、执行、逐项结果和审计，不因按钮隐藏而放松服务端权限。
 - 完成定义：只有 `VERIFIED` 计入完成；Mock 验证通过 ≠ 真实 Provider 验证通过；接口存在 ≠ 功能交付。
 - 证据与交接：每项 N 任务在 `docs/verification/<taskId>.md` 记录证据（命令与结果），在 `docs/handoffs/<taskId>.md` 交接；同步更新两个 `docs/requirements/ai-native-v04-*` 活账本。旧 P 账本保持历史语义，不用新状态覆写。
 - TODO 必须写清 why / dependency / intended interface。

@@ -1,0 +1,62 @@
+.publicLanding {
+  background: var(--ui-bg-canvas);
+  color: var(--ui-fg-primary);
+}
+
+.publicLanding :global(.landing-nav),
+.publicLanding :global(.landing-values),
+.publicLanding :global(.landing-product),
+.publicLanding :global(.mini-inspector) {
+  border-color: var(--ui-border-subtle);
+  background: var(--ui-bg-elevated);
+}
+
+.publicLanding :global(.landing-hero h1 span) { color: var(--ui-fg-primary); }
+.publicLanding :global(.landing-values) { color: var(--ui-fg-secondary); }
+.publicLanding :global(.mini-side) { border-color: var(--ui-border-subtle); }
+
+.canvasPreview {
+  position: relative;
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--ui-border-subtle);
+  background: var(--ui-bg-subtle);
+  color: var(--ui-fg-primary);
+  padding: 18px;
+}
+
+.previewEyebrow,
+.previewFootnote {
+  color: var(--ui-fg-secondary);
+  font-size: var(--ui-type-metadata);
+}
+
+.previewEyebrow { letter-spacing: .1em; }
+
+.canvasMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+}
+
+.canvasMessage strong { font-size: clamp(1.15rem, 2.2vw, 1.75rem); letter-spacing: -.03em; }
+.canvasMessage span { color: var(--ui-fg-secondary); font-size: var(--ui-type-control); }
+
+.miniNavigation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 36px;
+  color: var(--ui-fg-secondary);
+  font-size: var(--ui-type-metadata);
+}
+
+.designSystem :global(.color-tile),
+.designSystem :global(.rounded-demo div),
+.designSystem :global(.status-board div) {
+  border-color: var(--ui-border-subtle);
+}

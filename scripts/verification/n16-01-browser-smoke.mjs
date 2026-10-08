@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.ANCS_WEB_URL ?? 'http://127.0.0.1:4000';
-const evidenceDir = resolve('docs/verification/evidence/N16-01');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/evidence/N16-01');
 await mkdir(evidenceDir, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
@@ -33,15 +33,15 @@ try {
 
   const light = await page.evaluate(inspect);
   assert.equal(light.canvas, '#FFFFFF');
-  assert.deepEqual(light.action, { background: 'rgb(23, 23, 23)', color: 'rgb(255, 255, 255)' });
+  assert.deepEqual(light.action, { background: 'rgb(255, 255, 255)', color: 'rgb(23, 23, 23)' });
   assert.deepEqual(light.statusCard, { background: 'rgb(245, 245, 245)', color: 'rgb(23, 23, 23)' });
   await page.screenshot({ path: resolve(evidenceDir, 'design-system-light.png'), fullPage: true });
 
   await page.evaluate(() => document.body.classList.add('theme-dark'));
-  await page.waitForFunction(() => getComputedStyle(document.querySelector('.btn.blue')).backgroundColor === 'rgb(245, 245, 245)');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.btn.blue')).backgroundColor === 'rgb(28, 28, 28)');
   const dark = await page.evaluate(inspect);
   assert.equal(dark.canvas, '#0A0A0A');
-  assert.deepEqual(dark.action, { background: 'rgb(245, 245, 245)', color: 'rgb(23, 23, 23)' });
+  assert.deepEqual(dark.action, { background: 'rgb(28, 28, 28)', color: 'rgb(245, 245, 245)' });
   assert.deepEqual(dark.statusCard, { background: 'rgb(20, 20, 20)', color: 'rgb(245, 245, 245)' });
   assert.equal(dark.topbar.background, 'rgb(28, 28, 28)');
   await page.screenshot({ path: resolve(evidenceDir, 'design-system-dark.png'), fullPage: true });

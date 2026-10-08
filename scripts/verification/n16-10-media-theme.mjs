@@ -12,7 +12,7 @@ try {
   await page.route('**/api/v1/auth/session', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'usr_media_fixture', email: 'media-fixture@example.test', name: '媒体测试', emailVerified: true }, sessionId: 'ses_media_fixture', method: 'web_session', expiresAt: '2026-12-31T00:00:00.000Z' }) }));
   assert.equal((await page.goto(`${baseUrl}/welcome`, { waitUntil: 'networkidle' }))?.status(), 200);
   await page.evaluate(async () => {
-    const viewer = document.querySelector('.viewer.graph');
+    const viewer = document.querySelector('[data-testid="landing-canvas-preview"]');
     if (!viewer) throw new Error('Missing content viewer');
     const image = document.createElement('img');
     image.id = 'n16-10-media-fixture';
@@ -32,9 +32,9 @@ try {
     }
     return {
       canvas: getComputedStyle(document.body).getPropertyValue('--ui-bg-canvas').trim(),
-      viewerBackground: getComputedStyle(document.querySelector('.viewer.graph')).backgroundImage,
-      viewerColor: getComputedStyle(document.querySelector('.viewer.graph')).color,
-      contentStrokes: [...document.querySelectorAll('.viewer.graph svg path')].map((path) => getComputedStyle(path).stroke),
+      viewerBackground: getComputedStyle(document.querySelector('[data-testid="landing-canvas-preview"]')).backgroundImage,
+      viewerColor: getComputedStyle(document.querySelector('[data-testid="landing-canvas-preview"]')).color,
+      contentStrokes: [...document.querySelectorAll('[data-testid="landing-canvas-preview"] svg path')].map((path) => getComputedStyle(path).stroke),
       mediaPixels: (() => {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 64;
@@ -48,14 +48,15 @@ try {
   });
   const light = await inspect();
   await mkdir(resolve('.artifacts/v04/N16-10'), { recursive: true });
-  await page.locator('.viewer.graph').screenshot({ path: resolve('.artifacts/v04/N16-10/viewer-light.png') });
+  await page.locator('[data-testid="landing-canvas-preview"]').screenshot({ path: resolve('.artifacts/v04/N16-10/viewer-light.png') });
   await page.evaluate(() => document.body.classList.add('theme-dark'));
   const dark = await inspect();
-  await page.locator('.viewer.graph').screenshot({ path: resolve('.artifacts/v04/N16-10/viewer-dark.png') });
+  await page.locator('[data-testid="landing-canvas-preview"]').screenshot({ path: resolve('.artifacts/v04/N16-10/viewer-dark.png') });
   assert.equal(light.canvas, '#FFFFFF');
   assert.equal(dark.canvas, '#0A0A0A');
   assert.equal(light.viewerBackground, dark.viewerBackground);
-  assert.equal(light.viewerColor, dark.viewerColor);
+  assert.equal(light.viewerColor, 'rgb(23, 23, 23)');
+  assert.equal(dark.viewerColor, 'rgb(245, 245, 245)');
   assert.deepEqual(light.contentStrokes, dark.contentStrokes);
   assert.deepEqual(light.mediaPixels, [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [136, 136, 136, 255]]);
   assert.deepEqual(light.mediaPixels, dark.mediaPixels);
@@ -66,7 +67,7 @@ try {
     const bytes = await readFile(process.env.ANCS_N16_MEDIA_FILE);
     await page.evaluate((base64) => {
       document.body.classList.remove('theme-dark');
-      const viewer = document.querySelector('.viewer.graph');
+      const viewer = document.querySelector('[data-testid="landing-canvas-preview"]');
       if (!viewer) throw new Error('Missing content viewer');
       const video = document.createElement('video');
       video.id = 'n16-10-real-video';

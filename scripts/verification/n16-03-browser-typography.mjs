@@ -86,8 +86,8 @@ try {
   const previewResponse = await page.goto(`${baseUrl}/welcome`, { waitUntil: 'networkidle' });
   assert.equal(previewResponse?.status(), 200);
   const mediaPreview = await page.evaluate(() => {
-    const title = document.querySelector('.landing-product .viewer h2');
-    const canvas = document.querySelector('.landing-product .viewer');
+    const title = document.querySelector('[data-testid="landing-canvas-title"]');
+    const canvas = document.querySelector('[data-testid="landing-canvas-preview"]');
     if (!title || !canvas) throw new Error('Missing media preview');
     const titleStyle = getComputedStyle(title);
     return {

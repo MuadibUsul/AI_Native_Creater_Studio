@@ -103,15 +103,38 @@ body { font-family: var(--ui-font-family); }
 .btn { min-height: var(--ui-control-height); border-radius: var(--ui-radius-control); transition-duration: var(--ui-motion-feedback); }
 .btn.small { min-height: var(--ui-control-height-compact); }
 .btn:not(.primary):not(.blue):hover { background: var(--ui-bg-hover); }
-.btn.blue { color: var(--ui-action-primary-fg); }
-.btn.blue:hover { background: var(--ui-action-primary-bg); box-shadow: inset 0 0 0 1px var(--ui-fg-secondary); }
+.btn.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
+.btn.primary:hover { background: var(--ui-action-primary-bg); box-shadow: inset 0 0 0 1px var(--ui-fg-secondary); }
+.btn.blue { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); border-color: var(--ui-border-control); }
+.btn.blue:hover { background: var(--ui-bg-hover); }
+.textbtn { color: var(--ui-fg-primary); text-decoration: underline; text-underline-offset: 3px; }
 .switch[aria-checked="true"]:after { background: var(--ui-action-primary-fg); }
+.switch { background: var(--ui-border-control); }
+.switch:after { background: var(--ui-bg-elevated); }
+.segmented { background: var(--ui-bg-subtle); border-color: var(--ui-border-control); }
+.segmented button.active { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); }
+.chip.active { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
 .field { border-color: var(--ui-border-control); border-radius: var(--ui-radius-small); }
+.field::placeholder { color: var(--ui-fg-muted); }
 .panel { border-radius: var(--ui-radius-overlay); }
 .badge, .badge.blue, .badge.green, .badge.amber, .badge.red { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-.notice, .diff-add, .diff-remove { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); }
+.notice, .notice.amber, .notice.green, .diff-add, .diff-remove { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); }
+.panel:is([data-state="error"], [data-state="forbidden"], [data-state="conflict"], [data-state="unavailable"]) { border-inline-start: 3px solid var(--ui-border-control); }
 .diff-card header { background: var(--ui-bg-subtle); }
 .status-board div, .rounded-demo div { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); border-color: var(--ui-border-subtle); }
+.qf-mode-active { background: var(--ui-selection-bg) !important; box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+.qf-command-list a:hover, .qf-command-list a:focus-visible, .qf-project-menu a:hover { background: var(--ui-bg-hover); }
+.project-tabs :is(button, a).active, .voice-row.selected, .setting-nav button.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+.scene-rail, .editor-center, .source-preview, .analysis-insight, .voice-hero { background: var(--ui-bg-subtle); }
+.inspector, .narration-line, .metriccard, .paper { background: var(--ui-bg-elevated); }
+.narration-line, .paper p, .paper .lead { color: var(--ui-fg-primary); }
+.paper [contenteditable]:focus { background: var(--ui-bg-hover); }
+.scene-card.active, .timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); }
+.timeline-clip, .timeline-clip:nth-child(even) { background: var(--ui-bg-subtle); border-color: var(--ui-border-control); color: var(--ui-fg-primary); }
+.timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); outline: 1px solid var(--ui-fg-primary); }
+.voice-hero { min-height: 0; }
+.voice-sphere { display: none; }
+.voice-avatar, .provider-icon, .platform-logo, .compact-select { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
 .theme-dark .btn.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
 /* The legacy dark rules are more specific than the light aliases above. */
 body.theme-dark .topbar, body.theme-dark .projectbar { background: var(--ui-bg-elevated); }
@@ -122,6 +145,38 @@ body.theme-dark .badge, body.theme-dark .badge.blue, body.theme-dark .badge.gree
 body.theme-dark .page .panel, body.theme-dark .userrow { border-color: var(--ui-border-subtle); }
 body.theme-dark .btn.ghost { color: var(--ui-fg-primary); }
 body.theme-dark .diff-card header { background: var(--ui-bg-subtle); }
+body.theme-dark .segmented, body.theme-dark .compact-select { background: var(--ui-bg-subtle); }
+body.theme-dark .segmented button.active, body.theme-dark .project-tabs :is(button, a).active, body.theme-dark .setting-nav button.active, body.theme-dark .scene-card.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+body.theme-dark .paper p, body.theme-dark .paper .lead, body.theme-dark .narration-line { color: var(--ui-fg-primary); }
+body.theme-dark .scene-rail, body.theme-dark .editor-center, body.theme-dark .source-preview, body.theme-dark .voice-hero, body.theme-dark .analysis-insight { background: var(--ui-bg-subtle); }
+body.theme-dark .inspector, body.theme-dark .narration-line, body.theme-dark .metriccard, body.theme-dark .paper { background: var(--ui-bg-elevated); }
+body.theme-dark .provider-icon, body.theme-dark .platform-logo { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+
+/* Keep the project identity usable when native browser zoom reduces the CSS viewport. */
+.qf-project-identity {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.qf-project-identity .title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .projectbar > .qf-project-identity {
+    flex: 1 1 calc(100% - 170px);
+  }
+
+  .projectbar > .project-tabs {
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+}
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible {
   outline: 2px solid var(--ui-focus-ring);
   outline-offset: 3px;
@@ -131,6 +186,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* Legacy component selectors set 24–36px heights; touch targets must override them. */
   .btn, .textbtn { min-height: var(--ui-control-touch-target) !important; }
   .btn.icononly { min-width: var(--ui-control-touch-target); }
+  .segmented button, .switch { min-height: var(--ui-control-touch-target); }
   .qf-design-actions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
