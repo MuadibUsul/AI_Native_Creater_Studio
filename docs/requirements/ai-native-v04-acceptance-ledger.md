@@ -36,7 +36,7 @@
 | N00-02 | 切换需求权威与旧裁决 | N00-01 | VERIFIED | [`验证`](../verification/N00-02.md) · [`交接`](../handoffs/N00-02.md) |
 | N00-03 | 复跑基线验证并建立缺口账本 | N00-01 | VERIFIED | [`验证`](../verification/N00-03.md) · [`交接`](../handoffs/N00-03.md) |
 | N00-04 | 建立多素材与对照样例集 | N00-03 | IN_PROGRESS | [`验证`](../verification/N00-04.md) · [`交接`](../handoffs/N00-04.md) |
-| N00-05 | 功能差项、发布门与开关 | N00-02, N00-04 | TODO | — |
+| N00-05 | 功能差项、发布门与开关 | N00-02, N00-04 | IN_PROGRESS | [`验证`](../verification/N00-05.md) · [`交接`](../handoffs/N00-05.md) |
 | N00-06 | 建立新浏览器与媒体验收骨架 | N00-03, N00-04 | IN_PROGRESS | [`验证`](../verification/N00-06.md) · [`交接`](../handoffs/N00-06.md) |
 | N00-07 | 合并增量术语、来源边界和阶段映射 | N00-01, N00-02 | VERIFIED | [`验证`](../verification/N00-07.md) · [`交接`](../handoffs/N00-07.md) |
 
