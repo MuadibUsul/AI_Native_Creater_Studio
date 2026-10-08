@@ -9,9 +9,16 @@
 .hiddenInput { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
 .dropZone { display:flex; width:100%; min-height:145px; border:1px dashed var(--line); border-radius:12px; background:var(--bg); align-items:center; justify-content:center; flex-direction:column; gap:6px; padding:20px; }
 .dropZone :global(.icon) { width:27px; height:27px; color:var(--accent); }
+.uploadQueue { display:flex; flex-direction:column; gap:8px; max-height:min(360px, 42vh); margin-top:16px; overflow:auto; }
+.uploadRow { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px 16px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--ui-bg-subtle); }
+.uploadMeta { display:flex; min-width:0; flex-direction:column; gap:5px; }
+.uploadMeta strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.uploadMeta progress { width:100%; height:5px; accent-color:var(--ui-fg-primary); }
+.uploadActions { display:flex; align-items:center; gap:8px; }
+.uploadError { grid-column:1 / -1; margin:0; color:var(--bad); font-size:12px; }
 .summary { cursor:pointer; font-weight:600; }
 .rebindRow { display:grid; grid-template-columns:minmax(150px,1fr) minmax(180px,2fr) auto; align-items:center; gap:12px; }
-@media(max-width:760px) { .rebindRow { grid-template-columns:1fr; } }
+@media(max-width:760px) { .rebindRow, .uploadRow { grid-template-columns:1fr; } .dropZone { min-height:116px; padding:16px; } .uploadQueue { max-height:32vh; } .uploadActions { justify-content:flex-end; } }
 .renderPlayer { aspect-ratio:16/9; background:var(--ui-media-matte); border-radius:12px; overflow:hidden; color:#f5f5f5; }
 .renderPlayer video { display:block; width:100%; height:100%; object-fit:contain; background:var(--ui-media-matte); }
 .renderEmpty { height:100%; min-height:230px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:13px; text-align:center; padding:28px; }

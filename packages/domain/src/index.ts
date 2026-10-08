@@ -503,9 +503,13 @@ export {
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,
+  cancelUploadIntent,
+  completeUploadPart,
+  createUploadPartTarget,
   createAssetDownloadUrl,
   createUploadIntent,
   getAsset,
+  getUploadIntentStatus,
   listAssets,
   sanitizeFilename,
 } from './assets.js';

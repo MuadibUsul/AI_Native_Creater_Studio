@@ -143,6 +143,61 @@ describe('createClient：认证模式', () => {
   });
 });
 
+describe('N02-01 可恢复分片上传', () => {
+  it('只读取固定大小分片，并把同时驻留的分片限制在配置并发内', async () => {
+    const partSize = 256 * 1024;
+    const totalSize = partSize * 4;
+    let activeReads = 0;
+    let maxActiveReads = 0;
+    const sliceSizes: number[] = [];
+    const data = {
+      size: totalSize,
+      slice(start = 0, end = totalSize): Blob {
+        const size = end - start;
+        sliceSizes.push(size);
+        const blob = new Blob([new Uint8Array(size)]);
+        Object.defineProperty(blob, 'arrayBuffer', {
+          value: async () => {
+            activeReads += 1;
+            maxActiveReads = Math.max(maxActiveReads, activeReads);
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            const value = await Blob.prototype.arrayBuffer.call(blob);
+            activeReads -= 1;
+            return value;
+          },
+        });
+        return blob;
+      },
+    };
+    const now = '2026-10-09T00:00:00.000Z';
+    const asset = {
+      id: 'ast_1', workspaceId: 'ws_1', projectId: null, sceneId: null, assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD',
+      provider: null, providerAssetId: null, status: 'PENDING_UPLOAD', retentionClass: 'KEEP_USER_SOURCE',
+      license: { type: 'USER_OWNED', holder: null, attribution: null, sourceUrl: null, termsUrl: null, notes: null, confirmedBy: null, confirmedAt: null },
+      metadata: { filename: 'large.mp4' }, currentVersionId: null, createdAt: now, updatedAt: now,
+    };
+    const status = { intentId: 'upi_1', assetId: 'ast_1', status: 'PENDING', uploadMode: 'MULTIPART', partSizeBytes: partSize, partCount: 4, expiresAt: '2099-01-01T00:00:00.000Z', parts: [] };
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url === 'http://api.test/api/v1/workspaces/ws_1/assets/upload-intents' && init?.method === 'POST') {
+        return jsonResponse(201, { intentId: 'upi_1', upload: null, expiresAt: status.expiresAt, deduped: false, asset, uploadMode: 'MULTIPART', partSizeBytes: partSize, partCount: 4 });
+      }
+      if (url.endsWith('/assets/upload-intents/upi_1') && init?.method === 'GET') return jsonResponse(200, status);
+      const targetMatch = url.match(/\/parts\/(\d+)$/);
+      if (targetMatch && init?.method === 'POST') return jsonResponse(200, { partNumber: Number(targetMatch[1]), alreadyCompleted: false, upload: { url: `https://storage.test/${targetMatch[1]}`, method: 'PUT', headers: {}, expiresAt: status.expiresAt, maxBytes: partSize } });
+      if (url.startsWith('https://storage.test/') && init?.method === 'PUT') return jsonResponse(200, { ok: true });
+      if (url.endsWith('/complete') && init?.method === 'POST') return jsonResponse(200, status);
+      if (url.endsWith('/assets/ast_1/confirm') && init?.method === 'POST') return jsonResponse(200, { ...asset, status: 'READY', currentVersionId: 'av_1', versions: [{ id: 'av_1', assetId: 'ast_1', versionNumber: 1, storageKey: 'workspaces/ws_1/a', mimeType: 'video/mp4', sizeBytes: totalSize, checksumSha256: '0'.repeat(64), durationMs: null, width: null, height: null, status: 'READY', metadata: {}, createdAt: now }] });
+      return jsonResponse(404, { error: { code: 'NOT_FOUND', message: url } });
+    };
+    const client = createClient({ baseUrl: 'http://api.test', fetchImpl });
+    const result = await client.assets.uploadResumable('ws_1', { assetType: 'USER_UPLOAD', filename: 'large.mp4', contentType: 'video/mp4', data }, { partSizeBytes: partSize, concurrency: 2 });
+    expect(result.status).toBe('READY');
+    expect(sliceSizes).toEqual([partSize, partSize, partSize, partSize]);
+    expect(maxActiveReads).toBeLessThanOrEqual(2);
+  });
+});
+
 describe('createClient：响应解析与错误路径', () => {
   it('成功响应按契约解析', async () => {
     const fetchImpl: typeof fetch = async () => jsonResponse(200, healthBody);

@@ -191,6 +191,12 @@ export type AssetDetail = z.infer<typeof assetDetailSchema>;
 
 /** 单文件上限 5 GiB（§26.1：大文件必须直传对象存储，不经 Web App Server） */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
+export const DEFAULT_UPLOAD_PART_SIZE_BYTES = 8 * 1024 * 1024;
+export const MAX_UPLOAD_PARTS = 10_000;
+export const MULTIPART_UPLOAD_INTENT_TTL_SECONDS = 24 * 60 * 60;
+
+export const uploadModeSchema = z.enum(['SINGLE', 'MULTIPART']);
+export type UploadMode = z.infer<typeof uploadModeSchema>;
 
 export const createUploadIntentRequestSchema = z.object({
   assetType: assetTypeSchema,
@@ -206,6 +212,9 @@ export const createUploadIntentRequestSchema = z.object({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
   license: licenseInputSchema.optional(),
+  /** 新客户端统一使用 MULTIPART；SINGLE 仅保留旧 SDK/API 兼容。 */
+  uploadMode: uploadModeSchema.default('SINGLE'),
+  partSizeBytes: z.number().int().min(256 * 1024).max(64 * 1024 * 1024).optional(),
 });
 
 export type CreateUploadIntentRequest = z.infer<typeof createUploadIntentRequestSchema>;
@@ -222,12 +231,52 @@ export const uploadIntentResponseSchema = z
     /** 命中 workspace 内哈希去重：未创建新对象，客户端可直接绑定 asset */
     deduped: z.boolean(),
     asset: assetSchema,
+    uploadMode: uploadModeSchema.default('SINGLE'),
+    partSizeBytes: z.number().int().positive().nullable().default(null),
+    partCount: z.number().int().positive().nullable().default(null),
   })
-  .refine((value) => (value.deduped ? value.upload === null && value.intentId === null : value.upload !== null && value.intentId !== null), {
+  .refine((value) => (value.deduped ? value.upload === null && value.intentId === null : value.intentId !== null), {
     message: 'deduped 与 upload/intentId 必须一致（去重时无直传目标）',
+  })
+  .refine((value) => (value.deduped || value.uploadMode !== 'MULTIPART' ? true : value.upload === null && value.partSizeBytes !== null && value.partCount !== null), {
+    message: 'MULTIPART 意图必须返回分片参数且不返回整对象上传地址',
   });
 
 export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;
+
+export const uploadPartStatusSchema = z.enum(['PENDING', 'COMPLETED']);
+export const uploadPartSchema = z.object({
+  partNumber: z.number().int().positive(),
+  status: uploadPartStatusSchema,
+  sizeBytes: z.number().int().nonnegative().nullable().default(null),
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
+  completedAt: isoDateTimeSchema.nullable().default(null),
+});
+export type UploadPart = z.infer<typeof uploadPartSchema>;
+
+export const uploadIntentStatusSchema = z.object({
+  intentId: opaqueIdSchema,
+  assetId: opaqueIdSchema,
+  status: z.enum(['PENDING', 'COMPLETED', 'EXPIRED', 'FAILED', 'CANCELLED']),
+  uploadMode: uploadModeSchema,
+  partSizeBytes: z.number().int().positive().nullable(),
+  partCount: z.number().int().positive().nullable(),
+  expiresAt: isoDateTimeSchema,
+  parts: z.array(uploadPartSchema),
+});
+export type UploadIntentStatus = z.infer<typeof uploadIntentStatusSchema>;
+
+export const uploadPartTargetResponseSchema = z.object({
+  partNumber: z.number().int().positive(),
+  alreadyCompleted: z.boolean(),
+  upload: uploadTargetSchema.nullable(),
+});
+export type UploadPartTargetResponse = z.infer<typeof uploadPartTargetResponseSchema>;
+
+export const completeUploadPartRequestSchema = z.object({
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type CompleteUploadPartRequest = z.infer<typeof completeUploadPartRequestSchema>;
 
 export const confirmUploadRequestSchema = z.object({
   checksumSha256: z

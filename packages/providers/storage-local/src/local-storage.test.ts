@@ -113,4 +113,15 @@ describe('本地对象存储适配器', () => {
     expect((await storage.probeObject(key)).exists).toBe(false);
     expect(await storage.computeObjectSha256(key)).toBeNull();
   });
+
+  it('按顺序流式合并分片并原子暴露最终对象', async () => {
+    await storage.putObject('multipart/upi_1/part-00001', new TextEncoder().encode('alpha'));
+    await storage.putObject('multipart/upi_1/part-00002', new TextEncoder().encode('-beta'));
+    await storage.composeObjects({
+      sourceKeys: ['multipart/upi_1/part-00001', 'multipart/upi_1/part-00002'],
+      destinationKey: 'workspaces/ws_1/uploads/combined.bin',
+    });
+    expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/uploads/combined.bin') ?? new Uint8Array())).toBe('alpha-beta');
+    expect((await storage.probeObject('workspaces/ws_1/uploads/combined.bin')).sizeBytes).toBe(10);
+  });
 });

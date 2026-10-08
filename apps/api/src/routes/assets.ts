@@ -6,18 +6,25 @@ import {
   assetSchema,
   assetTypeSchema,
   confirmUploadRequestSchema,
+  completeUploadPartRequestSchema,
   createUploadIntentRequestSchema,
   downloadUrlResponseSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
   uploadIntentResponseSchema,
+  uploadIntentStatusSchema,
+  uploadPartTargetResponseSchema,
 } from '@ancs/contracts';
 import {
   confirmUpload,
+  cancelUploadIntent,
+  completeUploadPart,
+  createUploadPartTarget,
   createAssetDownloadUrl,
   createUploadIntent,
   getAsset,
+  getUploadIntentStatus,
   listAssets,
   restoreAsset,
   softDeleteAsset,
@@ -35,6 +42,8 @@ import type { StorageDeps } from '../plugins/storage.js';
 
 const wsParamsSchema = z.object({ id: opaqueIdSchema });
 const assetParamsSchema = z.object({ id: opaqueIdSchema, assetId: opaqueIdSchema });
+const intentParamsSchema = z.object({ id: opaqueIdSchema, intentId: opaqueIdSchema });
+const partParamsSchema = intentParamsSchema.extend({ partNumber: z.coerce.number().int().positive() });
 const assetListQuerySchema = z.object({
   projectId: opaqueIdSchema.optional(),
   assetType: assetTypeSchema.optional(),
@@ -72,6 +81,80 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         input: request.body,
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/upload-intents/:intentId',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '读取可恢复上传意图与已确认分片',
+        params: intentParamsSchema,
+        response: { 200: uploadIntentStatusSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return getUploadIntentStatus(domain, { workspaceId: request.params.id, intentId: request.params.intentId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/upload-intents/:intentId/parts/:partNumber',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '为单个未确认分片签发短期直传地址',
+        params: partParamsSchema,
+        response: { 200: uploadPartTargetResponseSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return createUploadPartTarget(domain, {
+        workspaceId: request.params.id,
+        intentId: request.params.intentId,
+        partNumber: request.params.partNumber,
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/upload-intents/:intentId/parts/:partNumber/complete',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '校验并确认一个上传分片',
+        params: partParamsSchema,
+        body: completeUploadPartRequestSchema,
+        response: { 200: uploadIntentStatusSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return completeUploadPart(domain, {
+        workspaceId: request.params.id,
+        intentId: request.params.intentId,
+        partNumber: request.params.partNumber,
+        input: request.body,
+      });
+    },
+  );
+
+  typed.delete(
+    '/workspaces/:id/assets/upload-intents/:intentId',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '取消未完成上传并清理已上传分片',
+        params: intentParamsSchema,
+        response: { 200: uploadIntentStatusSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return cancelUploadIntent(domain, { workspaceId: request.params.id, intentId: request.params.intentId });
     },
   );
 

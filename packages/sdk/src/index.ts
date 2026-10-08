@@ -4,5 +4,9 @@ export type {
   AuthorizeResult,
   ClientOptions,
   MutationOptions,
+  ResumableUploadInput,
+  ResumableUploadOptions,
+  UploadDataSource,
+  BatchUploadResult,
   PkcePair,
 } from './client.js';

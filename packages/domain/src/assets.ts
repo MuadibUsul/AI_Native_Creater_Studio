@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ASSET_DEFAULT_RETENTION,
   ASSET_MIME_ALLOWLIST,
   DIRECT_UPLOAD_ASSET_TYPES,
   DOWNLOAD_URL_TTL_SECONDS,
+  DEFAULT_UPLOAD_PART_SIZE_BYTES,
   ERROR_CODES,
+  MAX_UPLOAD_PARTS,
   MAX_SIGNED_URL_TTL_SECONDS,
+  MULTIPART_UPLOAD_INTENT_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
   assetDetailSchema,
   assetSchema,
@@ -18,17 +21,21 @@ import {
   probeImageDimensions,
   sniffMimeType,
   uploadIntentResponseSchema,
+  uploadIntentStatusSchema,
+  uploadPartSchema,
+  uploadPartTargetResponseSchema,
   type Asset,
   type AssetDetail,
   type AssetOrigin,
   type AssetType,
   type ConfirmUploadRequest,
+  type CompleteUploadPartRequest,
   createUploadIntentRequestSchema,
   type CreateUploadIntentInput,
   type DownloadUrlResponse,
   type LicenseMetadata,
 } from '@ancs/contracts';
-import { assetVersions, assets, projects, scenes, uploadIntents } from '@ancs/db';
+import { assetVersions, assets, projects, scenes, uploadIntents, uploadParts } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assertStorageQuota } from './plans.js';
 
@@ -242,6 +249,9 @@ export async function createUploadIntent(
         expiresAt: null,
         deduped: true,
         asset: toAssetDto(existing.asset),
+        uploadMode: request.uploadMode,
+        partSizeBytes: null,
+        partCount: null,
       });
     }
   }
@@ -258,8 +268,14 @@ export async function createUploadIntent(
     filename: request.filename,
   });
   const now = new Date();
-  const uploadTtlSeconds = deps.uploadIntentTtlSeconds ?? UPLOAD_URL_TTL_SECONDS;
+  const uploadTtlSeconds =
+    deps.uploadIntentTtlSeconds ?? (request.uploadMode === 'MULTIPART' ? MULTIPART_UPLOAD_INTENT_TTL_SECONDS : UPLOAD_URL_TTL_SECONDS);
   const expiresAt = new Date(now.getTime() + uploadTtlSeconds * 1000);
+  const partSizeBytes = request.uploadMode === 'MULTIPART' ? (request.partSizeBytes ?? DEFAULT_UPLOAD_PART_SIZE_BYTES) : null;
+  const partCount = partSizeBytes === null ? null : Math.ceil(request.sizeBytes / partSizeBytes);
+  if (partCount !== null && partCount > MAX_UPLOAD_PARTS) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '上传分片数量超过上限', 422, { partCount, maxParts: MAX_UPLOAD_PARTS });
+  }
   const license = defaultLicense(request, origin, userId);
 
   await deps.db.transaction(async (tx) => {
@@ -297,19 +313,25 @@ export async function createUploadIntent(
       expectedMimeType: request.contentType,
       expectedSizeBytes: request.sizeBytes,
       expectedChecksumSha256: request.checksumSha256 ?? null,
+      uploadMode: request.uploadMode,
+      partSizeBytes,
+      partCount,
       status: 'PENDING',
       expiresAt,
       createdBy: userId,
     });
   });
 
-  const upload = await storage.createUploadTarget({
-    key: storageKey,
-    contentType: request.contentType,
-    maxBytes: request.sizeBytes,
-    ttlSeconds: uploadTtlSeconds,
-    scope: { workspaceId, assetId, versionId },
-  });
+  const upload =
+    request.uploadMode === 'SINGLE'
+      ? await storage.createUploadTarget({
+          key: storageKey,
+          contentType: request.contentType,
+          maxBytes: request.sizeBytes,
+          ttlSeconds: uploadTtlSeconds,
+          scope: { workspaceId, assetId, versionId },
+        })
+      : null;
 
   const assetRows = await deps.db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
   const assetRow = assetRows[0];
@@ -321,7 +343,194 @@ export async function createUploadIntent(
     expiresAt: expiresAt.toISOString(),
     deduped: false,
     asset: toAssetDto(assetRow),
+    uploadMode: request.uploadMode,
+    partSizeBytes,
+    partCount,
   });
+}
+
+const partStorageKey = (intentId: string, partNumber: number): string => `multipart/${intentId}/part-${String(partNumber).padStart(5, '0')}`;
+
+async function loadUploadIntent(deps: DomainDeps, workspaceId: string, intentId: string) {
+  const rows = await deps.db
+    .select()
+    .from(uploadIntents)
+    .where(and(eq(uploadIntents.id, intentId), eq(uploadIntents.workspaceId, workspaceId)))
+    .limit(1);
+  const intent = rows[0];
+  if (!intent) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'upload intent not found', 404);
+  return intent;
+}
+
+function assertPendingMultipart(intent: typeof uploadIntents.$inferSelect): void {
+  if (intent.uploadMode !== 'MULTIPART' || intent.partSizeBytes === null || intent.partCount === null) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '该上传意图不是分片上传', 409, { reason: 'NOT_MULTIPART' });
+  }
+  if (intent.status !== 'PENDING') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '上传意图已结束', 409, { reason: `INTENT_${intent.status}` });
+  }
+  if (intent.expiresAt.getTime() <= Date.now()) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '上传意图已过期', 409, { reason: 'INTENT_EXPIRED' });
+  }
+}
+
+export async function getUploadIntentStatus(deps: DomainDeps, input: { workspaceId: string; intentId: string }) {
+  const intent = await loadUploadIntent(deps, input.workspaceId, input.intentId);
+  const rows = await deps.db
+    .select()
+    .from(uploadParts)
+    .where(and(eq(uploadParts.workspaceId, input.workspaceId), eq(uploadParts.uploadIntentId, input.intentId)))
+    .orderBy(asc(uploadParts.partNumber));
+  return uploadIntentStatusSchema.parse({
+    intentId: intent.id,
+    assetId: intent.assetId,
+    status: intent.status,
+    uploadMode: intent.uploadMode,
+    partSizeBytes: intent.partSizeBytes,
+    partCount: intent.partCount,
+    expiresAt: intent.expiresAt.toISOString(),
+    parts: rows.map((row) =>
+      uploadPartSchema.parse({
+        partNumber: row.partNumber,
+        status: row.status,
+        sizeBytes: row.sizeBytes === null ? null : Number(row.sizeBytes),
+        checksumSha256: row.checksumSha256,
+        completedAt: row.completedAt?.toISOString() ?? null,
+      }),
+    ),
+  });
+}
+
+export async function createUploadPartTarget(
+  deps: DomainDeps,
+  input: { workspaceId: string; intentId: string; partNumber: number },
+) {
+  const intent = await loadUploadIntent(deps, input.workspaceId, input.intentId);
+  assertPendingMultipart(intent);
+  if (input.partNumber < 1 || input.partNumber > (intent.partCount ?? 0)) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '分片编号越界', 422, { partNumber: input.partNumber, partCount: intent.partCount });
+  }
+  const existing = await deps.db
+    .select()
+    .from(uploadParts)
+    .where(and(eq(uploadParts.uploadIntentId, intent.id), eq(uploadParts.partNumber, input.partNumber)))
+    .limit(1);
+  if (existing[0]?.status === 'COMPLETED') {
+    return uploadPartTargetResponseSchema.parse({ partNumber: input.partNumber, alreadyCompleted: true, upload: null });
+  }
+  const expectedSize =
+    input.partNumber === intent.partCount
+      ? Number(intent.expectedSizeBytes) - intent.partSizeBytes! * (intent.partCount - 1)
+      : intent.partSizeBytes!;
+  const storageKey = partStorageKey(intent.id, input.partNumber);
+  await deps.db
+    .insert(uploadParts)
+    .values({
+      id: `upp_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      uploadIntentId: intent.id,
+      partNumber: input.partNumber,
+      storageKey,
+      status: 'PENDING',
+    })
+    .onConflictDoNothing({ target: [uploadParts.uploadIntentId, uploadParts.partNumber] });
+  const upload = await requireStorage(deps).createUploadTarget({
+    key: storageKey,
+    contentType: 'application/octet-stream',
+    maxBytes: expectedSize,
+    ttlSeconds: UPLOAD_URL_TTL_SECONDS,
+    scope: { workspaceId: input.workspaceId, assetId: intent.assetId, versionId: intent.assetVersionId },
+  });
+  return uploadPartTargetResponseSchema.parse({ partNumber: input.partNumber, alreadyCompleted: false, upload });
+}
+
+export async function completeUploadPart(
+  deps: DomainDeps,
+  input: { workspaceId: string; intentId: string; partNumber: number; input: CompleteUploadPartRequest },
+) {
+  const intent = await loadUploadIntent(deps, input.workspaceId, input.intentId);
+  assertPendingMultipart(intent);
+  const rows = await deps.db
+    .select()
+    .from(uploadParts)
+    .where(
+      and(
+        eq(uploadParts.workspaceId, input.workspaceId),
+        eq(uploadParts.uploadIntentId, intent.id),
+        eq(uploadParts.partNumber, input.partNumber),
+      ),
+    )
+    .limit(1);
+  const part = rows[0];
+  if (!part) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'upload part not found', 404);
+  if (part.status === 'COMPLETED') return getUploadIntentStatus(deps, { workspaceId: input.workspaceId, intentId: intent.id });
+  const expectedSize =
+    input.partNumber === intent.partCount
+      ? Number(intent.expectedSizeBytes) - intent.partSizeBytes! * (intent.partCount! - 1)
+      : intent.partSizeBytes!;
+  const storage = requireStorage(deps);
+  const probe = await storage.probeObject(part.storageKey);
+  if (!probe.exists || probe.sizeBytes !== expectedSize) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '分片大小与声明不一致', 409, {
+      reason: probe.exists ? 'PART_SIZE_MISMATCH' : 'PART_MISSING',
+      expectedSizeBytes: expectedSize,
+      actualSizeBytes: probe.sizeBytes,
+    });
+  }
+  const actualSha = await storage.computeObjectSha256(part.storageKey);
+  if (actualSha !== input.input.checksumSha256) {
+    await storage.deleteObject(part.storageKey);
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '分片校验和不符', 409, {
+      reason: 'PART_CHECKSUM_MISMATCH',
+      expectedChecksumSha256: input.input.checksumSha256,
+      actualChecksumSha256: actualSha,
+    });
+  }
+  const completedAt = new Date();
+  await deps.db
+    .update(uploadParts)
+    .set({ status: 'COMPLETED', sizeBytes: probe.sizeBytes, checksumSha256: actualSha, completedAt })
+    .where(and(eq(uploadParts.id, part.id), eq(uploadParts.workspaceId, input.workspaceId), eq(uploadParts.status, 'PENDING')));
+  return getUploadIntentStatus(deps, { workspaceId: input.workspaceId, intentId: intent.id });
+}
+
+export async function cancelUploadIntent(deps: DomainDeps, input: { workspaceId: string; intentId: string }) {
+  const intent = await loadUploadIntent(deps, input.workspaceId, input.intentId);
+  if (intent.status === 'COMPLETED') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '已完成上传不能取消', 409, { reason: 'UPLOAD_COMPLETED' });
+  }
+  if (intent.status !== 'CANCELLED') {
+    await deps.db.transaction(async (tx) => {
+      await tx.update(uploadIntents).set({ status: 'CANCELLED', completedAt: new Date() }).where(eq(uploadIntents.id, intent.id));
+      await tx.update(assetVersions).set({ status: 'FAILED', metadata: { failureReason: 'UPLOAD_CANCELLED' } }).where(eq(assetVersions.id, intent.assetVersionId));
+      await tx.update(assets).set({ status: 'FAILED', updatedAt: new Date() }).where(eq(assets.id, intent.assetId));
+    });
+    const parts = await deps.db.select().from(uploadParts).where(eq(uploadParts.uploadIntentId, intent.id));
+    await Promise.all(parts.map((part) => requireStorage(deps).deleteObject(part.storageKey)));
+  }
+  return getUploadIntentStatus(deps, { workspaceId: input.workspaceId, intentId: intent.id });
+}
+
+async function composeMultipartUpload(deps: DomainDeps, intent: typeof uploadIntents.$inferSelect): Promise<void> {
+  if (intent.uploadMode !== 'MULTIPART') return;
+  if (intent.partCount === null) throw new ApiFailure(ERROR_CODES.INTERNAL, '分片上传缺少 partCount', 500);
+  const parts = await deps.db
+    .select()
+    .from(uploadParts)
+    .where(and(eq(uploadParts.workspaceId, intent.workspaceId), eq(uploadParts.uploadIntentId, intent.id), eq(uploadParts.status, 'COMPLETED')))
+    .orderBy(asc(uploadParts.partNumber));
+  if (parts.length !== intent.partCount || parts.some((part, index) => part.partNumber !== index + 1)) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '仍有分片未确认', 409, {
+      reason: 'PARTS_INCOMPLETE',
+      completedParts: parts.length,
+      partCount: intent.partCount,
+    });
+  }
+  const storage = requireStorage(deps);
+  if (storage.composeObjects === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '当前存储驱动不支持分片合并', 501, { storageKind: storage.kind });
+  }
+  await storage.composeObjects({ sourceKeys: parts.map((part) => part.storageKey), destinationKey: intent.storageKey });
 }
 
 /** 上传失败的状态收敛（伪造 MIME / 校验和不符：版本 FAILED、意图 FAILED、对象删除）。 */
@@ -372,6 +581,9 @@ export async function confirmUpload(
       reason: 'UPLOAD_FAILED',
     });
   }
+  if (intent.status === 'CANCELLED') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '该上传已取消', 409, { reason: 'UPLOAD_CANCELLED' });
+  }
   if (intent.status === 'EXPIRED' || intent.expiresAt.getTime() <= Date.now()) {
     await deps.db
       .update(uploadIntents)
@@ -381,6 +593,9 @@ export async function confirmUpload(
       reason: 'INTENT_EXPIRED',
     });
   }
+
+  // 分片全部确认后由存储驱动流式合并为最终对象；不把整文件读入 API 内存。
+  await composeMultipartUpload(deps, intent);
 
   // 真实探测：存在性与大小
   const probe = await storage.probeObject(intent.storageKey);
@@ -516,6 +731,10 @@ export async function confirmUpload(
   // 去重时删除本次上传的冗余对象（事务提交后）
   if (deletedDuplicateObject) {
     await storage.deleteObject(intent.storageKey);
+  }
+  if (intent.uploadMode === 'MULTIPART') {
+    const parts = await deps.db.select().from(uploadParts).where(eq(uploadParts.uploadIntentId, intent.id));
+    await Promise.all(parts.map((part) => storage.deleteObject(part.storageKey)));
   }
 
   return getAsset(deps, { workspaceId, assetId });

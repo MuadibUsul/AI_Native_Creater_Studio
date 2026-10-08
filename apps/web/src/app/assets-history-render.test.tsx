@@ -55,38 +55,41 @@ describe('Assets × 外部处理回绑（P06-07）', () => {
 });
 
 describe('Assets', () => {
-  it('空：上传表单可用；提交调用 SDK 一体化上传（含 projectId）', async () => {
-    const upload = vi.fn().mockResolvedValue({ id: 'ast_1', status: 'READY' });
+  it('空：上传表单可用；提交调用 SDK 可恢复上传（含 projectId）', async () => {
+    const uploadResumable = vi.fn().mockResolvedValue({ id: 'ast_1', status: 'READY' });
     const client = mockClient({
-      assets: { list: vi.fn().mockResolvedValue([]), upload },
+      assets: { list: vi.fn().mockResolvedValue([]), uploadResumable, cancelUpload: vi.fn() },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
     });
     renderWithClient(<AssetsPage />, client);
     expect(await screen.findByText('还没有资产')).toBeTruthy();
     const file = testFile('cover.png', 'hello', 'image/png');
     // jsdom 下 file input 用 fireEvent 注入 FileList（userEvent.upload 在此组合下不触发 React onChange）
+    await userEvent.click(screen.getByRole('button', { name: '上传素材' }));
     const fileInput = screen.getByLabelText('选择文件');
     Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
     fireEvent.change(fileInput);
-    await userEvent.click(screen.getByRole('button', { name: '上传（直传签名 URL）' }));
-    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
-    const [, uploadInput] = upload.mock.calls[0] as [string, { assetType: string; filename: string; projectId: string; contentType: string }];
+    await userEvent.click(screen.getByRole('button', { name: '开始上传' }));
+    await waitFor(() => expect(uploadResumable).toHaveBeenCalledTimes(1));
+    const [, uploadInput] = uploadResumable.mock.calls[0] as [string, { assetType: string; filename: string; projectId: string; contentType: string }];
     expect(uploadInput.assetType).toBe('SOURCE_IMAGE');
     expect(uploadInput.filename).toBe('cover.png');
     expect(uploadInput.projectId).toBe('prj_1');
   });
 
   it('上传失败（服务端校验）：明确原因与重试动作', async () => {
-    const upload = vi.fn().mockRejectedValue(apiError(415, 'UNSUPPORTED_MEDIA_TYPE', '实际内容与声明不符'));
-    const client = mockClient({ assets: { list: vi.fn().mockResolvedValue([]), upload }, billing: { externalResults: vi.fn().mockResolvedValue([]) } });
+    const uploadResumable = vi.fn().mockRejectedValue(apiError(415, 'UNSUPPORTED_MEDIA_TYPE', '实际内容与声明不符'));
+    const client = mockClient({ assets: { list: vi.fn().mockResolvedValue([]), uploadResumable, cancelUpload: vi.fn() }, billing: { externalResults: vi.fn().mockResolvedValue([]) } });
     renderWithClient(<AssetsPage />, client);
     await screen.findByText('还没有资产');
+    await userEvent.click(screen.getByRole('button', { name: '上传素材' }));
     const fileInput = screen.getByLabelText('选择文件');
     Object.defineProperty(fileInput, 'files', { value: [testFile('evil.png', 'x', 'image/png')], configurable: true });
     fireEvent.change(fileInput);
-    await userEvent.click(screen.getByRole('button', { name: '上传（直传签名 URL）' }));
-    expect(await screen.findByText('上传失败')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '开始上传' }));
+    expect(await screen.findByText((_text, element) => element?.tagName === 'SPAN' && element.textContent?.includes('上传失败') === true)).toBeTruthy();
     expect(screen.getByText('实际内容与声明不符')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '继续' })).toBeTruthy();
   });
 
   it('正常：资产列表展示类型/状态/来源', async () => {

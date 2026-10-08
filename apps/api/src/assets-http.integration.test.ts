@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,10 +82,10 @@ afterAll(async () => {
   await rm(rootDir, { recursive: true, force: true });
 });
 
-async function newSignedInClient(): Promise<AncsClient> {
+async function newSignedInClient(fetchImpl?: typeof fetch): Promise<AncsClient> {
   const email = `assets-${randomUUID()}@test.local`;
   await createInternalUser(auth, { email, password: PASSWORD, name: '资产测试' });
-  const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
+  const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0', fetchImpl });
   await client.auth.signIn({ email, password: PASSWORD });
   return client;
 }
@@ -96,6 +96,84 @@ async function makeWorkspace(client: AncsClient): Promise<string> {
 }
 
 describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
+  it('分片断点续传：跳过服务端已确认分片，流式合并后字节与校验和一致', async () => {
+    const putParts: string[] = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/v1/storage/upload') && init?.method === 'PUT') putParts.push(url);
+      return fetch(input, init);
+    };
+    const client = await newSignedInClient(recordingFetch);
+    const workspaceId = await makeWorkspace(client);
+    const bytes = new Uint8Array(600_000);
+    bytes.set(makePng(1920, 1080));
+    const intent = await client.assets.createUploadIntent(workspaceId, {
+      assetType: 'USER_UPLOAD',
+      filename: 'resume.png',
+      contentType: 'image/png',
+      sizeBytes: bytes.byteLength,
+      uploadMode: 'MULTIPART',
+      partSizeBytes: 256 * 1024,
+    });
+    expect(intent.upload).toBeNull();
+    expect(intent.partCount).toBe(3);
+    const firstTarget = await client.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1);
+    const first = bytes.subarray(0, 256 * 1024);
+    expect((await fetch(firstTarget.upload!.url, { method: 'PUT', headers: firstTarget.upload!.headers, body: first })).status).toBe(200);
+    await client.assets.completeUploadPart(workspaceId, intent.intentId!, 1, {
+      checksumSha256: createHash('sha256').update(first).digest('hex'),
+    });
+    putParts.length = 0;
+
+    const result = await client.assets.uploadResumable(
+      workspaceId,
+      {
+        assetType: 'USER_UPLOAD',
+        filename: 'resume.png',
+        contentType: 'image/png',
+        data: new Blob([bytes]),
+        resumeIntentId: intent.intentId!,
+      },
+      { partSizeBytes: 256 * 1024, concurrency: 2 },
+    );
+    expect(result.status).toBe('READY');
+    expect(result.versions[0]?.checksumSha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(putParts).toHaveLength(2);
+  });
+
+  it('错误分片 checksum、跨租户 complete 与超过套餐存储额度均被拒绝', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const bytes = makePng(10, 10);
+    const intent = await owner.assets.createUploadIntent(workspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'bad-checksum.png', contentType: 'image/png', sizeBytes: bytes.byteLength,
+      uploadMode: 'MULTIPART', partSizeBytes: 256 * 1024,
+    });
+    const target = await owner.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1);
+    await fetch(target.upload!.url, { method: 'PUT', headers: target.upload!.headers, body: bytes });
+    const badChecksum = await owner.assets.completeUploadPart(workspaceId, intent.intentId!, 1, { checksumSha256: '0'.repeat(64) }).catch((error: unknown) => error);
+    expect(badChecksum).toMatchObject({ status: 409, details: { reason: 'PART_CHECKSUM_MISMATCH' } });
+    const hidden = await stranger.assets.completeUploadPart(workspaceId, intent.intentId!, 1, { checksumSha256: '0'.repeat(64) }).catch((error: unknown) => error);
+    expect(hidden).toMatchObject({ status: 404 });
+    const cancelled = await owner.assets.cancelUpload(workspaceId, intent.intentId!);
+    expect(cancelled.status).toBe('CANCELLED');
+    const afterCancel = await owner.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1).catch((error: unknown) => error);
+    expect(afterCancel).toMatchObject({ status: 409, details: { reason: 'INTENT_CANCELLED' } });
+    const previousPlan = process.env['ANCS_DEFAULT_PLAN'];
+    process.env['ANCS_DEFAULT_PLAN'] = 'FREE';
+    try {
+      const quota = await owner.assets.createUploadIntent(workspaceId, {
+        assetType: 'USER_UPLOAD', filename: 'too-large.mp4', contentType: 'video/mp4', sizeBytes: 3 * 1024 * 1024 * 1024,
+        uploadMode: 'MULTIPART',
+      }).catch((error: unknown) => error);
+      expect(quota).toMatchObject({ status: 422, details: { reason: 'STORAGE_QUOTA_EXCEEDED' } });
+    } finally {
+      if (previousPlan === undefined) delete process.env['ANCS_DEFAULT_PLAN'];
+      else process.env['ANCS_DEFAULT_PLAN'] = previousPlan;
+    }
+  });
+
   it('SDK 一体化上传：意图 → 直传 → 确认（真实探测）→ 下载 Signed URL 可取回原始字节', async () => {
     const client = await newSignedInClient();
     const workspaceId = await makeWorkspace(client);

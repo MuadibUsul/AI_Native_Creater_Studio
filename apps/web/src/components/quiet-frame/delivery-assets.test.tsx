@@ -5,19 +5,27 @@ import { mockClient, renderWithClient, testFile } from '@/test-utils';
 import { DeliveryAssets } from './delivery-assets';
 
 describe('Quiet Frame asset flow', () => {
-  it('uses SDK signed-upload flow for the selected real file', async () => {
-    const upload = vi.fn().mockResolvedValue({ id: 'ast_1' });
+  it('uses the SDK resumable flow for every selected real file without whole-file reads', async () => {
+    const uploadResumable = vi.fn().mockImplementation(async (_workspaceId, input, options) => {
+      options?.onIntent?.({ intentId: `upi_${input.filename}`, assetId: `ast_${input.filename}` });
+      options?.onProgress?.({ uploadedBytes: input.data.size, totalBytes: input.data.size, completedParts: 1, partCount: 1 });
+      return { id: `ast_${input.filename}` };
+    });
     const client = mockClient({
-      assets: { list: vi.fn().mockResolvedValue([]), upload },
+      assets: { list: vi.fn().mockResolvedValue([]), uploadResumable, cancelUpload: vi.fn() },
       billing: { externalResults: vi.fn().mockResolvedValue([]) },
     });
     renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
     await screen.findByText('还没有资产');
     await userEvent.click(screen.getByRole('button', { name: '上传素材' }));
-    const file = testFile('cover.png', 'PNG_DATA', 'image/png');
-    await userEvent.upload(screen.getByLabelText('选择文件'), file);
+    const files = [testFile('cover.png', 'PNG_DATA', 'image/png'), testFile('clip.mp4', 'VIDEO_DATA', 'video/mp4')];
+    await userEvent.upload(screen.getByLabelText('选择文件'), files);
+    expect(screen.getByText('已选择 2 个文件')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: '开始上传' }));
-    await waitFor(() => expect(upload).toHaveBeenCalledWith('ws_1', expect.objectContaining({ projectId: 'prj_1', filename: 'cover.png', contentType: 'image/png', assetType: 'SOURCE_IMAGE' })));
+    await waitFor(() => expect(uploadResumable).toHaveBeenCalledTimes(2));
+    expect(uploadResumable).toHaveBeenCalledWith('ws_1', expect.objectContaining({ projectId: 'prj_1', filename: 'cover.png', contentType: 'image/png', assetType: 'SOURCE_IMAGE', data: files[0] }), expect.objectContaining({ concurrency: 3 }));
+    expect(uploadResumable).toHaveBeenCalledWith('ws_1', expect.objectContaining({ projectId: 'prj_1', filename: 'clip.mp4', contentType: 'video/mp4', assetType: 'USER_UPLOAD', data: files[1] }), expect.objectContaining({ concurrency: 3 }));
+    expect(screen.getAllByText((_text, element) => element?.tagName === 'SPAN' && element.textContent?.includes('已完成') === true)).toHaveLength(2);
   });
 
   it('loads the workspace library without inventing a project binding', async () => {

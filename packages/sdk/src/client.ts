@@ -120,9 +120,12 @@ import {
   createProjectRequestSchema,
   createProjectVersionRequestSchema,
   createUploadIntentRequestSchema,
+  completeUploadPartRequestSchema,
   confirmUploadRequestSchema,
   downloadUrlResponseSchema,
   uploadIntentResponseSchema,
+  uploadIntentStatusSchema,
+  uploadPartTargetResponseSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
   editRequestSchema,
@@ -372,6 +375,7 @@ import {
   type Notification,
   type WorkspaceEvent,
   type ConfirmUploadRequest,
+  type CompleteUploadPartRequest,
   type CreateUploadIntentInput,
   type DownloadUrlResponse,
   type Project,
@@ -382,6 +386,8 @@ import {
   type ProjectVersionDetail,
   type SceneGraph,
   type UploadIntentResponse,
+  type UploadIntentStatus,
+  type UploadPartTargetResponse,
 } from '@ancs/contracts';
 
 /**
@@ -437,6 +443,39 @@ export type CredentialsMode = 'include' | 'omit' | 'same-origin';
 export interface MutationOptions {
   idempotencyKey?: string;
 }
+
+export interface UploadDataSource {
+  readonly size: number;
+  slice(start?: number, end?: number): Blob;
+}
+
+export interface ResumableUploadInput {
+  assetType: CreateUploadIntentInput['assetType'];
+  filename: string;
+  contentType: string;
+  data: UploadDataSource;
+  projectId?: string;
+  sceneId?: string;
+  license?: CreateUploadIntentInput['license'];
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  checksumSha256?: string;
+  /** 暂停后续传时复用原意图；服务端已确认分片不会重传。 */
+  resumeIntentId?: string;
+}
+
+export interface ResumableUploadOptions extends MutationOptions {
+  signal?: AbortSignal;
+  partSizeBytes?: number;
+  concurrency?: number;
+  onIntent?: (value: { intentId: string; assetId: string }) => void;
+  onProgress?: (value: { uploadedBytes: number; totalBytes: number; completedParts: number; partCount: number }) => void;
+}
+
+export type BatchUploadResult =
+  | { status: 'fulfilled'; filename: string; asset: AssetDetail }
+  | { status: 'rejected'; filename: string; error: unknown };
 
 export interface AuthorizeResult {
   /** 重定向地址（原样返回，便于客户端按环境打开浏览器） */
@@ -677,6 +716,15 @@ export interface AncsClient {
       input: CreateUploadIntentInput,
       options?: MutationOptions,
     ): Promise<UploadIntentResponse>;
+    getUploadIntent(workspaceId: string, intentId: string): Promise<UploadIntentStatus>;
+    createUploadPartTarget(workspaceId: string, intentId: string, partNumber: number): Promise<UploadPartTargetResponse>;
+    completeUploadPart(
+      workspaceId: string,
+      intentId: string,
+      partNumber: number,
+      input: CompleteUploadPartRequest,
+    ): Promise<UploadIntentStatus>;
+    cancelUpload(workspaceId: string, intentId: string): Promise<UploadIntentStatus>;
     /** 确认上传（服务端真实探测；重复确认幂等） */
     confirm(workspaceId: string, assetId: string, input: ConfirmUploadRequest, options?: MutationOptions): Promise<AssetDetail>;
     list(workspaceId: string, query?: { projectId?: string; assetType?: string; trashed?: boolean }): Promise<Asset[]>;
@@ -708,6 +756,8 @@ export interface AncsClient {
       },
       options?: MutationOptions,
     ): Promise<AssetDetail>;
+    uploadResumable(workspaceId: string, input: ResumableUploadInput, options?: ResumableUploadOptions): Promise<AssetDetail>;
+    uploadBatch(workspaceId: string, inputs: ResumableUploadInput[], options?: ResumableUploadOptions): Promise<BatchUploadResult[]>;
   };
   events: {
     /** 游标快照（headSeq；从 head 起仅收新事件） */
@@ -1171,7 +1221,7 @@ export function createClient(options: ClientOptions): AncsClient {
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     schema: ZodType<T>,
-    init?: { body?: unknown; bodySchema?: ZodType; idempotencyKey?: string },
+    init?: { body?: unknown; bodySchema?: ZodType; idempotencyKey?: string; signal?: AbortSignal },
   ): Promise<T> {
     // 请求体在异步边界内校验：非法输入以 rejection 呈现（而非同步抛出）
     const body = init?.body === undefined ? undefined : init.bodySchema ? init.bodySchema.parse(init.body) : init.body;
@@ -1180,6 +1230,7 @@ export function createClient(options: ClientOptions): AncsClient {
       headers: await buildHeaders(body !== undefined, init?.idempotencyKey),
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials,
+      signal: init?.signal,
     });
     captureCookies(response);
 
@@ -1234,6 +1285,118 @@ export function createClient(options: ClientOptions): AncsClient {
     return Array.from(new Uint8Array(digest))
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
+  };
+
+  const uploadResumableImpl = async (
+    workspaceId: string,
+    input: ResumableUploadInput,
+    options: ResumableUploadOptions = {},
+  ): Promise<AssetDetail> => {
+    const assertNotAborted = (): void => {
+      if (options.signal?.aborted === true) throw new DOMException('上传已暂停', 'AbortError');
+    };
+    assertNotAborted();
+    let intentId: string;
+    let assetId: string;
+    let status: UploadIntentStatus;
+    if (input.resumeIntentId !== undefined) {
+      status = await request(
+        'GET',
+        `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${input.resumeIntentId}`,
+        uploadIntentStatusSchema,
+        { signal: options.signal },
+      );
+      if (status.status !== 'PENDING') throw new Error(`上传意图不可续传：${status.status}`);
+      intentId = status.intentId;
+      assetId = status.assetId;
+    } else {
+      const intent = await request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
+        body: {
+          assetType: input.assetType,
+          filename: input.filename,
+          contentType: input.contentType,
+          sizeBytes: input.data.size,
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          license: input.license,
+          checksumSha256: input.checksumSha256,
+          uploadMode: 'MULTIPART',
+          partSizeBytes: options.partSizeBytes,
+        },
+        bodySchema: createUploadIntentRequestSchema,
+        idempotencyKey: options.idempotencyKey,
+        signal: options.signal,
+      });
+      if (intent.deduped) {
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}`, assetDetailSchema, { signal: options.signal });
+      }
+      if (intent.intentId === null) throw new Error('分片上传意图缺少 intentId');
+      intentId = intent.intentId;
+      assetId = intent.asset.id;
+      status = await request('GET', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema, {
+        signal: options.signal,
+      });
+    }
+    options.onIntent?.({ intentId, assetId });
+    if (status.uploadMode !== 'MULTIPART' || status.partSizeBytes === null || status.partCount === null) {
+      throw new Error('上传意图不是可恢复分片模式');
+    }
+    const completed = new Set(status.parts.filter((part) => part.status === 'COMPLETED').map((part) => part.partNumber));
+    let uploadedBytes = status.parts
+      .filter((part) => part.status === 'COMPLETED')
+      .reduce((sum, part) => sum + (part.sizeBytes ?? 0), 0);
+    const report = (): void =>
+      options.onProgress?.({ uploadedBytes, totalBytes: input.data.size, completedParts: completed.size, partCount: status.partCount! });
+    report();
+    const pending = Array.from({ length: status.partCount }, (_, index) => index + 1).filter((partNumber) => !completed.has(partNumber));
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = cursor++;
+        const partNumber = pending[index];
+        if (partNumber === undefined) return;
+        assertNotAborted();
+        const start = (partNumber - 1) * status.partSizeBytes!;
+        const end = Math.min(start + status.partSizeBytes!, input.data.size);
+        const bytes = new Uint8Array(await input.data.slice(start, end).arrayBuffer());
+        const checksumSha256 = await sha256Hex(bytes);
+        if (checksumSha256 === null) throw new Error('当前环境不支持 SHA-256，无法校验上传分片');
+        const target = await request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}`,
+          uploadPartTargetResponseSchema,
+          { signal: options.signal },
+        );
+        if (!target.alreadyCompleted) {
+          if (target.upload === null) throw new Error('分片上传目标缺失');
+          const response = await doFetch(target.upload.url, {
+            method: target.upload.method,
+            headers: target.upload.headers,
+            body: bytes,
+            signal: options.signal,
+          });
+          if (!response.ok) throw new Error(`分片 ${String(partNumber)} 直传失败：HTTP ${String(response.status)}`);
+          await request(
+            'POST',
+            `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}/complete`,
+            uploadIntentStatusSchema,
+            { body: { checksumSha256 }, bodySchema: completeUploadPartRequestSchema, signal: options.signal },
+          );
+        }
+        completed.add(partNumber);
+        uploadedBytes += end - start;
+        report();
+      }
+    };
+    const concurrency = Math.min(Math.max(options.concurrency ?? 3, 1), 6, Math.max(pending.length, 1));
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    assertNotAborted();
+    return request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/confirm`, assetDetailSchema, {
+      body: { durationMs: input.durationMs, width: input.width, height: input.height },
+      bodySchema: confirmUploadRequestSchema,
+      idempotencyKey: options.idempotencyKey,
+      signal: options.signal,
+    });
   };
 
   return {
@@ -1824,6 +1987,23 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createUploadIntentRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      getUploadIntent: (workspaceId, intentId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema),
+      createUploadPartTarget: (workspaceId, intentId, partNumber) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}`,
+          uploadPartTargetResponseSchema,
+        ),
+      completeUploadPart: (workspaceId, intentId, partNumber, input) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}/complete`,
+          uploadIntentStatusSchema,
+          { body: input, bodySchema: completeUploadPartRequestSchema },
+        ),
+      cancelUpload: (workspaceId, intentId) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema),
       confirm: (workspaceId, assetId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/confirm`, assetDetailSchema, {
           body: input,
@@ -1849,48 +2029,37 @@ export function createClient(options: ClientOptions): AncsClient {
       get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),
-      upload: async (workspaceId, input, mutation) => {
-        const checksumSha256 = await sha256Hex(input.data);
-        const intent = await request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
-          body: {
-            assetType: input.assetType,
-            filename: input.filename,
-            contentType: input.contentType,
-            sizeBytes: input.data.byteLength,
-            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
-            ...(input.sceneId !== undefined ? { sceneId: input.sceneId } : {}),
-            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
-            ...(input.license !== undefined ? { license: input.license } : {}),
+      upload: async (workspaceId, input, mutation) =>
+        uploadResumableImpl(
+          workspaceId,
+          {
+            ...input,
+            checksumSha256: await sha256Hex(input.data) ?? undefined,
+            data: {
+              size: input.data.byteLength,
+              slice: (start = 0, end = input.data.byteLength) => {
+                const source = input.data.subarray(start, end);
+                const copy = new Uint8Array(source.byteLength);
+                copy.set(source);
+                return new Blob([copy.buffer], { type: input.contentType });
+              },
+            },
           },
-          bodySchema: createUploadIntentRequestSchema,
-          idempotencyKey: mutation?.idempotencyKey,
-        });
-        if (intent.deduped) {
-          return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}`, assetDetailSchema);
+          mutation,
+        ),
+      uploadResumable: (workspaceId, input, options) => uploadResumableImpl(workspaceId, input, options),
+      uploadBatch: async (workspaceId, inputs, options) => {
+        const results: BatchUploadResult[] = [];
+        // 逐文件建立意图，避免并发额度检查越过 workspace 上限；单文件内部仍按分片限并发。
+        for (const input of inputs) {
+          try {
+            const asset = await uploadResumableImpl(workspaceId, input, options);
+            results.push({ status: 'fulfilled', filename: input.filename, asset });
+          } catch (error) {
+            results.push({ status: 'rejected', filename: input.filename, error });
+          }
         }
-        if (intent.upload === null) {
-          throw new Error('上传意图缺少直传目标（协议不一致）');
-        }
-        // body 用 ArrayBuffer：跨 node/DOM 类型的 BodyInit 均兼容（Uint8Array<ArrayBufferLike> 在 DOM 类型下不被接受）
-        const uploadBody = new Uint8Array(input.data).buffer;
-        const uploadResponse = await doFetch(intent.upload.url, {
-          method: intent.upload.method,
-          headers: intent.upload.headers,
-          body: uploadBody,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`直传失败：HTTP ${String(uploadResponse.status)}`);
-        }
-        return request('POST', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}/confirm`, assetDetailSchema, {
-          body: {
-            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
-            width: input.width ?? undefined,
-            height: input.height ?? undefined,
-            durationMs: input.durationMs ?? undefined,
-          },
-          bodySchema: confirmUploadRequestSchema,
-          idempotencyKey: mutation?.idempotencyKey,
-        });
+        return results;
       },
     },
 

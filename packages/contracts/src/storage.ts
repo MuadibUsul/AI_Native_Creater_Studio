@@ -65,6 +65,11 @@ export interface ObjectStorageAdapter {
   /** 对象 SHA-256（十六进制小写）；对象不存在返回 null */
   computeObjectSha256(key: string): Promise<string | null>;
   /**
+   * 将同一上传意图的分片按给定顺序合成为最终对象。实现必须流式复制，不能把所有分片
+   * 同时读入内存；目标写入失败时不得暴露半成品对象。
+   */
+  composeObjects?(input: { sourceKeys: string[]; destinationKey: string }): Promise<void>;
+  /**
    * 服务端写入对象（结果回收 / 渲染产物落库；§75 第 5 条：结果必须落在自有存储）。
    * 客户端上传走 Signed URL（createUploadTarget），不使用本方法。
    */

@@ -98,6 +98,10 @@ export const uploadIntents = pgTable(
     expectedMimeType: text('expected_mime_type').notNull(),
     expectedSizeBytes: bigint('expected_size_bytes', { mode: 'number' }).notNull(),
     expectedChecksumSha256: text('expected_checksum_sha256'),
+    /** SINGLE 为旧整对象直传；MULTIPART 为 N02-01 可恢复分片直传。 */
+    uploadMode: text('upload_mode').notNull().default('SINGLE'),
+    partSizeBytes: integer('part_size_bytes'),
+    partCount: integer('part_count'),
     /** PENDING / COMPLETED / EXPIRED / FAILED */
     status: text('status').notNull().default('PENDING'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -109,5 +113,29 @@ export const uploadIntents = pgTable(
     index('upload_intents_asset_idx').on(table.assetId),
     index('upload_intents_workspace_status_idx').on(table.workspaceId, table.status),
     index('upload_intents_expires_idx').on(table.expiresAt),
+  ],
+);
+
+export const uploadParts = pgTable(
+  'upload_parts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    uploadIntentId: text('upload_intent_id')
+      .notNull()
+      .references(() => uploadIntents.id, { onDelete: 'cascade' }),
+    partNumber: integer('part_number').notNull(),
+    storageKey: text('storage_key').notNull(),
+    status: text('status').notNull().default('PENDING'),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }),
+    checksumSha256: text('checksum_sha256'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('upload_parts_intent_number_uq').on(table.uploadIntentId, table.partNumber),
+    index('upload_parts_workspace_intent_idx').on(table.workspaceId, table.uploadIntentId),
   ],
 );
