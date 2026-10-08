@@ -386,6 +386,12 @@ export {
   assertProjectGenerationAllowed,
 } from './project-document.js';
 export {
+  createSequence,
+  createTrack,
+  createClip,
+  listProjectComposition,
+} from './composition.js';
+export {
   createConnection,
   getConnection,
   listConnections,

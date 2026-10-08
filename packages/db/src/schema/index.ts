@@ -31,6 +31,7 @@ export {
   voiceIdentities,
 } from './creator.js';
 export { projectVersions, projects, scenes } from './projects.js';
+export { projectSequences, sequenceTracks, sequenceClips } from './composition.js';
 export { editEvents, outboxEvents } from './history.js';
 export { assetVersions, assets, uploadIntents } from './assets.js';
 export { notifications } from './notifications.js';

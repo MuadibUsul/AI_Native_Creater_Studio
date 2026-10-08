@@ -98,6 +98,27 @@ export type {
   ProjectDocument,
   GovernedGenerationCapability,
 } from './project-document.js';
+export {
+  TRACK_KINDS,
+  trackKindSchema,
+  clipTimeMappingSchema,
+  sequenceSchema,
+  trackSchema,
+  clipSchema,
+  createSequenceRequestSchema,
+  createTrackRequestSchema,
+  createClipRequestSchema,
+} from './composition.js';
+export type {
+  TrackKind,
+  ClipTimeMapping,
+  Sequence,
+  Track,
+  Clip,
+  CreateSequenceRequest,
+  CreateTrackRequest,
+  CreateClipRequest,
+} from './composition.js';
 
 export {
   contentDocumentSchema,

@@ -5,6 +5,7 @@ import { frameRateSchema, mediaRangeSchema, mediaTimeSchema } from './common/med
 import { revisionSchema } from './common/revision.js';
 import { identitySnapshotSchema, sceneGraphSchema, sourceReferenceSchema } from './scene-graph.js';
 import { privacyTierSchema } from './workspaces.js';
+import { clipSchema, sequenceSchema, trackSchema } from './composition.js';
 
 /** N01-02: ProjectDocument is the single versioned project read model. */
 export const PROJECT_DOCUMENT_SCHEMA_VERSION = '1.0' as const;
@@ -149,6 +150,10 @@ export const projectCompositionSchema = z.object({
   start: mediaTimeSchema,
   duration: mediaTimeSchema,
   objects: z.array(compositionObjectSchema).default([]),
+  /** N01-03 normalized composition objects; legacy fields above remain a migration projection. */
+  sequences: z.array(sequenceSchema).default([]),
+  tracks: z.array(trackSchema).default([]),
+  clips: z.array(clipSchema).default([]),
 });
 
 export const projectDocumentSchema = z.object({

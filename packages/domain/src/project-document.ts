@@ -13,10 +13,14 @@ import {
   type ProductionPolicy,
   type ProjectDocument,
   type SceneGraph,
+  type Sequence,
+  type Track,
+  type Clip,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assembleSceneGraph } from './projects.js';
+import { listProjectComposition } from './composition.js';
 
 const compositionObjectId = (sceneId: string): string => `cmp_${sceneId}`;
 
@@ -26,6 +30,7 @@ export function projectDocumentFromSceneGraph(input: {
   brief: unknown;
   productionPolicy: unknown;
   documentSchemaVersion?: string;
+  composition?: { sequences: Sequence[]; tracks: Track[]; clips: Clip[] };
 }): ProjectDocument {
   if ((input.documentSchemaVersion ?? PROJECT_DOCUMENT_SCHEMA_VERSION) !== PROJECT_DOCUMENT_SCHEMA_VERSION) {
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'ProjectDocument schema version is not supported', 409, {
@@ -35,6 +40,7 @@ export function projectDocumentFromSceneGraph(input: {
   }
   const graph = input.graph;
   const frameRate = legacyFpsToFrameRate(graph.format.fps);
+  const activeSequence = input.composition?.sequences[0];
   const semanticScenes = graph.scenes.map((scene) => ({
     id: scene.id,
     purpose: scene.visualIntent,
@@ -66,11 +72,14 @@ export function projectDocumentFromSceneGraph(input: {
     identitySnapshot: graph.identitySnapshot,
     semanticPlan: semanticScenes.length === 0 ? null : { narrativePlanId: null, scenes: semanticScenes },
     composition: {
-      sequenceId: `seq_${graph.projectId}`,
-      frameRate,
-      start: legacyMillisecondsToMediaTime(0),
-      duration: legacyMillisecondsToMediaTime(graph.timeline.durationMs),
+      sequenceId: activeSequence?.id ?? `seq_${graph.projectId}`,
+      frameRate: activeSequence?.frameRate ?? frameRate,
+      start: activeSequence?.start ?? legacyMillisecondsToMediaTime(0),
+      duration: activeSequence?.duration ?? legacyMillisecondsToMediaTime(graph.timeline.durationMs),
       objects,
+      sequences: input.composition?.sequences ?? [],
+      tracks: input.composition?.tracks ?? [],
+      clips: input.composition?.clips ?? [],
     },
     assetVersionIds: [],
     sourceReferences: graph.sourceReferences,
@@ -106,12 +115,16 @@ export async function assembleProjectDocument(
     .limit(1);
   const project = rows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-  const graph = await assembleSceneGraph(deps, input);
+  const [graph, composition] = await Promise.all([
+    assembleSceneGraph(deps, input),
+    listProjectComposition(deps, input),
+  ]);
   return projectDocumentFromSceneGraph({
     graph,
     brief: project.brief,
     productionPolicy: project.productionPolicy,
     documentSchemaVersion: project.documentSchemaVersion,
+    composition,
   });
 }
 
