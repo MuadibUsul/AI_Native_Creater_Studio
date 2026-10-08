@@ -49,6 +49,7 @@ import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from '.
 import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
 import { validateEditOperationCandidate } from './edit-operation-registry.js';
 import { assertAnimationKeyframesWithinTarget } from './composition-objects.js';
+import { assertProjectApiSchemaVersion } from './project-state.js';
 
 /**
  * 编辑事务处理器（P02-02/P02-03 / 计划 §4.6—§4.8；规范 §23）。
@@ -1307,6 +1308,7 @@ async function applyEditsInTransaction(
 
 export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): Promise<ProcessEditsResult> {
   const request = editRequestSchema.parse(input.request);
+  assertProjectApiSchemaVersion(request.schemaVersion);
 
   await assertLegacyProjectWriteAllowed(deps, input);
 

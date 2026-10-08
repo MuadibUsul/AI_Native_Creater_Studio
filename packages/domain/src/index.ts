@@ -397,6 +397,7 @@ export {
   getProjectProductionPolicy,
   assertProjectGenerationAllowed,
 } from './project-document.js';
+export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
 export {
   createSequence,
   createTrack,

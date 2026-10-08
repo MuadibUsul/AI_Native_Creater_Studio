@@ -15,7 +15,9 @@ import {
   opaqueIdSchema,
   pageResponseSchema,
   projectDetailSchema,
+  projectEditEventPageSchema,
   projectSchema,
+  projectStateSchema,
   projectVersionDetailSchema,
   projectVersionSchema,
   sceneGraphSchema,
@@ -26,8 +28,10 @@ import {
   createProject,
   createProjectVersion,
   getProjectDetail,
+  getProjectState,
   getProjectVersion,
   listProjects,
+  listProjectEditEvents,
   listProjectVersions,
   processEdits,
   redoProject,
@@ -42,6 +46,11 @@ import type { AuthDeps } from '../plugins/auth.js';
 const wsParamsSchema = z.object({ id: opaqueIdSchema });
 const projectParamsSchema = z.object({ projectId: opaqueIdSchema });
 const versionParamsSchema = z.object({ projectId: opaqueIdSchema, versionId: opaqueIdSchema });
+const projectStateQuerySchema = z.object({ schemaVersion: z.string().min(1).max(32).optional() });
+const projectEventsQuerySchema = projectStateQuerySchema.extend({
+  afterSeq: z.coerce.number().int().nonnegative().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
 const projectListSchema = pageResponseSchema(projectSchema);
 const versionListSchema = pageResponseSchema(projectVersionSchema);
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema };
@@ -163,6 +172,46 @@ export function registerProjectRoutes(app: FastifyInstance, deps: AuthDeps): voi
     async (request) => {
       const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
       return assembleSceneGraph(domain, { workspaceId, projectId: request.params.projectId });
+    },
+  );
+
+  typed.get(
+    '/projects/:projectId/state',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '读取唯一权威 ProjectDocument、对象锁与事件水位线',
+        params: projectParamsSchema,
+        querystring: projectStateQuerySchema,
+        response: { 200: projectStateSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      return getProjectState(domain, { workspaceId, projectId: request.params.projectId, schemaVersion: request.query.schemaVersion });
+    },
+  );
+
+  typed.get(
+    '/projects/:projectId/edit-events',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '按单调 seq 增量读取项目 EditEvent',
+        params: projectParamsSchema,
+        querystring: projectEventsQuerySchema,
+        response: { 200: projectEditEventPageSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { workspaceId } = await requireProjectAccess(request, request.params.projectId, 'project:read');
+      return listProjectEditEvents(domain, {
+        workspaceId,
+        projectId: request.params.projectId,
+        schemaVersion: request.query.schemaVersion,
+        afterSeq: request.query.afterSeq,
+        limit: request.query.limit,
+      });
     },
   );
 

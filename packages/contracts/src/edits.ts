@@ -298,6 +298,8 @@ export type EditOperation = z.infer<typeof editOperationSchema>;
 
 /** 每个修改请求的公共外壳（§4.6） */
 export const editRequestSchema = z.object({
+  /** Omitted by legacy clients and interpreted as the current 1.0 contract. */
+  schemaVersion: z.string().min(1).max(32).optional(),
   baseProjectRevision: revisionSchema,
   /** sceneId → 客户端上次见到的 revision（未涉及的 Scene 可省略） */
   expectedSceneRevisions: z.record(opaqueIdSchema, revisionSchema).default({}),

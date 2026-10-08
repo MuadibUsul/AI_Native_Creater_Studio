@@ -127,6 +127,8 @@ import {
   createSceneResponseSchema,
   editRequestSchema,
   editResponseSchema,
+  projectEditEventPageSchema,
+  projectStateSchema,
   createSpeechProfileRequestSchema,
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
@@ -374,6 +376,8 @@ import {
   type DownloadUrlResponse,
   type Project,
   type ProjectDetail,
+  type ProjectEditEventPage,
+  type ProjectState,
   type ProjectVersion,
   type ProjectVersionDetail,
   type SceneGraph,
@@ -634,6 +638,10 @@ export interface AncsClient {
     get(projectId: string): Promise<ProjectDetail>;
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
+    /** 唯一权威 ProjectDocument、对象锁与事件水位线。 */
+    state(projectId: string, query?: { schemaVersion?: string }): Promise<ProjectState>;
+    /** 按单调 seq 增量读取正式 EditEvent。 */
+    editEvents(projectId: string, query?: { schemaVersion?: string; afterSeq?: number; limit?: number }): Promise<ProjectEditEventPage>;
     /** 渲染前预检（P07-05；项目当前状态，只读） */
     renderPrecheck(projectId: string): Promise<QaReport>;
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
@@ -1748,6 +1756,20 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/projects/${projectId}/restore`, projectSchema, { idempotencyKey: mutation?.idempotencyKey }),
       get: (projectId) => request('GET', `/api/v1/projects/${projectId}`, projectDetailSchema),
       graph: (projectId) => request('GET', `/api/v1/projects/${projectId}/graph`, sceneGraphSchema),
+      state: (projectId, query) => {
+        const params = new URLSearchParams();
+        if (query?.schemaVersion !== undefined) params.set('schemaVersion', query.schemaVersion);
+        const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+        return request('GET', `/api/v1/projects/${projectId}/state${suffix}`, projectStateSchema);
+      },
+      editEvents: (projectId, query) => {
+        const params = new URLSearchParams();
+        if (query?.schemaVersion !== undefined) params.set('schemaVersion', query.schemaVersion);
+        if (query?.afterSeq !== undefined) params.set('afterSeq', String(query.afterSeq));
+        if (query?.limit !== undefined) params.set('limit', String(query.limit));
+        const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+        return request('GET', `/api/v1/projects/${projectId}/edit-events${suffix}`, projectEditEventPageSchema);
+      },
       /** 渲染前预检（P07-05；项目当前状态，只读） */
       renderPrecheck: (projectId: string) => request('GET', `/api/v1/projects/${projectId}/render-precheck`, qaReportSchema),
       addScene: (projectId, input, mutation) =>

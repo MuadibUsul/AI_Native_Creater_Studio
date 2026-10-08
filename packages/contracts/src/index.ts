@@ -100,6 +100,13 @@ export type {
   GovernedGenerationCapability,
 } from './project-document.js';
 export {
+  PROJECT_API_SCHEMA_VERSION,
+  projectStateSchema,
+  projectEditEventSchema,
+  projectEditEventPageSchema,
+} from './project-api.js';
+export type { ProjectState, ProjectEditEvent, ProjectEditEventPage } from './project-api.js';
+export {
   TRACK_KINDS,
   trackKindSchema,
   clipTimeMappingSchema,
