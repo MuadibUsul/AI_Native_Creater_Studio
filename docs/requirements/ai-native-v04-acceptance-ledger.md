@@ -4,12 +4,12 @@
 
 来源：`docs/V04/ANCS_AI_Native_v0.4.md` §21—§24、任务清单和包内 `task_index.json`。本文件仅追踪仓库执行；来源中的 P15—P23/T1—T6 不是另一组可执行任务。缺少真实媒体、浏览器或 Provider 证据时，不能把依赖于它们的任务标为 VERIFIED。
 
-当前：N00-01—07、N01-01—10、N15-01/02、N16-01/02 共 21 项 `VERIFIED`；D0/D1、O0 与 G0—G4 总门仍未通过。N00 基础阶段已经全部关闭。N01-01—10 已建立 ProjectDocument、规范化 Composition、18 种编辑操作、六维对象锁、完整补偿历史和版本恢复、带 schema 协商的工程 API，以及 MediaSource／ClipInstance 单一权威映射；最新迁移为 0063，下一项 N01-11。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。
+当前：N00-01—07、N01-01—11、N15-01/02、N16-01/02 共 22 项 `VERIFIED`；D0/D1、O0 与 G0—G4 总门仍未通过。N00、N01 基础阶段已经全部关闭。N01 已建立 ProjectDocument、规范化 Composition、单一媒体权威、六维对象锁、完整补偿历史和版本恢复、工程 API，以及 33 项 Edit Operation v2 来源注册与统一别名 compiler；最新迁移为 0063，下一项 N02-01。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。
 
 | 工作流 | 任务数 | VERIFIED | 说明 |
 |---|---:|---:|---|
 | N00 | 7 | 7 | 基础阶段全部 VERIFIED |
-| N01 | 11 | 10 | N01-01—10 VERIFIED；继续 N01-11 |
+| N01 | 11 | 11 | N01 全部 VERIFIED；继续 N02-01 |
 | N02 | 15 | 0 | 以任务表逐项证据为准 |
 | N03 | 16 | 0 | 以任务表逐项证据为准 |
 | N04 | 11 | 0 | 以任务表逐项证据为准 |
@@ -54,7 +54,7 @@
 | N01-08 | 版本、快照与补偿事件扩展 | N01-05, N01-06, N01-07 | VERIFIED | [`验证`](../verification/N01-08.md) · [`交接`](../handoffs/N01-08.md) |
 | N01-09 | 工程API、SDK与事件契约 | N01-08 | VERIFIED | [`验证`](../verification/N01-09.md) · [`交接`](../handoffs/N01-09.md) |
 | N01-10 | MediaSource与ClipInstance单一权威映射 | N01-03, N01-05 | VERIFIED | [`验证`](../verification/N01-10.md) · [`交接`](../handoffs/N01-10.md) |
-| N01-11 | Edit Operation v2全清单与别名编译 | N01-06, N01-10 | TODO | — |
+| N01-11 | Edit Operation v2全清单与别名编译 | N01-06, N01-10 | VERIFIED | [`验证`](../verification/N01-11.md) · [`交接`](../handoffs/N01-11.md) |
 
 ### N02
 

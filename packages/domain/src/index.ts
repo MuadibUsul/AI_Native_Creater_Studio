@@ -399,6 +399,8 @@ export {
 } from './project-document.js';
 export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
 export { clipInstanceToLegacyProjection, compileLegacyClipProjectionUpdate, listProjectMediaViews, upsertMediaDerivativeState } from './media-sources.js';
+export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV2 } from './edit-operation-v2.js';
+export type { ProcessEditsV2Input } from './edit-operation-v2.js';
 export {
   createSequence,
   createTrack,

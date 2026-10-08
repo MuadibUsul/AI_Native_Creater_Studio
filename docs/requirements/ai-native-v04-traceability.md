@@ -81,7 +81,7 @@ N01-01—09 已按各自范围 VERIFIED：精确时基、ProjectDocument、规�
 | V03-68 | 现有标准场景与视觉语法保留、扩展不绑定供应商 | §2、§14 | N01-04, N03-05, N07-03, N08-02, N10-01, N12-07, N14-02 | IN_PROGRESS |
 | V04-01 | 增量来源、历史事实边界与冲突处置 | §1.4、§26.5、§27 | N00-02, N00-07, N13-12 | IN_PROGRESS |
 | V04-02 | MediaSource／ClipInstance等术语归一与单一权威 | §12.6 | N00-07, N01-10, N02-10, N04-09 | IN_PROGRESS |
-| V04-03 | Edit Operation v2完整清单及操作别名编译 | §13.5 | N01-11, N04-11, N07-09, N13-12 | TODO |
+| V04-03 | Edit Operation v2完整清单及操作别名编译 | §13.5 | N01-11, N04-11, N07-09, N13-12 | IN_PROGRESS |
 | V04-04 | 统一Media Index多模态记录契约 | §5.7 | N02-10, N02-12, N02-13 | TODO |
 | V04-05 | 媒体分析渐进就绪、阶段检查点及增量重建 | §5.8 | N02-11 | TODO |
 | V04-06 | 对象／动作／人物轨迹与运动事件检索 | §5.7—5.9 | N02-12, N02-15 | TODO |
@@ -95,7 +95,7 @@ N01-01—09 已按各自范围 VERIFIED：精确时基、ProjectDocument、规�
 | V04-14 | 共享RenderPlan与FFmpeg＋Remotion混合终渲染 | §15.10—15.11 | N03-08, N03-11, N03-16, N09-08, N09-09, N09-10, N09-11 | TODO |
 | V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | TODO |
 | V04-16 | Smart Timeline、Inspector与命令入口渐进显露 | §4.5 | N04-11, N07-11 | TODO |
-| V04-17 | 版本化Agent Tool Registry与能力授权 | §9.5 | N01-11, N07-04, N07-09, N07-10, N10-12, N14-07, N14-08 | TODO |
+| V04-17 | 版本化Agent Tool Registry与能力授权 | §9.5 | N01-11, N07-04, N07-09, N07-10, N10-12, N14-07, N14-08 | IN_PROGRESS |
 | V04-18 | 持久会话Agent与五工具最小闭环 | §9.6、§21.4 | N07-08, N07-10, N07-11, N07-13 | TODO |
 | V04-19 | Preview Branch正式历史与审计／费用分离 | §10.6 | N06-01, N06-10, N06-11 | TODO |
 | V04-20 | Decision Notebook拒绝方案、策略影响与偏好晋升 | §11.4 | N07-08, N07-12 | TODO |

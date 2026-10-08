@@ -1,7 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EDIT_OPERATION_REGISTRY, EDIT_OPERATION_TYPES, editOperationDefinitionSchema, editRequestSchema } from './index.js';
+import {
+  EDIT_OPERATION_REGISTRY,
+  EDIT_OPERATION_TYPES,
+  EDIT_OPERATION_V2_INPUT_SCHEMAS,
+  EDIT_OPERATION_V2_REGISTRY,
+  SOURCE_EDIT_OPERATION_TYPES,
+  editOperationDefinitionSchema,
+  editOperationV2RegistrationSchema,
+  editRequestSchema,
+} from './index.js';
 
 const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sample.json');
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
@@ -123,5 +132,25 @@ describe('编辑协议契约（计划 §4.6）', () => {
       ...request,
       operations: [{ op: 'update_audio_region', audioRegionId: 'aud_1', changes: { gainDb: -6, pan: 0.25 } }],
     }).success).toBe(true);
+  });
+
+  it('N01-11 为 §13.5 的每个来源操作登记输入 schema 和原生／别名／待实现状态', () => {
+    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(33);
+    expect(Object.keys(EDIT_OPERATION_V2_REGISTRY).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
+    expect(Object.keys(EDIT_OPERATION_V2_INPUT_SCHEMAS).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
+    for (const operation of SOURCE_EDIT_OPERATION_TYPES) {
+      const definition = editOperationV2RegistrationSchema.parse(EDIT_OPERATION_V2_REGISTRY[operation]);
+      expect(definition.operation).toBe(operation);
+      expect(EDIT_OPERATION_V2_INPUT_SCHEMAS[operation]).toBeDefined();
+      expect(['NATIVE', 'COMPILED_ALIAS', 'PLANNED']).toContain(definition.resolution);
+      if (definition.resolution === 'PLANNED') expect(definition.plannedTask).not.toBeNull();
+      else expect(definition.canonicalOperation).not.toBeNull();
+    }
+    expect(EDIT_OPERATION_V2_REGISTRY.move_clip).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.set_audio_gain).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_audio_region' });
+    expect(EDIT_OPERATION_V2_REGISTRY.regenerate_region).toMatchObject({ resolution: 'PLANNED', category: 'ASYNC_COMMAND', costCategory: 'PROVIDER_ESTIMATE_REQUIRED' });
+    for (const operation of ['create_preview_branch', 'commit_preview_branch', 'discard_preview_branch'] as const) {
+      expect(EDIT_OPERATION_V2_REGISTRY[operation]).toMatchObject({ resolution: 'PLANNED', category: 'PREVIEW_COMMAND', supportedBackends: ['PROPOSAL_SERVICE'] });
+    }
   });
 });

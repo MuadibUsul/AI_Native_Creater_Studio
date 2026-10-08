@@ -139,6 +139,7 @@ export {
   visualObjectSchema,
   effectInstanceSchema,
   animationBindingSchema,
+  keyframeSchema,
   captionWordTimingSchema,
   captionSpanSchema,
   audioChannelMappingSchema,
@@ -281,6 +282,35 @@ export {
   restoreProjectVersionOperationSchema,
 } from './edits.js';
 export type { EditRequest, EditOperation, EditOperationType, EditExecutionBackend, EditOperationDefinition, ProjectChanges, SceneChanges } from './edits.js';
+export {
+  SOURCE_EDIT_OPERATION_TYPES,
+  EDIT_OPERATION_V2_RESOLUTIONS,
+  EDIT_OPERATION_V2_CATEGORIES,
+  EDIT_OPERATION_V2_COST_CATEGORIES,
+  EDIT_OPERATION_V2_ENTRYPOINTS,
+  EDIT_OPERATION_V2_TARGET_KINDS,
+  EDIT_OPERATION_V2_INPUT_SCHEMAS,
+  EDIT_OPERATION_V2_REGISTRY,
+  editOperationV2RegistrationSchema,
+  editOperationV2EntrypointSchema,
+  moveClipSourceOperationSchema,
+  trimClipSourceOperationSchema,
+  slipClipSourceOperationSchema,
+  setClipSpeedSourceOperationSchema,
+  keyframeSourceOperationSchema,
+  setAudioGainSourceOperationSchema,
+  setAudioFadeSourceOperationSchema,
+  setAudioPanSourceOperationSchema,
+  setAudioAutomationSourceOperationSchema,
+  canonicalEditOperationSchema,
+} from './edit-operation-v2.js';
+export type {
+  SourceEditOperationType,
+  EditOperationV2Resolution,
+  EditOperationV2Category,
+  EditOperationV2Entrypoint,
+  EditOperationV2Registration,
+} from './edit-operation-v2.js';
 export {
   updateClipChangesSchema,
   updateClipOperationSchema,
