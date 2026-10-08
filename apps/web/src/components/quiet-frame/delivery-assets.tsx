@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { mapSourcePtsToProxyPts, type Asset, type MediaIndexEntry } from '@ancs/contracts';
+import { mapSourcePtsToProxyPts, type Asset, type MediaIndexEntry, type TranscriptSegment } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys } from '@/lib/queries';
@@ -108,6 +108,9 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
   const [rebindIds, setRebindIds] = useState<Record<string, string>>({});
   const [indexKind, setIndexKind] = useState<'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'>('THUMBNAIL');
   const [indexCursor, setIndexCursor] = useState<string | undefined>();
+  const [editingTranscriptSegmentId, setEditingTranscriptSegmentId] = useState<string | null>(null);
+  const [transcriptDraft, setTranscriptDraft] = useState('');
+  const [terminologyDraft, setTerminologyDraft] = useState<string | null>(null);
   const mediaRef = useRef<HTMLMediaElement | null>(null);
   const playbackRangeEnd = useRef<number | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -144,6 +147,26 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     mutationFn: () => client.assets.rebuildMediaIndex(workspaceId, selectedId as string),
     onSuccess: async () => { setIndexCursor(undefined); await cache.invalidateQueries({ queryKey: ['asset-media-index', workspaceId, selectedId] }); },
   });
+  const hasAudio = currentVersion?.mediaProbe?.streams.some((stream) => stream.type === 'AUDIO') === true;
+  const transcriptKey = ['asset-transcript', workspaceId, selectedId] as const;
+  const transcript = useQuery({
+    queryKey: transcriptKey,
+    enabled: selectedId !== null && currentVersion?.probeStatus === 'READY' && hasAudio,
+    queryFn: () => client.assets.transcript(workspaceId, selectedId as string),
+    refetchInterval: (query) => ['QUEUED', 'RUNNING'].includes(query.state.data?.status ?? '') ? 3000 : false,
+  });
+  const retryTranscript = useMutation({
+    mutationFn: () => client.assets.retryTranscript(workspaceId, selectedId as string),
+    onSuccess: (data) => cache.setQueryData(transcriptKey, data),
+  });
+  const correctSegment = useMutation({
+    mutationFn: (input: { segmentId: string; text: string }) => client.assets.correctTranscriptSegment(workspaceId, selectedId as string, { expectedVersion: transcript.data?.currentVersion?.version ?? 0, ...input }),
+    onSuccess: (data) => { cache.setQueryData(transcriptKey, data); setEditingTranscriptSegmentId(null); setTranscriptDraft(''); },
+  });
+  const updateTerminology = useMutation({
+    mutationFn: () => client.assets.updateTranscriptTerminology(workspaceId, selectedId as string, { expectedVersion: transcript.data?.currentVersion?.version ?? 0, entries: (terminologyDraft ?? transcript.data?.currentVersion?.terminology.map((entry) => `${entry.source}=${entry.preferred}`).join('\n') ?? '').split('\n').map((line) => line.split('=')).filter((parts) => parts.length >= 2 && parts[0]?.trim() && parts.slice(1).join('=').trim()).map((parts) => ({ source: parts[0]!.trim(), preferred: parts.slice(1).join('=').trim() })) }),
+    onSuccess: (data) => { cache.setQueryData(transcriptKey, data); setTerminologyDraft(null); },
+  });
   const sourcePtsSeconds = (entry: MediaIndexEntry, pts: string): number => {
     const streamType = entry.kind === 'WAVEFORM' || entry.payload['marker'] === 'SILENCE' ? 'AUDIO' : 'VIDEO';
     const mapping = playback.data?.rendition === 'PROXY' ? playback.data.timeMappings.find((candidate) => candidate.streamType === streamType) : undefined;
@@ -158,6 +181,15 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     if (!media) return;
     media.currentTime = Math.max(0, sourcePtsSeconds(entry, entry.sourceStartPts));
     playbackRangeEnd.current = Math.max(media.currentTime, sourcePtsSeconds(entry, entry.sourceEndPts));
+    void media.play();
+  };
+  const playTranscriptRange = (segment: TranscriptSegment) => {
+    const media = mediaRef.current;
+    if (!media) return;
+    const mapping = playback.data?.rendition === 'PROXY' ? playback.data.timeMappings.find((candidate) => candidate.streamType === 'AUDIO') : undefined;
+    const seconds = (pts: string) => mapping ? Number(mapSourcePtsToProxyPts(mapping, pts)) * mapping.proxyTimeBase.numerator / mapping.proxyTimeBase.denominator : Number(pts) * segment.timeBase.numerator / segment.timeBase.denominator;
+    media.currentTime = Math.max(0, seconds(segment.sourceStartPts));
+    playbackRangeEnd.current = Math.max(media.currentTime, seconds(segment.sourceEndPts));
     void media.play();
   };
   const stopAtIndexRangeEnd = () => {
@@ -268,6 +300,18 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     <span><strong>{entry.kind === 'SHOT' ? `镜头 ${String(entry.ordinal + 1)}` : entry.kind === 'QUALITY' ? (entry.payload['marker'] === 'SILENCE' ? '静音区间' : '黑场区间') : indexKindLabels[entry.kind]}</strong><small>{clockLabel(entry.payload['sourceStartMs'])}–{clockLabel(entry.payload['sourceEndMs'])}</small></span>
   </button>)}</div>}
   {mediaIndex.data && (indexCursor !== undefined || mediaIndex.data.nextCursor !== null) && <div className="row between mt16"><button type="button" className="textbtn small" disabled={indexCursor === undefined} onClick={() => setIndexCursor(undefined)}>第一页</button><button type="button" className="textbtn small" disabled={mediaIndex.data.nextCursor === null} onClick={() => setIndexCursor(mediaIndex.data?.nextCursor ?? undefined)}>下一页</button></div>}
-</section><div className="row mt24" style={{ flexWrap: 'wrap' }}>{signedDownloadUrl && <a className="btn" href={signedDownloadUrl} target="_blank" rel="noopener noreferrer"><QuietIcon name="download" />下载原文件</a>}{selected.status === 'READY' && (selected.projectId ?? projectId) && <Link className="btn" href={`/w/${workspaceId}/p/${selected.projectId ?? projectId}/storyboard`}>前往分镜</Link>}</div>{!signedDownloadUrl && !download.isError && !download.isPending && <p role="status" className="small muted mt16">签名下载链接已到期或暂未生成。<button type="button" className="textbtn small" onClick={() => void download.refetch()}>重新获取链接</button></p>}{download.isError && <p role="alert" className="small" style={{ color: 'var(--bad)' }}>下载链接暂不可用：{describeError(download.error).message} <button type="button" className="textbtn small" onClick={() => void download.refetch()}>重试</button></p>}</div></div>}
+</section>{hasAudio && <section className={`${styles['transcriptPanel']} panel pad mt16`} aria-label="源媒体转写">
+  <div className="row between" style={{ flexWrap: 'wrap' }}><div><strong>源媒体转写</strong><p className="small muted mt8">词句绑定原始音频时间。机器识别仅供核对，不作为已确认字幕。</p></div><span className={`badge ${transcript.data?.status === 'READY' ? 'green' : transcript.data?.status === 'FAILED' ? 'amber' : ''}`}>{transcript.isPending ? '正在读取' : transcript.data?.status === 'READY' ? `版本 ${String(transcript.data.currentVersion?.version ?? 0)}` : transcript.data?.status === 'FAILED' ? '等待处理' : transcript.data?.status === 'RUNNING' ? '正在识别' : '等待识别'}</span></div>
+  {transcript.isError && <p role="alert" className="small mt16" style={{ color: 'var(--bad)' }}>转写读取失败：{describeError(transcript.error).message}</p>}
+  {transcript.data?.status === 'FAILED' && <div className="notice amber mt16"><div><strong>转写暂不可用</strong><p className="small mt8">{transcript.data.errorSummary ?? '原音、播放和媒体索引仍可使用。'}</p><button type="button" className="btn small mt16" disabled={retryTranscript.isPending} onClick={() => retryTranscript.mutate()}>{retryTranscript.isPending ? '正在提交…' : '配置完成后重试'}</button></div></div>}
+  {transcript.data?.status === null && <div className="mt16"><p className="small muted">这个已有音频还没有转写记录。</p><button type="button" className="btn small mt8" disabled={retryTranscript.isPending} onClick={() => retryTranscript.mutate()}>{retryTranscript.isPending ? '正在提交…' : '开始转写'}</button></div>}
+  {retryTranscript.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>{describeError(retryTranscript.error).message}</p>}
+  {['QUEUED', 'RUNNING'].includes(transcript.data?.status ?? '') && <p role="status" className="small muted mt16">正在识别源音频；播放、下载与其他媒体结果不受影响。</p>}
+  {transcript.data?.currentVersion && <><div className={styles['transcriptMeta']}><span>机器识别 · 待核对</span><span>{transcript.data.currentVersion.language}</span><span>{transcript.data.currentVersion.provider} / {transcript.data.currentVersion.model}</span></div><div className={styles['transcriptList']}>{transcript.data.currentVersion.segments.map((segment) => {
+    const speaker = transcript.data.currentVersion?.speakers.find((candidate) => candidate.id === segment.speakerId);
+    const editing = editingTranscriptSegmentId === segment.id;
+    return <article key={segment.id} className={styles['transcriptSegment']}><button type="button" className={styles['transcriptTime']} onClick={() => playTranscriptRange(segment)} aria-label={`播放 ${clockLabel(Number(segment.sourceStartPts) * segment.timeBase.numerator / segment.timeBase.denominator * 1000)} 开始的转写片段`}><QuietIcon name="play" />{clockLabel(Number(segment.sourceStartPts) * segment.timeBase.numerator / segment.timeBase.denominator * 1000)}</button><div><span className="small muted">{speaker?.displayName ?? '说话人未知'} · {segment.reviewState === 'CORRECTED' ? '已人工校正' : '机器识别'}</span>{editing ? <><textarea className={styles['transcriptEditor']} rows={3} value={transcriptDraft} onChange={(event) => setTranscriptDraft(event.target.value)} aria-label="校正转写文本" /><div className="row mt8"><button type="button" className="btn small primary" disabled={!transcriptDraft.trim() || correctSegment.isPending} onClick={() => correctSegment.mutate({ segmentId: segment.id, text: transcriptDraft.trim() })}>保存校正</button><button type="button" className="btn ghost small" onClick={() => { setEditingTranscriptSegmentId(null); setTranscriptDraft(''); }}>取消</button></div></> : <button type="button" className={styles['transcriptText']} onClick={() => { setEditingTranscriptSegmentId(segment.id); setTranscriptDraft(segment.text); }}>{segment.text}</button>}</div></article>;
+  })}</div>{correctSegment.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>保存失败：{describeError(correctSegment.error).message} 请刷新版本后再试。</p>}<details className="mt16"><summary className={styles['summary']}>术语字典</summary><p className="small muted mt8">每行填写“识别词=首选写法”。修改会创建新版本，不改动原音。</p><textarea className={styles['terminologyEditor']} rows={4} value={terminologyDraft ?? transcript.data.currentVersion.terminology.map((entry) => `${entry.source}=${entry.preferred}`).join('\n')} onChange={(event) => setTerminologyDraft(event.target.value)} aria-label="转写术语字典" /><button type="button" className="btn small mt8" disabled={updateTerminology.isPending} onClick={() => updateTerminology.mutate()}>{updateTerminology.isPending ? '正在保存…' : '保存术语版本'}</button>{updateTerminology.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>{describeError(updateTerminology.error).message}</p>}</details></>}
+</section>}<div className="row mt24" style={{ flexWrap: 'wrap' }}>{signedDownloadUrl && <a className="btn" href={signedDownloadUrl} target="_blank" rel="noopener noreferrer"><QuietIcon name="download" />下载原文件</a>}{selected.status === 'READY' && (selected.projectId ?? projectId) && <Link className="btn" href={`/w/${workspaceId}/p/${selected.projectId ?? projectId}/storyboard`}>前往分镜</Link>}</div>{!signedDownloadUrl && !download.isError && !download.isPending && <p role="status" className="small muted mt16">签名下载链接已到期或暂未生成。<button type="button" className="textbtn small" onClick={() => void download.refetch()}>重新获取链接</button></p>}{download.isError && <p role="alert" className="small" style={{ color: 'var(--bad)' }}>下载链接暂不可用：{describeError(download.error).message} <button type="button" className="textbtn small" onClick={() => void download.refetch()}>重试</button></p>}</div></div>}
   </div>;
 }

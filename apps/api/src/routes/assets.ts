@@ -12,6 +12,9 @@ import {
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
   mediaIndexQuerySchema,
+  mediaTranscriptSchema,
+  correctTranscriptSegmentRequestSchema,
+  updateTranscriptTerminologyRequestSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
@@ -34,6 +37,10 @@ import {
   rebuildMediaProxy,
   listMediaIndex,
   rebuildMediaIndex,
+  getMediaTranscript,
+  retryMediaTranscript,
+  correctTranscriptSegment,
+  updateTranscriptTerminology,
   softDeleteAsset,
   type DomainDeps,
 } from '@ancs/domain';
@@ -88,6 +95,50 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         input: request.body,
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/transcript',
+    {
+      schema: { tags: ['assets'], summary: '读取源媒体机器转写及当前校正版本', params: assetParamsSchema, response: { 200: mediaTranscriptSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return getMediaTranscript(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/transcript/retry',
+    {
+      schema: { tags: ['assets'], summary: '为既有音频开始转写，或重试失败/过期的转写；原音不变', params: assetParamsSchema, response: { 200: mediaTranscriptSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return retryMediaTranscript(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.patch(
+    '/workspaces/:id/assets/:assetId/transcript/segments',
+    {
+      schema: { tags: ['assets'], summary: '校正一个转写句段并创建不可变新版本', params: assetParamsSchema, body: correctTranscriptSegmentRequestSchema, response: { 200: mediaTranscriptSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return correctTranscriptSegment(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
+    },
+  );
+
+  typed.put(
+    '/workspaces/:id/assets/:assetId/transcript/terminology',
+    {
+      schema: { tags: ['assets'], summary: '更新该转写的版本化术语字典', params: assetParamsSchema, body: updateTranscriptTerminologyRequestSchema, response: { 200: mediaTranscriptSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return updateTranscriptTerminology(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
     },
   );
 

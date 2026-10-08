@@ -209,6 +209,16 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(Array.from(downloaded)).toEqual(Array.from(bytes));
   });
 
+  it('转写 HTTP / SDK 读取按 workspace 隔离且无转写时返回明确空状态', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const asset = await owner.assets.upload(workspaceId, { assetType: 'SOURCE_IMAGE', filename: 'still.png', contentType: 'image/png', data: makePng(24, 24) });
+    expect(await owner.assets.transcript(workspaceId, asset.id)).toMatchObject({ runId: null, sourceAssetVersionId: asset.currentVersionId, status: null, currentVersion: null });
+    const hidden = await stranger.assets.transcript(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hidden).toMatchObject({ status: 404 });
+  });
+
   it('workspace 内去重（SDK）：相同字节第二次上传直接命中既有资产', async () => {
     const client = await newSignedInClient();
     const workspaceId = await makeWorkspace(client);

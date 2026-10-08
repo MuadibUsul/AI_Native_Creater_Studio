@@ -6,7 +6,7 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder } from '@ancs/contracts';
+import type { MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
@@ -14,6 +14,7 @@ import { cmsWritebackHandler } from './cms-writeback-handler.js';
 import { createAssetMediaProbeHandler } from './media-probe-handler.js';
 import { createMediaProxyHandler } from './media-proxy-handler.js';
 import { createMediaIndexHandler } from './media-index-handler.js';
+import { createMediaTranscriptHandler } from './media-transcript-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -119,6 +120,8 @@ export interface DefaultRegistryOptions {
   sourceMediaTranscoder?: SourceMediaTranscoder;
   /** 源时间媒体索引（N02-04）；真实实现使用隔离 ffmpeg 子进程。 */
   sourceMediaIndexer?: SourceMediaIndexer;
+  /** ASR 转写适配器；未配置时仍注册处理器并形成可见失败状态。 */
+  speechRecognitionAdapter?: SpeechRecognitionAdapter;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -139,5 +142,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
     handlers.push(createMediaProxyHandler({ transcoder: options.sourceMediaTranscoder }));
   }
   if (options.sourceMediaIndexer !== undefined) handlers.push(createMediaIndexHandler({ indexer: options.sourceMediaIndexer }));
+  handlers.push(createMediaTranscriptHandler({ adapter: options.speechRecognitionAdapter }));
   return new JobHandlerRegistry(handlers);
 }

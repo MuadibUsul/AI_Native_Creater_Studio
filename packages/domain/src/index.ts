@@ -518,6 +518,16 @@ export {
   scheduleMediaIndexInTx,
 } from './media-index.js';
 export {
+  beginMediaTranscript,
+  completeMediaTranscript,
+  correctTranscriptSegment,
+  failMediaTranscript,
+  getMediaTranscript,
+  retryMediaTranscript,
+  scheduleMediaTranscriptInTx,
+  updateTranscriptTerminology,
+} from './media-transcripts.js';
+export {
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,

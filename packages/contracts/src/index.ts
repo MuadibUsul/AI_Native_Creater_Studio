@@ -142,6 +142,36 @@ export {
   mediaIndexQuerySchema,
 } from './media-index.js';
 export type { MediaIndexJobInput, GeneratedMediaIndexEntry, GeneratedMediaIndex, MediaIndexEntry, MediaIndexPage, SourceMediaIndexer } from './media-index.js';
+export {
+  MEDIA_TRANSCRIPT_JOB_TYPE,
+  MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
+  MEDIA_TRANSCRIPT_STATUSES,
+  mediaTranscriptStatusSchema,
+  transcriptAnchorSchema,
+  transcriptSpeakerSchema,
+  transcriptWordSchema,
+  transcriptSegmentSchema,
+  mediaTranscriptSnapshotSchema,
+  generatedMediaTranscriptSchema,
+  mediaTranscriptJobInputSchema,
+  mediaTranscriptVersionSchema,
+  mediaTranscriptSchema,
+  correctTranscriptSegmentRequestSchema,
+  updateTranscriptTerminologyRequestSchema,
+} from './media-transcript.js';
+export type {
+  TranscriptSpeaker,
+  TranscriptWord,
+  TranscriptSegment,
+  MediaTranscriptSnapshot,
+  GeneratedMediaTranscript,
+  MediaTranscriptJobInput,
+  MediaTranscriptVersion,
+  MediaTranscript,
+  CorrectTranscriptSegmentRequest,
+  UpdateTranscriptTerminologyRequest,
+  SpeechRecognitionAdapter,
+} from './media-transcript.js';
 export type {
   MediaProxyProfileKey,
   MediaProxyStreamTimeMap,

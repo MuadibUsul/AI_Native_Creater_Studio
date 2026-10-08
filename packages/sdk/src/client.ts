@@ -125,6 +125,7 @@ import {
   downloadUrlResponseSchema,
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
+  mediaTranscriptSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
   uploadPartTargetResponseSchema,
@@ -282,6 +283,9 @@ import {
   type Asset,
   type AssetDetail,
   type MediaIndexPage,
+  type MediaTranscript,
+  type CorrectTranscriptSegmentRequest,
+  type UpdateTranscriptTerminologyRequest,
   type BillingStatus,
   type CatalogResponse,
   type ChartBindingCheck,
@@ -747,6 +751,11 @@ export interface AncsClient {
     mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
     /** 重新生成索引；原件与代理不变。 */
     rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
+    /** 读取机器转写及当前不可变校正版本。 */
+    transcript(workspaceId: string, assetId: string): Promise<MediaTranscript>;
+    retryTranscript(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaTranscript>;
+    correctTranscriptSegment(workspaceId: string, assetId: string, input: CorrectTranscriptSegmentRequest, options?: MutationOptions): Promise<MediaTranscript>;
+    updateTranscriptTerminology(workspaceId: string, assetId: string, input: UpdateTranscriptTerminologyRequest, options?: MutationOptions): Promise<MediaTranscript>;
     /**
      * 一体化上传：意图（客户端预计算 SHA-256 以支持去重）→ 直传 → 确认。
      * 命中去重时直接返回既有资产（不重复上传字节）。
@@ -2056,6 +2065,10 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       rebuildMediaIndex: (workspaceId, assetId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      transcript: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript`, mediaTranscriptSchema),
+      retryTranscript: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/retry`, mediaTranscriptSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      correctTranscriptSegment: (workspaceId, assetId, input, mutation) => request('PATCH', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/segments`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
+      updateTranscriptTerminology: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/terminology`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
       upload: async (workspaceId, input, mutation) =>
         uploadResumableImpl(
           workspaceId,

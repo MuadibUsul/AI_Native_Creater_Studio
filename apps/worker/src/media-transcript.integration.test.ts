@@ -1,0 +1,116 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { and, eq } from 'drizzle-orm';
+import { MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, type SpeechRecognitionAdapter } from '@ancs/contracts';
+import { claimJob, confirmUpload, correctTranscriptSegment, createUploadIntent, getMediaTranscript, retryMediaTranscript, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
+import { assetVersions, createDb, jobs, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
+import { LocalObjectStorage } from '@ancs/providers-storage-local';
+import { createDefaultRegistry } from './handlers.js';
+import { executeJob } from './runner.js';
+import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+
+let handle: DbHandle;
+let storageRoot: string;
+let storage: LocalObjectStorage;
+const deps = (): DomainDeps => ({ db: handle.db, storage });
+const fixture = resolve('packages/testing/fixtures/media-v04/clip-a-24000-1001.mp4');
+
+const successfulAdapter: SpeechRecognitionAdapter = {
+  kind: 'scripted-contract-fixture',
+  async transcribe() {
+    return {
+      schemaVersion: '1.0', processorVersion: 'source-transcript-v1', provider: 'scripted-test-only', model: 'fixture-v1', language: 'zh-CN', terminology: [],
+      speakers: [{ id: 'speaker-1', displayName: null, identityState: 'UNKNOWN', confidencePermille: 720 }],
+      words: [
+        { ordinal: 0, text: '价格是120元', speakerId: 'speaker-1', confidencePermille: 820, sourceStartPts: '0', sourceEndPts: '1000', timeBase: { numerator: 1, denominator: 1000 } },
+        { ordinal: 1, text: '今天交付', speakerId: null, confidencePermille: 780, sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } },
+      ],
+      segments: [
+        { id: 'mts_price', ordinal: 0, text: '价格是120元', speakerId: 'speaker-1', wordStartOrdinal: 0, wordEndOrdinal: 0, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '0', sourceEndPts: '1000', timeBase: { numerator: 1, denominator: 1000 } },
+        { id: 'mts_delivery', ordinal: 1, text: '今天交付', speakerId: null, wordStartOrdinal: 1, wordEndOrdinal: 1, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } },
+      ],
+    };
+  },
+};
+
+beforeAll(async () => {
+  const url = resolveTestDatabaseUrl();
+  handle = createDb(url);
+  try { await handle.pool.query('select 1'); } catch (error) { await handle.close(); throw new Error(`无法连接测试数据库 ${redactDatabaseUrl(url)}。`, { cause: error }); }
+  await runMigrations(handle);
+  storageRoot = await mkdtemp(join(tmpdir(), 'ancs-transcript-integration-'));
+  storage = new LocalObjectStorage({ rootDir: storageRoot, publicBaseUrl: 'http://127.0.0.1:3999', signingSecret: 'transcript-test-secret-0123456789' }); // secrets:check-ignore
+});
+afterAll(async () => { await handle.close(); await rm(storageRoot, { recursive: true, force: true }); });
+beforeEach(async () => { await handle.db.delete(workspaces); });
+
+async function uploadAndProbe() {
+  const bytes = await readFile(fixture);
+  const workspaceId = `ws_${randomUUID()}`;
+  await handle.db.insert(workspaces).values({ id: workspaceId, name: '转写测试工作区' });
+  const checksumSha256 = createHash('sha256').update(bytes).digest('hex');
+  const intent = await createUploadIntent(deps(), { workspaceId, userId: null, input: { assetType: 'USER_UPLOAD', filename: 'speech.mp4', contentType: 'video/mp4', sizeBytes: bytes.byteLength, checksumSha256 } });
+  const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.assetId, intent.asset.id)).limit(1))[0]!;
+  await storage.putObject(version.storageKey, bytes);
+  await confirmUpload(deps(), { workspaceId, assetId: intent.asset.id, input: { checksumSha256 } });
+  const job = await claimJob(deps(), { workerId: 'probe', leaseSeconds: 120, types: [MEDIA_PROBE_JOB_TYPE] });
+  expect(job).not.toBeNull();
+  await executeJob(deps(), createDefaultRegistry({ sourceMediaProbe: createFfmpegSourceMediaProbe({ timeoutMs: 30_000 }) }), { workerId: 'probe', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
+  return { workspaceId, assetId: intent.asset.id, version };
+}
+
+async function executeTranscript(adapter?: SpeechRecognitionAdapter) {
+  const job = await claimJob(deps(), { workerId: 'asr', leaseSeconds: 120, types: [MEDIA_TRANSCRIPT_JOB_TYPE] });
+  expect(job).not.toBeNull();
+  const outcome = await executeJob(deps(), createDefaultRegistry({ speechRecognitionAdapter: adapter }), { workerId: 'asr', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
+  return { job: job!, outcome };
+}
+
+describe('N02-05 media transcripts', () => {
+  it('persists ASR inference, keeps unknown speakers anonymous, and corrects only the selected segment', { timeout: 90_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect(await handle.db.select().from(jobs).where(eq(jobs.type, MEDIA_TRANSCRIPT_JOB_TYPE))).toHaveLength(1);
+    expect((await executeTranscript(successfulAdapter)).outcome).toBe('succeeded');
+    const first = await getMediaTranscript(deps(), created);
+    expect(first.currentVersion).toMatchObject({ version: 1, source: 'ASR', segments: [{ evidence: 'ASR_INFERENCE' }, { evidence: 'ASR_INFERENCE' }] });
+    expect(first.currentVersion?.speakers[0]).toMatchObject({ displayName: null, identityState: 'UNKNOWN' });
+    const beforeObject = await storage.probeObject(created.version.storageKey);
+    const corrected = await correctTranscriptSegment(deps(), { ...created, userId: null, request: { expectedVersion: 1, segmentId: 'mts_price', text: '价格是128元' } });
+    expect(corrected.currentVersion).toMatchObject({ version: 2, source: 'CORRECTION', affectedSegmentIds: ['mts_price'] });
+    expect(corrected.currentVersion?.segments.map((segment) => segment.text)).toEqual(['价格是128元', '今天交付']);
+    expect(corrected.currentVersion?.segments[1]).toEqual(first.currentVersion?.segments[1]);
+    expect(await storage.probeObject(created.version.storageKey)).toEqual(beforeObject);
+    expect(await handle.db.select().from(mediaTranscriptVersions).where(eq(mediaTranscriptVersions.runId, corrected.runId!))).toHaveLength(2);
+    await expect(correctTranscriptSegment(deps(), { ...created, userId: null, request: { expectedVersion: 1, segmentId: 'mts_price', text: '冲突' } })).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+    const terminology = await updateTranscriptTerminology(deps(), { ...created, userId: null, request: { expectedVersion: 2, entries: [{ source: 'ANCS', preferred: 'ANCS' }] } });
+    expect(terminology.currentVersion).toMatchObject({ version: 3, source: 'TERMINOLOGY', affectedSegmentIds: [], terminology: [{ source: 'ANCS', preferred: 'ANCS' }] });
+  });
+
+  it('shows an actionable failed state when ASR is unavailable and can retry without changing the source', { timeout: 90_000 }, async () => {
+    const created = await uploadAndProbe();
+    const sourceBefore = await storage.probeObject(created.version.storageKey);
+    expect((await executeTranscript()).outcome).toBe('failed');
+    const failed = await getMediaTranscript(deps(), created);
+    expect(failed).toMatchObject({ status: 'FAILED', currentVersion: null, errorSummary: expect.stringContaining('尚未配置') });
+    await retryMediaTranscript(deps(), created);
+    expect((await executeTranscript(successfulAdapter)).outcome).toBe('succeeded');
+    expect(await getMediaTranscript(deps(), created)).toMatchObject({ status: 'READY', currentVersion: { version: 1 } });
+    expect(await storage.probeObject(created.version.storageKey)).toEqual(sourceBefore);
+    const otherWorkspaceId = `ws_${randomUUID()}`;
+    await handle.db.insert(workspaces).values({ id: otherWorkspaceId, name: '其他租户' });
+    await expect(getMediaTranscript(deps(), { workspaceId: otherWorkspaceId, assetId: created.assetId })).rejects.toThrow('asset not found');
+    expect((await handle.db.select().from(jobs).where(and(eq(jobs.workspaceId, created.workspaceId), eq(jobs.type, MEDIA_TRANSCRIPT_JOB_TYPE)))).length).toBe(2);
+  });
+
+  it('lets a ready pre-existing audio asset create its first transcript run', { timeout: 90_000 }, async () => {
+    const created = await uploadAndProbe();
+    await handle.db.delete(jobs).where(and(eq(jobs.workspaceId, created.workspaceId), eq(jobs.type, MEDIA_TRANSCRIPT_JOB_TYPE)));
+    await handle.db.delete(mediaTranscriptRuns).where(eq(mediaTranscriptRuns.workspaceId, created.workspaceId));
+    expect(await getMediaTranscript(deps(), created)).toMatchObject({ runId: null, status: null });
+    expect(await retryMediaTranscript(deps(), created)).toMatchObject({ status: 'QUEUED', currentVersion: null });
+    expect(await handle.db.select().from(jobs).where(and(eq(jobs.workspaceId, created.workspaceId), eq(jobs.type, MEDIA_TRANSCRIPT_JOB_TYPE)))).toHaveLength(1);
+  });
+});

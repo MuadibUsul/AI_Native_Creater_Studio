@@ -10,6 +10,7 @@ V03-01—68 保持原 ID；V04-01—26 是上传方案增量，V04-27—51 是�
 N01-01—09 已按各自范围 VERIFIED：精确时基、ProjectDocument、规范化 Composition、旧模型单写迁移、18 种编辑操作、六维对象锁、完整补偿和版本恢复，以及带 schema 协商的权威 ProjectState／EditEvent API 与 SDK（见 `docs/verification/N01-01.md`—`N01-09.md`）。相关整条需求仍因 MediaSource 映射、其余 Composition v2 操作及完整产品路径未完成而维持 `IN_PROGRESS`。
 
 N02-04 已按范围 VERIFIED：源时间缩略、波形、镜头/质量索引、分页、区间播放和失败恢复均有真实媒体与浏览器证据（见 `docs/verification/N02-04.md`）。V03-13/25 仍有其余关联任务，状态更新为 `IN_PROGRESS`。
+N02-05 已按范围 VERIFIED：源时间词/句/说话人锚、推测证据、版本化校正/术语、失败保留和浏览器交互均有证据（见 `docs/verification/N02-05.md`）；第三方 ASR smoke 由 N02-09 单独验收。V03-13/23/24 仍有其余关联任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |
 |---|---|---|---|---|

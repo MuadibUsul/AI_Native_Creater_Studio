@@ -6,6 +6,8 @@ export { createMediaProxyHandler } from './media-proxy-handler.js';
 export { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 export { createMediaIndexHandler } from './media-index-handler.js';
 export { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
+export { createMediaTranscriptHandler } from './media-transcript-handler.js';
+export { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
 export { createDomainDeps, workerHandlerTypes } from './domain.js';
 export { executeJob } from './runner.js';
 export { createHttpResultFetcher } from './fetcher.js';

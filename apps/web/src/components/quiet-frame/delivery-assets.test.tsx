@@ -201,6 +201,37 @@ describe('Quiet Frame asset flow', () => {
     play.mockRestore();
   });
 
+  it('shows ASR as unconfirmed evidence, plays its source range, and saves a versioned correction', async () => {
+    const asset = { id: 'ast_transcript', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'interview.mp4' }, license: { type: 'USER_OWNED' } };
+    const mediaProbe = { status: 'READY', streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 24, denominator: 1 }, cadence: 'CONSTANT' }, { index: 1, type: 'AUDIO', codecName: 'aac', sampleRate: 48000, channels: 2 }], capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE', reasons: [] } };
+    const transcript = { runId: 'mtr_1', sourceAssetVersionId: 'av_source', processorVersion: 'source-transcript-v1', status: 'READY', errorSummary: null, currentVersion: { id: 'mtv_1', version: 1, source: 'ASR', provider: 'scripted-test-only', model: 'fixture-v1', language: 'zh-CN', terminology: [], affectedSegmentIds: ['mts_price'], createdAt: '2026-10-09T00:00:00.000Z', speakers: [{ id: 'speaker-1', displayName: null, identityState: 'UNKNOWN', confidencePermille: 700 }], words: [{ ordinal: 0, text: '价格是120元', speakerId: 'speaker-1', confidencePermille: 800, sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } }], segments: [{ id: 'mts_price', ordinal: 0, text: '价格是120元', speakerId: 'speaker-1', wordStartOrdinal: 0, wordEndOrdinal: 0, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } }] } };
+    const corrected = { ...transcript, currentVersion: { ...transcript.currentVersion, id: 'mtv_2', version: 2, source: 'CORRECTION', segments: [{ ...transcript.currentVersion.segments[0], text: '价格是128元', reviewState: 'CORRECTED' }] } };
+    const correctTranscriptSegment = vi.fn().mockResolvedValue(corrected);
+    const client = mockClient({ assets: {
+      list: vi.fn().mockResolvedValue([asset]),
+      get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_source', versions: [{ id: 'av_source', mimeType: 'video/mp4', probeStatus: 'READY', mediaProbe }] }),
+      downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+      playbackUrl: vi.fn().mockResolvedValue({ assetId: asset.id, sourceVersionId: 'av_source', rendition: 'ORIGINAL', renditionVersionId: 'av_source', mimeType: 'video/mp4', url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z', proxyStatus: 'NOT_REQUIRED', proxyProfileKey: null, timeMappings: [], message: null }),
+      mediaIndex: vi.fn().mockResolvedValue({ runId: null, sourceAssetVersionId: 'av_source', processorVersion: 'source-index-v1', status: 'EMPTY', coveragePermille: 0, checkpointMs: 0, errorSummary: null, items: [], nextCursor: null }),
+      transcript: vi.fn().mockResolvedValue(transcript), correctTranscriptSegment,
+    }, billing: { externalResults: vi.fn().mockResolvedValue([]) } });
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 interview.mp4' }));
+    const region = await screen.findByRole('region', { name: '源媒体转写' });
+    expect(region.textContent).toContain('机器识别 · 待核对');
+    expect(region.textContent).toContain('说话人未知');
+    await userEvent.click(screen.getByRole('button', { name: /播放 00:01 开始的转写片段/ }));
+    expect((screen.getByLabelText('预览视频 interview.mp4') as HTMLVideoElement).currentTime).toBe(1);
+    await userEvent.click(screen.getByRole('button', { name: '价格是120元' }));
+    await userEvent.clear(screen.getByLabelText('校正转写文本'));
+    await userEvent.type(screen.getByLabelText('校正转写文本'), '价格是128元');
+    await userEvent.click(screen.getByRole('button', { name: '保存校正' }));
+    await waitFor(() => expect(correctTranscriptSegment).toHaveBeenCalledWith('ws_1', 'ast_transcript', { expectedVersion: 1, segmentId: 'mts_price', text: '价格是128元' }));
+    expect(await screen.findByText('价格是128元')).toBeTruthy();
+    play.mockRestore();
+  });
+
   it('keeps asset dialog keyboard focus inside and restores the selected card on Escape', async () => {
     const asset = { id: 'ast_1', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
     const client = mockClient({
