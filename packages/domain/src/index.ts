@@ -392,6 +392,16 @@ export {
   listProjectComposition,
 } from './composition.js';
 export {
+  canonicalCompositionJson,
+  compositionDigestSha256,
+  setProjectCompositionMigrationEnabled,
+  getProjectCompositionMigration,
+  assertLegacyProjectWriteAllowed,
+  migrateLegacyProjectComposition,
+  listProjectVersionCompositionProjections,
+} from './composition-migration.js';
+export type { CompositionMigrationHooks } from './composition-migration.js';
+export {
   assertEffectExecutionSupported,
   createAnimationBinding,
   createAudioRegion,

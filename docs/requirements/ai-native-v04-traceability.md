@@ -7,7 +7,7 @@
 
 V03-01—68 保持原 ID；V04-01—26 是上传方案增量，V04-27—51 是运营后台增量；V04-52—63 是黑白设计增量。每项只有全部关联任务、适用发布门和真实证据具备后才可关闭。`TODO` 表示 v0.4 新需求尚未完整验收，不评价旧版本已验证的独立能力。
 
-N01-01—04 已按各自范围 VERIFIED：精确帧边界、有理换算与无损旧 ms 投影；ProjectDocument v1.0 与三模式硬门；规范化 Sequence/Track/Clip；稳定 VisualObject、版本化效果／参数／动画、字幕和音频局部时间（见 `docs/verification/N01-01.md`—`N01-04.md`）。相关整条需求仍因编辑操作、迁移、媒体时基、工程 API、真实执行与完整产品路径未完成而维持 `IN_PROGRESS`。
+N01-01—05 已按各自范围 VERIFIED：精确帧边界、有理换算与无损旧 ms 投影；ProjectDocument v1.0 与三模式硬门；规范化 Sequence/Track/Clip；稳定 VisualObject、版本化效果／参数／动画、字幕和音频局部时间；旧 Scene/audio/caption/version 的分步可恢复投影、源记录保护和单写切换（见 `docs/verification/N01-01.md`—`N01-05.md`）。V03-02/V03-56 仍因 N14-07、N01-09 等关联任务未完成而维持 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |
 |---|---|---|---|---|

@@ -19,6 +19,7 @@ import { assertAssetBindable } from './assets.js';
 import type { DomainDeps } from './channels.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
+import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
 
 /**
  * 编辑事务处理器（P02-02/P02-03 / 计划 §4.6—§4.8；规范 §23）。
@@ -929,6 +930,8 @@ async function applyEditsInTransaction(
 
 export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): Promise<ProcessEditsResult> {
   const request = editRequestSchema.parse(input.request);
+
+  await assertLegacyProjectWriteAllowed(deps, input);
 
   const projectRows = await deps.db
     .select()

@@ -164,6 +164,27 @@ export type {
 } from './composition.js';
 
 export {
+  COMPOSITION_MIGRATION_STATUSES,
+  COMPOSITION_MIGRATION_STEPS,
+  COMPOSITION_AUTHORITY_MODES,
+  COMPOSITION_MIGRATION_ERROR_REASONS,
+  compositionMigrationStatusSchema,
+  compositionMigrationStepSchema,
+  compositionAuthorityModeSchema,
+  compositionMigrationSchema,
+  projectVersionCompositionProjectionSchema,
+  projectVersionProjectionRecordSchema,
+} from './composition-migration.js';
+export type {
+  CompositionMigrationStatus,
+  CompositionMigrationStep,
+  CompositionAuthorityMode,
+  CompositionMigration,
+  ProjectVersionCompositionProjection,
+  ProjectVersionProjectionRecord,
+} from './composition-migration.js';
+
+export {
   contentDocumentSchema,
   contentBlockSchema,
   claimSchema,
