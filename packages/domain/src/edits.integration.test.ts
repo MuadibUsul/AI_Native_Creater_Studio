@@ -5,6 +5,7 @@ import {
   createDb,
   editEvents,
   outboxEvents,
+  scenes,
   redactDatabaseUrl,
   resolveTestDatabaseUrl,
   runMigrations,
@@ -335,5 +336,55 @@ describe('编辑事务（§4.6）', () => {
     expect(result.response.project.title).toBe('新标题');
     expect(result.response.editEvents[0]?.sceneId).toBeNull();
     expect(result.response.editEvents[0]?.action).toBe('UPDATE_PROJECT');
+  });
+
+  it('N01-06：A 创建的 Scene 可被 B 引用，整批只推进一次 Project revision', async () => {
+    const fixture = await makeFixture();
+    const createdSceneId = `scn_batch_${randomUUID()}`;
+    const result = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [
+        {
+          op: 'insert_scene',
+          afterSceneId: fixture.sceneIds[0] ?? null,
+          createdSceneId,
+          sceneDraft: {
+            sceneType: 'HOST_FULL', semanticType: 'DETAIL', durationMs: 3_000,
+            narration: '', visualIntent: '', componentId: null, componentVersion: null, props: {},
+            providerRequirement: null, sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+          },
+        },
+        { op: 'update_scene', sceneId: createdSceneId, changes: { narration: '批内后续操作已生效', durationMs: 2_500 } },
+      ],
+    }));
+
+    expect(result.response.project.revision).toBe(fixture.projectRevision + 1);
+    expect(result.createdSceneIds).toEqual([createdSceneId]);
+    expect(result.response.scenes.find((scene) => scene.id === createdSceneId)).toMatchObject({ narration: '批内后续操作已生效', durationMs: 2_500, revision: 2 });
+    expect(result.response.editEvents.map((event) => event.action)).toEqual(['INSERT_SCENE', 'UPDATE_SCENE']);
+  });
+
+  it('N01-06：候选状态中 B 无效时，A 及全部事件均不落库', async () => {
+    const fixture = await makeFixture();
+    const createdSceneId = `scn_rollback_${randomUUID()}`;
+    const beforeEvents = await handle.db.select().from(editEvents).where(eq(editEvents.projectId, fixture.projectId));
+    await expect(edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [
+        {
+          op: 'insert_scene', afterSceneId: null, createdSceneId,
+          sceneDraft: {
+            sceneType: 'HOST_FULL', semanticType: 'DETAIL', durationMs: 2_000,
+            narration: '', visualIntent: '', componentId: null, componentVersion: null, props: {},
+            providerRequirement: null, sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+          },
+        },
+        { op: 'split_scene', sceneId: createdSceneId, atMs: 2_000 },
+      ],
+    }))).rejects.toMatchObject({ details: { reason: 'EDIT_CANDIDATE_SPLIT_OUT_OF_RANGE' } });
+
+    expect(await handle.db.select().from(scenes).where(eq(scenes.id, createdSceneId))).toHaveLength(0);
+    expect((await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId })).revision).toBe(fixture.projectRevision);
+    expect(await handle.db.select().from(editEvents).where(eq(editEvents.projectId, fixture.projectId))).toHaveLength(beforeEvents.length);
   });
 });

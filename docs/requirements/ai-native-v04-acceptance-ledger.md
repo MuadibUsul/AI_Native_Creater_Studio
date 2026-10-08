@@ -4,12 +4,12 @@
 
 来源：`docs/V04/ANCS_AI_Native_v0.4.md` §21—§24、任务清单和包内 `task_index.json`。本文件仅追踪仓库执行；来源中的 P15—P23/T1—T6 不是另一组可执行任务。缺少真实媒体、浏览器或 Provider 证据时，不能把依赖于它们的任务标为 VERIFIED。
 
-当前：N00-01—07、N01-01—05、N15-01/02、N16-01/02 共 16 项 `VERIFIED`；D0/D1、O0 与 G0—G4 总门仍未通过。N00 基础阶段已经全部关闭。N01-01—05 已建立有理时基、ProjectDocument v1.0、三模式细粒度 ProductionPolicy，规范化 Sequence/Track/Clip，稳定 VisualObject、版本化效果／参数／动画、字幕和音频局部时间，以及旧 Scene/audio/caption/version 的可恢复投影和单写切换；最新迁移为 0060。完整工程 API 继续由 N01-09 实现。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。
+当前：N00-01—07、N01-01—06、N15-01/02、N16-01/02 共 17 项 `VERIFIED`；D0/D1、O0 与 G0—G4 总门仍未通过。N00 基础阶段已经全部关闭。N01-01—06 已建立有理时基、ProjectDocument v1.0、三模式细粒度 ProductionPolicy，规范化 Sequence/Track/Clip，稳定 VisualObject、版本化效果／参数／动画、字幕和音频局部时间，旧 Scene/audio/caption/version 的可恢复投影和单写切换，以及 14 种编辑操作的注册表与整批候选状态校验；最新迁移为 0060。完整工程 API 继续由 N01-09 实现。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。
 
 | 工作流 | 任务数 | VERIFIED | 说明 |
 |---|---:|---:|---|
 | N00 | 7 | 7 | 基础阶段全部 VERIFIED |
-| N01 | 11 | 5 | N01-01—05 VERIFIED；继续 N01-06 |
+| N01 | 11 | 6 | N01-01—06 VERIFIED；继续 N01-07 |
 | N02 | 15 | 0 | 以任务表逐项证据为准 |
 | N03 | 16 | 0 | 以任务表逐项证据为准 |
 | N04 | 11 | 0 | 以任务表逐项证据为准 |
@@ -49,7 +49,7 @@
 | N01-03 | 序列、轨道、Clip与源范围 | N01-02 | VERIFIED | [`验证`](../verification/N01-03.md) · [`交接`](../handoffs/N01-03.md) |
 | N01-04 | 图形、效果、字幕与音频对象 | N01-03 | VERIFIED | [`验证`](../verification/N01-04.md) · [`交接`](../handoffs/N01-04.md) |
 | N01-05 | 增量迁移与旧项目兼容适配 | N01-03, N01-04 | VERIFIED | [`验证`](../verification/N01-05.md) · [`交接`](../handoffs/N01-05.md) |
-| N01-06 | 操作注册表与候选状态校验 | N01-04 | TODO | — |
+| N01-06 | 操作注册表与候选状态校验 | N01-04 | VERIFIED | [`验证`](../verification/N01-06.md) · [`交接`](../handoffs/N01-06.md) |
 | N01-07 | 范围锁与间接影响计算 | N01-06 | TODO | — |
 | N01-08 | 版本、快照与补偿事件扩展 | N01-05, N01-06, N01-07 | TODO | — |
 | N01-09 | 工程API、SDK与事件契约 | N01-08 | TODO | — |

@@ -3,6 +3,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import {
   ApiFailure,
+  EDIT_OPERATION_REGISTRY,
   editRequestSchema,
   editResponseSchema,
   ERROR_CODES,
@@ -20,6 +21,7 @@ import type { DomainDeps } from './channels.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
 import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
+import { validateEditOperationCandidate } from './edit-operation-registry.js';
 
 /**
  * 编辑事务处理器（P02-02/P02-03 / 计划 §4.6—§4.8；规范 §23）。
@@ -37,21 +39,9 @@ import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
  * 每次内容事件在 patch 中记录受影响 Scene 的**前后内容快照**（供补偿与按 revision 恢复重放）。
  */
 
-const UNIMPLEMENTED_OPERATIONS: Readonly<Record<string, string>> = {
-  update_script: 'P04（Script/ContentBlock 模型）',
-  update_caption: 'P06-06（字幕）',
-  update_audio_track: 'P06-06（混音）',
-};
-
-const STRUCTURAL_OPERATIONS = new Set([
-  'insert_scene',
-  'delete_scene',
-  'duplicate_scene',
-  'split_scene',
-  'reorder_scenes',
-  'restore_scene',
-  'restore_project_version',
-]);
+const STRUCTURAL_OPERATIONS = new Set(
+  Object.values(EDIT_OPERATION_REGISTRY).filter((definition) => definition.structural).map((definition) => definition.operation),
+);
 
 /** Scene 内容快照（补偿与恢复重放的事实来源；不含 id/revision/position/startMs/时间戳）。 */
 export interface SceneContentSnapshot {
@@ -270,6 +260,12 @@ async function applyEditsInTransaction(
       .orderBy(scenes.position);
     const byId = new Map<string, SceneRow>(sceneRows.map((row) => [row.id, row]));
 
+    validateEditOperationCandidate({
+      scenes: sceneRows.map((row) => ({ id: row.id, durationMs: row.durationMs, locked: row.locked })),
+      operations: request.operations,
+      actorType: input.actor.type,
+    });
+
     // 应用前状态（AI 重编导快照用）
     const preApplyProject = structuredClone(project);
     const preApplyRows = sceneRows.map((row) => structuredClone(row));
@@ -293,6 +289,11 @@ async function applyEditsInTransaction(
 
     const requireExpectedOnce = (sceneId: string): void => {
       if (expectedValidated.has(sceneId)) return;
+      if (!initialRevisions.has(sceneId)) {
+        // The scene was created earlier in this atomic batch and had no concurrent pre-state.
+        expectedValidated.add(sceneId);
+        return;
+      }
       const expected = request.expectedSceneRevisions[sceneId];
       if (expected === undefined) {
         throw new ApiFailure(
@@ -318,16 +319,6 @@ async function applyEditsInTransaction(
         .orderBy(editEvents.seq);
 
     for (const operation of request.operations) {
-      const unimplementedPhase = UNIMPLEMENTED_OPERATIONS[operation.op];
-      if (unimplementedPhase !== undefined) {
-        throw new ApiFailure(
-          ERROR_CODES.CAPABILITY_UNAVAILABLE,
-          `操作 ${operation.op} 当前不可用（计划阶段：${unimplementedPhase}）`,
-          501,
-          { operation: operation.op, plannedPhase: unimplementedPhase },
-        );
-      }
-
       switch (operation.op) {
         case 'update_project': {
           const before = { title: project.title, targetDurationMs: project.targetDurationMs };
@@ -380,7 +371,7 @@ async function applyEditsInTransaction(
           if (operation.afterSceneId !== null && !byId.has(operation.afterSceneId)) {
             throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'afterSceneId 指向的 scene 不存在', 404);
           }
-          const newId = operation.restoreSceneId ?? `scn_${randomUUID()}`;
+          const newId = operation.createdSceneId ?? operation.restoreSceneId ?? `scn_${randomUUID()}`;
           if (byId.has(newId)) {
             throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'restoreSceneId 已被占用（不可覆盖既有 Scene）', 409);
           }
@@ -449,7 +440,7 @@ async function applyEditsInTransaction(
           // 复制不修改源 Scene（无需 expected revision）
           const row = byId.get(operation.sceneId);
           if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'scene not found', 404);
-          const copyId = operation.restoreSceneId ?? `scn_${randomUUID()}`;
+          const copyId = operation.createdSceneId ?? operation.restoreSceneId ?? `scn_${randomUUID()}`;
           if (byId.has(copyId)) {
             throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'restoreSceneId 已被占用（不可覆盖既有 Scene）', 409);
           }
@@ -490,7 +481,7 @@ async function applyEditsInTransaction(
           const before = contentOf(row);
           const tailDuration = row.durationMs - operation.atMs;
           const now = new Date();
-          const tailId = operation.restoreTailSceneId ?? `scn_${randomUUID()}`;
+          const tailId = operation.createdTailSceneId ?? operation.restoreTailSceneId ?? `scn_${randomUUID()}`;
           if (byId.has(tailId)) {
             throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'restoreTailSceneId 已被占用（不可覆盖既有 Scene）', 409);
           }
@@ -742,7 +733,9 @@ async function applyEditsInTransaction(
     for (const sceneId of dirtySceneIds) {
       const row = byId.get(sceneId);
       if (!row) continue;
-      const initialRevision = initialRevisions.get(row.id) ?? row.revision - 1;
+      const initialRevision = initialRevisions.get(row.id);
+      // New scenes are inserted below with their final candidate state.
+      if (initialRevision === undefined) continue;
       const result = await tx
         .update(scenes)
         .set({
@@ -941,30 +934,11 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
   const project = projectRows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
 
-  // 事务前快速校验（完整校验在事务内以锁定后的权威状态重复执行）
-  const existingSceneIds = new Set(
-    (
-      await deps.db
-        .select({ id: scenes.id })
-        .from(scenes)
-        .where(eq(scenes.projectId, input.projectId))
-    ).map((row) => row.id),
-  );
-  for (const operation of request.operations) {
-    const phase = UNIMPLEMENTED_OPERATIONS[operation.op];
-    if (phase !== undefined) {
-      throw new ApiFailure(
-        ERROR_CODES.CAPABILITY_UNAVAILABLE,
-        `操作 ${operation.op} 当前不可用（计划阶段：${phase}）`,
-        501,
-        { operation: operation.op, plannedPhase: phase },
-      );
-    }
-    const targetId = sceneTargetId(operation);
-    if (targetId !== null && !existingSceneIds.has(targetId)) {
-      throw new ApiFailure(ERROR_CODES.NOT_FOUND, `scene "${targetId}" 不存在`, 404);
-    }
-  }
+  // Fast candidate pass; the same simulation runs again under the project row lock.
+  const candidateRows = await deps.db.select({ id: scenes.id, durationMs: scenes.durationMs, locked: scenes.locked })
+    .from(scenes)
+    .where(and(eq(scenes.projectId, input.projectId), eq(scenes.workspaceId, input.workspaceId)));
+  validateEditOperationCandidate({ scenes: candidateRows, operations: request.operations, actorType: input.actor.type });
 
   const result = await applyEditsInTransaction(deps, input, request);
 
@@ -990,20 +964,3 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
 
   return { response, createdSceneIds: result.createdSceneIds };
 }
-
-const sceneTargetId = (operation: EditOperation): string | null => {
-  switch (operation.op) {
-    case 'insert_scene':
-      return operation.afterSceneId; // 仅用于存在性校验；新 Scene 尚未创建
-    case 'update_scene':
-    case 'delete_scene':
-    case 'duplicate_scene':
-    case 'split_scene':
-    case 'set_scene_lock':
-    case 'restore_scene':
-    case 'replace_asset':
-      return operation.sceneId;
-    default:
-      return null;
-  }
-};

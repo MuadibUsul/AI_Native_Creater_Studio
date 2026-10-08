@@ -238,6 +238,14 @@ export {
   editRequestSchema,
   editOperationSchema,
   EDIT_OPERATION_TYPES,
+  EDIT_EXECUTION_BACKENDS,
+  EDIT_OPERATION_AVAILABILITIES,
+  EDIT_COMPENSATION_MODES,
+  EDIT_OPERATION_REGISTRY,
+  editExecutionBackendSchema,
+  editOperationAvailabilitySchema,
+  editCompensationModeSchema,
+  editOperationDefinitionSchema,
   sceneDraftSchema,
   projectChangesSchema,
   sceneChangesSchema,
@@ -256,7 +264,7 @@ export {
   restoreSceneOperationSchema,
   restoreProjectVersionOperationSchema,
 } from './edits.js';
-export type { EditRequest, EditOperation, EditOperationType, ProjectChanges, SceneChanges } from './edits.js';
+export type { EditRequest, EditOperation, EditOperationType, EditExecutionBackend, EditOperationDefinition, ProjectChanges, SceneChanges } from './edits.js';
 
 // 认证契约（P01-02）
 export {

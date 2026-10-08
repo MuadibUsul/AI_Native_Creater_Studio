@@ -32,6 +32,12 @@ export {
 export { processEdits, replaySceneContent } from './edits.js';
 export type { ProcessEditsInput, ProcessEditsResult, SceneContentSnapshot } from './edits.js';
 export {
+  EDIT_OPERATION_ERROR_REASONS,
+  requireEditOperationDefinition,
+  validateEditOperationCandidate,
+} from './edit-operation-registry.js';
+export type { EditCandidateScene, EditCandidateResult } from './edit-operation-registry.js';
+export {
   AUTO_SNAPSHOT_INTERVAL,
   buildSnapshotPayload,
   createProjectVersion,

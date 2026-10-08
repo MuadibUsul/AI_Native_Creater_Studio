@@ -42,6 +42,57 @@ export const EDIT_OPERATION_TYPES = [
 
 export type EditOperationType = (typeof EDIT_OPERATION_TYPES)[number];
 
+export const EDIT_EXECUTION_BACKENDS = ['LEGACY_SCENE'] as const;
+export const editExecutionBackendSchema = z.enum(EDIT_EXECUTION_BACKENDS);
+export const EDIT_OPERATION_AVAILABILITIES = ['ACTIVE', 'PLANNED'] as const;
+export const editOperationAvailabilitySchema = z.enum(EDIT_OPERATION_AVAILABILITIES);
+export const EDIT_COMPENSATION_MODES = ['EVENT_INVERSE', 'SNAPSHOT_RESTORE', 'PLANNED'] as const;
+export const editCompensationModeSchema = z.enum(EDIT_COMPENSATION_MODES);
+
+export const editOperationDefinitionSchema = z.object({
+  operation: z.enum(EDIT_OPERATION_TYPES),
+  availability: editOperationAvailabilitySchema,
+  plannedPhase: z.string().nullable(),
+  requiredPermission: z.literal('project:write'),
+  actorTypes: z.array(z.enum(['USER', 'AI', 'SYSTEM'])).min(1),
+  supportedBackends: z.array(editExecutionBackendSchema).min(1),
+  structural: z.boolean(),
+  readSet: z.array(z.string().min(1)),
+  writeSet: z.array(z.string().min(1)),
+  preconditions: z.array(z.string().min(1)),
+  postconditions: z.array(z.string().min(1)),
+  invalidates: z.array(z.string().min(1)),
+  compensation: editCompensationModeSchema,
+}).strict();
+
+export type EditExecutionBackend = z.infer<typeof editExecutionBackendSchema>;
+export type EditOperationDefinition = z.infer<typeof editOperationDefinitionSchema>;
+
+const common: Pick<EditOperationDefinition, 'requiredPermission' | 'actorTypes' | 'supportedBackends' | 'invalidates'> = {
+  requiredPermission: 'project:write' as const,
+  actorTypes: ['USER', 'AI', 'SYSTEM'],
+  supportedBackends: ['LEGACY_SCENE'],
+  invalidates: ['PROJECT_PREVIEW', 'RENDER_APPROVAL'],
+};
+
+/** Server-owned operation registry shared by GUI, AI planning and execution. */
+export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOperationDefinition>> = {
+  update_project: { ...common, operation: 'update_project', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['PROJECT'], writeSet: ['PROJECT'], preconditions: ['PROJECT_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_script: { ...common, operation: 'update_script', availability: 'PLANNED', plannedPhase: 'P04（Script/ContentBlock 模型）', structural: false, readSet: ['CONTENT_BLOCK'], writeSet: ['CONTENT_BLOCK'], preconditions: ['CONTENT_BLOCK_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
+  insert_scene: { ...common, operation: 'insert_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['AFTER_SCENE_EXISTS', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  update_scene: { ...common, operation: 'update_scene', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_scene: { ...common, operation: 'delete_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REFERENCE_REMOVED', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  duplicate_scene: { ...common, operation: 'duplicate_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SOURCE_SCENE_EXISTS', 'AFTER_SCENE_EXISTS', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  split_scene: { ...common, operation: 'split_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'SPLIT_INSIDE_RANGE', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  reorder_scenes: { ...common, operation: 'reorder_scenes', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE_ORDER'], writeSet: ['SCENE_ORDER'], preconditions: ['ORDER_CONTAINS_CANDIDATE_SCENES_EXACTLY_ONCE'], postconditions: ['TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  replace_asset: { ...common, operation: 'replace_asset', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE', 'ASSET'], writeSet: ['SCENE.ASSET_BINDINGS'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'ASSET_BINDABLE', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_caption: { ...common, operation: 'update_caption', availability: 'PLANNED', plannedPhase: 'P06-06（字幕）', structural: false, readSet: ['CAPTION_SPAN'], writeSet: ['CAPTION_SPAN'], preconditions: ['CAPTION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
+  update_audio_track: { ...common, operation: 'update_audio_track', availability: 'PLANNED', plannedPhase: 'P06-06（混音）', structural: false, readSet: ['AUDIO_REGION'], writeSet: ['AUDIO_REGION'], preconditions: ['AUDIO_REGION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
+  set_scene_lock: { ...common, operation: 'set_scene_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE.LOCK'], preconditions: ['SCENE_EXISTS', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  restore_scene: { ...common, operation: 'restore_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'EDIT_EVENT'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'TARGET_REVISION_REPLAYABLE'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  restore_project_version: { ...common, operation: 'restore_project_version', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT_VERSION'], writeSet: ['PROJECT', 'SCENE', 'SCENE_ORDER'], preconditions: ['EXCLUSIVE_BATCH', 'PROJECT_VERSION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES', 'TIMELINE_RECOMPUTED'], compensation: 'SNAPSHOT_RESTORE' },
+};
+
 const changesSchema = z.record(z.string(), z.unknown());
 
 /**
@@ -121,6 +172,12 @@ export const insertSceneOperationSchema = z.object({
    * 普通客户端不提供（由服务端生成）；提供且 id 已被占用时拒绝。
    */
   restoreSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity. Later operations in the same request may reference it. */
+  createdSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdSceneId !== undefined && value.restoreSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdSceneId and restoreSceneId are mutually exclusive' });
+  }
 });
 
 export const updateSceneOperationSchema = z.object({
@@ -140,6 +197,12 @@ export const duplicateSceneOperationSchema = z.object({
   afterSceneId: opaqueIdSchema.nullable().default(null),
   /** 补偿专用（Undo/Redo）：复用原副本 id */
   restoreSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity for the duplicate. */
+  createdSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdSceneId !== undefined && value.restoreSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdSceneId and restoreSceneId are mutually exclusive' });
+  }
 });
 
 export const splitSceneOperationSchema = z.object({
@@ -148,6 +211,12 @@ export const splitSceneOperationSchema = z.object({
   atMs: videoMsSchema,
   /** 补偿专用（Undo/Redo）：复用原尾部 Scene id */
   restoreTailSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity for the created tail Scene. */
+  createdTailSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdTailSceneId !== undefined && value.restoreTailSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdTailSceneId and restoreTailSceneId are mutually exclusive' });
+  }
 });
 
 export const reorderScenesOperationSchema = z.object({

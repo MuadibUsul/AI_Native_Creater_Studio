@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EDIT_OPERATION_TYPES, editRequestSchema } from './index.js';
+import { EDIT_OPERATION_REGISTRY, EDIT_OPERATION_TYPES, editOperationDefinitionSchema, editRequestSchema } from './index.js';
 
 const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sample.json');
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
@@ -11,6 +11,20 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(EDIT_OPERATION_TYPES).toHaveLength(14);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
+  });
+
+  it('N01-06 注册表对每种操作恰有一项完整定义', () => {
+    expect(Object.keys(EDIT_OPERATION_REGISTRY).sort()).toEqual([...EDIT_OPERATION_TYPES].sort());
+    for (const operation of EDIT_OPERATION_TYPES) {
+      const definition = editOperationDefinitionSchema.parse(EDIT_OPERATION_REGISTRY[operation]);
+      expect(definition.operation).toBe(operation);
+      expect(definition.requiredPermission).toBe('project:write');
+      expect(definition.readSet.length).toBeGreaterThan(0);
+      expect(definition.writeSet.length).toBeGreaterThan(0);
+      expect(definition.preconditions.length).toBeGreaterThan(0);
+      expect(definition.postconditions.length).toBeGreaterThan(0);
+      expect(definition.supportedBackends).toEqual(['LEGACY_SCENE']);
+    }
   });
 
   it('样例往返无损（defaults 填充后为标准不动点）', () => {
@@ -44,5 +58,25 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(
       editRequestSchema.safeParse({ ...request, expectedSceneRevisions: { scn_002: 0 } }).success,
     ).toBe(false);
+  });
+
+  it('批内创建 ID 可被后续操作引用，且不能与补偿 ID 同时出现', () => {
+    const request = editRequestSchema.parse(raw);
+    const sceneDraft = {
+      sceneType: 'HOST_FULL', semanticType: 'HOOK', narration: '', visualIntent: '', durationMs: 1_000,
+      componentId: null, componentVersion: null, props: {}, providerRequirement: null,
+      sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+    };
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [
+        { op: 'insert_scene', afterSceneId: null, createdSceneId: 'scn_batch', sceneDraft },
+        { op: 'update_scene', sceneId: 'scn_batch', changes: { narration: '批内引用' } },
+      ],
+    }).success).toBe(true);
+    expect(editRequestSchema.safeParse({
+      ...request,
+      operations: [{ op: 'insert_scene', afterSceneId: null, createdSceneId: 'scn_a', restoreSceneId: 'scn_b', sceneDraft }],
+    }).success).toBe(false);
   });
 });
