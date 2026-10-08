@@ -128,7 +128,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 @media (pointer: coarse) {
-  .btn.icononly { min-width: var(--ui-control-touch-target); min-height: var(--ui-control-touch-target); }
+  /* Legacy component selectors set 24–36px heights; touch targets must override them. */
+  .btn, .textbtn { min-height: var(--ui-control-touch-target) !important; }
+  .btn.icononly { min-width: var(--ui-control-touch-target); }
+  .qf-design-actions { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --ui-motion-feedback: 0ms; --ui-motion-popover: 0ms; --ui-motion-drawer: 0ms; }

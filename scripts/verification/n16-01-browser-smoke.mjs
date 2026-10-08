@@ -1,4 +1,4 @@
-/* global document, getComputedStyle */
+/* global document, getComputedStyle, window */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -59,11 +59,37 @@ try {
   const mobileSidebar = await page.locator('.sidebar').evaluate((element) => getComputedStyle(element).backgroundColor);
   assert.equal(mobileSidebar, 'rgb(20, 20, 20)');
 
+  const touchContext = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
+  const touchPage = await touchContext.newPage();
+  const touchResponse = await touchPage.goto(`${baseUrl}/design-system`, { waitUntil: 'load' });
+  assert.equal(touchResponse?.status(), 200);
+  const touch = await touchPage.evaluate(() => {
+    const targets = [...document.querySelectorAll('.btn, .textbtn')]
+      .filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible')
+      .map((element) => ({
+        label: element.textContent?.trim() || element.getAttribute('aria-label'),
+        height: element.getBoundingClientRect().height,
+        width: element.getBoundingClientRect().width,
+        iconOnly: element.classList.contains('icononly'),
+      }));
+    const actionBounds = [...document.querySelectorAll('.qf-design-actions .btn')]
+      .map((element) => element.getBoundingClientRect().right);
+    return { coarsePointer: window.matchMedia('(pointer: coarse)').matches, targets, maxActionRight: Math.max(...actionBounds), viewportWidth: window.innerWidth };
+  });
+  assert.equal(touch.coarsePointer, true);
+  assert.ok(touch.targets.length > 0);
+  assert.ok(touch.targets.every((target) => target.height >= 44), JSON.stringify(touch.targets));
+  assert.ok(touch.targets.some((target) => target.iconOnly));
+  assert.ok(touch.targets.filter((target) => target.iconOnly).every((target) => target.width >= 44));
+  assert.ok(Number.isFinite(touch.maxActionRight));
+  assert.ok(touch.maxActionRight <= touch.viewportWidth, JSON.stringify(touch));
+  await touchContext.close();
+
   const hashes = {};
   for (const name of ['design-system-light.png', 'design-system-dark.png']) {
     hashes[name] = createHash('sha256').update(await readFile(resolve(evidenceDir, name))).digest('hex');
   }
-  process.stdout.write(`${JSON.stringify({ result: 'PASS', url: `${baseUrl}/design-system`, light, dark, hover, mobileSidebar, hashes }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ result: 'PASS', url: `${baseUrl}/design-system`, light, dark, hover, mobileSidebar, touch, hashes }, null, 2)}\n`);
 } finally {
   await browser.close();
 }
