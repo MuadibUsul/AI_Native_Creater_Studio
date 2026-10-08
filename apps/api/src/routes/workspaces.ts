@@ -16,8 +16,12 @@ import {
   updateWorkspaceMemberRoleRequestSchema,
   updateWorkspaceRequestSchema,
   workspaceInvitationSchema,
+  workspaceFeatureKeySchema,
+  workspaceFeatureListSchema,
+  workspaceFeatureSchema,
   workspaceMemberSchema,
   workspaceWithRoleSchema,
+  setWorkspaceFeatureRequestSchema,
 } from '@ancs/contracts';
 import {
   addMember,
@@ -38,7 +42,9 @@ import {
   getWorkspaceEntitlement,
   listInvitations,
   listMyInvitations,
+  listWorkspaceFeatures,
   revokeInvitation,
+  setWorkspaceFeaturePreference,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
@@ -47,6 +53,7 @@ const workspaceIdParamsSchema = z.object({ id: opaqueIdSchema });
 const memberParamsSchema = z.object({ id: opaqueIdSchema, userId: opaqueIdSchema });
 const invitationParamsSchema = z.object({ id: opaqueIdSchema, invitationId: opaqueIdSchema });
 const acceptInvitationParamsSchema = z.object({ invitationId: opaqueIdSchema });
+const workspaceFeatureParamsSchema = z.object({ id: opaqueIdSchema, featureKey: workspaceFeatureKeySchema });
 const workspaceListSchema = pageResponseSchema(workspaceWithRoleSchema);
 const memberListSchema = pageResponseSchema(workspaceMemberSchema);
 const invitationListSchema = pageResponseSchema(workspaceInvitationSchema);
@@ -118,6 +125,44 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: AuthDeps): v
     async (request) => {
       const { context } = await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return getWorkspace({ db: deps.db }, { userId: context.userId, workspaceId: request.params.id });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/features',
+    {
+      schema: {
+        tags: ['workspaces'],
+        summary: '读取 v0.4 工作区功能偏好与服务端发布门的有效状态',
+        params: workspaceIdParamsSchema,
+        response: { 200: workspaceFeatureListSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return { items: await listWorkspaceFeatures(domain, { workspaceId: request.params.id }) };
+    },
+  );
+
+  typed.put(
+    '/workspaces/:id/features/:featureKey',
+    {
+      schema: {
+        tags: ['workspaces'],
+        summary: '设置工作区功能偏好；服务端发布门仍是有效能力的权威来源',
+        params: workspaceFeatureParamsSchema,
+        body: setWorkspaceFeatureRequestSchema,
+        response: { 200: workspaceFeatureSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'workspace:update');
+      return setWorkspaceFeaturePreference(domain, {
+        workspaceId: request.params.id,
+        featureKey: request.params.featureKey,
+        enabled: request.body.enabled,
+        actorId: context.userId,
+      });
     },
   );
 

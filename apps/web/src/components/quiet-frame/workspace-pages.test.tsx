@@ -81,6 +81,27 @@ describe('Quiet Frame 工作区与公开页', () => {
     await waitFor(() => expect(setBudget).toHaveBeenCalledWith('ws_1', { period: 'MONTHLY', limitCredits: 25, perJobMaxCredits: 0 }));
   });
 
+  it('新能力页显示服务端有效状态，选择偏好不会冒充能力已发布', async () => {
+    const setFeature = vi.fn().mockResolvedValue({});
+    const feature = {
+      key: 'V04_MEDIA_EDITING', label: '素材剪辑', description: '纯素材导入、预览与非破坏性剪辑。',
+      platforms: ['WEB'], minimumCapabilityLevel: 'INTERNAL_VALIDATED', releaseGate: 'G0', releaseReady: false,
+      requestedEnabled: false, effectiveState: 'OFF', reason: 'WORKSPACE_DISABLED', updatedAt: null,
+    };
+    const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ name: '工作区', role: 'OWNER', privacyTier: 'STANDARD' }), features: vi.fn().mockResolvedValue([feature]), setFeature },
+      providerConnections: { list: vi.fn().mockResolvedValue([]) },
+      providerSettings: { list: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<WorkspaceSettings workspaceId="ws_1" />, client);
+    await userEvent.click(screen.getByRole('button', { name: '新能力' }));
+    await screen.findByText('素材剪辑');
+    expect(screen.getByText('未选择')).toBeTruthy();
+    expect(screen.getByText(/选择不会触发生成、扣费或改写旧项目/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '选择此能力' }));
+    await waitFor(() => expect(setFeature).toHaveBeenCalledWith('ws_1', 'V04_MEDIA_EDITING', true));
+  });
+
   it('BYOK 密钥只在创建请求中提交一次，响应仅显示掩码', async () => {
     const fixture = 'synthetic-ui-value';
     const create = vi.fn().mockResolvedValue({ id: 'pcon_1', maskedToken: '••••abcd' });

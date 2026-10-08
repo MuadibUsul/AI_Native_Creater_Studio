@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth.js';
 
@@ -69,5 +69,29 @@ export const workspaceInvitations = pgTable(
       .where(sql`${table.status} = 'PENDING'`),
     index('workspace_invitations_email_idx').on(table.email),
     index('workspace_invitations_workspace_idx').on(table.workspaceId),
+  ],
+);
+
+/**
+ * Workspace preference for a server owned v0.4 release gate (N00-05).
+ * The row records intent only; it cannot make a blocked global gate effective.
+ */
+export const workspaceFeaturePreferences = pgTable(
+  'workspace_feature_preferences',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    featureKey: text('feature_key').notNull(),
+    requestedEnabled: boolean('requested_enabled').notNull().default(false),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('workspace_feature_preferences_workspace_key_uq').on(table.workspaceId, table.featureKey),
+    index('workspace_feature_preferences_workspace_idx').on(table.workspaceId),
   ],
 );

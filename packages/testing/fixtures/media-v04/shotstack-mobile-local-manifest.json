@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-shotstack-galaxy-s9-vfr-20261008",
+  "storage": "ignored-local-cache-only",
+  "cacheDirectory": ".artifacts/n00-04-shotstack",
+  "source": {
+    "repository": "https://github.com/shotstack/test-media",
+    "commit": "b790a2b72325feecd189291c52663ed8123b1839",
+    "directory": "orientation",
+    "readme": "https://github.com/shotstack/test-media/blob/b790a2b72325feecd189291c52663ed8123b1839/orientation/README.md",
+    "provenance": "The upstream orientation README states that all four clips were shot using a Samsung Galaxy S9 and identifies the contributor as Jeff Shillitto (@jeffski).",
+    "capturedDevice": "Samsung Galaxy S9",
+    "contributor": "Jeff Shillitto (@jeffski)"
+  },
+  "license": {
+    "name": "CC0 1.0 Universal",
+    "url": "https://github.com/shotstack/test-media/blob/b790a2b72325feecd189291c52663ed8123b1839/LICENSE",
+    "checkedAt": "2026-10-08",
+    "summary": "The upstream repository README states that all assets are licensed under CC0 and may be used without cost or attribution.",
+    "repositoryPolicy": "Downloaded media stays in the Git-ignored cache. Commit only immutable upstream URLs, source commit, provenance, license, checksums, and measured stream properties."
+  },
+  "measurement": {
+    "tool": "ffprobe",
+    "vfrRule": "Variable frame cadence is established from more than one adjacent best_effort_timestamp delta in the 1/90000 video time base; r_frame_rate and avg_frame_rate alone are not treated as proof.",
+    "fullDecode": "All four files decoded to the null muxer with ffmpeg exit code 0 on 2026-10-08."
+  },
+  "assets": [
+    {
+      "id": "shotstack-galaxy-s9-landscape-0",
+      "file": "orientation/h1080_w1920_f30_a16-9_r0.mp4",
+      "rawUrl": "https://raw.githubusercontent.com/shotstack/test-media/b790a2b72325feecd189291c52663ed8123b1839/orientation/h1080_w1920_f30_a16-9_r0.mp4",
+      "sha256": "5f4455bec917bce657ccc6a8ead87e806a6264f9272042f1dbcbe6d7bc75195c",
+      "sizeBytes": 20715563,
+      "expected": "H.264 1920x1080, AAC stereo 48 kHz, duration 11.497200 seconds, 345 video frames, time base 1/90000, adjacent PTS deltas 2995/2997/2998/2999/3000/3001/3337 ticks; full decode succeeds."
+    },
+    {
+      "id": "shotstack-galaxy-s9-landscape-180",
+      "file": "orientation/h1080_w1920_f30_a16-9_r180.mp4",
+      "rawUrl": "https://raw.githubusercontent.com/shotstack/test-media/b790a2b72325feecd189291c52663ed8123b1839/orientation/h1080_w1920_f30_a16-9_r180.mp4",
+      "sha256": "38f73598d1cc18da686268359a52bb9186693530a9dd6fa77416b92a540d274e",
+      "sizeBytes": 21196403,
+      "expected": "H.264 1920x1080 with -180 degree display rotation, AAC stereo 48 kHz, duration 11.826578 seconds, 355 video frames, time base 1/90000, 10 distinct adjacent PTS deltas; full decode succeeds."
+    },
+    {
+      "id": "shotstack-galaxy-s9-portrait-270",
+      "file": "orientation/h1920_w1080_f30_a9-16_r270.mp4",
+      "rawUrl": "https://raw.githubusercontent.com/shotstack/test-media/b790a2b72325feecd189291c52663ed8123b1839/orientation/h1920_w1080_f30_a9-16_r270.mp4",
+      "sha256": "461f4db5d9580e1b94aeabd53c05db4af0d58c6211705c69ad3b8281a02a1733",
+      "sizeBytes": 21762813,
+      "expected": "H.264 1920x1080 with 90 degree display rotation (9:16 presentation), AAC stereo 48 kHz, duration 12.109544 seconds, 363 video frames, time base 1/90000, 10 distinct adjacent PTS deltas including 4480 ticks; full decode succeeds."
+    },
+    {
+      "id": "shotstack-galaxy-s9-portrait-90",
+      "file": "orientation/h1920_w1080_f30_a9-16_r90.mp4",
+      "rawUrl": "https://raw.githubusercontent.com/shotstack/test-media/b790a2b72325feecd189291c52663ed8123b1839/orientation/h1920_w1080_f30_a9-16_r90.mp4",
+      "sha256": "cb88fcb67c6f3336680a9f41a22eead1b970d61ef733e921a93830a11b4ce8e5",
+      "sizeBytes": 19632143,
+      "expected": "H.264 1920x1080 with -90 degree display rotation (9:16 presentation), AAC stereo 48 kHz, duration 10.962178 seconds, 329 video frames, time base 1/90000, adjacent PTS deltas 2996/2997/2998/2999/3000/3002/3158 ticks; full decode succeeds."
+    }
+  ],
+  "boundaries": [
+    "The repository documentation establishes phone capture and device model; it does not expose per-file EXIF make/model tags.",
+    "These clips verify source cadence, rotation metadata, decoding, and rights provenance. Product import, playback, editing, and long-duration sync remain separate task evidence.",
+    "The cached upstream repository is not committed; re-downloads must match the recorded commit and SHA-256 before use."
+  ]
+}

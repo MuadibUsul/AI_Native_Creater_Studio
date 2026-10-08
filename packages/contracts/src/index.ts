@@ -1206,6 +1206,32 @@ export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember, Priv
 // 隐私档位与邀请契约（P09-04）
 export { PRIVACY_TIERS, privacyTierSchema, setPrivacyTierRequestSchema } from './workspaces.js';
 export {
+  WORKSPACE_FEATURE_KEYS,
+  workspaceFeatureKeySchema,
+  FEATURE_RELEASE_GATES,
+  featureReleaseGateSchema,
+  FEATURE_CAPABILITY_LEVELS,
+  featureCapabilityLevelSchema,
+  FEATURE_PLATFORMS,
+  featurePlatformSchema,
+  FEATURE_EFFECTIVE_STATES,
+  featureEffectiveStateSchema,
+  FEATURE_AVAILABILITY_REASONS,
+  featureAvailabilityReasonSchema,
+  workspaceFeatureSchema,
+  workspaceFeatureListSchema,
+  setWorkspaceFeatureRequestSchema,
+  WORKSPACE_FEATURE_ERROR_REASONS,
+} from './workspace-features.js';
+export type {
+  WorkspaceFeatureKey,
+  FeatureReleaseGate,
+  FeatureEffectiveState,
+  WorkspaceFeature,
+  WorkspaceFeatureList,
+  SetWorkspaceFeatureRequest,
+} from './workspace-features.js';
+export {
   INVITATION_STORED_STATUSES,
   INVITATION_STATUSES,
   invitationStatusSchema,

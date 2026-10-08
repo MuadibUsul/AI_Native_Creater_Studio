@@ -374,6 +374,12 @@ export {
 } from './billing.js';
 export type { BillingPolicy } from './billing.js';
 export {
+  WORKSPACE_FEATURE_DEFINITIONS,
+  assertWorkspaceFeatureWriteAllowed,
+  listWorkspaceFeatures,
+  setWorkspaceFeaturePreference,
+} from './workspace-features.js';
+export {
   createConnection,
   getConnection,
   listConnections,

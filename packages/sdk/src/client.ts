@@ -160,6 +160,9 @@ import {
   addWorkspaceMemberRequestSchema,
   workspaceMemberSchema,
   workspaceWithRoleSchema,
+  workspaceFeatureListSchema,
+  workspaceFeatureSchema,
+  setWorkspaceFeatureRequestSchema,
   workspaceEntitlementSchema,
   planSchema,
   assignPlanRequestSchema,
@@ -225,6 +228,8 @@ import {
   type TokenResponse,
   type WorkspaceMember,
   type WorkspaceWithRole,
+  type WorkspaceFeature,
+  type WorkspaceFeatureKey,
   type WorkspaceInvitation,
   type MyInvitation,
   type VoiceClone,
@@ -496,6 +501,8 @@ export interface AncsClient {
     create(input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     list(): Promise<WorkspaceWithRole[]>;
     get(workspaceId: string): Promise<WorkspaceWithRole>;
+    features(workspaceId: string): Promise<WorkspaceFeature[]>;
+    setFeature(workspaceId: string, featureKey: WorkspaceFeatureKey, enabled: boolean, options?: MutationOptions): Promise<WorkspaceFeature>;
     /** 当前权益 + 实时用量（P09-01；成员可读） */
     entitlements(workspaceId: string): Promise<WorkspaceEntitlement>;
     /** Scene Graph 导出（P10-06；可移植 JSON，无 URL/Secret） */
@@ -1505,6 +1512,13 @@ export function createClient(options: ClientOptions): AncsClient {
       list: async () =>
         (await request('GET', '/api/v1/workspaces', listOf(workspaceWithRoleSchema))).items,
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema),
+      features: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/features`, workspaceFeatureListSchema)).items,
+      setFeature: (workspaceId, featureKey, enabled, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/features/${featureKey}`, workspaceFeatureSchema, {
+          body: { enabled }, bodySchema: setWorkspaceFeatureRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
       entitlements: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/entitlements`, workspaceEntitlementSchema),
       graphExport: (workspaceId, projectId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/graph-export`, graphExportSchema),

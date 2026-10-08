@@ -40,6 +40,7 @@
 .qf-provider-button .grow { display: flex; flex-direction: column; }
 .qf-provider-button .grow small { color: var(--muted); }
 .qf-settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.qf-settings-content .btn.qf-feature-action { min-height: 40px; height: auto; flex: 0 0 auto; }
 .qf-metric-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .qf-metric-row > div { border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 .qf-metric-row h2 { margin-top: 8px; }
@@ -69,4 +70,5 @@
   .qf-provider-form { grid-template-columns: 1fr; }
   .qf-provider-form .qf-span-2 { grid-column: auto; }
   .qf-landing .mini-inspector, .qf-landing .mini-side { display: none; }
+  .qf-settings-content .btn.qf-feature-action { min-height: 44px; }
 }
