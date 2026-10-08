@@ -38,13 +38,17 @@ export function WelcomePage() {
 }
 
 const colors = [
-  ['#F6F6F4', 'Canvas', '画布'], ['#FFFFFF', 'Surface', '工作表面'], ['#EEEFED', 'Sidebar', '导航层'],
-  ['#202322', 'Ink', '主文字'], ['#1768B2', 'Action', '交互强调'], ['#34735B', 'Success', '完成状态'],
+  ['bg-canvas', 'Canvas', '画布', 'fg-primary'],
+  ['bg-subtle', 'Subtle', '次级表面', 'fg-primary'],
+  ['bg-elevated', 'Elevated', '浮层', 'fg-primary'],
+  ['fg-primary', 'Ink', '主文字', 'bg-canvas'],
+  ['action-primary-bg', 'Action', '主要操作', 'action-primary-fg'],
+  ['selection-bg', 'Selection', '选区', 'fg-primary'],
 ] as const;
 
 export function DesignSystemPage() {
   return <main className="page qf-workspace-page"><div className="sectionhead"><div><div className="eyebrow mb16">ANCS / DESIGN SYSTEM 01</div><h1>Quiet Frame · 静框</h1><p>让界面退后，让作品上前。克制的材质，明确的操作。</p></div><Link href="/" className="btn small">返回创作台 →</Link></div>
-    <div className="design-colors mt32">{colors.map(([color, name, caption]) => <div className="color-tile" key={name} style={{ background: color, color: ['Ink', 'Action', 'Success'].includes(name) ? '#fff' : '#495649' }}><strong>{name} · {caption}</strong><span>{color}</span></div>)}</div>
+    <div className="design-colors mt32">{colors.map(([token, name, caption, foreground]) => <div className="color-tile" key={name} style={{ background: `var(--ui-${token})`, color: `var(--ui-${foreground})` }}><strong>{name} · {caption}</strong><span>{`ui.${token.replaceAll('-', '.')}`}</span></div>)}</div>
     <div className="type-spec mt32"><section className="panel pad"><h3>清晰的文字层级</h3><div className="spec-line"><span className="qf-type-title">把观点，变成作品。</span><span className="sample-note">36 / 1.25</span></div><div className="spec-line"><span className="qf-type-heading">继续创作</span><span className="sample-note">23 / 1.4</span></div><div className="spec-line"><span className="qf-type-subheading">让表达，更进一步。</span><span className="sample-note">16 / 1.6</span></div><div className="spec-line"><span>正文保持完整，不为极简牺牲可读性。</span><span className="sample-note">14 / 1.8</span></div><div className="spec-line"><span className="small muted">状态、说明与辅助信息</span><span className="sample-note">12 / 1.6</span></div></section><section className="panel pad"><h3>只在该强调时强调</h3><DesignSystemExampleActions /><div className="row mt24 gap8 qf-design-actions"><span className="badge green">已保存</span><span className="badge amber">等待确认</span><span className="badge red">来源缺失</span></div><hr className="divider" /><h3>柔和，但不含糊</h3><div className="rounded-demo">{[6, 10, 16, 24].map((radius) => <div key={radius} style={{ borderRadius: radius }}>{radius}</div>)}</div><p className="small muted mt16">间距 4 / 8 / 12 / 16 / 24 / 32 / 48<br />按钮 40 px · 主要触控 44–48 px</p><DesignSystemControls /></section></div>
     <section className="panel pad mt24"><h3>状态，同样需要设计。</h3><div className="status-board"><div><span className="badge">加载中</span><h4 className="mt16">正在读取资料</h4><p className="small muted mt8">保留当前内容，不让布局跳动。</p></div><div><span className="badge amber">版本冲突</span><h4 className="mt16">作品已有更新</h4><p className="small muted mt8">先比较差异，再决定如何保留。</p><DesignSystemStatusAction kind="conflict" /></div><div><span className="badge blue">需要授权</span><h4 className="mt16">声音尚未获得授权</h4><p className="small muted mt8">完成授权前，不提交克隆任务。</p><DesignSystemStatusAction kind="consent" /></div></div></section></main>;
 }

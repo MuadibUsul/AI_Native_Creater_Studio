@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 统一验证入口（计划 §11.1）。
+ * 统一验证入口（当前 v0.4 增量任务继承旧验证门）。
  *
  * - 顺序：secrets:check → lint → typecheck → build → arch:check → 全部测试套件；
  * - 不包含 test:provider-smoke（真实 Provider 费用，单独显式开启）；
@@ -55,4 +55,4 @@ if (failedStep) {
   process.exit(1);
 }
 
-console.log('\nverify 通过（[PLANNED] 套件不执行断言；关闭进度见 docs/requirements/v1-acceptance-ledger.md）。');
+console.log('\nverify 通过（[PLANNED] 套件不执行断言；v0.4 进度见 docs/requirements/ai-native-v04-acceptance-ledger.md，旧 V1 证据见 v1-acceptance-ledger.md）。');

@@ -1,3 +1,11 @@
+# 历史计划提示（2026-10-08）
+
+本文件记录 2026-10-04 的 v0.2 / 旧 P 系列工程计划，保留供旧任务、裁决和证据回查；**不再单独作为当前 N 系列执行入口**。当前需求权威为 `docs/V04/ANCS_AI_Native_v0.4.md`，任务与接手顺序见 `docs/V04/ANCS_v0.4_Task_Backlog.md`、`docs/V04/ANCS_v0.4_Codex_Start.md`，实际状态见 `docs/requirements/ai-native-v04-acceptance-ledger.md`。冲突按 v0.4 §1.4 和 `docs/decisions/0009-v04-authority-and-scope.md` 处理；下方旧“已生效”只表示其历史时点。
+
+明确替换：文章／研究长视频不再是唯一入口；持久化权威时间由整数毫秒扩展为有理时基与源 PTS（旧毫秒数据须兼容）；全局 Audio-First、专业功能永久排除、旧界面限制以及只在最后生成实际镜头的假设不再指挥新实现。旧安全、隐私、版本、账本、恢复和多端原则继续有效。旧任务及验收证据不清零。
+
+---
+
 ANCS 工程推进细则 · 2026-10-04
 
 目标文件：`E:\Codes\ANCS\ANCS_Plan261004.md`  

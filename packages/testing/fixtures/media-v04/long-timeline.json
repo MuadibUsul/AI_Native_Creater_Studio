@@ -1,0 +1,8 @@
+{
+  "label": "SYNTHETIC_TIMEBASE_ONLY",
+  "note": "No 24-hour media file exists; this checks integer time arithmetic only.",
+  "duration": { "ticks": "4147200000", "timebase": { "num": 1, "den": 48000 } },
+  "fractionalFrameRate": { "num": 30000, "den": 1001 },
+  "sourcePtsStart": { "ticks": "-48000", "timebase": { "num": 1, "den": 48000 } },
+  "expectedSeconds": 86400
+}

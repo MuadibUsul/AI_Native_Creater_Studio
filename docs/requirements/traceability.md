@@ -1,5 +1,7 @@
 # ANCS 需求追踪矩阵（RTM）v1
 
+> 历史账本提示（2026-10-08）：本表保留旧 v0.2/P 系列 REQ 的验收记录与当时的暂停备注；当前 N 系列按 `docs/V04/ANCS_AI_Native_v0.4.md` 和 `docs/requirements/ai-native-v04-traceability.md` 执行。新版本初始 TODO 不覆写本表旧 VERIFIED，旧 P15/P16 暂停与新 N15/N16 横切任务不混同。
+
 - 任务：P00-01（建立需求追踪与裁决记录）
 - 需求基线：`creator_video_os_spec_v0.2.md`（v0.2，2026-10-04，共 97 节 + 附录 A/B/C）
 - 工程计划：`ANCS_Plan261004.md`

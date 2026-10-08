@@ -6,6 +6,28 @@ export { opaqueIdSchema } from './common/ids.js';
 export type { OpaqueId } from './common/ids.js';
 export { isoDateTimeSchema, isoDateOrDateTimeSchema, videoMsSchema, durationMsSchema } from './common/time.js';
 export type { IsoDateTime, VideoMs } from './common/time.js';
+export {
+  rationalSchema,
+  frameRateSchema,
+  mediaTicksSchema,
+  mediaTimeSchema,
+  mediaRangeSchema,
+  MEDIA_ROUNDING_MODES,
+  mediaRoundingSchema,
+  normalizeRational,
+  compareMediaTime,
+  rescaleMediaTime,
+  frameIndexToMediaTime,
+  mediaTimeToFrameIndex,
+  sampleIndexToMediaTime,
+  mediaTimeToSampleIndex,
+  legacyMillisecondsToMediaTime,
+  legacyFpsToFrameRate,
+  mapRangeBoundary,
+  sourcePtsToSequenceTime,
+  sequenceTimeToSourcePts,
+} from './common/media-time.js';
+export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
 export type { Revision } from './common/revision.js';
 export { moneySchema, creditsSchema } from './common/money.js';

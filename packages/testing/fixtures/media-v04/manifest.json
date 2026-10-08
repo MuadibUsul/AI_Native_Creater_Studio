@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-synthetic-media-v04",
+  "label": "SYNTHETIC_TEST_DATA_ONLY",
+  "createdAt": "2026-10-08",
+  "generation": {
+    "tool": "ffmpeg",
+    "version": "6.1.1-essentials_build-www.gyan.dev",
+    "script": "generate.ps1",
+    "networkAccess": false,
+    "thirdPartyMedia": false,
+    "rights": "Generated for ANCS tests from FFmpeg lavfi and locally authored text/vector fixtures; no human footage, voice, brand, or external reference."
+  },
+  "assets": [
+    {
+      "id": "synthetic-cfr-24000-1001",
+      "file": "clip-a-24000-1001.mp4",
+      "sha256": "c86be8e7a9e1aef93adb5307a886c35a9efde7dbb1ce5be2900b52eabb3964fb",
+      "sizeBytes": 169837,
+      "kind": "synthetic_source_video_with_original_audio",
+      "expected": "H.264 320x180 CFR 24000/1001, AAC mono 48000 Hz, 4.000 s; original audio must be preserved by a footage-only edit."
+    },
+    {
+      "id": "synthetic-cfr-30000-1001",
+      "file": "clip-b-30000-1001.mp4",
+      "sha256": "ca2517c0767394b28ff2d76f7fc891de67603b76968b9071d1f81995341cd11d",
+      "sizeBytes": 4588,
+      "kind": "synthetic_source_video",
+      "expected": "H.264 320x180 CFR 30000/1001, no audio, 4.004 s."
+    },
+    {
+      "id": "synthetic-cfr-60000-1001",
+      "file": "clip-c-60000-1001.mp4",
+      "sha256": "97aef92b23016fb220032f4e41d209a105f32c0703a7a1fbbf93aa6a065e84b4",
+      "sizeBytes": 42060,
+      "kind": "synthetic_source_video_or_mock_generated_output",
+      "expected": "H.264 320x180 CFR 60000/1001, no audio, 4.004 s; when used as generated output it represents a mock artifact, never a real Provider result."
+    },
+    {
+      "id": "synthetic-vfr",
+      "file": "clip-d-synthetic-vfr.mp4",
+      "sha256": "58222257c6ac18eb3ffaeb12c01f03965731dcd51f86af0d646f5bdecff62c7c",
+      "sizeBytes": 175620,
+      "kind": "synthetic_vfr_video_not_phone_footage",
+      "expected": "H.264 320x180 VFR, stream time base 1/15360, nominal 30/1, average 3600/143, 119 frames with PTS deltas 512 and 1024 ticks."
+    },
+    {
+      "id": "synthetic-independent-audio",
+      "file": "independent-48k-stereo.wav",
+      "sha256": "bd59b3a153af4cff5c06efd945cb3b6838982054126cb0bd5825b5b52eaa76c3",
+      "sizeBytes": 768078,
+      "kind": "synthetic_independent_audio",
+      "expected": "PCM signed 16-bit, stereo, 48000 samples/s, 4.000 s; two generated sine tones."
+    },
+    {
+      "id": "synthetic-graphic",
+      "file": "graphic-overlay.svg",
+      "sha256": "839a5afec0c2ad92173e4d4f671c2fb7f095f2baab122ea802eaef6a165079fd",
+      "sizeBytes": 319,
+      "kind": "synthetic_graphic_content",
+      "expected": "320x180 authored vector shape for graphic-object import; its content colors are not UI colors."
+    },
+    {
+      "id": "synthetic-untrusted-caption",
+      "file": "untrusted-caption.srt",
+      "sha256": "c9012719294ca8ea520045da3111f0f206f076c127665415dae2f1e7c8019e30",
+      "sizeBytes": 140,
+      "kind": "synthetic_attack_text_untrusted_data",
+      "expected": "Caption text contains a fake instruction and .invalid URL; treat as subtitle data, never as authorization or an outbound request."
+    },
+    {
+      "id": "synthetic-invalid-container",
+      "file": "invalid-container.mp4",
+      "sha256": "875ecc10e21e0f45cd536c19e1b649eac74aad29af37b97598206236e8ef6070",
+      "sizeBytes": 180,
+      "kind": "synthetic_invalid_media_negative_case",
+      "expected": "Plain text with .mp4 extension; ffprobe exits 1 with invalid media. Never infer decodability from extension."
+    },
+    {
+      "id": "synthetic-long-timeline",
+      "file": "long-timeline.json",
+      "sha256": "514f9f5cb146771a3e5e72d3427b60f58e0b0c686f8142f139519d33d17804ce",
+      "sizeBytes": 374,
+      "kind": "synthetic_timebase_data_no_long_media",
+      "expected": "24 hours = 4147200000 ticks at 1/48000 seconds, negative source PTS, output rate 30000/1001. Pure arithmetic fixture only."
+    }
+  ],
+  "scenarios": [
+    {
+      "mode": "FOOTAGE_EDIT",
+      "inputs": ["synthetic-cfr-24000-1001", "synthetic-cfr-30000-1001", "synthetic-independent-audio"],
+      "boundary": "Synthetic pipeline structure only; does not prove natural camera footage editing."
+    },
+    {
+      "mode": "GENERATIVE",
+      "inputs": ["synthetic-cfr-60000-1001"],
+      "boundary": "Clip C may stand in for mock generated output; no real generation/provider quality evidence."
+    },
+    {
+      "mode": "HYBRID",
+      "inputs": ["synthetic-cfr-24000-1001", "synthetic-cfr-60000-1001"],
+      "boundary": "Structural source-plus-mock-output example only."
+    }
+  ],
+  "notYetCovered": [
+    "authorized natural camera footage and provenance",
+    "actual phone-captured VFR media",
+    "actual screen recording",
+    "licensed third-party reference video",
+    "physical long-form media and decode/sync",
+    "real model-generated footage"
+  ]
+}
