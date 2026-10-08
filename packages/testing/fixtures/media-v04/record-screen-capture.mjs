@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const scratch = resolve('.artifacts/v04/n00-04-screen-recording');
