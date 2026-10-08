@@ -32,6 +32,13 @@ export {
 } from './creator.js';
 export { projectVersions, projects, scenes } from './projects.js';
 export { projectSequences, sequenceTracks, sequenceClips } from './composition.js';
+export {
+  compositionAnimationBindings,
+  compositionAudioRegions,
+  compositionCaptionSpans,
+  compositionEffectInstances,
+  compositionVisualObjects,
+} from './composition-objects.js';
 export { editEvents, outboxEvents } from './history.js';
 export { assetVersions, assets, uploadIntents } from './assets.js';
 export { notifications } from './notifications.js';

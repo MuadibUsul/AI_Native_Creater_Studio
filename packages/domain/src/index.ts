@@ -392,6 +392,16 @@ export {
   listProjectComposition,
 } from './composition.js';
 export {
+  assertEffectExecutionSupported,
+  createAnimationBinding,
+  createAudioRegion,
+  createCaptionSpan,
+  createEffectInstance,
+  createVisualObject,
+  listProjectCompositionObjects,
+  repositionVisualObject,
+} from './composition-objects.js';
+export {
   createConnection,
   getConnection,
   listConnections,

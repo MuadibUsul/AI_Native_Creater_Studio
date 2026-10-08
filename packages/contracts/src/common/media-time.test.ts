@@ -10,6 +10,7 @@ import {
   legacyFpsToFrameRate,
   legacyMillisecondsToMediaTime,
   mapRangeBoundary,
+  mediaRangeDuration,
   mediaTimeToLegacyMilliseconds,
   mediaRangeSchema,
   mediaRoundingSchema,
@@ -52,6 +53,10 @@ describe('v0.4 MediaTime contract', () => {
     expect(isMediaTimeInRange({ ticks: '999', timebase: msBase }, range)).toBe(true);
     expect(isMediaTimeInRange({ ticks: '1000', timebase: msBase }, range)).toBe(false);
     expect(isMediaTimeInRange({ ticks: '-1', timebase: audioBase }, range)).toBe(false);
+    expect(mediaRangeDuration({
+      start: { ticks: '24000', timebase: audioBase },
+      end: { ticks: '1500', timebase: msBase },
+    })).toEqual({ ticks: '2', timebase: { num: 1, den: 2 } });
   });
 
   it('makes boundary rounding explicit, including negative ties', () => {

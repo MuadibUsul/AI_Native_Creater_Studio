@@ -193,6 +193,17 @@ function outputTimebase(range: MediaRange): Rational {
   return { num: 1, den: Number(denominator) };
 }
 
+/** Exact half-open range duration expressed in a lossless supported timebase. */
+export function mediaRangeDuration(range: MediaRange): MediaTime {
+  const span = mediaRangeSchema.parse(range);
+  const duration = subtract(seconds(span.end), seconds(span.start));
+  const base = outputTimebase(span);
+  const numerator = duration.num * BigInt(base.den);
+  const denominator = duration.den * BigInt(base.num);
+  if (numerator % denominator !== 0n) throw new RangeError('Range duration cannot be represented exactly');
+  return checkedTime(numerator / denominator, base);
+}
+
 /** Linear source↔sequence boundary mapping. The end boundary is allowed; content remains [start,end). */
 export function mapRangeBoundary(
   time: MediaTime,

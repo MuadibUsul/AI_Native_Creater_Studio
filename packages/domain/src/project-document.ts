@@ -16,11 +16,17 @@ import {
   type Sequence,
   type Track,
   type Clip,
+  type VisualObject,
+  type EffectInstance,
+  type AnimationBinding,
+  type CaptionSpan,
+  type AudioRegion,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { assembleSceneGraph } from './projects.js';
 import { listProjectComposition } from './composition.js';
+import { listProjectCompositionObjects } from './composition-objects.js';
 
 const compositionObjectId = (sceneId: string): string => `cmp_${sceneId}`;
 
@@ -30,7 +36,16 @@ export function projectDocumentFromSceneGraph(input: {
   brief: unknown;
   productionPolicy: unknown;
   documentSchemaVersion?: string;
-  composition?: { sequences: Sequence[]; tracks: Track[]; clips: Clip[] };
+  composition?: {
+    sequences: Sequence[];
+    tracks: Track[];
+    clips: Clip[];
+    visualObjects?: VisualObject[];
+    effects?: EffectInstance[];
+    animations?: AnimationBinding[];
+    captions?: CaptionSpan[];
+    audioRegions?: AudioRegion[];
+  };
 }): ProjectDocument {
   if ((input.documentSchemaVersion ?? PROJECT_DOCUMENT_SCHEMA_VERSION) !== PROJECT_DOCUMENT_SCHEMA_VERSION) {
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'ProjectDocument schema version is not supported', 409, {
@@ -80,6 +95,11 @@ export function projectDocumentFromSceneGraph(input: {
       sequences: input.composition?.sequences ?? [],
       tracks: input.composition?.tracks ?? [],
       clips: input.composition?.clips ?? [],
+      visualObjects: input.composition?.visualObjects ?? [],
+      effects: input.composition?.effects ?? [],
+      animations: input.composition?.animations ?? [],
+      captions: input.composition?.captions ?? [],
+      audioRegions: input.composition?.audioRegions ?? [],
     },
     assetVersionIds: [],
     sourceReferences: graph.sourceReferences,
@@ -115,16 +135,17 @@ export async function assembleProjectDocument(
     .limit(1);
   const project = rows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-  const [graph, composition] = await Promise.all([
+  const [graph, composition, compositionObjects] = await Promise.all([
     assembleSceneGraph(deps, input),
     listProjectComposition(deps, input),
+    listProjectCompositionObjects(deps, input),
   ]);
   return projectDocumentFromSceneGraph({
     graph,
     brief: project.brief,
     productionPolicy: project.productionPolicy,
     documentSchemaVersion: project.documentSchemaVersion,
-    composition,
+    composition: { ...composition, ...compositionObjects },
   });
 }
 

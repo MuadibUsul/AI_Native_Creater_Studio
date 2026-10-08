@@ -9,13 +9,13 @@
 
 ## 已核验与在途
 
-- `VERIFIED`：N00-01—07、N01-01/02/03、N15-01/02、N16-01/02，共 **14/219** 项。N00 基础阶段已全部关闭；N01-01—03 已完成有理时基、ProjectDocument v1.0、三模式 ProductionPolicy，以及迁移 0058 的规范化 Sequence/Track/Clip、源／序列范围、线性时间映射和循环／越界硬门。图形／效果、旧版本迁移和工程 API 属于 N01-04/05/09。N15-02 是独立运营身份/MFA/会话工程验收，生产旧 `/admin/*` 全部读写维持 403；N16-02 是账号同步主题、设备覆盖与首屏工程验收。O0、D0/D1、G0—G4 和整个 v0.4 均未关闭，生产账号与外部通知尚未启用。逐项证据与交接在 `docs/verification/N*.md`、`docs/handoffs/N*.md`。
+- `VERIFIED`：N00-01—07、N01-01—04、N15-01/02、N16-01/02，共 **15/219** 项。N00 基础阶段已全部关闭；N01-01—04 已完成有理时基、ProjectDocument v1.0、三模式 ProductionPolicy、规范化 Sequence/Track/Clip，以及迁移 0059 的稳定 VisualObject、版本化效果／参数／动画、字幕和音频局部时间。旧版本迁移和工程 API 属于 N01-05/09。N15-02 是独立运营身份/MFA/会话工程验收，生产旧 `/admin/*` 全部读写维持 403；N16-02 是账号同步主题、设备覆盖与首屏工程验收。O0、D0/D1、G0—G4 和整个 v0.4 均未关闭，生产账号与外部通知尚未启用。逐项证据与交接在 `docs/verification/N*.md`、`docs/handoffs/N*.md`。
 - N00-04 新增来源可追溯且仓库声明 CC0 的 Shotstack `test-media` Galaxy S9 四段原始方向/VFR 素材，本地 4/4 hash、大小、PTS 差值和完整解码通过；N00-05 已实现发布门和工作区能力偏好；N00-06 的真实浏览器、签名上传、故意失败、跨租户 404 与安全清理最终复跑通过。
 - 0051 运营认证、0052 用户外观偏好及 N15-03 的 0053—0055 权限 scope、策略版本和受限紧急授权模型均在精确隔离测试库通过。N15-03 仍为 `IN_PROGRESS`：缺可信同人关联、独立复核/发布流程及多数旧 GET 安全投影；生产旧后台读写保持关闭。没有调用收费 Provider。`test:contract` 与 `test:e2e` 仍为显式 `[PLANNED]`，不能计作断言通过。
 
 ## 验证和环境
 
-- 精确隔离 DB 的最新完整 `pnpm verify` 于 2026-10-08 22:02 退出 **0**：Unit 369、Web 159、Motion 19、Integration 361、Security 24、Render 6、Golden 15，合计 **953/953**。950、943、939、937、879、893、916、929、933 是更早基线。`test:contract`、`test:e2e` 为 `[PLANNED]`、0 断言。该运行包含 N01-03、迁移 0058 与全部既有套件；测试数不等于尚在途产品门关闭。
+- 精确隔离 DB 的最新完整 `pnpm verify` 于 2026-10-08 22:32 退出 **0**：Unit 372、Web 159、Motion 19、Integration 364、Security 24、Render 6、Golden 15，合计 **959/959**。953、950、943、939、937、879、893、916、929、933 是更早基线。`test:contract`、`test:e2e` 为 `[PLANNED]`、0 断言。该运行包含 N01-04、迁移 0059、legacy Render fail-closed 门与全部既有套件；测试数不等于尚在途产品门关闭。
 - `scripts/verification/n16-01-browser-smoke.mjs` 在最终 Next 构建重启后，用 Playwright Chromium 对公开 `/design-system` 做明暗按钮、状态卡、顶部栏、hover、375px 侧栏和粗指针命中尺寸断言，退出 0；两个图标按钮宽度和 10 个可见按钮高度实际为 44px，两张全页截图和 hash 在 `docs/verification/evidence/N16-01/` 与验证文档。浏览器脚本未覆盖真实项目、开关、21 路由矩阵或媒体播放。
 - **数据库隔离**：历史开发库数据恢复由用户明确要求暂缓。此后运行真实 DB 测试时只使用 `ANCS_TEST_DATABASE_URL` 指向隔离的 `ancs_quiet_frame_test_261007`，并移除当前命令环境的 `DATABASE_URL`；不要清理或重建 `ancs_dev`。浏览器现有工作区记录已丢失，不能据此声称应用功能故障或恢复完成。
 - N00-04 已收到横屏与竖屏两段用户指定的本地 MP4，原片没有入库或推送；另有 Pexels 参考、ANCS 公共页录屏和 20 分钟派生压力片。最终用 Shotstack `test-media` 固定提交中的四段 Galaxy S9 原始方向素材补齐可追溯 CC0 手机 VFR 来源，4/4 hash、大小、PTS 差值和完整解码通过。详见 `docs/verification/N00-04.md` 与各媒体 manifest。N00-06 已在精确隔离库用合成 CFR 样本、真实签名存储和双租户权限回归验证。长视频真实项目、最终成片和完整编辑链路继续由后续任务证明。
@@ -34,8 +34,8 @@
 
 - `scripts/verification/n16-02-real-session.mjs` 已扩展到公开 3 路由与登录后 18 路由，在 1440×900 浅色、1280×800 深色和 390×844 窄屏共完成 63 次页面检查；页面错误、告警、横向溢出和可见控件越界为 0，窄屏小于 32px 的可见触控目标为 0。移动导航与 Studio Inspector 共 5 次真实开合通过。
 - 修复了窄屏创作输入越界、移动导航关闭与长账户信息、身份空态、最后一名 OWNER 保护和版本历史中文标题。人工查看 `.artifacts/n16-route-audit/authenticated-narrow-390/workspace-navigation.png` 与 `project-editor-inspector.png`，未发现新的裁切或重叠。
-- 22:02 的最新 `pnpm verify` 为 Unit 369、Web 159、Motion 19、Integration 361、Security 24、Render 6、Golden 15，共 **953/953** 已实现断言。contract/e2e 仍为 `[PLANNED]`、0 断言。N01-03 已关闭并进入 N01-04；用户已取消 Web 检查暂停，整个 v0.4、D0/D1 和依赖未闭合的 N15/N16 任务仍没有被标为完成。
+- 22:32 的最新 `pnpm verify` 为 Unit 372、Web 159、Motion 19、Integration 364、Security 24、Render 6、Golden 15，共 **959/959** 已实现断言。contract/e2e 仍为 `[PLANNED]`、0 断言。N01-04 已关闭并进入 N01-05；用户已取消 Web 检查暂停，整个 v0.4、D0/D1 和依赖未闭合的 N15/N16 任务仍没有被标为完成。
 
-1. 以本文件末尾更新的最新 `pnpm verify` 和逐项验证文档为基线；950、939、937、879、893、916、929、933 是更早对照数。若再次重建 `.next`，重新核对并重启 4200 进程。
-2. N00、N01-01/02/03 已 VERIFIED；从 N01-04 继续图形、效果、字幕与音频对象。必须扩展 N01-03 的规范化 Composition 和 N01-01 的精确时间原语，不得把任意效果 JSON 塞回旧 Scene props 或建立第二套时间权威。用户需配合的外部账号、生产审批与设备事项集中在 `docs/handoffs/USER-ACTIONS-261008.md`，不逐项中断工程。
+1. 以本文件末尾更新的最新 `pnpm verify` 和逐项验证文档为基线；953、950、939、937、879、893、916、929、933 是更早对照数。若再次重建 `.next`，重新核对并重启 4200 进程。
+2. N00、N01-01—04 已 VERIFIED；从 N01-05 继续旧 Scene/audio/caption/version 的增量兼容、可重试回填与单写切换。必须先建立可比投影和失败恢复，再改变权威读取；禁止旧表和新 Composition 双写。用户需配合的外部账号、生产审批与设备事项集中在 `docs/handoffs/USER-ACTIONS-261008.md`，不逐项中断工程。
 3. N16-02 账号偏好契约、持久化、Web 首屏和真实会话已验；N16-10 单色图表、320px 滚动与真实媒体同帧主题隔离已通过定向浏览器检查，但仍缺正式 ProjectDocument 内容 hash 的切主题前后对照。N16-03 继续图标权利/替代方案、macOS 与受保护路由缩放证据，D0/D1 未关闭。N15-02 独立身份/MFA 已验；N15-03 已有 0053—0055 权限与安全投影切片，生产旧 `/admin` 读写全关闭，独立复核和发布等剩余见单项交接。用户需配合的真实生产操作者、可信同人别名来源与独立复核人已集中登记，不阻塞当前可独立完成的工程。

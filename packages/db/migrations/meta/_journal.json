@@ -414,6 +414,13 @@
       "when": 1791467119415,
       "tag": "0058_real_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791468803321,
+      "tag": "0059_long_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

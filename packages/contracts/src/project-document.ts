@@ -6,6 +6,13 @@ import { revisionSchema } from './common/revision.js';
 import { identitySnapshotSchema, sceneGraphSchema, sourceReferenceSchema } from './scene-graph.js';
 import { privacyTierSchema } from './workspaces.js';
 import { clipSchema, sequenceSchema, trackSchema } from './composition.js';
+import {
+  animationBindingSchema,
+  audioRegionSchema,
+  captionSpanSchema,
+  effectInstanceSchema,
+  visualObjectSchema,
+} from './composition-objects.js';
 
 /** N01-02: ProjectDocument is the single versioned project read model. */
 export const PROJECT_DOCUMENT_SCHEMA_VERSION = '1.0' as const;
@@ -154,6 +161,11 @@ export const projectCompositionSchema = z.object({
   sequences: z.array(sequenceSchema).default([]),
   tracks: z.array(trackSchema).default([]),
   clips: z.array(clipSchema).default([]),
+  visualObjects: z.array(visualObjectSchema).default([]),
+  effects: z.array(effectInstanceSchema).default([]),
+  animations: z.array(animationBindingSchema).default([]),
+  captions: z.array(captionSpanSchema).default([]),
+  audioRegions: z.array(audioRegionSchema).default([]),
 });
 
 export const projectDocumentSchema = z.object({
