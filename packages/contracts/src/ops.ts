@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
+import { jobStatusSchema, jobSubmitStateSchema } from './jobs.js';
 
 /**
  * 最小运营（Admin）契约（P08-02 / 规范 §67；计划 §8 P08-02）。
@@ -57,6 +58,24 @@ export const opsOverviewSchema = z.object({
 });
 
 export type OpsOverview = z.infer<typeof opsOverviewSchema>;
+
+/** Scoped Admin job projection: no Worker input, result, error, stage, or free text. */
+export const opsJobSummarySchema = z.object({
+  id: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema.nullable(),
+  status: jobStatusSchema,
+  submitState: jobSubmitStateSchema,
+  attempts: z.number().int().nonnegative(),
+  maxAttempts: z.number().int().positive(),
+  needsReconciliation: z.boolean(),
+  nextAttemptAt: isoDateTimeSchema.nullable(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+  errorCategory: z.enum(['RETRYABLE', 'FINAL', 'OTHER']).nullable(),
+});
+
+export type OpsJobSummary = z.infer<typeof opsJobSummarySchema>;
 
 export const opsAuditKindSchema = z.enum(['JOB', 'RENDER', 'APPROVAL']);
 export type OpsAuditKind = z.infer<typeof opsAuditKindSchema>;

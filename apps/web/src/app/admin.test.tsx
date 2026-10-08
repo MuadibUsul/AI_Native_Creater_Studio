@@ -9,7 +9,7 @@ const { default: AdminPage } = await import('@/app/admin/page.js');
  * 最小运营界面（P08-02）：
  * - 非管理员（404）→ 无权限块，**不显示任何运营数据**；
  * - 未登录（401）→ 需要登录；
- * - 管理员：总览（队列/成本/QA/审批/Provider）+ 失败任务重试（复用任务服务）+ 审计列表。
+ * - 管理员：总览、显式工作区过滤后的安全任务摘要、审计列表；旧写入口不展示。
  */
 
 const overview = {
@@ -65,8 +65,16 @@ describe('运营界面（P08-02）', () => {
     expect(await screen.findByText('需要登录')).toBeTruthy();
   });
 
-  it('管理员：总览 + 失败任务重试（经任务服务）+ 审计可见', async () => {
-    const retryJob = vi.fn().mockResolvedValue({ id: 'job_1', type: 'RENDER_FINAL', status: 'QUEUED', attempts: 2, maxAttempts: 2, needsReconciliation: false, input: {}, result: null, error: null, stage: null, submitState: 'NOT_SUBMITTED', priority: 0, nextAttemptAt: null, enqueuedAt: null, startedAt: null, completedAt: null, workspaceId: 'ws_1', projectId: null, createdAt: '2026-10-05T11:00:00.000Z', updatedAt: '2026-10-05T12:00:00.000Z' });
+  it('管理员：总览 + 工作区范围的安全任务摘要 + 审计可见', async () => {
+    const retryJob = vi.fn();
+    const listJobs = vi.fn().mockImplementation((query: { workspaceId: string; status?: string }) =>
+      Promise.resolve(query.workspaceId === 'ws_1' && query.status === 'FAILED_FINAL' ? [{
+        id: 'job_1', workspaceId: 'ws_1', projectId: 'prj_1', status: 'FAILED_FINAL',
+        submitState: 'NOT_SUBMITTED', attempts: 2, maxAttempts: 2, needsReconciliation: false,
+        nextAttemptAt: null, createdAt: '2026-10-05T11:00:00.000Z', updatedAt: '2026-10-05T11:30:00.000Z',
+        errorCategory: 'FINAL',
+      }] : []),
+    );
     const client = mockClient({
       admin: {
         users: vi.fn().mockResolvedValue([]),
@@ -77,36 +85,7 @@ describe('运营界面（P08-02）', () => {
         auditLog: vi.fn().mockResolvedValue([]),
         supportGrants: vi.fn().mockResolvedValue([]),
         overview: vi.fn().mockResolvedValue(overview),
-        jobs: vi.fn().mockImplementation((query: { status?: string }) =>
-          Promise.resolve(
-            query?.status === 'FAILED_FINAL'
-              ? [
-                  {
-                    id: 'job_1',
-                    workspaceId: 'ws_1',
-                    projectId: 'prj_1',
-                    type: 'RENDER_FINAL',
-                    status: 'FAILED_FINAL',
-                    stage: null,
-                    submitState: 'NOT_SUBMITTED',
-                    input: {},
-                    result: null,
-                    error: { reason: 'RENDER_EXECUTION_FAILED' },
-                    attempts: 2,
-                    maxAttempts: 2,
-                    priority: 0,
-                    needsReconciliation: false,
-                    nextAttemptAt: null,
-                    enqueuedAt: null,
-                    startedAt: null,
-                    completedAt: null,
-                    createdAt: '2026-10-05T11:00:00.000Z',
-                    updatedAt: '2026-10-05T11:30:00.000Z',
-                  },
-                ]
-              : [],
-          ),
-        ),
+        jobs: listJobs,
         audit: vi.fn().mockResolvedValue([
           {
             id: 'evt_1',
@@ -125,10 +104,14 @@ describe('运营界面（P08-02）', () => {
     expect(await screen.findByTestId('ops-summary')).toBeTruthy();
     expect(screen.getByText('42s')).toBeTruthy();
     expect(screen.getByText('120')).toBeTruthy();
-    expect(await screen.findByText('RENDER_EXECUTION_FAILED')).toBeTruthy();
+    expect(listJobs).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText('工作区 ID'), 'ws_1');
+    await userEvent.click(screen.getByRole('button', { name: '查看任务' }));
+    expect(await screen.findByText('job_1')).toBeTruthy();
+    expect(screen.getByText('FINAL')).toBeTruthy();
+    await waitFor(() => expect(listJobs).toHaveBeenCalledWith({ workspaceId: 'ws_1', status: 'FAILED_FINAL', limit: 50 }));
     expect(screen.getByText(/render rnd_1 → QA/)).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(retryJob).toHaveBeenCalledWith('job_1', { reason: '运营人工重试' }));
-    expect(await screen.findByText(/已重新入队/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '重试' })).toBeNull();
+    expect(retryJob).not.toHaveBeenCalled();
   });
 });

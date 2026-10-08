@@ -1,8 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { useAdminAudit, useAdminJobs, useAdminOverview } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
@@ -38,22 +36,12 @@ function StatusGrid({ title, counts, testId }: { title: string; counts: Record<s
 }
 
 export default function AdminPage() {
-  const client = useAncsClient();
-  const queryClient = useQueryClient();
   const overview = useAdminOverview();
-  const failed = useAdminJobs('FAILED_FINAL');
-  const retryable = useAdminJobs('FAILED_RETRYABLE');
+  const [workspaceDraft, setWorkspaceDraft] = useState('');
+  const [jobWorkspaceId, setJobWorkspaceId] = useState('');
+  const failed = useAdminJobs(jobWorkspaceId, 'FAILED_FINAL');
+  const retryable = useAdminJobs(jobWorkspaceId, 'FAILED_RETRYABLE');
   const audit = useAdminAudit();
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const retry = useMutation({
-    mutationFn: (jobId: string) => client.admin.retryJob(jobId, { reason: '运营人工重试' }),
-    onSuccess: async (job) => {
-      setNotice(`任务 ${job.id} 已重新入队（QUEUED）——仍受预算/幂等/版本规则约束。`);
-      await queryClient.invalidateQueries({ queryKey: ['admin'] });
-    },
-    onError: (error: unknown) => setNotice(`重试失败：${describeError(error).message}`),
-  });
 
   const denied = overview.isError && (overview.error as { status?: number } | null)?.status === 404;
   const unauthenticated = overview.isError && (overview.error as { status?: number } | null)?.status === 401;
@@ -75,7 +63,6 @@ export default function AdminPage() {
     <section className={`page ${styles['surface']} flex flex-col gap-4`}>
       <div className="eyebrow">PLATFORM / OPERATIONS</div><h1>运营</h1>
       <OpsSessionPanel />
-      {notice !== null ? <p role="status" className="text-xs text-amber-300">{notice}</p> : null}
 
       {overview.isPending ? <p className="text-sm text-slate-400">正在加载运营总览…</p> : null}
       {overview.isError ? <StateBlock variant="error" title="运营总览加载失败" description={describeError(overview.error).message} action={{ label: '重试', onClick: () => void overview.refetch() }} /> : null}
@@ -119,31 +106,30 @@ export default function AdminPage() {
       ) : null}
 
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="text-sm font-semibold text-slate-300">失败任务（人工恢复）</h2>
-        {failed.isPending || retryable.isPending ? <p className="mt-2 text-sm text-slate-400">正在加载…</p> : null}
-        {failed.isError || retryable.isError ? <p role="alert" className="mt-2 text-sm text-rose-300">失败任务加载失败：{describeError(failed.error ?? retryable.error).message} <button type="button" className="textbtn small" onClick={() => { void failed.refetch(); void retryable.refetch(); }}>重试</button></p> : null}
-        {failed.data !== undefined && retryable.data !== undefined ? (
+        <h2 className="text-sm font-semibold text-slate-300">失败任务</h2>
+        <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); setJobWorkspaceId(workspaceDraft.trim()); }}>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">工作区 ID
+            <input className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100" value={workspaceDraft} onChange={(event) => setWorkspaceDraft(event.target.value)} autoComplete="off" spellCheck={false} required />
+          </label>
+          <button type="submit" className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-slate-500">查看任务</button>
+        </form>
+        {jobWorkspaceId === '' ? <p className="mt-2 text-xs text-slate-500">输入获授权的工作区 ID 后查看任务。</p> : null}
+        {jobWorkspaceId !== '' && (failed.isPending || retryable.isPending) ? <p className="mt-2 text-sm text-slate-400">正在加载…</p> : null}
+        {jobWorkspaceId !== '' && (failed.isError || retryable.isError) ? <p role="alert" className="mt-2 text-sm text-rose-300">失败任务加载失败：{describeError(failed.error ?? retryable.error).message} <button type="button" className="textbtn small" onClick={() => { void failed.refetch(); void retryable.refetch(); }}>重试</button></p> : null}
+        {jobWorkspaceId !== '' && failed.data !== undefined && retryable.data !== undefined ? (
           <ul data-testid="ops-failed-jobs" className="mt-2 flex flex-col gap-2">
             {[...failed.data, ...retryable.data].slice(0, 20).map((job) => (
               <li key={job.id} className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                 <span className={job.status === 'FAILED_FINAL' ? 'text-rose-300' : 'text-amber-300'}>{job.status}</span>
-                <span className="font-mono text-slate-300">{job.type}</span>
+                <span className="font-mono text-slate-300">{job.id}</span>
                 <span>尝试 {job.attempts}/{job.maxAttempts}</span>
-                <span className="text-slate-500">{String((job.error as Record<string, unknown> | null)?.['reason'] ?? '')}</span>
-                <button
-                  type="button"
-                  className="rounded border border-slate-700 px-2 py-0.5 text-slate-200 hover:border-slate-500"
-                  onClick={() => retry.mutate(job.id)}
-                  disabled={retry.isPending}
-                >
-                  重试
-                </button>
+                <span className="text-slate-500">{job.errorCategory}</span>
               </li>
             ))}
             {failed.data.length === 0 && retryable.data.length === 0 ? <li className="text-slate-500">无失败任务。</li> : null}
           </ul>
         ) : null}
-        <p className="mt-2 text-xs text-slate-500">人工重试经统一任务服务：预算、幂等与版本规则不变（§67）。</p>
+        <p className="mt-2 text-xs text-slate-500">此处只提供工作区范围的任务摘要；人工操作入口将在审批流程完成后开放。</p>
       </div>
 
       <div className="rounded border border-slate-800 bg-slate-900/60 p-4">

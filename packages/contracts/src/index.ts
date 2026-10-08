@@ -175,6 +175,16 @@ export type {
 
 export { OPS_ENVIRONMENTS, opsEnvironmentSchema, OPS_ROLES, opsRoleSchema, opsSessionSchema, opsMfaEnrollmentRequestSchema, opsMfaEnrollmentSchema, opsRevokeSessionRequestSchema } from './ops-auth.js';
 export type { OpsEnvironment, OpsRole, OpsSession } from './ops-auth.js';
+export {
+  OPS_ACTIONS, opsActionSchema, OPS_SCOPE_KINDS, opsScopeKindSchema,
+  OPS_RESOURCE_KINDS, opsResourceKindSchema, opsPermissionTargetSchema,
+  OPS_PERMISSION_DENIALS, opsPermissionDenialSchema, opsPermissionDecisionSchema,
+} from './ops-permissions.js';
+export type { OpsAction, OpsScopeKind, OpsResourceKind, OpsPermissionTarget, OpsPermissionDenial, OpsPermissionDecision } from './ops-permissions.js';
+export { opsJobSummarySchema } from './ops.js';
+export type { OpsJobSummary } from './ops.js';
+export { OPS_PERMISSION_POLICY_STATUSES, opsPermissionPolicyStatusSchema, opsPermissionPolicyVersionSchema, OPS_EMERGENCY_ACTIONS, opsEmergencyActionSchema, opsEmergencyTargetKindSchema, opsEmergencyGrantSchema, OPS_EMERGENCY_DENIALS, opsEmergencyEligibilitySchema } from './ops-governance.js';
+export type { OpsPermissionPolicyVersion, OpsEmergencyAction, OpsEmergencyGrant, OpsEmergencyEligibility } from './ops-governance.js';
 
 // 编辑历史与版本契约（P02-02/P02-03 / §23、§24）
 export {
@@ -1228,6 +1238,7 @@ export {
   supportAccessGrantSchema,
   SUPPORT_GRANT_MAX_HOURS,
   createSupportGrantRequestSchema,
+  supportViewQuerySchema,
   supportViewSchema,
   SUPPORT_ERROR_REASONS,
   AUDIT_ACTOR_KINDS,

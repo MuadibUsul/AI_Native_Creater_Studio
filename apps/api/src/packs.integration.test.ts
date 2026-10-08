@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
-import { ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
+import { assignWorkspacePlan, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { packManifestSchema, type PackPlugin, type RestrictedPluginContext } from '@ancs/contracts';
 import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import type { ArticleFetcher } from '@ancs/contracts';
@@ -177,7 +177,8 @@ describe('Pack 运行时（P11-03）', () => {
     await client.packs.bind(workspaceId, projectId, SHORTS_PACK);
 
     // 降级 FREE（packs: [] = 无 Pack 权益）→ analyze 403（权益在 analyze 链内复检）
-    await admin.admin.assignPlan(workspaceId, { planKey: 'FREE' });
+    await expectApiError(admin.admin.assignPlan(workspaceId, { planKey: 'FREE' }), 403);
+    await assignWorkspacePlan(deps(), { workspaceId, planKey: 'FREE', assignedBy: 'test-domain' });
     await expectApiError(client.packs.analyze(workspaceId, projectId, SHORTS_PACK), 403, 'PACK_NOT_ENABLED'); // P09-01 权益常量
 
     // 停用后再启用 → 403（权益已不含）

@@ -1,6 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { adminPrincipals, adminRoleGrants } from '@ancs/db';
+import { and, eq } from 'drizzle-orm';
+import { OPS_PERMISSION_POLICY_HASH, OPS_PERMISSION_POLICY_VERSION } from '@ancs/auth';
+import { adminPermissionPolicyVersions, adminPrincipals, adminRoleGrants, adminRoleScopes } from '@ancs/db';
 import type { AncsClient } from '@ancs/sdk';
 import { createAdminDeps } from '../plugins/admin.js';
 
@@ -16,8 +18,24 @@ export function testOpsDeps(db: NodePgDatabase) {
 
 export async function provisionTestOpsPrincipal(db: NodePgDatabase, userId: string): Promise<void> {
   const principalId = `oppr_${randomUUID()}`;
+  const roleGrantId = `oprg_${randomUUID()}`;
   await db.insert(adminPrincipals).values({ id: principalId, userId, environment: 'TEST' });
-  await db.insert(adminRoleGrants).values({ id: `oprg_${randomUUID()}`, principalId, role: 'PRODUCTION_OPERATOR' });
+  await db.insert(adminRoleGrants).values({ id: roleGrantId, principalId, role: 'PRODUCTION_OPERATOR' });
+  // An explicit TEST fixture scope. Migration 0053 deliberately grants no scope to existing rows.
+  await db.insert(adminRoleScopes).values({ id: `opsc_${randomUUID()}`, roleGrantId, scopeKind: 'PLATFORM' });
+  // TEST only: explicit fixture publication. Migration never enables any environment by default.
+  const active = (await db.select({ version: adminPermissionPolicyVersions.version, rulesHash: adminPermissionPolicyVersions.rulesHash })
+    .from(adminPermissionPolicyVersions).where(and(
+      eq(adminPermissionPolicyVersions.environment, 'TEST'), eq(adminPermissionPolicyVersions.status, 'ACTIVE'),
+    )).limit(1))[0];
+  if (active === undefined) {
+    await db.insert(adminPermissionPolicyVersions).values({
+      id: `oppv_${randomUUID()}`, environment: 'TEST', version: OPS_PERMISSION_POLICY_VERSION,
+      rulesHash: OPS_PERMISSION_POLICY_HASH, status: 'ACTIVE', publishedAt: new Date(), publishedByPrincipalId: principalId,
+    });
+  } else if (active.version !== OPS_PERMISSION_POLICY_VERSION || active.rulesHash !== OPS_PERMISSION_POLICY_HASH) {
+    throw new Error('TEST permission policy differs from the compiled rule matrix');
+  }
 }
 
 function decodeBase32(value: string): Buffer {

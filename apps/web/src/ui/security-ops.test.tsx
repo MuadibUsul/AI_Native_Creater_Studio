@@ -8,7 +8,7 @@ import { SecurityOps } from '@/ui/SecurityOps';
  * SaaS 安全运营面板（P09-05）：
  * - 检索（users/workspaces）与 Provider/存储聚合展示；
  * - 滥用标记：创建/解决调用 SDK；限制/解除调用 SDK（提示"阻止新任务"）；
- * - 支持工具：创建授权（提示对成员可见）→ 支持视图（元数据摘要）→ 撤销；无授权时视图 403 明示；
+ * - 支持工具界面的工单/受益主体请求形状；API 在 AdminAction 接线前仍拒绝旧直写；
  * - 运营审计（audit_log）列表可见。
  */
 
@@ -97,8 +97,12 @@ describe('SaaS 安全运营面板（P09-05）', () => {
 
     await userEvent.type(await screen.findByLabelText('支持 Workspace ID'), 'ws_1');
     await userEvent.type(screen.getByLabelText('支持目的'), '排查渲染失败工单');
+    await userEvent.type(screen.getByLabelText('支持工单 ID'), 'ticket-42');
+    await userEvent.type(screen.getByLabelText('受益运营主体 ID'), 'oppr_alice');
     await userEvent.click(screen.getByRole('button', { name: '创建授权（2h）' }));
-    await waitFor(() => expect(createSupportGrant).toHaveBeenCalledWith('ws_1', { purpose: '排查渲染失败工单', ttlHours: 2 }));
+    await waitFor(() => expect(createSupportGrant).toHaveBeenCalledWith('ws_1', {
+      purpose: '排查渲染失败工单', ticketId: 'ticket-42', beneficiaryPrincipalId: 'oppr_alice', scope: 'SUMMARY_READ', ttlHours: 2,
+    }));
     expect(screen.getByTestId('secops-notice').textContent).toMatch(/成员可见/);
     expect((await screen.findByTestId('support-grants')).textContent).toMatch(/排查工单/);
 
@@ -118,6 +122,7 @@ describe('SaaS 安全运营面板（P09-05）', () => {
       }),
     );
     await userEvent.type(await screen.findByLabelText('支持 Workspace ID'), 'ws_1');
+    await userEvent.type(screen.getByLabelText('支持工单 ID'), 'ticket-42');
     await userEvent.click(screen.getByRole('button', { name: '打开支持视图' }));
     expect((await screen.findByTestId('secops-notice')).textContent).toMatch(/需先创建时限授权/);
   });

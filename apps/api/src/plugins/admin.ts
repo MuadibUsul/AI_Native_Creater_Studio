@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ApiFailure, ERROR_CODES, type OpsSession } from '@ancs/contracts';
-import { resolveOpsSession, type AuthContext, type OpsAuthDeps } from '@ancs/auth';
+import { decideOpsPermission, resolveOpsSession, type AuthContext, type OpsAuthDeps } from '@ancs/auth';
+import { legacyAdminRoute, resolveLegacyAdminTarget } from './admin-actions.js';
 
 /** Legacy `userIds` is accepted while old callers migrate, but grants no access. */
 export interface AdminDeps {
@@ -50,10 +51,20 @@ export function registerAdminGuard(app: FastifyInstance, admin: AdminDeps): void
       context,
       requireRecentReauth: !['GET', 'HEAD', 'OPTIONS'].includes(request.method),
     });
-    // N15-03/04 尚未把旧 Admin 读写动作接入逐动作/逐对象授权与安全投影。
-    // 生产旧入口全部关闭；独立 /ops 会话自助仍可用。
-    if (admin.ops.environment === 'PRODUCTION' && request.url.startsWith('/api/v1/admin/')) {
-      throw new ApiFailure(ERROR_CODES.FORBIDDEN, 'Production ops policy is not enabled', 403);
+    const legacyRoute = legacyAdminRoute(request);
+    if (legacyRoute !== null) {
+      // The registered route is canonical; URL spelling or encoding cannot weaken this gate.
+      if (admin.ops.environment === 'PRODUCTION') {
+        throw new ApiFailure(ERROR_CODES.FORBIDDEN, 'Production ops policy is not enabled', 403);
+      }
+      if (legacyRoute.action === null) {
+        throw new ApiFailure(ERROR_CODES.FORBIDDEN, 'Ops action is not defined', 403);
+      }
+      const target = await resolveLegacyAdminTarget(admin.ops, request, legacyRoute.action);
+      const decision = await decideOpsPermission(admin.ops, { session: opsSession, action: legacyRoute.action, target });
+      if (!decision.allowed) {
+        throw new ApiFailure(ERROR_CODES.FORBIDDEN, 'Ops action is not permitted', 403, { reason: decision.reason });
+      }
     }
     return { context, opsSession };
   });

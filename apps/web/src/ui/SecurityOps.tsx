@@ -29,6 +29,8 @@ export function SecurityOps(): ReactElement {
   const [flagNote, setFlagNote] = useState('');
   const [grantWorkspaceId, setGrantWorkspaceId] = useState('');
   const [grantPurpose, setGrantPurpose] = useState('');
+  const [grantTicketId, setGrantTicketId] = useState('');
+  const [grantBeneficiaryPrincipalId, setGrantBeneficiaryPrincipalId] = useState('');
   const [supportViewText, setSupportViewText] = useState<string | null>(null);
 
   const users = useAdminUsers(search);
@@ -73,7 +75,10 @@ export function SecurityOps(): ReactElement {
   });
 
   const createGrant = useMutation({
-    mutationFn: () => client.admin.createSupportGrant(grantWorkspaceId, { purpose: grantPurpose, ttlHours: 2 }),
+    mutationFn: () => client.admin.createSupportGrant(grantWorkspaceId, {
+      purpose: grantPurpose, ticketId: grantTicketId, beneficiaryPrincipalId: grantBeneficiaryPrincipalId,
+      scope: 'SUMMARY_READ', ttlHours: 2,
+    }),
     onSuccess: async () => {
       setNotice('已创建支持访问授权（2h）。**工作区成员可见**该授权（support.access_granted 事件）——每次访问同样留痕。');
       setGrantPurpose('');
@@ -92,7 +97,7 @@ export function SecurityOps(): ReactElement {
   });
 
   const openSupportView = useMutation({
-    mutationFn: (workspaceId: string) => client.admin.supportView(workspaceId),
+    mutationFn: (workspaceId: string) => client.admin.supportView(workspaceId, grantTicketId),
     onSuccess: async (view) => {
       setSupportViewText(
         `${view.name}：成员 ${String(view.counts.members)} · 项目 ${String(view.counts.projects)} · 资产 ${String(view.counts.assets)} · 存储 ${formatBytes(view.counts.storageBytesUsed)} · 积分 ${String(view.counts.creditsBalance)}（仅元数据；本次访问已留痕并对成员可见）`,
@@ -245,9 +250,23 @@ export function SecurityOps(): ReactElement {
             placeholder="工单/目的（≥5 字符）"
             className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
           />
+          <input
+            aria-label="支持工单 ID"
+            value={grantTicketId}
+            onChange={(event) => setGrantTicketId(event.target.value)}
+            placeholder="工单 ID"
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+          />
+          <input
+            aria-label="受益运营主体 ID"
+            value={grantBeneficiaryPrincipalId}
+            onChange={(event) => setGrantBeneficiaryPrincipalId(event.target.value)}
+            placeholder="oppr_..."
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+          />
           <button
             type="button"
-            disabled={grantWorkspaceId === '' || grantPurpose.length < 5 || createGrant.isPending}
+            disabled={grantWorkspaceId === '' || grantPurpose.length < 5 || grantTicketId === '' || grantBeneficiaryPrincipalId === '' || createGrant.isPending}
             onClick={() => createGrant.mutate()}
             className="rounded bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-500 disabled:opacity-50"
           >
@@ -255,7 +274,7 @@ export function SecurityOps(): ReactElement {
           </button>
           <button
             type="button"
-            disabled={grantWorkspaceId === '' || openSupportView.isPending}
+            disabled={grantWorkspaceId === '' || grantTicketId === '' || openSupportView.isPending}
             onClick={() => openSupportView.mutate(grantWorkspaceId)}
             className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
           >

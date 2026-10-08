@@ -37,6 +37,7 @@ import {
   renderApprovalSchema,
   exportPackageSchema,
   opsOverviewSchema,
+  opsJobSummarySchema,
   opsAuditEntrySchema,
   editPlanSchema,
   masterNarrationSchema,
@@ -295,6 +296,7 @@ import {
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
+  type OpsJobSummary,
   type OpsSession,
   type OpsAuditEntry,
   type RenderStatus,
@@ -1035,7 +1037,7 @@ export interface AncsClient {
    */
   admin: {
     overview(): Promise<OpsOverview>;
-    jobs(query?: { status?: Job['status']; workspaceId?: string; limit?: number }): Promise<Job[]>;
+    jobs(query: { workspaceId: string; status?: Job['status']; limit?: number }): Promise<OpsJobSummary[]>;
     /** 人工重试（复用任务服务：预算/幂等/版本规则不变） */
     retryJob(jobId: string, input?: { reason?: string }, options?: MutationOptions): Promise<Job>;
     audit(query?: { limit?: number }): Promise<OpsAuditEntry[]>;
@@ -1070,10 +1072,10 @@ export interface AncsClient {
     setAbuseState(workspaceId: string, input: { abuseState: WorkspaceAbuseState; note: string }, options?: MutationOptions): Promise<{ workspaceId: string; abuseState: WorkspaceAbuseState }>;
     /** 支持访问授权（时限 ≤ 24h；不可无痕：审计 + 工作区可见事件） */
     supportGrants(workspaceId: string): Promise<SupportAccessGrant[]>;
-    createSupportGrant(workspaceId: string, input: { purpose: string; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
+    createSupportGrant(workspaceId: string, input: { purpose: string; ticketId: string; beneficiaryPrincipalId: string; scope: 'SUMMARY_READ'; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
     revokeSupportGrant(grantId: string, options?: MutationOptions): Promise<SupportAccessGrant>;
     /** 支持视图（需有效授权；仅元数据摘要；每次访问留痕） */
-    supportView(workspaceId: string): Promise<SupportView>;
+    supportView(workspaceId: string, ticketId: string): Promise<SupportView>;
   };
   /** 套餐目录（P09-01；版本化、价格为数据） */
   plans: {
@@ -2298,11 +2300,10 @@ export function createClient(options: ClientOptions): AncsClient {
       overview: () => request('GET', '/api/v1/admin/overview', opsOverviewSchema),
       jobs: async (query) => {
         const search = new URLSearchParams();
-        if (query?.status !== undefined) search.set('status', query.status);
-        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
-        if (query?.limit !== undefined) search.set('limit', String(query.limit));
-        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
-        return (await request('GET', `/api/v1/admin/jobs${suffix}`, z.object({ items: z.array(jobSchemaForGeneration) }))).items;
+        search.set('workspaceId', query.workspaceId);
+        if (query.status !== undefined) search.set('status', query.status);
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return (await request('GET', `/api/v1/admin/jobs?${search.toString()}`, z.object({ items: z.array(opsJobSummarySchema) }))).items;
       },
       retryJob: (jobId, input, mutation) =>
         request('POST', `/api/v1/admin/jobs/${jobId}/retry`, jobSchemaForGeneration, {
@@ -2406,7 +2407,7 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/admin/support-grants/${grantId}/revoke`, supportAccessGrantSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      supportView: (workspaceId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-view`, supportViewSchema),
+      supportView: (workspaceId, ticketId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-view?ticketId=${encodeURIComponent(ticketId)}`, supportViewSchema),
     },
     plans: {
       list: async (query) => {

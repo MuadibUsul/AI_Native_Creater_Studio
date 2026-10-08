@@ -17,6 +17,7 @@ import {
   resolveAbuseFlagRequestSchema,
   setWorkspaceAbuseStateRequestSchema,
   supportAccessGrantSchema,
+  supportViewQuerySchema,
   supportViewSchema,
   workspaceAbuseStateSchema,
 } from '@ancs/contracts';
@@ -344,12 +345,18 @@ export function registerAdminSecurityRoutes(app: FastifyInstance, deps: AuthDeps
         tags: ['admin'],
         summary: '支持视图（**需有效授权**；仅元数据摘要；每次访问留痕 + 工作区可见事件）',
         params: workspaceParamsSchema,
+        querystring: supportViewQuerySchema,
         response: { 200: supportViewSchema, ...ERROR_RESPONSES },
       },
     },
     async (request) => {
-      const { context } = await app.requirePlatformAdmin(request);
-      return getSupportView(domain, { workspaceId: request.params.workspaceId, actorUserId: context.userId });
+      const { context, opsSession } = await app.requirePlatformAdmin(request);
+      return getSupportView(domain, {
+        workspaceId: request.params.workspaceId,
+        actorUserId: context.userId,
+        actorPrincipalId: opsSession.principalId,
+        ticketId: request.query.ticketId,
+      });
     },
   );
 }

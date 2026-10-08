@@ -1,6 +1,7 @@
 export { account, session, user, verification, twoFactor } from './auth.js';
 export { userAppearancePreferences } from './appearance.js';
-export { adminPrincipals, adminRoleGrants, adminSessions } from './ops-auth.js';
+export { adminPrincipals, adminRoleGrants, adminRoleScopes, adminSessions } from './ops-auth.js';
+export { adminPermissionPolicyVersions, adminEmergencyGrants } from './ops-governance.js';
 export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './auth-native.js';
 export { idempotencyKeys } from './idempotency.js';
 export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';

@@ -372,6 +372,27 @@
       "when": 1791437985364,
       "tag": "0052_busy_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791441723343,
+      "tag": "0053_plain_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791444486407,
+      "tag": "0054_true_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791445893750,
+      "tag": "0055_acoustic_tusk",
+      "breakpoints": true
     }
   ]
 }

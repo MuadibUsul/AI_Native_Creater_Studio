@@ -116,6 +116,10 @@ export const supportAccessGrantSchema = z.object({
   id: opaqueIdSchema,
   workspaceId: opaqueIdSchema,
   requestedByUserId: opaqueIdSchema,
+  /** Legacy rows may predate ticket binding; those rows never authorize support-view. */
+  ticketId: z.string().min(1).max(128).nullable(),
+  beneficiaryPrincipalId: opaqueIdSchema.nullable(),
+  scope: z.literal('SUMMARY_READ').nullable(),
   /** 访问目的（必填——授权即记录"为什么"） */
   purpose: z.string().min(5).max(500),
   status: supportGrantStatusSchema,
@@ -132,8 +136,13 @@ export const SUPPORT_GRANT_MAX_HOURS = 24;
 
 export const createSupportGrantRequestSchema = z.object({
   purpose: z.string().min(5).max(500),
+  ticketId: z.string().min(1).max(128),
+  beneficiaryPrincipalId: opaqueIdSchema,
+  scope: z.literal('SUMMARY_READ'),
   ttlHours: z.number().int().positive().max(SUPPORT_GRANT_MAX_HOURS).default(4),
 });
+
+export const supportViewQuerySchema = z.object({ ticketId: z.string().min(1).max(128) });
 
 /**
  * 支持视图（授权内可见）：**仅非私密元数据摘要**（计数/状态/用量）——

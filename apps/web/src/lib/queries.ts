@@ -107,11 +107,12 @@ export function useAdminOverview() {
   return useQuery({ queryKey: ['admin', 'overview'], queryFn: () => client.admin.overview(), retry: false, refetchInterval: 10000 });
 }
 
-export function useAdminJobs(status?: 'FAILED_RETRYABLE' | 'FAILED_FINAL' | 'RUNNING' | 'QUEUED') {
+export function useAdminJobs(workspaceId: string, status?: 'FAILED_RETRYABLE' | 'FAILED_FINAL' | 'RUNNING' | 'QUEUED') {
   const client = useAncsClient();
   return useQuery({
-    queryKey: ['admin', 'jobs', status ?? 'all'],
-    queryFn: () => client.admin.jobs({ ...(status === undefined ? {} : { status }), limit: 50 }),
+    queryKey: ['admin', 'jobs', workspaceId, status ?? 'all'],
+    queryFn: () => client.admin.jobs({ workspaceId, ...(status === undefined ? {} : { status }), limit: 50 }),
+    enabled: workspaceId !== '',
     retry: false,
     refetchInterval: 10000,
   });
