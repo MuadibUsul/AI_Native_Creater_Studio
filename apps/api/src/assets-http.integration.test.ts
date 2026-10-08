@@ -219,6 +219,22 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(hidden).toMatchObject({ status: 404 });
   });
 
+  it('片段标签与搜索通过 SDK 往返，并在 HTTP 层保持 workspace 隔离', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const asset = await owner.assets.upload(workspaceId, { assetType: 'SOURCE_IMAGE', filename: 'product.png', contentType: 'image/png', data: makePng(64, 64) });
+    const tag = await owner.assets.createRangeTag(workspaceId, asset.id, { label: '产品近景', sourceStartPts: '0', sourceEndPts: '1000', timeBase: { numerator: 1, denominator: 1000 } });
+    expect(await owner.assets.listRangeTags(workspaceId, asset.id)).toEqual({ items: [tag] });
+    expect(await owner.assets.searchSegments(workspaceId, { q: '产品近景' })).toMatchObject({ items: [{ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, evidence: 'USER_ASSERTED', contentTreatment: 'REFERENCE_DATA_ONLY' }] });
+    const hiddenList = await stranger.assets.listRangeTags(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hiddenList).toMatchObject({ status: 404 });
+    const hiddenSearch = await stranger.assets.searchSegments(workspaceId, { q: '产品近景' }).catch((error: unknown) => error);
+    expect(hiddenSearch).toMatchObject({ status: 404 });
+    await owner.assets.deleteRangeTag(workspaceId, asset.id, tag.id);
+    expect(await owner.assets.listRangeTags(workspaceId, asset.id)).toEqual({ items: [] });
+  });
+
   it('workspace 内去重（SDK）：相同字节第二次上传直接命中既有资产', async () => {
     const client = await newSignedInClient();
     const workspaceId = await makeWorkspace(client);

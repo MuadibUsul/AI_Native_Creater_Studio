@@ -125,6 +125,10 @@ import {
   downloadUrlResponseSchema,
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
+  mediaRangeTagListSchema,
+  mediaRangeTagSchema,
+  mediaSegmentSearchResponseSchema,
+  createMediaRangeTagRequestSchema,
   mediaTranscriptSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
@@ -283,6 +287,9 @@ import {
   type Asset,
   type AssetDetail,
   type MediaIndexPage,
+  type MediaRangeTag,
+  type MediaSegmentSearchResponse,
+  type CreateMediaRangeTagRequest,
   type MediaTranscript,
   type CorrectTranscriptSegmentRequest,
   type UpdateTranscriptTerminologyRequest,
@@ -751,6 +758,11 @@ export interface AncsClient {
     mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
     /** 重新生成索引；原件与代理不变。 */
     rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
+    /** 跨视觉、音频、转写和用户标签检索真实源片段。 */
+    searchSegments(workspaceId: string, query: { q: string; limit?: number }): Promise<MediaSegmentSearchResponse>;
+    listRangeTags(workspaceId: string, assetId: string): Promise<{ items: MediaRangeTag[] }>;
+    createRangeTag(workspaceId: string, assetId: string, input: CreateMediaRangeTagRequest, options?: MutationOptions): Promise<MediaRangeTag>;
+    deleteRangeTag(workspaceId: string, assetId: string, tagId: string, options?: MutationOptions): Promise<void>;
     /** 读取机器转写及当前不可变校正版本。 */
     transcript(workspaceId: string, assetId: string): Promise<MediaTranscript>;
     retryTranscript(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaTranscript>;
@@ -2065,6 +2077,14 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       rebuildMediaIndex: (workspaceId, assetId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      searchSegments: (workspaceId, query) => {
+        const search = new URLSearchParams({ q: query.q });
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/segment-search?${search.toString()}`, mediaSegmentSearchResponseSchema);
+      },
+      listRangeTags: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags`, mediaRangeTagListSchema),
+      createRangeTag: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags`, mediaRangeTagSchema, { body: input, bodySchema: createMediaRangeTagRequestSchema, idempotencyKey: mutation?.idempotencyKey }),
+      deleteRangeTag: (workspaceId, assetId, tagId, mutation) => request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags/${tagId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
       transcript: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript`, mediaTranscriptSchema),
       retryTranscript: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/retry`, mediaTranscriptSchema, { idempotencyKey: mutation?.idempotencyKey }),
       correctTranscriptSegment: (workspaceId, assetId, input, mutation) => request('PATCH', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/segments`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),

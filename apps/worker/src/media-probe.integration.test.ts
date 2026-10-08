@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts, type SourceMediaIndexer } from '@ancs/contracts';
-import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, listMediaIndex, rebuildMediaIndex, rebuildMediaProxy, type DomainDeps } from '@ancs/domain';
+import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, listMediaIndex, rebuildMediaIndex, rebuildMediaProxy, searchMediaSegments, type DomainDeps } from '@ancs/domain';
 import {
   assetVersions,
   mediaDerivatives,
@@ -196,6 +196,7 @@ describe('N02-02 media probe worker', () => {
     expect(persistedEntries.some((entry) => entry.kind === 'THUMBNAIL' && entry.storageKey !== null)).toBe(true);
     expect(persistedEntries.some((entry) => entry.kind === 'WAVEFORM')).toBe(true);
     expect(persistedEntries.some((entry) => entry.kind === 'SHOT')).toBe(true);
+    expect(await searchMediaSegments(deps(), { workspaceId: created.workspaceId, query: '镜头 1' })).toMatchObject({ items: [{ assetId: created.assetId, modality: 'VISUAL', evidence: 'OBSERVATION', contentTreatment: 'REFERENCE_DATA_ONLY' }] });
 
     const first = await listMediaIndex(deps(), { workspaceId: created.workspaceId, assetId: created.assetId, kind: 'THUMBNAIL', limit: 1 });
     expect(first).toMatchObject({ status: 'READY', items: [{ kind: 'THUMBNAIL', previewUrl: expect.stringContaining('/api/v1/storage/download?token=') }] });

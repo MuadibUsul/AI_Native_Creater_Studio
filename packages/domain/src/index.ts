@@ -527,6 +527,7 @@ export {
   scheduleMediaTranscriptInTx,
   updateTranscriptTerminology,
 } from './media-transcripts.js';
+export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMediaSegments } from './media-search.js';
 export {
   assertAssetBindable,
   buildStorageKey,

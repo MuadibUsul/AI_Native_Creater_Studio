@@ -159,6 +159,19 @@ export {
   correctTranscriptSegmentRequestSchema,
   updateTranscriptTerminologyRequestSchema,
 } from './media-transcript.js';
+export {
+  MEDIA_SEARCH_MODALITIES,
+  MEDIA_SEARCH_EVIDENCE,
+  mediaSearchModalitySchema,
+  mediaSearchEvidenceSchema,
+  mediaRangeTagSchema,
+  createMediaRangeTagRequestSchema,
+  mediaRangeTagListSchema,
+  mediaSegmentSearchQuerySchema,
+  mediaSegmentSearchResultSchema,
+  mediaSegmentSearchResponseSchema,
+} from './media-search.js';
+export type { MediaRangeTag, CreateMediaRangeTagRequest, MediaSegmentSearchResult, MediaSegmentSearchResponse } from './media-search.js';
 export type {
   TranscriptSpeaker,
   TranscriptWord,

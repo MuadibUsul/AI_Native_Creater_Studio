@@ -46,6 +46,7 @@ export { assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
 export { mediaDerivatives } from './media-derivatives.js';
 export { mediaIndexEntries, mediaIndexRuns } from './media-index.js';
 export { mediaTranscriptRuns, mediaTranscriptVersions } from './media-transcripts.js';
+export { mediaRangeTags } from './media-range-tags.js';
 export { notifications } from './notifications.js';
 export { jobDependencies, jobs } from './jobs.js';
 export { providerCatalogVersions } from './providers.js';

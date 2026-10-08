@@ -12,7 +12,12 @@ import {
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
   mediaIndexQuerySchema,
+  mediaRangeTagListSchema,
+  mediaRangeTagSchema,
+  mediaSegmentSearchQuerySchema,
+  mediaSegmentSearchResponseSchema,
   mediaTranscriptSchema,
+  createMediaRangeTagRequestSchema,
   correctTranscriptSegmentRequestSchema,
   updateTranscriptTerminologyRequestSchema,
   errorEnvelopeSchema,
@@ -36,6 +41,10 @@ import {
   restoreAsset,
   rebuildMediaProxy,
   listMediaIndex,
+  listMediaRangeTags,
+  createMediaRangeTag,
+  deleteMediaRangeTag,
+  searchMediaSegments,
   rebuildMediaIndex,
   getMediaTranscript,
   retryMediaTranscript,
@@ -56,6 +65,7 @@ import type { StorageDeps } from '../plugins/storage.js';
 
 const wsParamsSchema = z.object({ id: opaqueIdSchema });
 const assetParamsSchema = z.object({ id: opaqueIdSchema, assetId: opaqueIdSchema });
+const rangeTagParamsSchema = assetParamsSchema.extend({ tagId: opaqueIdSchema });
 const intentParamsSchema = z.object({ id: opaqueIdSchema, intentId: opaqueIdSchema });
 const partParamsSchema = intentParamsSchema.extend({ partNumber: z.coerce.number().int().positive() });
 const assetListQuerySchema = z.object({
@@ -95,6 +105,58 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         input: request.body,
       });
       return reply.status(201).send(result);
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/segment-search',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '按视觉、音频、转写和用户标签检索可播放的真实源片段',
+        params: wsParamsSchema,
+        querystring: mediaSegmentSearchQuerySchema,
+        response: { 200: mediaSegmentSearchResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return searchMediaSegments(domain, { workspaceId: request.params.id, query: request.query.q, limit: request.query.limit });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/range-tags',
+    {
+      schema: { tags: ['assets'], summary: '读取当前源版本的片段标签', params: assetParamsSchema, response: { 200: mediaRangeTagListSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listMediaRangeTags(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/range-tags',
+    {
+      schema: { tags: ['assets'], summary: '为当前源版本添加精确时间片段标签', params: assetParamsSchema, body: createMediaRangeTagRequestSchema, response: { 201: mediaRangeTagSchema, ...ERROR_RESPONSES } },
+    },
+    async (request, reply) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      const tag = await createMediaRangeTag(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
+      return reply.status(201).send(tag);
+    },
+  );
+
+  typed.delete(
+    '/workspaces/:id/assets/:assetId/range-tags/:tagId',
+    {
+      schema: { tags: ['assets'], summary: '删除当前素材的片段标签', params: rangeTagParamsSchema, response: { 204: z.void(), ...ERROR_RESPONSES } },
+    },
+    async (request, reply) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      await deleteMediaRangeTag(domain, { workspaceId: request.params.id, assetId: request.params.assetId, tagId: request.params.tagId });
+      return reply.status(204).send();
     },
   );
 

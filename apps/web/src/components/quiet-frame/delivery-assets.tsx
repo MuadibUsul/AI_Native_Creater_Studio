@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { mapSourcePtsToProxyPts, type Asset, type MediaIndexEntry, type TranscriptSegment } from '@ancs/contracts';
+import { mapSourcePtsToProxyPts, type Asset, type MediaIndexEntry, type MediaSegmentSearchResult, type TranscriptSegment } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys } from '@/lib/queries';
@@ -80,6 +80,8 @@ function clockLabel(value: unknown): string {
 }
 
 const indexKindLabels = { THUMBNAIL: '缩略', WAVEFORM: '波形', SHOT: '镜头', QUALITY: '质量' } as const;
+const searchModalityLabels = { VISUAL: '画面', AUDIO: '声音', TRANSCRIPT: '转写', USER_TAG: '用户标签' } as const;
+const searchEvidenceLabels = { OBSERVATION: '媒体观测', INFERENCE: '机器推测', USER_ASSERTED: '用户标记' } as const;
 
 function AssetPreview({ kind, name, id }: { kind: Filter; name: string; id: string }) {
   const art = [...id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 5;
@@ -100,6 +102,9 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
   const assets = useQuery({ queryKey: assetsKey, queryFn: () => client.assets.list(workspaceId, projectId ? { projectId } : undefined) });
   const [filter, setFilter] = useState<Filter>('全部素材');
   const [search, setSearch] = useState('');
+  const [segmentDraft, setSegmentDraft] = useState('');
+  const [segmentQuery, setSegmentQuery] = useState('');
+  const [pendingSearchResult, setPendingSearchResult] = useState<MediaSegmentSearchResult | null>(null);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -111,6 +116,9 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
   const [editingTranscriptSegmentId, setEditingTranscriptSegmentId] = useState<string | null>(null);
   const [transcriptDraft, setTranscriptDraft] = useState('');
   const [terminologyDraft, setTerminologyDraft] = useState<string | null>(null);
+  const [tagLabel, setTagLabel] = useState('');
+  const [tagStartSeconds, setTagStartSeconds] = useState('0');
+  const [tagEndSeconds, setTagEndSeconds] = useState('5');
   const mediaRef = useRef<HTMLMediaElement | null>(null);
   const playbackRangeEnd = useRef<number | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -136,6 +144,30 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
   const rebuildProxy = useMutation({
     mutationFn: () => client.assets.rebuildProxy(workspaceId, selectedId as string),
     onSuccess: async () => { await cache.invalidateQueries({ queryKey: ['asset-playback', workspaceId, selectedId] }); },
+  });
+  const segmentSearch = useQuery({
+    queryKey: ['asset-segment-search', workspaceId, segmentQuery],
+    enabled: segmentQuery.length >= 2,
+    queryFn: () => client.assets.searchSegments(workspaceId, { q: segmentQuery, limit: 20 }),
+  });
+  const rangeTagsKey = ['asset-range-tags', workspaceId, selectedId] as const;
+  const rangeTags = useQuery({
+    queryKey: rangeTagsKey,
+    enabled: selectedId !== null && currentVersion?.probeStatus === 'READY',
+    queryFn: () => client.assets.listRangeTags(workspaceId, selectedId as string),
+  });
+  const createRangeTag = useMutation({
+    mutationFn: () => client.assets.createRangeTag(workspaceId, selectedId as string, {
+      label: tagLabel.trim(),
+      sourceStartPts: String(Math.round(Number(tagStartSeconds) * 1000)),
+      sourceEndPts: String(Math.round(Number(tagEndSeconds) * 1000)),
+      timeBase: { numerator: 1, denominator: 1000 },
+    }),
+    onSuccess: async () => { setTagLabel(''); await cache.invalidateQueries({ queryKey: rangeTagsKey }); },
+  });
+  const deleteRangeTag = useMutation({
+    mutationFn: (tagId: string) => client.assets.deleteRangeTag(workspaceId, selectedId as string, tagId),
+    onSuccess: async () => { await cache.invalidateQueries({ queryKey: rangeTagsKey }); },
   });
   const mediaIndex = useQuery({
     queryKey: ['asset-media-index', workspaceId, selectedId, indexKind, indexCursor],
@@ -181,7 +213,7 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     if (!media) return;
     media.currentTime = Math.max(0, sourcePtsSeconds(entry, entry.sourceStartPts));
     playbackRangeEnd.current = Math.max(media.currentTime, sourcePtsSeconds(entry, entry.sourceEndPts));
-    void media.play();
+    void media.play().catch(() => undefined);
   };
   const playTranscriptRange = (segment: TranscriptSegment) => {
     const media = mediaRef.current;
@@ -190,8 +222,22 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     const seconds = (pts: string) => mapping ? Number(mapSourcePtsToProxyPts(mapping, pts)) * mapping.proxyTimeBase.numerator / mapping.proxyTimeBase.denominator : Number(pts) * segment.timeBase.numerator / segment.timeBase.denominator;
     media.currentTime = Math.max(0, seconds(segment.sourceStartPts));
     playbackRangeEnd.current = Math.max(media.currentTime, seconds(segment.sourceEndPts));
-    void media.play();
+    void media.play().catch(() => undefined);
   };
+  useEffect(() => {
+    if (!pendingSearchResult || pendingSearchResult.assetId !== selectedId || !previewUrl) return;
+    const media = mediaRef.current;
+    if (!media) return;
+    const streamType = pendingSearchResult.modality === 'AUDIO' || pendingSearchResult.modality === 'TRANSCRIPT' ? 'AUDIO' : 'VIDEO';
+    const mapping = playback.data?.rendition === 'PROXY' ? playback.data.timeMappings.find((candidate) => candidate.streamType === streamType) : undefined;
+    const seconds = (pts: string): number => mapping
+      ? Number(mapSourcePtsToProxyPts(mapping, pts)) * mapping.proxyTimeBase.numerator / mapping.proxyTimeBase.denominator
+      : Number(pts) * pendingSearchResult.timeBase.numerator / pendingSearchResult.timeBase.denominator;
+    media.currentTime = Math.max(0, seconds(pendingSearchResult.sourceStartPts));
+    playbackRangeEnd.current = Math.max(media.currentTime, seconds(pendingSearchResult.sourceEndPts));
+    void media.play().catch(() => undefined);
+    setPendingSearchResult(null);
+  }, [pendingSearchResult, playback.data, previewUrl, selectedId]);
   const stopAtIndexRangeEnd = () => {
     const media = mediaRef.current;
     if (media && playbackRangeEnd.current !== null && media.currentTime >= playbackRangeEnd.current) { media.pause(); playbackRangeEnd.current = null; }
@@ -277,7 +323,14 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
   return <div className="page" data-testid="quiet-assets">
     <header className="sectionhead mobile-stack"><div><div className="eyebrow mb16">YOUR CREATIVE LIBRARY</div><h1>好素材，值得留下。</h1><p>作品、来源与授权，放在同一个地方。</p></div><button type="button" className="btn primary" aria-label="上传素材" onClick={(event) => { uploadDialog.triggerRef.current = event.currentTarget; setUploadOpen(true); }}><QuietIcon name="plus" />上传素材</button></header>
     <input ref={picker} type="file" multiple className={styles['hiddenInput']} aria-label="选择文件" onChange={(event) => chooseFiles(event.target.files)} />
-    <div className="row between mt32 mb24" style={{ flexWrap: 'wrap' }}><div className="chips" role="group" aria-label="素材类型筛选">{filters.map((name) => <button key={name} type="button" className={`chip ${filter === name ? 'active' : ''}`} aria-pressed={filter === name} onClick={() => setFilter(name)}>{name}</button>)}</div><label className="searchbox"><QuietIcon name="search" /><input aria-label="搜索素材" placeholder="搜索素材" value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
+    <div className="row between mt32 mb24" style={{ flexWrap: 'wrap' }}><div className="chips" role="group" aria-label="素材类型筛选">{filters.map((name) => <button key={name} type="button" className={`chip ${filter === name ? 'active' : ''}`} aria-pressed={filter === name} onClick={() => setFilter(name)}>{name}</button>)}</div><label className="searchbox"><QuietIcon name="search" /><input aria-label="搜索素材" placeholder="按名称筛选" value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
+    <section className={`${styles['segmentSearch']} panel pad mb24`} aria-labelledby="segment-search-title">
+      <div className={styles['segmentSearchHead']}><div><strong id="segment-search-title">搜索真实片段</strong><p className="small muted mt8">从画面、声音、转写与用户标签中查找，结果始终回到原素材时间范围。</p></div><form className={styles['segmentSearchForm']} onSubmit={(event) => { event.preventDefault(); setSegmentQuery(segmentDraft.trim()); }}><label className="searchbox"><QuietIcon name="search" /><input aria-label="搜索素材片段" placeholder="例如：产品近景、第二次回答" value={segmentDraft} onChange={(event) => setSegmentDraft(event.target.value)} /></label><button type="submit" className="btn primary small" disabled={segmentDraft.trim().length < 2}>搜索片段</button></form></div>
+      {segmentSearch.isPending && segmentQuery && <p role="status" className="small muted mt16">正在查找真实片段…</p>}
+      {segmentSearch.isError && <p role="alert" className="small mt16" style={{ color: 'var(--bad)' }}>片段搜索失败：{describeError(segmentSearch.error).message}</p>}
+      {segmentSearch.data?.items.length === 0 && <div className={styles['segmentEmpty']}><strong>没有找到真实片段</strong><span>可以换一个说法或先为素材添加片段标签；系统不会生成替代素材。</span></div>}
+      {(segmentSearch.data?.items.length ?? 0) > 0 && <div className={styles['segmentResults']}>{segmentSearch.data?.items.map((result) => <article key={result.id} className={styles['segmentResult']}><div className="grow"><div className="row gap8" style={{ flexWrap: 'wrap' }}><span className="badge">{searchModalityLabels[result.modality]}</span><span className="small muted">{searchEvidenceLabels[result.evidence]}</span></div><strong title={result.label}>{result.label}</strong><span className="small muted">{clockLabel(Number(result.sourceStartPts) * result.timeBase.numerator / result.timeBase.denominator * 1000)}–{clockLabel(Number(result.sourceEndPts) * result.timeBase.numerator / result.timeBase.denominator * 1000)} · 内容仅作检索依据</span></div><button type="button" className="btn small" onClick={(event) => { assetDialog.triggerRef.current = event.currentTarget; setMediaErrorAssetId(null); setPendingSearchResult(result); setSelectedId(result.assetId); }}>播放片段</button></article>)}</div>}
+    </section>
     {shown.length === 0 ? <div className="panel pad"><StateBlock variant="empty" title={items.length === 0 ? '还没有资产' : '没有匹配的素材'} description={items.length === 0 ? '上传图片、视频、音频或文件后，可在分镜中绑定。' : '试试其他类型或搜索词。'} /></div> : <div className="asset-grid">{shown.map((asset) => {
       const kind = assetKind(asset);
       return <button key={asset.id} type="button" className="asset-item" aria-label={`查看素材 ${assetName(asset)}`} aria-describedby={`asset-preview-${asset.id}`} onClick={(event) => { assetDialog.triggerRef.current = event.currentTarget; setMediaErrorAssetId(null); setSelectedId(asset.id); }}><AssetPreview kind={kind} name={assetName(asset)} id={asset.id} /><div className="asset-info"><h3>{assetName(asset)}</h3><p>{originLabels[asset.origin] ?? asset.origin} · <span>{asset.assetType}</span></p><div className="row between mt16"><span className={`badge ${(asset.license?.type ?? 'UNKNOWN') === 'UNKNOWN' ? 'amber' : 'green'}`}>{licenseLabel(asset)}</span><span className="sample-note">{assetStatusLabels[asset.status]}</span></div></div></button>;
@@ -312,6 +365,6 @@ export function DeliveryAssets({ workspaceId, projectId }: { workspaceId: string
     const editing = editingTranscriptSegmentId === segment.id;
     return <article key={segment.id} className={styles['transcriptSegment']}><button type="button" className={styles['transcriptTime']} onClick={() => playTranscriptRange(segment)} aria-label={`播放 ${clockLabel(Number(segment.sourceStartPts) * segment.timeBase.numerator / segment.timeBase.denominator * 1000)} 开始的转写片段`}><QuietIcon name="play" />{clockLabel(Number(segment.sourceStartPts) * segment.timeBase.numerator / segment.timeBase.denominator * 1000)}</button><div><span className="small muted">{speaker?.displayName ?? '说话人未知'} · {segment.reviewState === 'CORRECTED' ? '已人工校正' : '机器识别'}</span>{editing ? <><textarea className={styles['transcriptEditor']} rows={3} value={transcriptDraft} onChange={(event) => setTranscriptDraft(event.target.value)} aria-label="校正转写文本" /><div className="row mt8"><button type="button" className="btn small primary" disabled={!transcriptDraft.trim() || correctSegment.isPending} onClick={() => correctSegment.mutate({ segmentId: segment.id, text: transcriptDraft.trim() })}>保存校正</button><button type="button" className="btn ghost small" onClick={() => { setEditingTranscriptSegmentId(null); setTranscriptDraft(''); }}>取消</button></div></> : <button type="button" className={styles['transcriptText']} onClick={() => { setEditingTranscriptSegmentId(segment.id); setTranscriptDraft(segment.text); }}>{segment.text}</button>}</div></article>;
   })}</div>{correctSegment.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>保存失败：{describeError(correctSegment.error).message} 请刷新版本后再试。</p>}<details className="mt16"><summary className={styles['summary']}>术语字典</summary><p className="small muted mt8">每行填写“识别词=首选写法”。修改会创建新版本，不改动原音。</p><textarea className={styles['terminologyEditor']} rows={4} value={terminologyDraft ?? transcript.data.currentVersion.terminology.map((entry) => `${entry.source}=${entry.preferred}`).join('\n')} onChange={(event) => setTerminologyDraft(event.target.value)} aria-label="转写术语字典" /><button type="button" className="btn small mt8" disabled={updateTerminology.isPending} onClick={() => updateTerminology.mutate()}>{updateTerminology.isPending ? '正在保存…' : '保存术语版本'}</button>{updateTerminology.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>{describeError(updateTerminology.error).message}</p>}</details></>}
-</section>}<div className="row mt24" style={{ flexWrap: 'wrap' }}>{signedDownloadUrl && <a className="btn" href={signedDownloadUrl} target="_blank" rel="noopener noreferrer"><QuietIcon name="download" />下载原文件</a>}{selected.status === 'READY' && (selected.projectId ?? projectId) && <Link className="btn" href={`/w/${workspaceId}/p/${selected.projectId ?? projectId}/storyboard`}>前往分镜</Link>}</div>{!signedDownloadUrl && !download.isError && !download.isPending && <p role="status" className="small muted mt16">签名下载链接已到期或暂未生成。<button type="button" className="textbtn small" onClick={() => void download.refetch()}>重新获取链接</button></p>}{download.isError && <p role="alert" className="small" style={{ color: 'var(--bad)' }}>下载链接暂不可用：{describeError(download.error).message} <button type="button" className="textbtn small" onClick={() => void download.refetch()}>重试</button></p>}</div></div>}
+</section>}{currentVersion?.probeStatus === 'READY' && <section className={`${styles['rangeTags']} panel pad mt16`} aria-label="片段标签"><div><strong>片段标签</strong><p className="small muted mt8">把确定的源时间范围命名，之后可直接搜索并播放。时间单位为秒。</p></div><div className={styles['rangeTagForm']}><label><span className="label">标签</span><input className="field" aria-label="片段标签名称" placeholder="例如：产品近景" value={tagLabel} onChange={(event) => setTagLabel(event.target.value)} /></label><label><span className="label">开始</span><input className="field" aria-label="片段开始秒数" type="number" min="0" step="0.001" value={tagStartSeconds} onChange={(event) => setTagStartSeconds(event.target.value)} /></label><label><span className="label">结束</span><input className="field" aria-label="片段结束秒数" type="number" min="0" step="0.001" value={tagEndSeconds} onChange={(event) => setTagEndSeconds(event.target.value)} /></label><button type="button" className="btn small" disabled={createRangeTag.isPending || !tagLabel.trim() || !Number.isFinite(Number(tagStartSeconds)) || !Number.isFinite(Number(tagEndSeconds)) || Number(tagEndSeconds) <= Number(tagStartSeconds)} onClick={() => createRangeTag.mutate()}>{createRangeTag.isPending ? '正在添加…' : '添加标签'}</button></div>{rangeTags.isPending && <p role="status" className="small muted mt16">正在读取片段标签…</p>}{rangeTags.isError && <p role="alert" className="small mt16" style={{ color: 'var(--bad)' }}>标签读取失败：{describeError(rangeTags.error).message}</p>}{createRangeTag.isError && <p role="alert" className="small mt8" style={{ color: 'var(--bad)' }}>标签添加失败：{describeError(createRangeTag.error).message}</p>}{rangeTags.data?.items.length === 0 && <p className="small muted mt16">还没有片段标签。</p>}{(rangeTags.data?.items.length ?? 0) > 0 && <div className={styles['rangeTagList']}>{rangeTags.data?.items.map((tag) => <div key={tag.id} className={styles['rangeTagItem']}><div className="grow"><strong>{tag.label}</strong><span className="small muted">{clockLabel(Number(tag.sourceStartPts) * tag.timeBase.numerator / tag.timeBase.denominator * 1000)}–{clockLabel(Number(tag.sourceEndPts) * tag.timeBase.numerator / tag.timeBase.denominator * 1000)}</span></div><button type="button" className="textbtn small" disabled={deleteRangeTag.isPending} onClick={() => deleteRangeTag.mutate(tag.id)}>删除</button></div>)}</div>}</section>}<div className="row mt24" style={{ flexWrap: 'wrap' }}>{signedDownloadUrl && <a className="btn" href={signedDownloadUrl} target="_blank" rel="noopener noreferrer"><QuietIcon name="download" />下载原文件</a>}{selected.status === 'READY' && (selected.projectId ?? projectId) && <Link className="btn" href={`/w/${workspaceId}/p/${selected.projectId ?? projectId}/storyboard`}>前往分镜</Link>}</div>{!signedDownloadUrl && !download.isError && !download.isPending && <p role="status" className="small muted mt16">签名下载链接已到期或暂未生成。<button type="button" className="textbtn small" onClick={() => void download.refetch()}>重新获取链接</button></p>}{download.isError && <p role="alert" className="small" style={{ color: 'var(--bad)' }}>下载链接暂不可用：{describeError(download.error).message} <button type="button" className="textbtn small" onClick={() => void download.refetch()}>重试</button></p>}</div></div>}
   </div>;
 }
