@@ -1,0 +1,23 @@
+.chart { color: var(--ui-fg-primary); min-width: 0; }
+.chart figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 10px; }
+.chart figcaption span, .note { color: var(--ui-fg-secondary); font-size: 12px; }
+.chart figcaption span { overflow-wrap: anywhere; }
+.plotScroll { overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+@media (max-width: 800px) { .plotScroll svg { min-width: 760px; } }
+.grid { fill: none; stroke: var(--ui-border-control); stroke-width: 1; opacity: .6; }
+.series > path { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.series > g:not(.directLabel) { fill: var(--ui-bg-elevated); stroke: currentColor; stroke-width: 2; }
+.directLabel > path { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.directLabel > rect { stroke: currentColor; stroke-width: 1; }
+.directLabel text, .axis { fill: currentColor; font-size: 12px; }
+.axis { font-variant-numeric: tabular-nums; }
+.details { margin-top: 10px; }
+.details summary { cursor: pointer; color: var(--ui-fg-primary); text-decoration: underline; text-underline-offset: 3px; }
+.details summary:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }
+.tableWrap { overflow-x: auto; margin-top: 10px; }
+.tableWrap table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12px; }
+.tableWrap caption { text-align: left; color: var(--ui-fg-secondary); padding-bottom: 6px; }
+.tableWrap th, .tableWrap td { padding: 7px 9px; border-bottom: 1px solid var(--ui-border-subtle); text-align: left; }
+.tableWrap thead th { border-bottom-color: var(--ui-border-control); }
+@media (forced-colors: active) { .grid { opacity: 1; } }
