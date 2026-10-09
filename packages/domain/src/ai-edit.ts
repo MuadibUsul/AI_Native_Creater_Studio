@@ -174,6 +174,18 @@ export function assertSceneReferences(scenes: readonly Scene[], operations: read
         });
       }
     }
+    if (operation.op === 'insert_scene') {
+      const createdId = operation.createdSceneId ?? operation.restoreSceneId;
+      if (createdId !== undefined) known.add(createdId);
+    } else if (operation.op === 'duplicate_scene') {
+      const createdId = operation.createdSceneId ?? operation.restoreSceneId;
+      if (createdId !== undefined) known.add(createdId);
+    } else if (operation.op === 'split_scene') {
+      const createdId = operation.createdTailSceneId ?? operation.restoreTailSceneId;
+      if (createdId !== undefined) known.add(createdId);
+    } else if (operation.op === 'delete_scene') {
+      known.delete(operation.sceneId);
+    }
   }
 }
 

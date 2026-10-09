@@ -1,4 +1,6 @@
-import { index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { check, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { adminPrincipals } from './ops-auth.js';
 import { workspaces } from './workspaces.js';
 
 /**
@@ -62,6 +64,10 @@ export const supportAccessGrants = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     requestedByUserId: text('requested_by_user_id').notNull(),
+    /** Nullable only for pre-0053 grants; such rows cannot authorize a view. */
+    ticketId: text('ticket_id'),
+    beneficiaryPrincipalId: text('beneficiary_principal_id').references(() => adminPrincipals.id, { onDelete: 'cascade' }),
+    scope: text('scope'),
     purpose: text('purpose').notNull(),
     /** ACTIVE / REVOKED（EXPIRED 为读取推导态） */
     status: text('status').notNull().default('ACTIVE'),
@@ -70,5 +76,14 @@ export const supportAccessGrants = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('support_grants_workspace_idx').on(table.workspaceId, table.status), index('support_grants_active_idx').on(table.status, table.expiresAt)],
+  (table) => [
+    index('support_grants_workspace_idx').on(table.workspaceId, table.status),
+    index('support_grants_active_idx').on(table.status, table.expiresAt),
+    check('support_grants_scope_check', sql`${table.scope} is null or ${table.scope} = 'SUMMARY_READ'`),
+    check('support_grants_binding_check', sql`(
+      ${table.ticketId} is null and ${table.beneficiaryPrincipalId} is null and ${table.scope} is null
+    ) or (
+      ${table.ticketId} is not null and ${table.beneficiaryPrincipalId} is not null and ${table.scope} is not null
+    )`),
+  ],
 );

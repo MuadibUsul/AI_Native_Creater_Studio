@@ -7,6 +7,7 @@ import { AncsApiError } from '@ancs/sdk';
 import { useAncsClient } from '@/lib/client';
 import { useBilling, useCreditPacks, useCreditStatement, useEntitlements } from '@/lib/queries';
 import { StateBlock } from './StateBlock';
+import ui from './Monochrome.module.css';
 
 /**
  * Credits 与账单（P09-03 / §35、§73.3）：
@@ -113,61 +114,61 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
     <section data-testid="credits-billing" className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Credits 与账单</h1>
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
+      <div className={`${ui['panel']} p-4`}>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <p className="text-sm text-slate-300">
-            套餐：<span className="font-medium text-slate-100">{billing.data?.state.planKey ?? '默认套餐'}</span>
-            <span className="ml-2 text-xs text-slate-400">订阅状态：{billing.data?.state.state ?? '—'}</span>
+          <p className={`text-sm ${ui['secondaryText']}`}>
+            套餐：<span className={`font-medium ${ui['primaryText']}`}>{billing.data?.state.planKey ?? '默认套餐'}</span>
+            <span className={`ml-2 text-xs ${ui['secondaryText']}`}>订阅状态：{billing.data?.state.state ?? '—'}</span>
           </p>
-          <p className="text-xs text-slate-400">入账口径：支付成功事件入账且「至多一次」；网页跳转不触发入账。</p>
+          <p className={`text-xs ${ui['secondaryText']}`}>入账口径：支付成功事件入账且「至多一次」；网页跳转不触发入账。</p>
         </div>
         <dl className="mt-3 flex flex-wrap gap-6 text-sm">
           <div>
-            <dt className="text-xs text-slate-400">余额</dt>
-            <dd data-testid="credits-balance" className="text-lg font-semibold text-slate-100">
+            <dt className={`text-xs ${ui['secondaryText']}`}>余额</dt>
+            <dd data-testid="credits-balance" className={`text-lg font-semibold ${ui['primaryText']}`}>
               {data.balanceCredits}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-400">预扣（预算预留）</dt>
-            <dd data-testid="credits-held" className="text-lg font-semibold text-amber-300">
+            <dt className={`text-xs ${ui['secondaryText']}`}>预扣（预算预留）</dt>
+            <dd data-testid="credits-held" className={`text-lg font-semibold ${ui['primaryText']}`}>
               {data.heldCredits}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-400">可用</dt>
-            <dd data-testid="credits-available" className="text-lg font-semibold text-emerald-300">
+            <dt className={`text-xs ${ui['secondaryText']}`}>可用</dt>
+            <dd data-testid="credits-available" className={`text-lg font-semibold ${ui['primaryText']}`}>
               {data.availableCredits}
             </dd>
           </div>
         </dl>
         {entitlement.data !== undefined ? (
-          <p data-testid="plan-usage" className="mt-3 text-xs text-slate-400">
+          <p data-testid="plan-usage" className={`mt-3 text-xs ${ui['secondaryText']}`}>
             用量（Plan 权益核算）：存储 {limitText(entitlement.data.usage.storageBytesUsed, entitlement.data.entitlements.storageBytes, formatBytes)} · 席位{' '}
             {limitText(entitlement.data.usage.seatsUsed, entitlement.data.entitlements.seats, String)}
           </p>
         ) : null}
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">购买 Credits</h2>
+      <div className={`${ui['panel']} p-4`}>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>购买 Credits</h2>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(packs.data ?? []).map((pack) => {
             const purchasable = pack.status === 'ACTIVE' && pack.priceMinor > 0;
             return (
-              <li key={`${pack.code}@${String(pack.version)}`} data-testid={`credit-pack-${pack.code}`} className="flex flex-col gap-2 rounded border border-slate-800 bg-slate-950/60 p-3">
+              <li key={`${pack.code}@${String(pack.version)}`} data-testid={`credit-pack-${pack.code}`} className={`flex flex-col gap-2 p-3 ${ui['inset']}`}>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium text-slate-100">{pack.name}</span>
-                  <span className="text-xs text-slate-400">v{pack.version}</span>
+                  <span className={`text-sm font-medium ${ui['primaryText']}`}>{pack.name}</span>
+                  <span className={`text-xs ${ui['mutedText']}`}>v{pack.version}</span>
                 </div>
-                <p className="text-xs text-slate-300">{pack.credits} Credits</p>
-                <p className={`text-xs ${pack.priceMinor > 0 ? 'text-slate-300' : 'text-amber-300'}`}>{priceText(pack)}</p>
+                <p className={`text-xs ${ui['secondaryText']}`}>{pack.credits} Credits</p>
+                <p className={`text-xs ${pack.priceMinor > 0 ? ui['secondaryText'] : ui['emphasis']}`}>{priceText(pack)}</p>
                 <button
                   type="button"
                   disabled={!purchasable || buy.isPending}
                   title={purchasable ? undefined : '未定价（待运营配置价格版本；上线门 P09-06 前必须定价）'}
                   onClick={() => buy.mutate(pack.code)}
-                  className="mt-1 rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`mt-1 ${ui['primaryButton']}`}
                 >
                   购买
                 </button>
@@ -176,46 +177,46 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
           })}
         </ul>
         {notice !== null ? (
-          <p data-testid="credits-notice" className="mt-3 text-sm text-slate-300">
+          <p data-testid="credits-notice" role="status" className={`mt-3 text-sm ${ui['notice']}`}>
             {notice}
           </p>
         ) : null}
         {checkoutUrl !== null ? (
-          <a data-testid="credits-checkout-link" href={checkoutUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-sky-300 underline">
+          <a data-testid="credits-checkout-link" href={checkoutUrl} target="_blank" rel="noreferrer" className={`mt-2 inline-block text-sm ${ui['link']}`}>
             前往渠道结账页完成支付（网页返回不代表入账——入账以渠道事件为准）
           </a>
         ) : null}
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
+      <div className={`${ui['panel']} p-4`}>
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-200">账单明细（只追加）</h2>
+          <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>账单明细（只追加）</h2>
           <button
             type="button"
             onClick={() => runReconcile.mutate()}
             disabled={runReconcile.isPending}
-            className="rounded border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            className={ui['button']}
           >
             对账（事件 ↔ 账本）
           </button>
         </div>
         {entries.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">暂无 Credits 流水（充值/赠送/使用后在此展示）。</p>
+          <p className={`mt-3 text-sm ${ui['secondaryText']}`}>暂无 Credits 流水（充值/赠送/使用后在此展示）。</p>
         ) : (
           <ul className="mt-3 flex flex-col">
             {entries.map((entry) => (
-              <li key={entry.id} data-testid={`credit-entry-${entry.id}`} className="flex items-center justify-between gap-3 border-b border-slate-800 py-2 text-sm last:border-b-0">
+              <li key={entry.id} data-testid={`credit-entry-${entry.id}`} className={`flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0 ${ui['divider']}`}>
                 <div className="flex flex-col">
-                  <span className="text-slate-200">{entryLabel(entry)}</span>
-                  <span className="text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString()}</span>
+                  <span className={ui['primaryText']}>{entryLabel(entry)}</span>
+                  <span className={`text-xs ${ui['mutedText']}`}>{new Date(entry.createdAt).toLocaleString()}</span>
                 </div>
-                <span className={entry.entryType === 'DEBIT' ? 'font-mono text-rose-300' : 'font-mono text-emerald-300'}>{entryAmountText(entry)}</span>
+                <span className={`font-mono ${ui['primaryText']}`}>{entryAmountText(entry)}</span>
               </li>
             ))}
           </ul>
         )}
         {reconcile !== null ? (
-          <p data-testid="credits-reconcile" className={reconcile.consistent ? 'mt-3 text-sm text-emerald-300' : 'mt-3 text-sm text-rose-300'}>
+          <p data-testid="credits-reconcile" role="status" className={`mt-3 text-sm ${reconcile.consistent ? ui['secondaryText'] : ui['notice']}`}>
             收款事件 {reconcile.purchaseEvents} · 账本入账条目 {reconcile.purchaseEntries} · 退款条目 {reconcile.refundEntries} · 余额 {reconcile.balanceCredits} ——{' '}
             {reconcile.consistent ? '一致' : '不一致（需人工排查，系统不会自动修正）'}
           </p>

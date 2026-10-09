@@ -1,10 +1,12 @@
 # ANCS 需求追踪矩阵（RTM）v1
 
+> 历史账本提示（2026-10-08）：本表保留旧 v0.2/P 系列 REQ 的验收记录与当时的暂停备注；当前 N 系列按 `docs/V04/ANCS_AI_Native_v0.4.md` 和 `docs/requirements/ai-native-v04-traceability.md` 执行。新版本初始 TODO 不覆写本表旧 VERIFIED，旧 P15/P16 暂停与新 N15/N16 横切任务不混同。
+
 - 任务：P00-01（建立需求追踪与裁决记录）
 - 需求基线：`creator_video_os_spec_v0.2.md`（v0.2，2026-10-04，共 97 节 + 附录 A/B/C）
 - 工程计划：`ANCS_Plan261004.md`
 - 建立日期：2026-10-04（初始建账）
-- 2026-10-08 交付备注：Quiet Frame Web 视觉重构是 P14 之后的独立界面验收工作，证据见 `docs/verification/QUIET-FRAME-REBUILD.md`。本轮没有新增需求 ID，也没有凭视觉截图把任何 REQ 状态改为 `VERIFIED`；用户检查 Web 前暂停 P15/P16。
+- 2026-10-08 交付备注：Quiet Frame Web 视觉重构是 P14 之后的独立界面验收工作，证据见 `docs/verification/QUIET-FRAME-REBUILD.md` 与 `docs/verification/N16-global-web.md`。全部 21 个现存路由已完成 63 次真实页面检查与移动导航/Inspector 交互，最终 `pnpm verify` 为 939/939 已实现断言；本轮没有新增需求 ID，也没有凭视觉截图把任何 REQ 状态改为 `VERIFIED`，用户检查 Web 前暂停 P15/P16。
 - 配套文件：
   - `docs/requirements/v1-acceptance-ledger.md` — §77 / §78 / 附录 C / §96 逐项验收账本
   - `docs/decisions/0001-scope-decisions.md` — DEC-01..14 范围与解释裁决

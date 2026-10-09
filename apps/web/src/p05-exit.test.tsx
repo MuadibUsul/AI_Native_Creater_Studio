@@ -131,7 +131,7 @@ describe('P05 阶段退出条件（预览 → 修改 → 撤销 → 恢复快照
     // 3) 撤销：History 页补偿事件（恢复原值）
     const { default: HistoryPage } = await import('@/app/w/[workspaceId]/p/[projectId]/history/page');
     renderWithClient(<HistoryPage />, client);
-    await screen.findByText('History');
+    await screen.findByText('版本历史');
     await userEvent.click(screen.getByRole('button', { name: '撤销最近一次编辑' }));
     await waitFor(() => expect(server.undo).toHaveBeenCalledTimes(1));
     expect(server.getState().durationMs).toBe(2500);

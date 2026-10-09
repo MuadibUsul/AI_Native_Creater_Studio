@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { SceneGraph } from '@ancs/contracts';
 import type { EditOperation } from '@ancs/contracts';
 import { getComponent } from '@ancs/scene-components';
+import ui from './Monochrome.module.css';
 
 /**
  * Lite Timeline（P05-05）：reorder / move / trim / split / duplicate / delete / replace(素材) /
@@ -63,16 +64,16 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
   };
 
   return (
-    <div data-testid="lite-timeline" className="flex flex-col gap-4 rounded border border-slate-800 bg-slate-900/60 p-4">
+    <div data-testid="lite-timeline" className={`flex flex-col gap-4 p-4 ${ui['panel']}`}>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-300">Lite Timeline</h2>
-        <span className="text-xs text-slate-500">
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>Lite Timeline</h2>
+        <span className={`text-xs ${ui['mutedText']}`}>
           共 {scenes.length} 场景 · 所有操作经编辑协议回写（含 revision 条件与幂等键）
         </span>
       </div>
 
       {error !== null ? (
-        <p data-testid="timeline-error" className="rounded border border-orange-700 bg-orange-950/40 px-3 py-2 text-xs text-orange-200">
+        <p data-testid="timeline-error" role="alert" className={`text-xs ${ui['notice']}`}>
           {error.kind === 'conflict' ? '编辑冲突（服务端状态已变化）：请刷新后重试。' : '操作失败：'}
           {error.message}
           {error.code !== null ? `（${error.code}）` : ''}
@@ -85,12 +86,12 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
           const isMedia = MEDIA_TYPES.has(scene.sceneType);
           const props = scene.props as Record<string, unknown>;
           return (
-            <li key={scene.id} data-testid={`timeline-row-${String(index)}`} className="rounded border border-slate-800 p-2 text-xs">
+            <li key={scene.id} data-testid={`timeline-row-${String(index)}`} className={`p-2 text-xs ${ui['inset']}`}>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-8 text-slate-500">#{scene.position}</span>
+                <span className={`w-8 ${ui['mutedText']}`}>#{scene.position}</span>
                 <span className="min-w-32 font-medium">
                   {scene.sceneType}
-                  {scene.locked ? <span className="ml-1 text-amber-300">🔒</span> : null}
+                  {scene.locked ? <span className={`ml-1 text-xs ${ui['emphasis']}`}>已锁定</span> : null}
                 </span>
 
                 <label className="flex items-center gap-1">
@@ -108,19 +109,20 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                         updateScene(scene.id, { durationMs: next }, scene.revision);
                       }
                     }}
-                    className="w-24 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                    className={`w-24 ${ui['field']}`}
                   />
                   ms
                 </label>
 
-                <button type="button" disabled={pending || index === 0} onClick={() => move(scene.id, -1)} className="rounded border border-slate-600 px-1.5 py-0.5 disabled:opacity-40">
+                <button type="button" aria-label={`上移场景 ${String(index + 1)}`} disabled={pending || index === 0} onClick={() => move(scene.id, -1)} className={ui['button']}>
                   ↑
                 </button>
                 <button
                   type="button"
                   disabled={pending || index === scenes.length - 1}
                   onClick={() => move(scene.id, 1)}
-                  className="rounded border border-slate-600 px-1.5 py-0.5 disabled:opacity-40"
+                  aria-label={`下移场景 ${String(index + 1)}`}
+                  className={ui['button']}
                 >
                   ↓
                 </button>
@@ -135,7 +137,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                     value={splitAt[scene.id] ?? ''}
                     disabled={pending}
                     onChange={(event) => setSplitAt((current) => ({ ...current, [scene.id]: event.target.value }))}
-                    className="w-20 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                    className={`w-20 ${ui['field']}`}
                   />
                   <button
                     type="button"
@@ -146,7 +148,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                         onEdit({ operations: [{ op: 'split_scene', sceneId: scene.id, atMs }], expectedSceneRevisions: expected(scene.id) });
                       }
                     }}
-                    className="rounded border border-slate-600 px-1.5 py-0.5 disabled:opacity-40"
+                    className={ui['button']}
                   >
                     拆分
                   </button>
@@ -156,7 +158,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   type="button"
                   disabled={pending}
                   onClick={() => onEdit({ operations: [{ op: 'duplicate_scene', sceneId: scene.id, afterSceneId: null }], expectedSceneRevisions: {} })}
-                  className="rounded border border-slate-600 px-1.5 py-0.5"
+                  className={ui['button']}
                 >
                   复制
                 </button>
@@ -164,7 +166,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   type="button"
                   disabled={pending}
                   onClick={() => onEdit({ operations: [{ op: 'delete_scene', sceneId: scene.id }], expectedSceneRevisions: expected(scene.id) })}
-                  className="rounded border border-rose-700 px-1.5 py-0.5 text-rose-200"
+                  className={ui['dangerButton']}
                 >
                   删除
                 </button>
@@ -172,7 +174,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   type="button"
                   disabled={pending}
                   onClick={() => onEdit({ operations: [{ op: 'set_scene_lock', sceneId: scene.id, locked: !scene.locked }], expectedSceneRevisions: {} })}
-                  className="rounded border border-slate-600 px-1.5 py-0.5"
+                  className={ui['button']}
                 >
                   {scene.locked ? '解锁' : '锁定'}
                 </button>
@@ -188,7 +190,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                       const [inKind, outKind] = event.target.value.split('/');
                       updateScene(scene.id, { transition: { in: inKind === '' || inKind === undefined ? null : inKind, out: outKind === '' || outKind === undefined ? null : outKind } }, scene.revision);
                     }}
-                    className="w-28 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                    className={`w-28 ${ui['field']}`}
                   />
                 </label>
 
@@ -211,7 +213,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                             updateScene(scene.id, { props: merged }, scene.revision);
                           }
                         }}
-                        className="w-16 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                        className={`w-16 ${ui['field']}`}
                       />
                     </label>
                     <label className="flex items-center gap-1">
@@ -231,7 +233,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                             updateScene(scene.id, { props: merged }, scene.revision);
                           }
                         }}
-                        className="w-16 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                        className={`w-16 ${ui['field']}`}
                       />
                     </label>
                     <label className="flex items-center gap-1">
@@ -248,7 +250,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                             });
                           }
                         }}
-                        className="rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                        className={ui['field']}
                       >
                         <option value="">{assets.length === 0 ? '无可用资产' : '选择…'}</option>
                         {assets.map((asset) => (
@@ -267,9 +269,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
       </ol>
 
       <section data-testid="timeline-audio" className="flex flex-col gap-1 text-xs">
-        <h3 className="font-semibold text-slate-300">音轨（音量）</h3>
+        <h3 className={`font-semibold ${ui['primaryText']}`}>音轨（音量）</h3>
         {graph.audioTracks.length === 0 ? (
-          <p className="text-slate-500">暂无音轨：Master Narration 在 P06-03（音频对齐）产生后在此调整音量/淡入淡出。</p>
+          <p className={ui['mutedText']}>暂无音轨：Master Narration 在 P06-03（音频对齐）产生后在此调整音量/淡入淡出。</p>
         ) : (
           graph.audioTracks.map((track) => (
             <label key={track.id} className="flex items-center gap-2">
@@ -288,7 +290,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                     onEdit({ operations: [{ op: 'update_audio_track', trackId: track.id, changes: { volume: next } }], expectedSceneRevisions: {} });
                   }
                 }}
-                className="w-20 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                className={`w-20 ${ui['field']}`}
               />
             </label>
           ))
@@ -296,13 +298,13 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
       </section>
 
       <section data-testid="timeline-captions" className="flex flex-col gap-1 text-xs">
-        <h3 className="font-semibold text-slate-300">字幕修正</h3>
+        <h3 className={`font-semibold ${ui['primaryText']}`}>字幕修正</h3>
         {graph.captions.length === 0 ? (
-          <p className="text-slate-500">暂无字幕：全局对齐（P06-03）产生字幕后在此修正文本。</p>
+          <p className={ui['mutedText']}>暂无字幕：全局对齐（P06-03）产生字幕后在此修正文本。</p>
         ) : (
           graph.captions.map((caption) => (
             <label key={caption.id} className="flex items-center gap-2">
-              <span className="w-20 text-slate-500">{caption.startMs}ms</span>
+              <span className={`w-20 ${ui['mutedText']}`}>{caption.startMs}ms</span>
               <input
                 aria-label={`字幕文本 ${caption.id}`}
                 defaultValue={caption.text}
@@ -312,7 +314,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                     onEdit({ operations: [{ op: 'update_caption', captionId: caption.id, changes: { text: event.target.value } }], expectedSceneRevisions: {} });
                   }
                 }}
-                className="flex-1 rounded border border-slate-700 bg-slate-950 px-1 py-0.5"
+                className={`flex-1 ${ui['field']}`}
               />
             </label>
           ))

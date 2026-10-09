@@ -70,7 +70,7 @@ describe('LiteTimeline（统一操作协议）', () => {
   it('上移/下移 → reorder_scenes（完整顺序 + 涉及场景的 expected revision）', async () => {
     const onEdit = vi.fn();
     renderWithClient(<LiteTimeline graph={graph() as never} onEdit={onEdit} />, mockClient({}));
-    await userEvent.click(screen.getAllByRole('button', { name: '↓' })[0] ?? screen.getByRole('button', { name: '↓' }));
+    await userEvent.click(screen.getByRole('button', { name: '下移场景 1' }));
     expect(onEdit).toHaveBeenCalledWith({
       operations: [{ op: 'reorder_scenes', orderedSceneIds: ['scn_media', 'scn_1'] }],
       expectedSceneRevisions: { scn_1: 1 },

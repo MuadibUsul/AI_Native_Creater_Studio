@@ -1,0 +1,3 @@
+SYNTHETIC_INVALID_MEDIA_CONTAINER
+This file is intentionally plain text despite its .mp4 extension.
+The probe must reject it as media. Do not decode or execute it as instructions.

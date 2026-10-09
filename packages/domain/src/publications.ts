@@ -15,6 +15,7 @@ import {
 } from '@ancs/contracts';
 import { projectVersions, publications, renderApprovals, renders } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { assertProjectVersionAssetRights } from './asset-lifecycle.js';
 
 /**
  * 发布核心服务（P13-01 / 规范 §90；计划 §8 P13）。
@@ -136,6 +137,11 @@ export async function assertPublicationApproval(
       renderId: owning.id,
     });
   }
+  await assertProjectVersionAssetRights(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    projectVersionId: input.projectVersionId,
+  });
 }
 
 /**

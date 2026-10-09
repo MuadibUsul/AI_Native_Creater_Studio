@@ -8,6 +8,7 @@ import {
   projectVersionDetailSchema,
   projectVersionSnapshotSchema,
   projectVersionSchema,
+  objectLockSchema,
   type ProjectVersion,
   type ProjectVersionDetail,
   type ProjectVersionSnapshot,
@@ -18,6 +19,7 @@ import {
   channelStyleVersions,
   editEvents,
   projectVersions,
+  projectObjectLocks,
   projects,
   scenes,
   speechProfiles,
@@ -26,6 +28,9 @@ import {
 import type { DomainDeps } from './channels.js';
 import { buildSceneGraph } from './projects.js';
 import { toProjectDto, type ProjectRow, type SceneRow } from './mappers.js';
+import { listProjectComposition } from './composition.js';
+import { listProjectCompositionObjects } from './composition-objects.js';
+import { projectDocumentFromSceneGraph } from './project-document.js';
 
 /**
  * 项目版本快照（P02-03 / §23.2）：版本行不可变；Restore/Publish/Final 等场景按 versionId 解析。
@@ -114,9 +119,33 @@ export async function buildSnapshotPayload(
     sceneRows,
   });
 
-  return projectVersionSnapshotSchema.parse({
-    schemaVersion: '0.1',
+  const [composition, compositionObjects, lockRows] = await Promise.all([
+    listProjectComposition({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
+    listProjectCompositionObjects({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
+    db.select().from(projectObjectLocks).where(and(
+      eq(projectObjectLocks.workspaceId, project.workspaceId),
+      eq(projectObjectLocks.projectId, project.id),
+    )),
+  ]);
+  const locks = lockRows.map((row) => objectLockSchema.parse({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+  const document = projectDocumentFromSceneGraph({
     graph,
+    brief: project.brief,
+    productionPolicy: project.productionPolicy,
+    documentSchemaVersion: project.documentSchemaVersion,
+    composition: { ...composition, ...compositionObjects },
+    lockedObjectIds: locks.map((lock) => lock.objectId),
+  });
+
+  return projectVersionSnapshotSchema.parse({
+    schemaVersion: '1.0',
+    graph,
+    document,
+    locks,
     // P07-04：主题 tokens 随快照固化（成片渲染必须与快照一致——渠道后续改主题不影响既有版本）
     meta: { themeTokens: defaults.themeTokens, ...extraMeta },
   });

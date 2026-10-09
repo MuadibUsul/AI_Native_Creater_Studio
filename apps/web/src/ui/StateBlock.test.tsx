@@ -21,7 +21,7 @@ describe('StateBlock（状态矩阵原语）', () => {
         </Providers>,
       );
       expect(screen.getByText(`状态 ${variant}`)).toBeTruthy();
-      expect(document.querySelector(`[data-state="${variant}"]`)).toBeTruthy();
+      expect(document.querySelector(`[data-state="${variant}"]`)?.classList.contains('panel')).toBe(true);
       unmount();
     }
   });
@@ -35,6 +35,7 @@ describe('StateBlock（状态矩阵原语）', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '重试' }).classList.contains('primary')).toBe(true);
   });
 
   it('诊断信息（服务端 code）只在提供时展示', () => {

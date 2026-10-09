@@ -75,6 +75,30 @@ const directorPreview = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('Storyboard', () => {
+  it('读取素材检索带入的真实源范围，明确不自动修改项目并允许取消', async () => {
+    sessionStorage.setItem('ancs-media-selection:ws_1:prj_1', JSON.stringify({ assetId: 'ast_phone', label: '举起手机', sourceStartPts: '200', sourceEndPts: '800', timeBase: { numerator: 1, denominator: 1000 } }));
+    renderWithClient(<StoryboardPage />, mockClient({ ...editableWorkspace, projects: { graph: vi.fn().mockResolvedValue(graph([scene()])) } }));
+    expect(await screen.findByText('已选择真实片段：举起手机')).toBeTruthy();
+    expect(screen.getByText(/项目尚未自动修改/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '取消选择' }));
+    expect(screen.queryByText('已选择真实片段：举起手机')).toBeNull();
+    expect(sessionStorage.getItem('ancs-media-selection:ws_1:prj_1')).toBeNull();
+  });
+
+  it('空分镜时同样显示带入的真实片段与源范围（不因空项目丢失选区），取消后不写入任何编辑', async () => {
+    sessionStorage.setItem('ancs-media-selection:ws_1:prj_1', JSON.stringify({ assetId: 'ast_phone', label: '举起手机', sourceStartPts: '200', sourceEndPts: '800', timeBase: { numerator: 1, denominator: 1000 } }));
+    const edit = vi.fn();
+    renderWithClient(<StoryboardPage />, mockClient({ ...editableWorkspace, projects: { graph: vi.fn().mockResolvedValue(graph([])), edit } }));
+    expect(await screen.findByText('分镜还是空的')).toBeTruthy();
+    expect(screen.getByText('已选择真实片段：举起手机')).toBeTruthy();
+    expect(screen.getByText(/源范围 200–800/)).toBeTruthy();
+    expect(screen.getByText(/项目尚未自动修改/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '取消选择' }));
+    expect(screen.queryByText('已选择真实片段：举起手机')).toBeNull();
+    expect(sessionStorage.getItem('ancs-media-selection:ws_1:prj_1')).toBeNull();
+    expect(edit).not.toHaveBeenCalled();
+  });
+
   it('场景选择更新画布和检查器；AI 计划在确认前不写入，确认后走编辑协议', async () => {
     const edit = vi.fn().mockResolvedValue({ project: { revision: 6 }, scenes: [], editEvents: [] });
     const aiEditPlan = vi.fn().mockResolvedValue({

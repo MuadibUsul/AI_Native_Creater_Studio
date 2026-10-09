@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
@@ -9,6 +10,7 @@ import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StateBlock } from '@/ui/StateBlock';
 import { useWorkspaceSelection } from '@/ui/StudioShell';
+import styles from './dashboard.module.css';
 
 const stageLabel: Record<string, string> = {
   DRAFT: '草稿', SCRIPTING: '脚本中', STORYBOARDING: '分镜中',
@@ -39,6 +41,7 @@ function editedAt(value: string): string {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const client = useAncsClient();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -84,8 +87,12 @@ export default function DashboardPage() {
     } catch { /* The new project page still works without session storage. */ }
     window.location.href = `/w/${effectiveWorkspaceId}/new`;
   };
+  const isUnauthenticated = session.isError && describeError(session.error).kind === 'unauthenticated';
+  useEffect(() => {
+    if (isUnauthenticated) router.replace('/welcome');
+  }, [isUnauthenticated, router]);
+  if (isUnauthenticated) return null;
   if (session.isPending || workspaces.isPending) return <div className="page narrow"><StateBlock variant="loading" title="正在加载工作区…" /></div>;
-  if (session.isError && describeError(session.error).kind === 'unauthenticated') return <div className="page narrow"><StateBlock variant="unauthenticated" title="需要登录" description="登录后继续创作。" action={{ label: '前往登录', onClick: () => { window.location.href = '/sign-in'; } }} /></div>;
   if (session.isError) return <div className="page narrow"><StateBlock variant="error" title="会话暂不可用" description={describeError(session.error).message} action={{ label: '重试', onClick: () => void session.refetch() }} /></div>;
   if (workspaces.isError) {
     const error = describeError(workspaces.error);
@@ -97,10 +104,9 @@ export default function DashboardPage() {
     const bTime = Date.parse(b.updatedAt ?? '') || 0;
     return sortOrder === 'recent' ? bTime - aTime : aTime - bTime;
   });
-  return <div className="page narrow">
+  return <div className={`page narrow ${styles['dashboard']}`}>
     <div className="home-intro">
-      <div><div className="eyebrow mb16">YOUR NEXT GOOD STORY</div><h1>把观点，变成作品。</h1><p>从一篇文章开始，做出属于你的专业视频。</p></div>
-      <div className="little-frames" aria-hidden="true"><span className="frame" /><span className="frame" /><span className="frame"><QuietIcon name="play" /></span></div>
+      <div><div className="eyebrow mb16">YOUR NEXT GOOD STORY</div><h1>把观点，变成作品。</h1><p>从素材、文章或想法开始，继续你的作品。</p></div>
     </div>
     {workspaces.data?.length === 0 ? <div className="mt32"><StateBlock variant="empty" title="还没有工作区" description="工作区是项目、预算与成员的边界。">
       <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
@@ -114,9 +120,9 @@ export default function DashboardPage() {
         <textarea id="home-source" aria-label="文章链接或创作想法" placeholder="粘贴文章链接，或写下你的想法…" value={source} onChange={(event) => setSource(event.target.value)} />
         <div className="composer-footer">
           <div className="composer-tools">
-            <button type="button" className={`btn ghost small ${sourceKind === 'url' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('url')}><QuietIcon name="link" />文章链接</button>
+            <button type="button" aria-pressed={sourceKind === 'url'} className={`btn ghost small ${sourceKind === 'url' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('url')}><QuietIcon name="link" />文章链接</button>
             <button type="button" className={`btn ghost small ${sourceKind === 'file' ? 'qf-mode-active' : ''}`} onClick={() => start('file')}><QuietIcon name="upload" />上传资料</button>
-            <button type="button" className={`btn ghost small ${sourceKind === 'text' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('text')}><QuietIcon name="text" />粘贴正文</button>
+            <button type="button" aria-pressed={sourceKind === 'text'} className={`btn ghost small ${sourceKind === 'text' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('text')}><QuietIcon name="text" />粘贴正文</button>
           </div>
           <button type="button" className="btn primary" onClick={() => start()}>开始创作 <QuietIcon name="arrow" /></button>
         </div>
@@ -126,10 +132,10 @@ export default function DashboardPage() {
         <div className="sectionhead"><div className="row gap16"><h2>继续创作</h2>{projects.data ? <span className="badge">{projects.data.length} 个作品</span> : null}</div><div className="row gap8"><button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? '最近编辑' : '最早编辑'} <QuietIcon name="down" /></button><Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />新建作品</Link></div></div>
         {projects.isPending ? <StateBlock variant="loading" title="正在加载项目…" /> : null}
         {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title="加载项目失败" description={describeError(projects.error).message} action={{ label: '重试', onClick: () => void projects.refetch() }} /> : null}
-        {projects.data?.length === 0 ? <StateBlock variant="empty" title="该工作区还没有项目" description="创建第一个项目开始：导入文章 → 生成叙事 → 分镜 → 编辑。"><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label="项目标题" placeholder="例如：利率周报视频" value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn primary" type="submit" disabled={createProject.isPending}>创建项目</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
-        <div className="project-grid">{ordered.map((project, index) => <Link className="project-card" href={`/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
-          <div className="cover"><div className={`cover-art art-${index % 5}`} /><div className="cover-label">CREATOR STUDIO / EDITORIAL</div><div className="cover-title">{project.title}</div><div className="cover-sub">项目封面占位</div></div>
-          <h3>{project.title}</h3><div className="project-meta"><span>目标 {projectDuration(project.targetDurationMs ?? null)} · {project.aspectRatio}</span><span className={`badge ${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'amber' : project.status === 'FAILED' ? 'red' : 'blue'}`}>{stageLabel[project.status] ?? project.status}</span></div>
+        {projects.data?.length === 0 ? <StateBlock variant="empty" title="该工作区还没有项目" description="新建作品后，可以导入素材或内容，再决定如何剪辑与生成。"><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label="项目标题" placeholder="例如：利率周报视频" value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn primary" type="submit" disabled={createProject.isPending}>创建项目</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
+        <div className="project-grid">{ordered.map((project) => <Link className="project-card" href={`/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
+          <div className={styles['projectPreview']} aria-hidden="true"><span className={styles['previewLabel']}>PROJECT</span><strong className={styles['previewTitle']}>{project.title}</strong><span className={styles['previewNote']}>尚无封面</span></div>
+          <h3>{project.title}</h3><div className="project-meta"><span>目标 {projectDuration(project.targetDurationMs ?? null)} · {project.aspectRatio}</span><span className="badge">{stageLabel[project.status] ?? project.status}</span></div>
           <div className="muted" style={{ fontSize: 10, marginTop: 8 }}>{project.updatedAt ? editedAt(project.updatedAt) : '更新时间未知'}</div>
         </Link>)}</div>
       </section>

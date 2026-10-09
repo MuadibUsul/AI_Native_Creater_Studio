@@ -6,11 +6,17 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MotionValidator, RenderExecutor, RenderMediaProbe } from '@ancs/contracts';
+import type { MediaAudioAnalysisAdapter, MediaVisualAnalysisAdapter, MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
 import { cmsWritebackHandler } from './cms-writeback-handler.js';
+import { createAssetMediaProbeHandler } from './media-probe-handler.js';
+import { createMediaProxyHandler } from './media-proxy-handler.js';
+import { createMediaIndexHandler } from './media-index-handler.js';
+import { createMediaTranscriptHandler } from './media-transcript-handler.js';
+import { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
+import { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -110,6 +116,18 @@ export interface DefaultRegistryOptions {
    * "未知类型 → FAILED_FINAL"（明确失败，不静默吞）。
    */
   mediaProbe?: RenderMediaProbe;
+  /** 源素材能力探测（N02-02）；与 Final QA probe 分离，结果写回 AssetVersion。 */
+  sourceMediaProbe?: SourceMediaProbe;
+  /** 标准编辑代理转码（N02-03）；真实实现使用隔离 ffmpeg/ffprobe 子进程。 */
+  sourceMediaTranscoder?: SourceMediaTranscoder;
+  /** 源时间媒体索引（N02-04）；真实实现使用隔离 ffmpeg 子进程。 */
+  sourceMediaIndexer?: SourceMediaIndexer;
+  /** ASR 转写适配器；未配置时仍注册处理器并形成可见失败状态。 */
+  speechRecognitionAdapter?: SpeechRecognitionAdapter;
+  /** 源视频视觉分析适配器；未配置时仍形成可见失败，不编造检测结果。 */
+  mediaVisualAnalysisAdapter?: MediaVisualAnalysisAdapter;
+  /** 源音频事件与节拍分析适配器；未配置时形成可见失败且不修改原音。 */
+  mediaAudioAnalysisAdapter?: MediaAudioAnalysisAdapter;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -123,5 +141,15 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   if (options.mediaProbe !== undefined) {
     handlers.push(createRenderQaHandler({ probe: options.mediaProbe }));
   }
+  if (options.sourceMediaProbe !== undefined) {
+    handlers.push(createAssetMediaProbeHandler({ probe: options.sourceMediaProbe }));
+  }
+  if (options.sourceMediaTranscoder !== undefined) {
+    handlers.push(createMediaProxyHandler({ transcoder: options.sourceMediaTranscoder }));
+  }
+  if (options.sourceMediaIndexer !== undefined) handlers.push(createMediaIndexHandler({ indexer: options.sourceMediaIndexer }));
+  handlers.push(createMediaTranscriptHandler({ adapter: options.speechRecognitionAdapter }));
+  handlers.push(createMediaVisualAnalysisHandler({ adapter: options.mediaVisualAnalysisAdapter }));
+  handlers.push(createMediaAudioAnalysisHandler({ adapter: options.mediaAudioAnalysisAdapter }));
   return new JobHandlerRegistry(handlers);
 }

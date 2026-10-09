@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { errorEnvelopeSchema, type EditRequest } from '@ancs/contracts';
+import { errorEnvelopeSchema, legacyMillisecondsToMediaTime, type EditRequest } from '@ancs/contracts';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { createDb, editEvents, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { assets, assetVersions, createDb, editEvents, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { createClip, createSequence, createTrack } from '@ancs/domain';
 import { and, eq } from 'drizzle-orm';
 import { buildServer } from './server.js';
 
@@ -62,7 +63,7 @@ async function newSignedInClient(): Promise<AncsClient> {
   return client;
 }
 
-async function makeProjectWithScene(client: AncsClient): Promise<{ projectId: string; sceneId: string; revision: number }> {
+async function makeProjectWithScene(client: AncsClient): Promise<{ workspaceId: string; projectId: string; sceneId: string; revision: number }> {
   const workspace = await client.workspaces.create({ name: `编辑工作流-${randomUUID().slice(0, 8)}` });
   const channel = await client.channels.create(workspace.id, { name: '栏目' });
   const project = await client.projects.create(workspace.id, { title: '编辑项目', channelId: channel.id });
@@ -71,7 +72,7 @@ async function makeProjectWithScene(client: AncsClient): Promise<{ projectId: st
     semanticType: 'HOST_STATEMENT',
     durationMs: 5000,
   });
-  return { projectId: project.id, sceneId: scene.scene.id, revision: scene.project.revision };
+  return { workspaceId: workspace.id, projectId: project.id, sceneId: scene.scene.id, revision: scene.project.revision };
 }
 
 async function countEvents(projectId: string, action?: string): Promise<number> {
@@ -175,5 +176,121 @@ describe('编辑事务（HTTP / SDK）', () => {
       },
     });
     expect(envelope.error.details['plannedPhase']).toBe('P04（Script/ContentBlock 模型）');
+  });
+
+  it('N01-07 SDK 透传对象锁；无 sceneId 的重排仍执行间接影响检查', async () => {
+    const client = await newSignedInClient();
+    const { projectId, sceneId, revision } = await makeProjectWithScene(client);
+    const second = await client.projects.addScene(projectId, {
+      sceneType: 'SUMMARY',
+      semanticType: 'SUMMARY',
+      durationMs: 4_000,
+    });
+    expect(second.project.revision).toBe(revision + 1);
+
+    const contentLocked = await client.projects.edit(projectId, {
+      baseProjectRevision: second.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: sceneId, dimensions: ['CONTENT'], locked: true }],
+      idempotencyKey: `idem_lock_content_${randomUUID()}`,
+    });
+    const moved = await client.projects.edit(projectId, {
+      baseProjectRevision: contentLocked.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [second.scene.id, sceneId] }],
+      idempotencyKey: `idem_lock_move_${randomUUID()}`,
+    });
+    expect(moved.scenes.map((scene) => scene.id)).toEqual([second.scene.id, sceneId]);
+
+    const positionLocked = await client.projects.edit(projectId, {
+      baseProjectRevision: moved.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: sceneId, dimensions: ['POSITION'], locked: true }],
+      idempotencyKey: `idem_lock_position_${randomUUID()}`,
+    });
+    const failure = await client.projects.edit(projectId, {
+      baseProjectRevision: positionLocked.project.revision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [sceneId, second.scene.id] }],
+      idempotencyKey: `idem_lock_block_${randomUUID()}`,
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AncsApiError);
+    expect(failure).toMatchObject({ status: 409, code: 'PRECONDITION_FAILED', details: { reason: 'EDIT_IMPACT_LOCKED' } });
+  });
+
+  it('N01-09 SDK 往返权威工程状态和事件，保留新字段并拒绝未知 schema 与越权读取', async () => {
+    const openapi = await (await fetch(`${baseUrl}/openapi.json`)).json() as { paths: Record<string, unknown> };
+    expect(Object.keys(openapi.paths)).toContain('/api/v1/projects/{projectId}/state');
+    expect(Object.keys(openapi.paths)).toContain('/api/v1/projects/{projectId}/edit-events');
+    const client = await newSignedInClient();
+    const { workspaceId, projectId } = await makeProjectWithScene(client);
+    const mt = (milliseconds: number) => legacyMillisecondsToMediaTime(milliseconds);
+    const assetId = `ast_${randomUUID()}`;
+    const assetVersionId = `av_${randomUUID()}`;
+    await handle.db.insert(assets).values({
+      id: assetId, workspaceId, projectId, assetType: 'UPLOADED_VIDEO', origin: 'USER_UPLOAD', status: 'READY',
+      retentionClass: 'PROJECT', license: { kind: 'OWNED' }, currentVersionId: assetVersionId,
+    });
+    await handle.db.insert(assetVersions).values({
+      id: assetVersionId, assetId, workspaceId, versionNumber: 1, storageKey: `n01-09/${assetVersionId}.mp4`,
+      mimeType: 'video/mp4', sizeBytes: 1000, checksumSha256: '9'.repeat(64), durationMs: 10_000,
+      width: 1920, height: 1080, status: 'READY',
+    });
+    const sequence = await createSequence({ db: handle.db }, { workspaceId, projectId, input: { name: 'API 主序列', frameRate: { num: 30, den: 1 }, duration: mt(10_000) } });
+    const track = await createTrack({ db: handle.db }, { workspaceId, projectId, sequenceId: sequence.id, input: { kind: 'VIDEO', position: 0, name: 'V1' } });
+    const clip = await createClip({ db: handle.db }, {
+      workspaceId, projectId, sequenceId: sequence.id,
+      input: { trackId: track.id, assetVersionId, sourceRange: { start: mt(0), end: mt(10_000) }, sequenceRange: { start: mt(0), end: mt(10_000) }, timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true } },
+    });
+
+    const initial = await client.projects.state(projectId, { schemaVersion: '1.0' });
+    expect(initial.document.composition.clips).toMatchObject([{ id: clip.id, assetVersionId }]);
+    expect(initial.document.assetVersionIds).toEqual([assetVersionId]);
+    expect(initial.mediaSources).toMatchObject([{ sourceAssetVersionId: assetVersionId, checksumSha256: '9'.repeat(64) }]);
+    expect(initial.clipInstances).toMatchObject([{ clipId: clip.id, sourceKind: 'MEDIA_SOURCE', sourceId: assetVersionId }]);
+
+    // 旧 Scene 写入口仍可兼容使用，但不得丢失规范化 Composition 字段。
+    await client.projects.addScene(projectId, { sceneType: 'SUMMARY', semanticType: 'SUMMARY', durationMs: 1_000 });
+    const afterLegacyWrite = await client.projects.state(projectId);
+    expect(afterLegacyWrite.document.composition.clips).toEqual(initial.document.composition.clips);
+    expect(afterLegacyWrite.mediaSources).toEqual(initial.mediaSources);
+    expect(afterLegacyWrite.clipInstances).toEqual(initial.clipInstances);
+
+    const idempotencyKey = `idem_n01_09_${randomUUID()}`;
+    const request: EditRequest = {
+      schemaVersion: '1.0',
+      baseProjectRevision: afterLegacyWrite.document.projectRevision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'update_clip', clipId: clip.id, changes: { sourceStreamId: 'video-main' } }],
+      idempotencyKey,
+    };
+    const first = await client.projects.edit(projectId, request);
+    const replay = await client.projects.edit(projectId, request);
+    expect(replay.project.revision).toBe(first.project.revision);
+    expect(await countEvents(projectId, 'UPDATE_CLIP')).toBe(1);
+
+    const events = await client.projects.editEvents(projectId, { schemaVersion: '1.0', afterSeq: initial.eventSeq, limit: 1 });
+    expect(events.items).toHaveLength(1);
+    expect(events.items[0]).toMatchObject({ objectKind: 'SCENE' });
+    expect(events.nextAfterSeq).not.toBeNull();
+    const next = await client.projects.editEvents(projectId, { afterSeq: events.nextAfterSeq ?? 0, limit: 10 });
+    expect(next.items.some((event) => event.action === 'UPDATE_CLIP' && event.objectId === clip.id)).toBe(true);
+
+    const unsupported = await client.projects.state(projectId, { schemaVersion: '9.9' }).catch((error: unknown) => error);
+    expect(unsupported).toMatchObject({ status: 409, code: 'CAPABILITY_UNAVAILABLE', details: { reason: 'PROJECT_SCHEMA_UNSUPPORTED' } });
+    const current = await client.projects.state(projectId);
+    const unsupportedWrite = await client.projects.edit(projectId, {
+      schemaVersion: '9.9',
+      baseProjectRevision: current.document.projectRevision,
+      expectedSceneRevisions: {},
+      operations: [{ op: 'update_clip', clipId: clip.id, changes: { sourceStreamId: 'unsupported' } }],
+      idempotencyKey: `idem_n01_09_unsupported_${randomUUID()}`,
+    }).catch((error: unknown) => error);
+    expect(unsupportedWrite).toMatchObject({ status: 409, code: 'CAPABILITY_UNAVAILABLE', details: { reason: 'PROJECT_SCHEMA_UNSUPPORTED' } });
+    expect(await countEvents(projectId, 'UPDATE_CLIP')).toBe(1);
+
+    const outsider = await newSignedInClient();
+    const denied = await outsider.projects.state(projectId).catch((error: unknown) => error);
+    expect(denied).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 });

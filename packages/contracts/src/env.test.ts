@@ -83,7 +83,8 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     ANCS_DEFAULT_PLAN: 'FREE',
     ANCS_PAYMENTS_DRIVER: 'stripe',
     BETTER_AUTH_URL: 'https://api.example.com',
-    ANCS_PLATFORM_ADMINS: 'usr_admin_1',
+    NODE_ENV: 'production',
+    ANCS_OPS_ENVIRONMENT: 'PRODUCTION',
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -101,12 +102,12 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     expect(issues.map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_DRIVER']);
   });
 
-  it('live 缺条件 → 逐项明确（默认套餐非 FREE / mock 收款 / local 存储 / 非 https / 无管理员）', () => {
+  it('live 缺条件 → 逐项明确（默认套餐非 FREE / mock 收款 / local 存储 / 非 https / 运营环境不匹配）', () => {
     const result = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_SAAS_MODE: 'live', ANCS_PAYMENTS_DRIVER: 'mock', ANCS_PAYMENTS_MOCK_SECRET: 'live-gate-mock-secret-0123' }); // secrets:check-ignore：测试专用假密钥
     expect(result.ok).toBe(true);
     const issues = crossCheckApiEnv(result.value as NonNullable<typeof result.value>);
     const variables = issues.map((issue) => issue.variable).sort();
-    expect(variables).toEqual(['ANCS_DEFAULT_PLAN', 'ANCS_PAYMENTS_DRIVER', 'ANCS_PLATFORM_ADMINS', 'ANCS_STORAGE_DRIVER', 'BETTER_AUTH_URL']);
+    expect(variables).toEqual(['ANCS_DEFAULT_PLAN', 'ANCS_OPS_ENVIRONMENT', 'ANCS_PAYMENTS_DRIVER', 'ANCS_STORAGE_DRIVER', 'BETTER_AUTH_URL']);
     expect(issues.find((issue) => issue.variable === 'ANCS_PAYMENTS_DRIVER')?.message).toContain('mock 无真实扣款能力');
     expect(issues.find((issue) => issue.variable === 'ANCS_DEFAULT_PLAN')?.message).toContain('必须为 FREE');
   });

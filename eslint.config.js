@@ -24,6 +24,8 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      // 临时浏览器/媒体证据与探针，已由 Git 忽略，不作为项目源码检查。
+      '.artifacts/**',
       '**/*.tsbuildinfo',
       '.github/**',
       // Next.js 生成物（P05-03：apps/web 的构建缓存与自动生成声明）

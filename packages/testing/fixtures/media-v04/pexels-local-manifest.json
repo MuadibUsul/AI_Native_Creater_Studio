@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-pexels-local-20261008",
+  "storage": "ignored-local-cache-only",
+  "cacheDirectory": ".artifacts/n00-04-pexels",
+  "downloadedAt": "2026-10-08",
+  "license": {
+    "name": "Pexels License",
+    "url": "https://www.pexels.com/license/",
+    "checkedAt": "2026-10-08",
+    "summary": "Pexels states that photos and videos can be downloaded and used for free, modified, and used without required attribution. Restrictions include unaltered-copy sales, redistribution on stock platforms, and implying endorsement by depicted people or brands.",
+    "repositoryPolicy": "Keep downloaded original video files outside Git; commit only source, license, checksum, and technical metadata."
+  },
+  "assets": [
+    {
+      "id": "pexels-8859850-portrait-waterfall",
+      "sourcePage": "https://www.pexels.com/video/vertical-video-of-a-waterfalls-8859850/",
+      "creator": "Pavel Danilyuk",
+      "downloadUrl": "https://videos.pexels.com/video-files/8859850/8859850-uhd_2160_3840_25fps.mp4",
+      "cacheFile": "8859850-uhd_2160_3840_25fps.mp4",
+      "sha256": "6327ec78a0d454525b9396bef481e40c41e79bfe006f89698b32bf83e77f7c67",
+      "sizeBytes": 39791420,
+      "expected": "H.264 2160x3840 portrait 9:16; 14.600 seconds, 25/1 CFR, 365 frames; no audio; full decode succeeds.",
+      "use": "Licensed external portrait reference and source-aspect-ratio fixture.",
+      "boundary": "A sampled middle frame showed no identifiable person or logo; full-content review and original capture-device proof were not performed."
+    },
+    {
+      "id": "pexels-3148931-fractional-landscape",
+      "sourcePage": "https://www.pexels.com/video/a-river-stream-cutting-through-rice-field-terraces-3148931/",
+      "creator": "Tom Fisk",
+      "downloadUrl": "https://videos.pexels.com/video-files/3148931/3148931-hd_1920_1080_30fps.mp4",
+      "cacheFile": "3148931-hd_1920_1080_30fps.mp4",
+      "sha256": "e34e4e145565ac0bb5bdba639ee48f451d431dd66156f65f9e1b1ede698b39db",
+      "sizeBytes": 30363391,
+      "expected": "H.264 1280x720 landscape (despite the CDN filename); 80.063333 seconds, 30000/1001 CFR, 2399 frames; AAC stereo 48000 Hz starts at 0; full decode succeeds.",
+      "use": "Licensed external fractional-frame-rate and source-audio fixture.",
+      "boundary": "A sampled middle frame showed no identifiable person or logo; full-content review and original capture-device proof were not performed."
+    },
+    {
+      "id": "pexels-13221691-two-minute-landscape",
+      "sourcePage": "https://www.pexels.com/video/a-tree-with-fall-foliage-on-a-windy-day-13221691/",
+      "creator": "Zura Narimanishvili",
+      "downloadUrl": "https://videos.pexels.com/video-files/13221691/13221691-hd_1920_1080_25fps.mp4",
+      "cacheFile": "13221691-hd_1920_1080_25fps.mp4",
+      "sha256": "8fd199320bee7a801f0cb397d85461896f7e2d9a81e68c8a6907f46c761bc818",
+      "sizeBytes": 41920332,
+      "expected": "H.264 1280x720 landscape (despite the CDN filename); 120.000 seconds, 25/1 CFR, 3000 frames; no audio; full decode succeeds.",
+      "use": "Licensed external two-minute sequential decode and seek fixture.",
+      "boundary": "Two minutes is not evidence for 24-hour or production long-form playback. A sampled middle frame showed no identifiable person or logo; full-content review was not performed."
+    }
+  ]
+}

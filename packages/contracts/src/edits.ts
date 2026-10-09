@@ -11,6 +11,37 @@ import {
   sceneTransitionSchema,
   sourceBindingSchema,
 } from './scene-graph.js';
+import { setObjectLockOperationSchema } from './object-locks.js';
+import {
+  applyAudioCrossfadeOperationSchema,
+  createCaptionOperationSchema,
+  cutCaptionRangeOperationSchema,
+  deleteCaptionOperationSchema,
+  splitCaptionOperationSchema,
+  createTrackOperationSchema,
+  setClipCropOperationSchema,
+  setClipOpacityOperationSchema,
+  setClipTransformOperationSchema,
+  deleteClipOperationSchema,
+  deleteTrackOperationSchema,
+  duplicateClipOperationSchema,
+  insertClipOperationSchema,
+  moveClipOperationSchema,
+  moveTrackOperationSchema,
+  replaceClipSourceOperationSchema,
+  rippleClipOperationSchema,
+  rollClipOperationSchema,
+  slideClipOperationSchema,
+  setAvLinkOperationSchema,
+  slipClipOperationSchema,
+  splitAvCutOperationSchema,
+  splitClipOperationSchema,
+  trimClipOperationSchema,
+  updateTrackOperationSchema,
+  updateAnimationOperationSchema,
+  updateAudioRegionOperationSchema,
+  updateClipOperationSchema,
+} from './composition-edits.js';
 
 /**
  * 编辑协议契约（计划 §4.6）：客户端不得提交任意数据库补丁，只能提交显式类型的操作。
@@ -34,13 +65,122 @@ export const EDIT_OPERATION_TYPES = [
   'reorder_scenes',
   'replace_asset',
   'update_caption',
+  'create_caption',
+  'split_caption',
+  'cut_caption_range',
+  'delete_caption',
   'update_audio_track',
   'set_scene_lock',
+  'set_object_lock',
+  'insert_clip',
+  'delete_clip',
+  'split_clip',
+  'trim_clip',
+  'move_clip',
+  'duplicate_clip',
+  'replace_clip_source',
+  'slip_clip',
+  'slide_clip',
+  'roll_clip',
+  'ripple_clip',
+  'split_av_cut',
+  'create_track',
+  'move_track',
+  'delete_track',
+  'update_track',
+  'set_av_link',
+  'set_clip_transform',
+  'set_clip_crop',
+  'set_clip_opacity',
+  'apply_audio_crossfade',
+  'update_clip',
+  'update_animation',
+  'update_audio_region',
   'restore_scene',
   'restore_project_version',
 ] as const;
 
 export type EditOperationType = (typeof EDIT_OPERATION_TYPES)[number];
+
+export const EDIT_EXECUTION_BACKENDS = ['LEGACY_SCENE'] as const;
+export const editExecutionBackendSchema = z.enum(EDIT_EXECUTION_BACKENDS);
+export const EDIT_OPERATION_AVAILABILITIES = ['ACTIVE', 'PLANNED'] as const;
+export const editOperationAvailabilitySchema = z.enum(EDIT_OPERATION_AVAILABILITIES);
+export const EDIT_COMPENSATION_MODES = ['EVENT_INVERSE', 'SNAPSHOT_RESTORE', 'PLANNED'] as const;
+export const editCompensationModeSchema = z.enum(EDIT_COMPENSATION_MODES);
+
+export const editOperationDefinitionSchema = z.object({
+  operation: z.enum(EDIT_OPERATION_TYPES),
+  availability: editOperationAvailabilitySchema,
+  plannedPhase: z.string().nullable(),
+  requiredPermission: z.literal('project:write'),
+  actorTypes: z.array(z.enum(['USER', 'AI', 'SYSTEM'])).min(1),
+  supportedBackends: z.array(editExecutionBackendSchema).min(1),
+  structural: z.boolean(),
+  readSet: z.array(z.string().min(1)),
+  writeSet: z.array(z.string().min(1)),
+  preconditions: z.array(z.string().min(1)),
+  postconditions: z.array(z.string().min(1)),
+  invalidates: z.array(z.string().min(1)),
+  compensation: editCompensationModeSchema,
+}).strict();
+
+export type EditExecutionBackend = z.infer<typeof editExecutionBackendSchema>;
+export type EditOperationDefinition = z.infer<typeof editOperationDefinitionSchema>;
+
+const common: Pick<EditOperationDefinition, 'requiredPermission' | 'actorTypes' | 'supportedBackends' | 'invalidates'> = {
+  requiredPermission: 'project:write' as const,
+  actorTypes: ['USER', 'AI', 'SYSTEM'],
+  supportedBackends: ['LEGACY_SCENE'],
+  invalidates: ['PROJECT_PREVIEW', 'RENDER_APPROVAL'],
+};
+
+/** Server-owned operation registry shared by GUI, AI planning and execution. */
+export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOperationDefinition>> = {
+  update_project: { ...common, operation: 'update_project', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['PROJECT'], writeSet: ['PROJECT'], preconditions: ['PROJECT_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_script: { ...common, operation: 'update_script', availability: 'PLANNED', plannedPhase: 'P04（Script/ContentBlock 模型）', structural: false, readSet: ['CONTENT_BLOCK'], writeSet: ['CONTENT_BLOCK'], preconditions: ['CONTENT_BLOCK_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
+  insert_scene: { ...common, operation: 'insert_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['AFTER_SCENE_EXISTS', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  update_scene: { ...common, operation: 'update_scene', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_scene: { ...common, operation: 'delete_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REFERENCE_REMOVED', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  duplicate_scene: { ...common, operation: 'duplicate_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SOURCE_SCENE_EXISTS', 'AFTER_SCENE_EXISTS', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  split_scene: { ...common, operation: 'split_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'SCENE_ORDER'], writeSet: ['SCENE', 'SCENE_ORDER'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'SPLIT_INSIDE_RANGE', 'CREATED_ID_AVAILABLE'], postconditions: ['CREATED_SCENE_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  reorder_scenes: { ...common, operation: 'reorder_scenes', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE_ORDER'], writeSet: ['SCENE_ORDER'], preconditions: ['ORDER_CONTAINS_CANDIDATE_SCENES_EXACTLY_ONCE'], postconditions: ['TIMELINE_RECOMPUTED'], compensation: 'EVENT_INVERSE' },
+  replace_asset: { ...common, operation: 'replace_asset', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE', 'ASSET'], writeSet: ['SCENE.ASSET_BINDINGS'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'ASSET_BINDABLE', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_caption: { ...common, operation: 'update_caption', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CAPTION_SPAN'], writeSet: ['CAPTION_SPAN'], preconditions: ['CAPTION_EXISTS', 'CAPTION_WITHIN_SEQUENCE'], postconditions: ['CAPTION_TEXT_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_audio_track: { ...common, operation: 'update_audio_track', availability: 'PLANNED', plannedPhase: 'P06-06（混音）', structural: false, readSet: ['AUDIO_REGION'], writeSet: ['AUDIO_REGION'], preconditions: ['AUDIO_REGION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'PLANNED' },
+  set_scene_lock: { ...common, operation: 'set_scene_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE.LOCK'], preconditions: ['SCENE_EXISTS', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_object_lock: { ...common, operation: 'set_object_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['OBJECT_LOCK'], writeSet: ['OBJECT_LOCK'], preconditions: ['LOCK_TARGET_EXISTS'], postconditions: ['LOCK_STATE_UPDATED'], invalidates: [], compensation: 'EVENT_INVERSE' },
+  update_clip: { ...common, operation: 'update_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP'], preconditions: ['CLIP_EXISTS', 'PROJECT_REVISION_MATCHES', 'RESULTING_CLIP_VALID'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  insert_clip: { ...common, operation: 'insert_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'TRACK', 'CLIP', 'ASSET_VERSION'], writeSet: ['CLIP', 'CLIP_ORDER', 'SEQUENCE'], preconditions: ['SEQUENCE_EXISTS', 'TRACK_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY', 'RESULTING_CLIP_VALID'], postconditions: ['CREATED_CLIP_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_clip: { ...common, operation: 'delete_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['CLIP_REFERENCE_REMOVED', 'TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  split_clip: { ...common, operation: 'split_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'ANIMATION_BINDING'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SPLIT_POINT_INSIDE_CLIP', 'SOURCE_SPLIT_REPRESENTABLE'], postconditions: ['CLIP_REFERENCE_AVAILABLE', 'RANGES_CONSERVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  trim_clip: { ...common, operation: 'trim_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'ASSET_VERSION', 'ANIMATION_BINDING'], writeSet: ['CLIP'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY', 'RESULTING_CLIP_VALID'], postconditions: ['TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  move_clip: { ...common, operation: 'move_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'SEQUENCE', 'ANIMATION_BINDING'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'TARGET_TRACK_KIND_MATCHES', 'RESULTING_CLIP_VALID'], postconditions: ['TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  duplicate_clip: { ...common, operation: 'duplicate_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'ASSET_VERSION'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY'], postconditions: ['CREATED_CLIP_REFERENCE_AVAILABLE', 'SOURCE_BINARY_UNTOUCHED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  slip_clip: { ...common, operation: 'slip_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'ASSET_VERSION'], writeSet: ['CLIP'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY', 'RESULTING_CLIP_VALID'], postconditions: ['SOURCE_IN_OUT_SLIPPED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  slide_clip: { ...common, operation: 'slide_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'ADJACENT_NEIGHBORS_EXIST', 'NEIGHBOR_HANDLES_AVAILABLE'], postconditions: ['TOTAL_DURATION_CONSERVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  roll_clip: { ...common, operation: 'roll_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP'], preconditions: ['CLIPS_ADJACENT', 'TARGET_TRACK_UNLOCKED', 'NEIGHBOR_HANDLES_AVAILABLE'], postconditions: ['COMBINED_DURATION_CONSERVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  ripple_clip: { ...common, operation: 'ripple_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'SEQUENCE'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'EXPLICIT_RIPPLE_REQUESTED'], postconditions: ['GAP_CLOSED', 'SHIFTED_CLIPS_REPORTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  create_track: { ...common, operation: 'create_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'TRACK'], writeSet: ['TRACK', 'CLIP_ORDER'], preconditions: ['SEQUENCE_EXISTS', 'TRACK_POSITION_AVAILABLE'], postconditions: ['TRACK_AVAILABLE', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  move_track: { ...common, operation: 'move_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['TRACK'], writeSet: ['TRACK', 'CLIP_ORDER'], preconditions: ['TRACK_EXISTS'], postconditions: ['TRACK_ORDER_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_track: { ...common, operation: 'delete_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['TRACK', 'CLIP'], writeSet: ['TRACK', 'CLIP', 'CLIP_ORDER'], preconditions: ['TRACK_EXISTS', 'NON_EMPTY_POLICY_SATISFIED'], postconditions: ['TRACK_REMOVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_track: { ...common, operation: 'update_track', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['TRACK'], writeSet: ['TRACK'], preconditions: ['TRACK_EXISTS'], postconditions: ['TRACK_STATE_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_clip_transform: { ...common, operation: 'set_clip_transform', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['TRANSFORM_UPDATED', 'NO_REGENERATION_TRIGGERED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_clip_crop: { ...common, operation: 'set_clip_crop', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'CROP_AREA_NONEMPTY'], postconditions: ['CROP_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  create_caption: { ...common, operation: 'create_caption', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'TRACK'], writeSet: ['CAPTION'], preconditions: ['SEQUENCE_EXISTS', 'CAPTION_TRACK_EXISTS', 'CAPTION_WITHIN_SEQUENCE'], postconditions: ['CAPTION_AVAILABLE', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_caption: { ...common, operation: 'delete_caption', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CAPTION'], writeSet: ['CAPTION'], preconditions: ['CAPTION_EXISTS'], postconditions: ['CAPTION_REFERENCE_REMOVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  split_caption: { ...common, operation: 'split_caption', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CAPTION'], writeSet: ['CAPTION'], preconditions: ['CAPTION_EXISTS', 'SPLIT_INDEX_INSIDE_WORDS'], postconditions: ['CAPTIONS_PARTITIONED', 'TEXT_REBUILT_FROM_WORDS', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  cut_caption_range: { ...common, operation: 'cut_caption_range', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CAPTION', 'CLIP', 'TRACK', 'SEQUENCE'], writeSet: ['CAPTION', 'CLIP', 'CLIP_ORDER'], preconditions: ['CAPTION_EXISTS', 'EXPLICIT_CUT_MODE', 'CUT_RANGE_INSIDE_SEQUENCE'], postconditions: ['CAPTIONS_SHIFTED_WITH_RIPPLE', 'CAPTIONS_WITHIN_SEQUENCE', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  apply_audio_crossfade: { ...common, operation: 'apply_audio_crossfade', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['AUDIO_REGION', 'TRACK'], writeSet: ['AUDIO_REGION'], preconditions: ['REGIONS_ADJACENT', 'CROSSFADE_WITHIN_REGION_DURATION'], postconditions: ['NON_DESTRUCTIVE_CHAIN_ONLY', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_clip_opacity: { ...common, operation: 'set_clip_opacity', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['OPACITY_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_av_link: { ...common, operation: 'set_av_link', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP'], preconditions: ['CLIPS_EXIST', 'LINK_TARGETS_COMPATIBLE'], postconditions: ['AV_LINK_STATE_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  split_av_cut: { ...common, operation: 'split_av_cut', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIPS_AV_LINKED', 'CUT_POINTS_INSIDE_CLIPS', 'AUDIO_SOURCE_CONTINUITY'], postconditions: ['AUDIO_CLOCK_CONTINUOUS', 'SPLIT_POINTS_OFFSET_REPORTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  replace_clip_source: { ...common, operation: 'replace_clip_source', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK', 'ASSET_VERSION', 'SEQUENCE'], writeSet: ['CLIP'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY', 'SOURCE_DURATION_MATCHES', 'RESULTING_CLIP_VALID'], postconditions: ['SOURCE_REFERENCE_SWAPPED', 'APPROVAL_STALENESS_ADVANCES', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_animation: { ...common, operation: 'update_animation', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['ANIMATION_BINDING'], writeSet: ['ANIMATION_BINDING.KEYFRAMES'], preconditions: ['ANIMATION_EXISTS', 'TARGET_MATCHES', 'PROJECT_REVISION_MATCHES'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  update_audio_region: { ...common, operation: 'update_audio_region', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['AUDIO_REGION', 'TRACK'], writeSet: ['AUDIO_REGION'], preconditions: ['AUDIO_REGION_EXISTS', 'PROJECT_REVISION_MATCHES', 'RESULTING_AUDIO_REGION_VALID'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  restore_scene: { ...common, operation: 'restore_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'EDIT_EVENT'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'TARGET_REVISION_REPLAYABLE'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  restore_project_version: { ...common, operation: 'restore_project_version', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT_VERSION'], writeSet: ['PROJECT', 'SCENE', 'SCENE_ORDER'], preconditions: ['EXCLUSIVE_BATCH', 'PROJECT_VERSION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES', 'TIMELINE_RECOMPUTED'], compensation: 'SNAPSHOT_RESTORE' },
+};
 
 const changesSchema = z.record(z.string(), z.unknown());
 
@@ -121,6 +261,12 @@ export const insertSceneOperationSchema = z.object({
    * 普通客户端不提供（由服务端生成）；提供且 id 已被占用时拒绝。
    */
   restoreSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity. Later operations in the same request may reference it. */
+  createdSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdSceneId !== undefined && value.restoreSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdSceneId and restoreSceneId are mutually exclusive' });
+  }
 });
 
 export const updateSceneOperationSchema = z.object({
@@ -140,6 +286,12 @@ export const duplicateSceneOperationSchema = z.object({
   afterSceneId: opaqueIdSchema.nullable().default(null),
   /** 补偿专用（Undo/Redo）：复用原副本 id */
   restoreSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity for the duplicate. */
+  createdSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdSceneId !== undefined && value.restoreSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdSceneId and restoreSceneId are mutually exclusive' });
+  }
 });
 
 export const splitSceneOperationSchema = z.object({
@@ -148,6 +300,12 @@ export const splitSceneOperationSchema = z.object({
   atMs: videoMsSchema,
   /** 补偿专用（Undo/Redo）：复用原尾部 Scene id */
   restoreTailSceneId: opaqueIdSchema.optional(),
+  /** Public batch-local identity for the created tail Scene. */
+  createdTailSceneId: opaqueIdSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.createdTailSceneId !== undefined && value.restoreTailSceneId !== undefined) {
+    context.addIssue({ code: 'custom', message: 'createdTailSceneId and restoreTailSceneId are mutually exclusive' });
+  }
 });
 
 export const reorderScenesOperationSchema = z.object({
@@ -195,6 +353,7 @@ export const restoreProjectVersionOperationSchema = z.object({
 });
 
 export const editOperationSchema = z.discriminatedUnion('op', [
+  createCaptionOperationSchema,
   updateProjectOperationSchema,
   updateScriptOperationSchema,
   insertSceneOperationSchema,
@@ -207,6 +366,34 @@ export const editOperationSchema = z.discriminatedUnion('op', [
   updateCaptionOperationSchema,
   updateAudioTrackOperationSchema,
   setSceneLockOperationSchema,
+  setObjectLockOperationSchema,
+  insertClipOperationSchema,
+  deleteClipOperationSchema,
+  splitClipOperationSchema,
+  trimClipOperationSchema,
+  moveClipOperationSchema,
+  duplicateClipOperationSchema,
+  replaceClipSourceOperationSchema,
+  rippleClipOperationSchema,
+  rollClipOperationSchema,
+  slideClipOperationSchema,
+  slipClipOperationSchema,
+  setAvLinkOperationSchema,
+  setClipCropOperationSchema,
+  setClipOpacityOperationSchema,
+  setClipTransformOperationSchema,
+  splitAvCutOperationSchema,
+  applyAudioCrossfadeOperationSchema,
+  cutCaptionRangeOperationSchema,
+  deleteCaptionOperationSchema,
+  splitCaptionOperationSchema,
+  createTrackOperationSchema,
+  moveTrackOperationSchema,
+  deleteTrackOperationSchema,
+  updateTrackOperationSchema,
+  updateClipOperationSchema,
+  updateAnimationOperationSchema,
+  updateAudioRegionOperationSchema,
   restoreSceneOperationSchema,
   restoreProjectVersionOperationSchema,
 ]);
@@ -215,6 +402,8 @@ export type EditOperation = z.infer<typeof editOperationSchema>;
 
 /** 每个修改请求的公共外壳（§4.6） */
 export const editRequestSchema = z.object({
+  /** Omitted by legacy clients and interpreted as the current 1.0 contract. */
+  schemaVersion: z.string().min(1).max(32).optional(),
   baseProjectRevision: revisionSchema,
   /** sceneId → 客户端上次见到的 revision（未涉及的 Scene 可省略） */
   expectedSceneRevisions: z.record(opaqueIdSchema, revisionSchema).default({}),

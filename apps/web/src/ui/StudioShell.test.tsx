@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { StudioShell } from './StudioShell';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StudioShell, useWorkspaceSelection } from './StudioShell';
 import { DesignSystemControls, DesignSystemExampleActions, DesignSystemStatusAction } from '@/components/quiet-frame/DesignSystemControls';
 import { DesignSystemPage } from '@/components/quiet-frame/workspace-public';
 import { mockClient, renderWithClient } from '@/test-utils';
@@ -10,15 +10,29 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
 
 function client() {
   return mockClient({
-    auth: { session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', name: '作者', email: 'a@example.com' } }) },
+    auth: {
+      session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', name: '作者', email: 'a@example.com' } }),
+      getAppearance: vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'system', updatedAt: null }),
+      setAppearance: vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'dark', updatedAt: '2026-10-08T00:00:00.000Z' }),
+    },
     workspaces: { list: vi.fn().mockResolvedValue([{ id: 'ws_1', name: '研究室' }]) },
     projects: { list: vi.fn().mockResolvedValue([{ id: 'prj_1', title: '真实作品', status: 'DRAFT' }]) },
     notifications: { list: vi.fn().mockResolvedValue([{ id: 'ntf_1', title: '任务完成', body: '作品已更新', createdAt: '2026-10-07T00:00:00Z' }]) },
   });
 }
 
+function AppearanceProbe() {
+  const { setDeviceOverride, setAccountAppearance } = useWorkspaceSelection();
+  return <>
+    <button onClick={() => setDeviceOverride('system')}>覆盖本机系统</button>
+    <button onClick={() => setDeviceOverride(null)}>继承账号</button>
+    <button onClick={() => void setAccountAppearance('light')}>账号浅色</button>
+  </>;
+}
+
 describe('Quiet Frame 工作台外壳', () => {
-  beforeEach(() => { window.localStorage.clear(); document.body.classList.remove('theme-dark'); });
+  beforeEach(() => { window.localStorage.clear(); document.cookie = 'ancs-qf-appearance=; Path=/; Max-Age=0'; document.body.classList.remove('theme-dark'); delete document.body.dataset['appearanceMode']; });
+  afterEach(() => vi.unstubAllGlobals());
 
   it('用真实工作区和项目生成导航，通知只从 SDK 读取', async () => {
     const sdk = client();
@@ -29,6 +43,17 @@ describe('Quiet Frame 工作台外壳', () => {
     await userEvent.click(screen.getByRole('button', { name: '打开任务通知' }));
     expect(await screen.findByText('任务完成')).toBeTruthy();
     expect(sdk.notifications.list).toHaveBeenCalledWith({ workspaceId: 'ws_1', limit: 20 });
+  });
+
+  it('窄屏导航提供抽屉内关闭入口并恢复导航语义', async () => {
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await screen.findByRole('link', { name: /真实作品/ });
+    await userEvent.click(screen.getByRole('button', { name: '打开导航' }));
+    expect(screen.getByRole('dialog', { name: '主导航' })).toBeTruthy();
+    const closeButtons = screen.getAllByRole('button', { name: '关闭导航' });
+    await userEvent.click(closeButtons[0]!);
+    expect(screen.queryByRole('dialog', { name: '主导航' })).toBeNull();
+    expect(screen.getByRole('complementary', { name: '主导航' })).toBeTruthy();
   });
 
   it('命令搜索支持快捷键、过滤、Esc 关闭与焦点返回', async () => {
@@ -49,10 +74,81 @@ describe('Quiet Frame 工作台外壳', () => {
   it('主题切换只改变用户偏好，不触发业务写入', async () => {
     const sdk = client();
     renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);
+    await screen.findByRole('link', { name: /真实作品/ });
     await userEvent.click(screen.getByRole('button', { name: '切换浅深色' }));
     expect(document.body.classList.contains('theme-dark')).toBe(true);
-    expect(window.localStorage.getItem('ancs-qf-theme')).toBe('dark');
+    expect(window.localStorage.getItem('ancs-qf-appearance:usr_1')).toBe('dark');
+    expect(document.cookie).toContain('ancs-qf-appearance=usr_1.dark');
     expect(sdk.projects.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('默认跟随系统变化，固定外观后不受系统变化影响', async () => {
+    const media = Object.assign(new EventTarget(), { matches: true, media: '(prefers-color-scheme: dark)' });
+    vi.stubGlobal('matchMedia', vi.fn(() => media));
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    media.matches = false;
+    media.dispatchEvent(new Event('change'));
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(false));
+    await userEvent.click(screen.getByRole('button', { name: '切换浅深色' }));
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
+    media.matches = true;
+    media.dispatchEvent(new Event('change'));
+    media.matches = false;
+    media.dispatchEvent(new Event('change'));
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
+  });
+
+  it('设备覆盖按用户隔离，旧版全局偏好不被继承', async () => {
+    window.localStorage.setItem('ancs-qf-theme', 'dark');
+    window.localStorage.setItem('ancs-qf-appearance:usr_1', 'dark');
+    const first = renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, client());
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    first.unmount();
+    const second = client();
+    second.auth.session = vi.fn().mockResolvedValue({ user: { id: 'usr_2', name: '第二人', email: 'b@example.com' } });
+    second.auth.getAppearance = vi.fn().mockResolvedValue({ userId: 'usr_2', mode: 'system', updatedAt: null });
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, second);
+    await waitFor(() => expect(document.body.dataset['appearanceMode']).toBe('system'));
+    expect(document.body.classList.contains('theme-dark')).toBe(false);
+  });
+
+  it('设备覆盖优先于同步账号偏好，显式 system 可覆盖账号 dark', async () => {
+    const sdk = client();
+    sdk.auth.getAppearance = vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'dark', updatedAt: '2026-10-08T00:00:00.000Z' });
+    sdk.auth.setAppearance = vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'light', updatedAt: '2026-10-08T00:01:00.000Z' });
+    renderWithClient(<StudioShell><AppearanceProbe /></StudioShell>, sdk);
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    await userEvent.click(screen.getByRole('button', { name: '覆盖本机系统' }));
+    expect(document.body.classList.contains('theme-dark')).toBe(false);
+    expect(window.localStorage.getItem('ancs-qf-appearance:usr_1')).toBe('system');
+    await userEvent.click(screen.getByRole('button', { name: '继承账号' }));
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: '账号浅色' }));
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(false));
+    expect(sdk.auth.setAppearance).toHaveBeenCalledWith({ mode: 'light' });
+    expect(sdk.projects.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('账号偏好接口失败时仍应用本机设备覆盖', async () => {
+    window.localStorage.setItem('ancs-qf-appearance:usr_1', 'dark');
+    const sdk = client();
+    sdk.auth.getAppearance = vi.fn().mockRejectedValue(new Error('offline'));
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);
+    await waitFor(() => expect(document.body.classList.contains('theme-dark')).toBe(true));
+    expect(document.body.dataset['appearanceMode']).toBe('dark');
+    expect(window.localStorage.getItem('ancs-qf-appearance:usr_1')).toBe('dark');
+  });
+
+  it('账号偏好接口失败且无设备覆盖时保留服务端首屏外观', async () => {
+    document.body.dataset['appearanceMode'] = 'dark';
+    document.body.classList.add('theme-dark');
+    const sdk = client();
+    sdk.auth.getAppearance = vi.fn().mockRejectedValue(new Error('offline'));
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);
+    await waitFor(() => expect(sdk.auth.getAppearance).toHaveBeenCalled());
+    expect(document.body.dataset['appearanceMode']).toBe('dark');
+    expect(document.body.classList.contains('theme-dark')).toBe(true);
   });
 
   it('设计系统中的主题与快捷键按钮调用工作台的真实交互', async () => {
@@ -116,7 +212,11 @@ describe('Quiet Frame 工作台外壳', () => {
 
   it('切换工作区后保留首页深链接，避免刷新后串回第一个工作区', async () => {
     const sdk = mockClient({
-      auth: { session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', name: '作者', email: 'a@example.com' } }) },
+      auth: {
+        session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', name: '作者', email: 'a@example.com' } }),
+        getAppearance: vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'system', updatedAt: null }),
+        setAppearance: vi.fn().mockResolvedValue({ userId: 'usr_1', mode: 'dark', updatedAt: '2026-10-08T00:00:00.000Z' }),
+      },
       workspaces: { list: vi.fn().mockResolvedValue([{ id: 'ws_1', name: '第一工作区' }, { id: 'ws_2', name: '第二工作区' }]) },
       projects: { list: vi.fn().mockResolvedValue([]) },
     });

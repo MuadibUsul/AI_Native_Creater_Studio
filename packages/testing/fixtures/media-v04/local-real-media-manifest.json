@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-user-supplied-local-videos-20261008",
+  "storage": "external-local-only",
+  "pathVariable": "ANCS_REAL_MEDIA_PATH",
+  "source": {
+    "providedBy": "user",
+    "authorizationRecordedAt": "2026-10-08",
+    "authorizationEvidence": "The user selected a video in this conversation and said it can be used as project material, then supplied a second file as the portrait version.",
+    "captureMethod": "unknown",
+    "originalCreator": "unknown",
+    "distributionRights": "not established; keep both originals outside the repository and do not publish them"
+  },
+  "assets": [
+    {
+      "id": "user-supplied-landscape-cfr",
+      "sha256": "ea42a74a410185ec7095bda8a8c499acb20b5e382ecf9c489d3552725faafc2f",
+      "sizeBytes": 1738029,
+      "brief": "A short moving view of a waterfront at night, selected by the user as local ANCS test material; do not infer the location or capture device.",
+      "expected": {
+        "container": "mov,mp4,m4a,3gp,3g2,mj2",
+        "durationSeconds": 4.133333,
+        "video": "H.264 1280x720 yuv420p BT.709, 124 frames at constant 30/1 fps, time base 1/600, B frames present",
+        "audio": "AAC LC mono 44100 Hz, starts at 0 seconds",
+        "fullDecode": "success"
+      },
+      "intendedScenarios": [
+        "local media hash and stream probe",
+        "future isolated import, playback, trimming and source-audio preservation checks"
+      ],
+      "notEvidenceFor": [
+        "phone-captured VFR",
+        "screen recording",
+        "long-form playback or sync",
+        "licensed external reference video",
+        "real Provider generation",
+        "verified camera origin or publication rights"
+      ]
+    },
+    {
+      "id": "user-supplied-portrait-vfr",
+      "sha256": "8f13e3943c84623a7b21c48e13cf4c09615ac8f6490c4a387a7386354d1228fb",
+      "sizeBytes": 3680460,
+      "brief": "A portrait 9:16 social-video file selected by the user for private local ANCS media tests. Visible person and account overlay require private handling.",
+      "expected": {
+        "container": "mov,mp4,m4a,3gp,3g2,mj2",
+        "durationSeconds": 13.885011,
+        "video": "H.264 720x1280 yuv420p BT.709, video duration 13.816667 seconds, 742 frames, time base 1/15360, adjacent display PTS deltas 256 and 512 ticks, B frames present",
+        "audio": "AAC LC stereo 44100 Hz, starts at 0 seconds, duration 13.885011 seconds",
+        "fullDecode": "success"
+      },
+      "intendedScenarios": [
+        "local portrait aspect-ratio and VFR source-PTS checks",
+        "future isolated import, playback and audio/video endpoint checks"
+      ],
+      "notEvidenceFor": [
+        "native phone camera capture or original acquisition frame cadence",
+        "screen recording",
+        "long-form playback or sync",
+        "licensed external reference video or public fixture distribution",
+        "real Provider generation"
+      ]
+    }
+  ]
+}

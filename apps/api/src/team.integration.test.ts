@@ -4,8 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
-import { ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
+import { assignWorkspacePlan, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P09-04 验收（真实 DB + HTTP/SDK）：
@@ -24,6 +25,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let adminEmail = '';
+let adminTotpUri = '';
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
 
@@ -42,13 +44,15 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'team-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `team-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'team-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -79,7 +83,7 @@ async function newClientWithEmail(email: string, name = 'invitee'): Promise<Ancs
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 
@@ -159,7 +163,8 @@ describe('团队与隐私（P09-04）', () => {
     const pendingUser = await newClientWithEmail(pendingEmail, 'pending');
 
     // **降级**：FREE（席位 1）——存量 2 成员保留，进入超额清单
-    await admin.admin.assignPlan(workspace.id, { planKey: 'FREE', note: '降级验证' });
+    await expectApiError(admin.admin.assignPlan(workspace.id, { planKey: 'FREE', note: '降级验证' }), 403);
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'FREE', note: '降级验证', assignedBy: 'test-domain' });
     const entitlement = await owner.workspaces.entitlements(workspace.id);
     expect(entitlement.usage.seatsUsed).toBe(2);
     expect(entitlement.entitlements.seats).toBe(1);
@@ -178,7 +183,7 @@ describe('团队与隐私（P09-04）', () => {
     expect((await owner.workspaces.invitations.list(workspace.id)).find((item) => item.id === pendingInvite.id)?.status).toBe('PENDING');
 
     // 恢复升级（CREATOR seats=1 不够；STUDIO seats=10）→ 可继续接受、overCommitted 清空
-    await admin.admin.assignPlan(workspace.id, { planKey: 'STUDIO', note: '升级恢复' });
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'STUDIO', note: '升级恢复', assignedBy: 'test-domain' });
     const accepted = await pendingUser.invitations.accept(pendingInvite.id);
     expect(accepted.workspace.role).toBe('VIEWER');
     expect((await owner.workspaces.entitlements(workspace.id)).overCommitted).toEqual([]);
@@ -215,18 +220,19 @@ describe('团队与隐私（P09-04）', () => {
     expect((await owner.workspaces.get(workspace.id)).privacyTier).toBe('STANDARD');
 
     // FREE（privacyMode=false）→ 422（明确 reason；档位保持 STANDARD）
-    await admin.admin.assignPlan(workspace.id, { planKey: 'FREE' });
+    await expectApiError(admin.admin.assignPlan(workspace.id, { planKey: 'FREE' }), 403);
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'FREE', assignedBy: 'test-domain' });
     await expectApiError(owner.workspaces.setPrivacyTier(workspace.id, { privacyTier: 'PRIVATE' }), 422, 'PRIVACY_MODE_NOT_ALLOWED');
     expect((await owner.workspaces.get(workspace.id)).privacyTier).toBe('STANDARD');
 
     // STUDIO（privacyMode=true）→ 可设置
-    await admin.admin.assignPlan(workspace.id, { planKey: 'STUDIO' });
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'STUDIO', assignedBy: 'test-domain' });
     const updated = await owner.workspaces.setPrivacyTier(workspace.id, { privacyTier: 'PRIVATE' });
     expect(updated.privacyTier).toBe('PRIVATE');
     expect(await owner.workspaces.entitlements(workspace.id)).toMatchObject({ overCommitted: [] });
 
     // 降级 FREE：**档位不被静默改写**（仍 PRIVATE），但进入超额清单（运营/用户显式处理）
-    await admin.admin.assignPlan(workspace.id, { planKey: 'FREE' });
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'FREE', assignedBy: 'test-domain' });
     expect((await owner.workspaces.get(workspace.id)).privacyTier).toBe('PRIVATE');
     const entitlement = await owner.workspaces.entitlements(workspace.id);
     expect(entitlement.overCommitted).toContain('privacyMode');

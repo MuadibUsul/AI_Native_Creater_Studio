@@ -3,6 +3,7 @@
 import type { ReactElement } from 'react';
 import { ASPECT_RATIO_SIZES, DEFAULT_THEME_TOKENS, sceneRenderContextSchema, type AspectRatio } from '@ancs/contracts';
 import { getComponent, SceneThemeProvider } from '@ancs/scene-components';
+import ui from './Monochrome.module.css';
 
 /**
  * 场景缩略预览（P05-03；P05-04 将替换为 Remotion Player 时间轴预览）：
@@ -24,7 +25,7 @@ export function ScenePreview({ sceneType, componentVersion, props, durationMs, a
   const scale = width / ASPECT_RATIO_SIZES[aspectRatio].width;
   if (definition === null) {
     return (
-      <div data-state="unregistered" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className="flex items-center justify-center rounded border border-amber-700 bg-slate-900 text-xs text-amber-200">
+      <div data-state="unregistered" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className={`flex items-center justify-center text-xs ${ui['notice']}`}>
         组件未注册：{sceneType}
       </div>
     );
@@ -32,7 +33,7 @@ export function ScenePreview({ sceneType, componentVersion, props, durationMs, a
   const parsed = definition.inputSchema.safeParse(props);
   if (!parsed.success) {
     return (
-      <div data-state="invalid-props" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className="flex items-center justify-center rounded border border-rose-700 bg-slate-900 text-xs text-rose-200">
+      <div data-state="invalid-props" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className={`flex items-center justify-center text-xs ${ui['notice']}`}>
         props 未通过 {sceneType} 校验（编辑器需先修正）
       </div>
     );

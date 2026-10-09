@@ -1,0 +1,2 @@
+ALTER TABLE "media_index_entries" DROP CONSTRAINT "media_index_entries_kind_ck";--> statement-breakpoint
+ALTER TABLE "media_index_entries" ADD CONSTRAINT "media_index_entries_kind_ck" CHECK ("media_index_entries"."kind" in ('THUMBNAIL','WAVEFORM','SHOT','QUALITY','OBJECT_TRACK','ACTION_EVENT','PERSON_TRACK','VISUAL_EVENT','MOTION_INTENSITY','AUDIO_EVENT','MUSIC_BEAT'));

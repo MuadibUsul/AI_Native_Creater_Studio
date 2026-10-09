@@ -1,0 +1,2 @@
+ALTER TABLE "admin_emergency_grants" ADD CONSTRAINT "admin_emergency_no_self_review_check" CHECK ("admin_emergency_grants"."reviewed_by_principal_id" is null or "admin_emergency_grants"."reviewed_by_principal_id" <> "admin_emergency_grants"."principal_id");--> statement-breakpoint
+ALTER TABLE "admin_emergency_grants" ADD CONSTRAINT "admin_emergency_review_requires_verified_identity_check" CHECK ("admin_emergency_grants"."reviewed_at" is null and "admin_emergency_grants"."reviewed_by_principal_id" is null);

@@ -11,6 +11,8 @@ import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAiEditRoutes } from './routes/ai-edit.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerAppearanceRoutes } from './routes/appearance.js';
+import { registerOpsAuthRoutes } from './routes/ops-auth.js';
 import { registerBillingRoutes } from './routes/billing.js';
 import { registerCapabilityRoutes } from './routes/capabilities.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
@@ -165,11 +167,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const packPlugins = options.packs?.plugins ?? [createShortsAnalyzerPlugin(), createSocialVisualPlugin(), createTextPackPlugin()];
   const audioDeps = options.audio;
   if (authDeps !== undefined) {
+    const adminDeps = options.admin ?? createAdminDeps();
     registerAuth(app, authDeps);
     await app.register(
       async (instance) => {
         registerIdempotency(instance, authDeps);
-        registerAuthRoutes(instance, authDeps);
+        registerAuthRoutes(instance, authDeps, adminDeps);
+        registerAppearanceRoutes(instance, authDeps);
+        registerOpsAuthRoutes(instance, authDeps, adminDeps);
         registerWorkspaceRoutes(instance, authDeps);
         registerChannelRoutes(instance, authDeps);
         registerCreatorIdentityRoutes(instance, authDeps);
@@ -238,8 +243,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           registerAssetRoutes(instance, authDeps, storageDeps);
           registerApprovalRoutes(instance, authDeps, storageDeps);
         }
-        registerAdminGuard(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
-        registerAdminRoutes(instance, authDeps, options.admin ?? createAdminDeps(process.env['ANCS_PLATFORM_ADMINS']));
+        registerAdminGuard(instance, adminDeps);
+        registerAdminRoutes(instance, authDeps, adminDeps);
         registerAdminSecurityRoutes(instance, authDeps);
         registerAdminMetricsRoutes(instance, authDeps);
         registerPlanRoutes(instance, authDeps);

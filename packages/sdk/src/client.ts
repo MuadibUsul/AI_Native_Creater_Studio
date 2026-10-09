@@ -14,7 +14,16 @@ import {
   createChannelRequestSchema,
   createCreatorIdentityRequestSchema,
   assetDetailSchema,
+  assetLifecycleSchema,
+  assetPrivacyDeletionResultSchema,
+  assetRelinkComparisonSchema,
+  assetRelinkResultSchema,
+  assetRelinkStateSchema,
+  applyAssetRelinkRequestSchema,
+  preflightAssetRelinkRequestSchema,
   assetSchema,
+  requestAssetPrivacyDeletionSchema,
+  updateAssetRightsRequestSchema,
   billingStatusSchema,
   catalogResponseSchema,
   chartBindingCheckSchema,
@@ -37,6 +46,10 @@ import {
   renderApprovalSchema,
   exportPackageSchema,
   opsOverviewSchema,
+  opsJobSummarySchema,
+  opsProjectSummarySchema,
+  opsWorkspaceStorageSummarySchema,
+  opsSupportGrantSummarySchema,
   opsAuditEntrySchema,
   editPlanSchema,
   masterNarrationSchema,
@@ -116,13 +129,28 @@ import {
   createProjectRequestSchema,
   createProjectVersionRequestSchema,
   createUploadIntentRequestSchema,
+  completeUploadPartRequestSchema,
   confirmUploadRequestSchema,
   downloadUrlResponseSchema,
+  mediaPlaybackResponseSchema,
+  mediaIndexPageSchema,
+  unifiedMediaIndexPageSchema,
+  mediaEvidenceBundleSchema,
+  mediaAnalysisGraphSchema,
+  mediaRangeTagListSchema,
+  mediaRangeTagSchema,
+  mediaSegmentSearchResponseSchema,
+  createMediaRangeTagRequestSchema,
+  mediaTranscriptSchema,
   uploadIntentResponseSchema,
+  uploadIntentStatusSchema,
+  uploadPartTargetResponseSchema,
   createSceneRequestSchema,
   createSceneResponseSchema,
   editRequestSchema,
   editResponseSchema,
+  projectEditEventPageSchema,
+  projectStateSchema,
   createSpeechProfileRequestSchema,
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
@@ -136,8 +164,15 @@ import {
   revokeTokenRequestSchema,
   sceneGraphSchema,
   sessionInfoSchema,
+  userAppearancePreferenceSchema,
+  setUserAppearancePreferenceRequestSchema,
   signInRequestSchema,
   signInResponseSchema,
+  verifyTotpRequestSchema,
+  opsSessionSchema,
+  opsMfaEnrollmentRequestSchema,
+  opsMfaEnrollmentSchema,
+  opsRevokeSessionRequestSchema,
   speechProfileSchema,
   tokenRequestSchema,
   tokenResponseSchema,
@@ -149,6 +184,9 @@ import {
   addWorkspaceMemberRequestSchema,
   workspaceMemberSchema,
   workspaceWithRoleSchema,
+  workspaceFeatureListSchema,
+  workspaceFeatureSchema,
+  setWorkspaceFeatureRequestSchema,
   workspaceEntitlementSchema,
   planSchema,
   assignPlanRequestSchema,
@@ -201,19 +239,21 @@ import {
   auditLogEntrySchema,
   adminUserSummarySchema,
   adminWorkspaceSummarySchema,
-  adminProjectSummarySchema,
   adminProviderStatusSchema,
-  adminStorageSummarySchema,
   createInvitationRequestSchema,
   setPrivacyTierRequestSchema,
   type ClientType,
   type HealthResponse,
   type SessionInfo,
+  type UserAppearancePreference,
+  type SetUserAppearancePreferenceRequest,
   type SignInResponse,
   type SpeechProfile,
   type TokenResponse,
   type WorkspaceMember,
   type WorkspaceWithRole,
+  type WorkspaceFeature,
+  type WorkspaceFeatureKey,
   type WorkspaceInvitation,
   type MyInvitation,
   type VoiceClone,
@@ -244,9 +284,11 @@ import {
   type AuditLogEntry,
   type AdminUserSummary,
   type AdminWorkspaceSummary,
-  type AdminProjectSummary,
   type AdminProviderStatus,
-  type AdminStorageSummary,
+  type OpsProjectListQuery,
+  type OpsProjectSummary,
+  type OpsWorkspaceStorageSummary,
+  type OpsSupportGrantSummary,
   type PrivacyTier,
   type ChannelWithStyle,
   type ChannelStyleVersion,
@@ -256,6 +298,28 @@ import {
   type EditResponse,
   type Asset,
   type AssetDetail,
+  type AssetLifecycle,
+  type AssetPrivacyDeletionResult,
+  type AssetRelinkComparison,
+  type AssetRelinkResult,
+  type AssetRelinkState,
+  type ApplyAssetRelinkRequest,
+  type PreflightAssetRelinkRequest,
+  type RequestAssetPrivacyDeletion,
+  type UpdateAssetRightsRequest,
+  type MediaIndexPage,
+  type UnifiedMediaIndexPage,
+  type UnifiedMediaIndexKind,
+  type MediaEvidenceBundle,
+  type MediaEvidenceRequest,
+  type MediaAnalysisGraph,
+  type MediaAnalysisStageName,
+  type MediaRangeTag,
+  type MediaSegmentSearchResponse,
+  type CreateMediaRangeTagRequest,
+  type MediaTranscript,
+  type CorrectTranscriptSegmentRequest,
+  type UpdateTranscriptTerminologyRequest,
   type BillingStatus,
   type CatalogResponse,
   type ChartBindingCheck,
@@ -286,6 +350,8 @@ import {
   type RenderApproval,
   type ExportPackage,
   type OpsOverview,
+  type OpsJobSummary,
+  type OpsSession,
   type OpsAuditEntry,
   type RenderStatus,
   type EditPlan,
@@ -350,14 +416,20 @@ import {
   type Notification,
   type WorkspaceEvent,
   type ConfirmUploadRequest,
+  type CompleteUploadPartRequest,
   type CreateUploadIntentInput,
   type DownloadUrlResponse,
+  type MediaPlaybackResponse,
   type Project,
   type ProjectDetail,
+  type ProjectEditEventPage,
+  type ProjectState,
   type ProjectVersion,
   type ProjectVersionDetail,
   type SceneGraph,
   type UploadIntentResponse,
+  type UploadIntentStatus,
+  type UploadPartTargetResponse,
 } from '@ancs/contracts';
 
 /**
@@ -414,6 +486,41 @@ export interface MutationOptions {
   idempotencyKey?: string;
 }
 
+export interface UploadDataSource {
+  readonly size: number;
+  slice(start?: number, end?: number): Blob;
+}
+
+export interface ResumableUploadInput {
+  assetType: CreateUploadIntentInput['assetType'];
+  filename: string;
+  contentType: string;
+  data: UploadDataSource;
+  projectId?: string;
+  sceneId?: string;
+  license?: CreateUploadIntentInput['license'];
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  checksumSha256?: string;
+  /** 缺失版本恢复候选；仅当服务端确认目标对象缺失时跳过去重。 */
+  relinkTargetVersionId?: string;
+  /** 暂停后续传时复用原意图；服务端已确认分片不会重传。 */
+  resumeIntentId?: string;
+}
+
+export interface ResumableUploadOptions extends MutationOptions {
+  signal?: AbortSignal;
+  partSizeBytes?: number;
+  concurrency?: number;
+  onIntent?: (value: { intentId: string; assetId: string }) => void;
+  onProgress?: (value: { uploadedBytes: number; totalBytes: number; completedParts: number; partCount: number }) => void;
+}
+
+export type BatchUploadResult =
+  | { status: 'fulfilled'; filename: string; asset: AssetDetail }
+  | { status: 'rejected'; filename: string; error: unknown };
+
 export interface AuthorizeResult {
   /** 重定向地址（原样返回，便于客户端按环境打开浏览器） */
   location: string;
@@ -447,8 +554,11 @@ export interface AncsClient {
   health(): Promise<HealthResponse>;
   auth: {
     signIn(input: { email: string; password: string }): Promise<SignInResponse>;
+    verifyTotp(input: { code: string }): Promise<SignInResponse>;
     signOut(): Promise<void>;
     session(): Promise<SessionInfo>;
+    getAppearance(): Promise<UserAppearancePreference>;
+    setAppearance(input: SetUserAppearancePreferenceRequest): Promise<UserAppearancePreference>;
     authorize(input: {
       clientId: string;
       redirectUri: string;
@@ -478,6 +588,8 @@ export interface AncsClient {
     create(input: { name: string }, options?: MutationOptions): Promise<WorkspaceWithRole>;
     list(): Promise<WorkspaceWithRole[]>;
     get(workspaceId: string): Promise<WorkspaceWithRole>;
+    features(workspaceId: string): Promise<WorkspaceFeature[]>;
+    setFeature(workspaceId: string, featureKey: WorkspaceFeatureKey, enabled: boolean, options?: MutationOptions): Promise<WorkspaceFeature>;
     /** 当前权益 + 实时用量（P09-01；成员可读） */
     entitlements(workspaceId: string): Promise<WorkspaceEntitlement>;
     /** Scene Graph 导出（P10-06；可移植 JSON，无 URL/Secret） */
@@ -609,6 +721,10 @@ export interface AncsClient {
     get(projectId: string): Promise<ProjectDetail>;
     /** 组装后的 SceneGraph（由服务端规范化状态生成并通过契约校验） */
     graph(projectId: string): Promise<SceneGraph>;
+    /** 唯一权威 ProjectDocument、对象锁与事件水位线。 */
+    state(projectId: string, query?: { schemaVersion?: string }): Promise<ProjectState>;
+    /** 按单调 seq 增量读取正式 EditEvent。 */
+    editEvents(projectId: string, query?: { schemaVersion?: string; afterSeq?: number; limit?: number }): Promise<ProjectEditEventPage>;
     /** 渲染前预检（P07-05；项目当前状态，只读） */
     renderPrecheck(projectId: string): Promise<QaReport>;
     addScene(projectId: string, input: Record<string, unknown>, options?: MutationOptions): Promise<CreateSceneResponse>;
@@ -644,6 +760,15 @@ export interface AncsClient {
       input: CreateUploadIntentInput,
       options?: MutationOptions,
     ): Promise<UploadIntentResponse>;
+    getUploadIntent(workspaceId: string, intentId: string): Promise<UploadIntentStatus>;
+    createUploadPartTarget(workspaceId: string, intentId: string, partNumber: number): Promise<UploadPartTargetResponse>;
+    completeUploadPart(
+      workspaceId: string,
+      intentId: string,
+      partNumber: number,
+      input: CompleteUploadPartRequest,
+    ): Promise<UploadIntentStatus>;
+    cancelUpload(workspaceId: string, intentId: string): Promise<UploadIntentStatus>;
     /** 确认上传（服务端真实探测；重复确认幂等） */
     confirm(workspaceId: string, assetId: string, input: ConfirmUploadRequest, options?: MutationOptions): Promise<AssetDetail>;
     list(workspaceId: string, query?: { projectId?: string; assetType?: string; trashed?: boolean }): Promise<Asset[]>;
@@ -652,8 +777,39 @@ export interface AncsClient {
     /** 从 Trash 恢复资产 */
     restore(workspaceId: string, assetId: string, options?: MutationOptions): Promise<Asset>;
     get(workspaceId: string, assetId: string): Promise<AssetDetail>;
+    lifecycle(workspaceId: string, assetId: string): Promise<AssetLifecycle>;
+    updateRights(workspaceId: string, assetId: string, input: UpdateAssetRightsRequest, options?: MutationOptions): Promise<AssetLifecycle>;
+    requestPrivacyDeletion(workspaceId: string, assetId: string, input: RequestAssetPrivacyDeletion, options?: MutationOptions): Promise<AssetPrivacyDeletionResult>;
+    relinkState(workspaceId: string, assetId: string): Promise<AssetRelinkState>;
+    preflightRelink(workspaceId: string, assetId: string, input: PreflightAssetRelinkRequest): Promise<AssetRelinkComparison>;
+    applyRelink(workspaceId: string, assetId: string, input: ApplyAssetRelinkRequest, options?: MutationOptions): Promise<AssetRelinkResult>;
     /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
     downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
+    /** 播放 Signed URL：优先标准代理，必要时明确回退原件或返回尚未就绪状态。 */
+    playbackUrl(workspaceId: string, assetId: string): Promise<MediaPlaybackResponse>;
+    /** 重新生成失败或丢失的代理；原件不变。 */
+    rebuildProxy(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaPlaybackResponse>;
+    /** 分页读取源时间媒体索引。 */
+    mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
+    /** 统一读取所有媒体分析、转写和用户标记的来源证据。 */
+    mediaIndexRecords(workspaceId: string, assetId: string, query?: { kind?: UnifiedMediaIndexKind; sourceStartPts?: string; sourceEndPts?: string; timeBaseNumerator?: number; timeBaseDenominator?: number; cursor?: number; limit?: number }): Promise<UnifiedMediaIndexPage>;
+    /** 为 Director、选区或参考分析读取并复用同一份已授权范围证据。 */
+    mediaEvidence(workspaceId: string, assetId: string, query: MediaEvidenceRequest): Promise<MediaEvidenceBundle>;
+    analysisStages(workspaceId: string, assetId: string): Promise<MediaAnalysisGraph>;
+    rebuildAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, detectorConfigHash: string, options?: MutationOptions): Promise<MediaAnalysisGraph>;
+    cancelAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, options?: MutationOptions): Promise<MediaAnalysisGraph>;
+    /** 重新生成索引；原件与代理不变。 */
+    rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
+    /** 跨视觉、音频、转写和用户标签检索真实源片段。 */
+    searchSegments(workspaceId: string, query: { q: string; limit?: number }): Promise<MediaSegmentSearchResponse>;
+    listRangeTags(workspaceId: string, assetId: string): Promise<{ items: MediaRangeTag[] }>;
+    createRangeTag(workspaceId: string, assetId: string, input: CreateMediaRangeTagRequest, options?: MutationOptions): Promise<MediaRangeTag>;
+    deleteRangeTag(workspaceId: string, assetId: string, tagId: string, options?: MutationOptions): Promise<void>;
+    /** 读取机器转写及当前不可变校正版本。 */
+    transcript(workspaceId: string, assetId: string): Promise<MediaTranscript>;
+    retryTranscript(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaTranscript>;
+    correctTranscriptSegment(workspaceId: string, assetId: string, input: CorrectTranscriptSegmentRequest, options?: MutationOptions): Promise<MediaTranscript>;
+    updateTranscriptTerminology(workspaceId: string, assetId: string, input: UpdateTranscriptTerminologyRequest, options?: MutationOptions): Promise<MediaTranscript>;
     /**
      * 一体化上传：意图（客户端预计算 SHA-256 以支持去重）→ 直传 → 确认。
      * 命中去重时直接返回既有资产（不重复上传字节）。
@@ -675,6 +831,8 @@ export interface AncsClient {
       },
       options?: MutationOptions,
     ): Promise<AssetDetail>;
+    uploadResumable(workspaceId: string, input: ResumableUploadInput, options?: ResumableUploadOptions): Promise<AssetDetail>;
+    uploadBatch(workspaceId: string, inputs: ResumableUploadInput[], options?: ResumableUploadOptions): Promise<BatchUploadResult[]>;
   };
   events: {
     /** 游标快照（headSeq；从 head 起仅收新事件） */
@@ -721,6 +879,12 @@ export interface AncsClient {
     upsertWritebackTarget(workspaceId: string, input: UpsertCmsWritebackTargetRequest, options?: MutationOptions): Promise<CmsWritebackTarget>;
     listWritebackAttempts(workspaceId: string, query?: { deliveryId?: string; renderId?: string; limit?: number }): Promise<CmsWritebackAttemptList>;
     retryWriteback(workspaceId: string, deliveryId: string, options?: MutationOptions): Promise<RetryCmsWritebackResponse>;
+  };
+  ops: {
+    session(): Promise<OpsSession>;
+    enrollTotp(input: { password: string }): Promise<{ totpUri: string; backupCodes: string[] }>;
+    reauthenticate(input: { code: string }): Promise<OpsSession>;
+    revokeSession(input: { sessionId: string }): Promise<void>;
   };
   analytics: {
     attributeScenes(workspaceId: string, projectId: string, performanceId: string, options?: MutationOptions): Promise<{ items: ScenePerformanceRecord[] }>;
@@ -1011,12 +1175,12 @@ export interface AncsClient {
     retry(workspaceId: string, jobId: string, options?: MutationOptions): Promise<Job>;
   };
   /**
-   * 最小运营（P08-02 / §67）：仅**平台管理员**可用（部署配置 ANCS_PLATFORM_ADMINS；
-   * 非管理员调用 → 404 反枚举——与普通用户角色严格分离）。
+   * 运营 API：独立 principal、TOTP 验证后的 ops cookie 与环境绑定；
+   * 非管理员调用 → 404 反枚举，与普通工作区角色分离。
    */
   admin: {
     overview(): Promise<OpsOverview>;
-    jobs(query?: { status?: Job['status']; workspaceId?: string; limit?: number }): Promise<Job[]>;
+    jobs(query: { workspaceId: string; status?: Job['status']; limit?: number }): Promise<OpsJobSummary[]>;
     /** 人工重试（复用任务服务：预算/幂等/版本规则不变） */
     retryJob(jobId: string, input?: { reason?: string }, options?: MutationOptions): Promise<Job>;
     audit(query?: { limit?: number }): Promise<OpsAuditEntry[]>;
@@ -1033,12 +1197,12 @@ export interface AncsClient {
     users(query?: { query?: string; limit?: number }): Promise<AdminUserSummary[]>;
     /** Workspace 列表（套餐/用量/积分/限制状态/未解决标记） */
     workspaces(query?: { query?: string; limit?: number }): Promise<AdminWorkspaceSummary[]>;
-    /** Project 列表（查询标题/按 Workspace） */
-    projects(query?: { query?: string; workspaceId?: string; limit?: number }): Promise<AdminProjectSummary[]>;
+    /** 指定 Workspace 的项目状态摘要；不返回标题或内容。 */
+    projects(query: OpsProjectListQuery): Promise<OpsProjectSummary[]>;
     /** Provider 状态（近 7 天聚合） */
     providerStatus(): Promise<AdminProviderStatus>;
-    /** 存储用量（Top-N + 总量） */
-    storage(query?: { limit?: number }): Promise<AdminStorageSummary>;
+    /** 指定 Workspace 的存储用量，不返回资产名称或存储键。 */
+    storage(query: { workspaceId: string }): Promise<OpsWorkspaceStorageSummary>;
     /** 运营审计表（append-only） */
     auditLog(query?: { workspaceId?: string; action?: string; limit?: number }): Promise<AuditLogEntry[]>;
     /** 指定 Workspace 的 Credits 账单（平台视图） */
@@ -1050,11 +1214,11 @@ export interface AncsClient {
     /** 工作区限制状态（RESTRICTED = 阻止新的成本性任务） */
     setAbuseState(workspaceId: string, input: { abuseState: WorkspaceAbuseState; note: string }, options?: MutationOptions): Promise<{ workspaceId: string; abuseState: WorkspaceAbuseState }>;
     /** 支持访问授权（时限 ≤ 24h；不可无痕：审计 + 工作区可见事件） */
-    supportGrants(workspaceId: string): Promise<SupportAccessGrant[]>;
-    createSupportGrant(workspaceId: string, input: { purpose: string; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
+    supportGrants(workspaceId: string, ticketId: string): Promise<OpsSupportGrantSummary[]>;
+    createSupportGrant(workspaceId: string, input: { purpose: string; ticketId: string; beneficiaryPrincipalId: string; scope: 'SUMMARY_READ'; ttlHours?: number }, options?: MutationOptions): Promise<SupportAccessGrant>;
     revokeSupportGrant(grantId: string, options?: MutationOptions): Promise<SupportAccessGrant>;
     /** 支持视图（需有效授权；仅元数据摘要；每次访问留痕） */
-    supportView(workspaceId: string): Promise<SupportView>;
+    supportView(workspaceId: string, ticketId: string): Promise<SupportView>;
   };
   /** 套餐目录（P09-01；版本化、价格为数据） */
   plans: {
@@ -1132,7 +1296,7 @@ export function createClient(options: ClientOptions): AncsClient {
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     schema: ZodType<T>,
-    init?: { body?: unknown; bodySchema?: ZodType; idempotencyKey?: string },
+    init?: { body?: unknown; bodySchema?: ZodType; idempotencyKey?: string; signal?: AbortSignal },
   ): Promise<T> {
     // 请求体在异步边界内校验：非法输入以 rejection 呈现（而非同步抛出）
     const body = init?.body === undefined ? undefined : init.bodySchema ? init.bodySchema.parse(init.body) : init.body;
@@ -1141,6 +1305,7 @@ export function createClient(options: ClientOptions): AncsClient {
       headers: await buildHeaders(body !== undefined, init?.idempotencyKey),
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials,
+      signal: init?.signal,
     });
     captureCookies(response);
 
@@ -1197,17 +1362,134 @@ export function createClient(options: ClientOptions): AncsClient {
       .join('');
   };
 
+  const uploadResumableImpl = async (
+    workspaceId: string,
+    input: ResumableUploadInput,
+    options: ResumableUploadOptions = {},
+  ): Promise<AssetDetail> => {
+    const assertNotAborted = (): void => {
+      if (options.signal?.aborted === true) throw new DOMException('上传已暂停', 'AbortError');
+    };
+    assertNotAborted();
+    let intentId: string;
+    let assetId: string;
+    let status: UploadIntentStatus;
+    if (input.resumeIntentId !== undefined) {
+      status = await request(
+        'GET',
+        `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${input.resumeIntentId}`,
+        uploadIntentStatusSchema,
+        { signal: options.signal },
+      );
+      if (status.status !== 'PENDING') throw new Error(`上传意图不可续传：${status.status}`);
+      intentId = status.intentId;
+      assetId = status.assetId;
+    } else {
+      const intent = await request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
+        body: {
+          assetType: input.assetType,
+          filename: input.filename,
+          contentType: input.contentType,
+          sizeBytes: input.data.size,
+          projectId: input.projectId,
+          sceneId: input.sceneId,
+          license: input.license,
+          checksumSha256: input.checksumSha256,
+          uploadMode: 'MULTIPART',
+          partSizeBytes: options.partSizeBytes,
+          relinkTargetVersionId: input.relinkTargetVersionId,
+        },
+        bodySchema: createUploadIntentRequestSchema,
+        idempotencyKey: options.idempotencyKey,
+        signal: options.signal,
+      });
+      if (intent.deduped) {
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}`, assetDetailSchema, { signal: options.signal });
+      }
+      if (intent.intentId === null) throw new Error('分片上传意图缺少 intentId');
+      intentId = intent.intentId;
+      assetId = intent.asset.id;
+      status = await request('GET', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema, {
+        signal: options.signal,
+      });
+    }
+    options.onIntent?.({ intentId, assetId });
+    if (status.uploadMode !== 'MULTIPART' || status.partSizeBytes === null || status.partCount === null) {
+      throw new Error('上传意图不是可恢复分片模式');
+    }
+    const completed = new Set(status.parts.filter((part) => part.status === 'COMPLETED').map((part) => part.partNumber));
+    let uploadedBytes = status.parts
+      .filter((part) => part.status === 'COMPLETED')
+      .reduce((sum, part) => sum + (part.sizeBytes ?? 0), 0);
+    const report = (): void =>
+      options.onProgress?.({ uploadedBytes, totalBytes: input.data.size, completedParts: completed.size, partCount: status.partCount! });
+    report();
+    const pending = Array.from({ length: status.partCount }, (_, index) => index + 1).filter((partNumber) => !completed.has(partNumber));
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = cursor++;
+        const partNumber = pending[index];
+        if (partNumber === undefined) return;
+        assertNotAborted();
+        const start = (partNumber - 1) * status.partSizeBytes!;
+        const end = Math.min(start + status.partSizeBytes!, input.data.size);
+        const bytes = new Uint8Array(await input.data.slice(start, end).arrayBuffer());
+        const checksumSha256 = await sha256Hex(bytes);
+        if (checksumSha256 === null) throw new Error('当前环境不支持 SHA-256，无法校验上传分片');
+        const target = await request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}`,
+          uploadPartTargetResponseSchema,
+          { signal: options.signal },
+        );
+        if (!target.alreadyCompleted) {
+          if (target.upload === null) throw new Error('分片上传目标缺失');
+          const response = await doFetch(target.upload.url, {
+            method: target.upload.method,
+            headers: target.upload.headers,
+            body: bytes,
+            signal: options.signal,
+          });
+          if (!response.ok) throw new Error(`分片 ${String(partNumber)} 直传失败：HTTP ${String(response.status)}`);
+          await request(
+            'POST',
+            `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}/complete`,
+            uploadIntentStatusSchema,
+            { body: { checksumSha256 }, bodySchema: completeUploadPartRequestSchema, signal: options.signal },
+          );
+        }
+        completed.add(partNumber);
+        uploadedBytes += end - start;
+        report();
+      }
+    };
+    const concurrency = Math.min(Math.max(options.concurrency ?? 3, 1), 6, Math.max(pending.length, 1));
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    assertNotAborted();
+    return request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/confirm`, assetDetailSchema, {
+      body: { durationMs: input.durationMs, width: input.width, height: input.height },
+      bodySchema: confirmUploadRequestSchema,
+      idempotencyKey: options.idempotencyKey,
+      signal: options.signal,
+    });
+  };
+
   return {
     health: () => request('GET', '/api/v1/health', healthResponseSchema),
 
     auth: {
       signIn: (input) =>
         request('POST', '/api/v1/auth/sign-in', signInResponseSchema, { body: input, bodySchema: signInRequestSchema }),
+      verifyTotp: (input) =>
+        request('POST', '/api/v1/auth/verify-totp', signInResponseSchema, { body: input, bodySchema: verifyTotpRequestSchema }),
       signOut: async () => {
         await request('POST', '/api/v1/auth/sign-out', emptySchema);
         cookieJar.clear();
       },
       session: () => request('GET', '/api/v1/auth/session', sessionInfoSchema),
+      getAppearance: () => request('GET', '/api/v1/users/me/appearance', userAppearancePreferenceSchema),
+      setAppearance: (input) => request('PUT', '/api/v1/users/me/appearance', userAppearancePreferenceSchema, { body: input, bodySchema: setUserAppearancePreferenceRequestSchema }),
       authorize: async (input) => {
         const query = nativeAuthorizeQuerySchema.parse({
           responseType: 'code',
@@ -1391,6 +1673,21 @@ export function createClient(options: ClientOptions): AncsClient {
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },
+
+    ops: {
+      session: () => request('GET', '/api/v1/ops/session', opsSessionSchema),
+      enrollTotp: (input) => request('POST', '/api/v1/ops/mfa/enroll', opsMfaEnrollmentSchema, {
+        body: input, bodySchema: opsMfaEnrollmentRequestSchema,
+      }),
+      reauthenticate: (input) => request('POST', '/api/v1/ops/reauth', opsSessionSchema, {
+        body: input, bodySchema: verifyTotpRequestSchema,
+      }),
+      revokeSession: async (input) => {
+        await request('POST', '/api/v1/ops/sessions/revoke', emptySchema, {
+          body: input, bodySchema: opsRevokeSessionRequestSchema,
+        });
+      },
+    },
     analytics: {
       attributeScenes: (workspaceId, projectId, performanceId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/analytics/performance/${performanceId}/attribute-scenes`, scenePerformanceListSchema, {
@@ -1462,6 +1759,13 @@ export function createClient(options: ClientOptions): AncsClient {
       list: async () =>
         (await request('GET', '/api/v1/workspaces', listOf(workspaceWithRoleSchema))).items,
       get: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}`, workspaceWithRoleSchema),
+      features: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/features`, workspaceFeatureListSchema)).items,
+      setFeature: (workspaceId, featureKey, enabled, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/features/${featureKey}`, workspaceFeatureSchema, {
+          body: { enabled }, bodySchema: setWorkspaceFeatureRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
       entitlements: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/entitlements`, workspaceEntitlementSchema),
       graphExport: (workspaceId, projectId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/graph-export`, graphExportSchema),
@@ -1691,6 +1995,20 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/projects/${projectId}/restore`, projectSchema, { idempotencyKey: mutation?.idempotencyKey }),
       get: (projectId) => request('GET', `/api/v1/projects/${projectId}`, projectDetailSchema),
       graph: (projectId) => request('GET', `/api/v1/projects/${projectId}/graph`, sceneGraphSchema),
+      state: (projectId, query) => {
+        const params = new URLSearchParams();
+        if (query?.schemaVersion !== undefined) params.set('schemaVersion', query.schemaVersion);
+        const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+        return request('GET', `/api/v1/projects/${projectId}/state${suffix}`, projectStateSchema);
+      },
+      editEvents: (projectId, query) => {
+        const params = new URLSearchParams();
+        if (query?.schemaVersion !== undefined) params.set('schemaVersion', query.schemaVersion);
+        if (query?.afterSeq !== undefined) params.set('afterSeq', String(query.afterSeq));
+        if (query?.limit !== undefined) params.set('limit', String(query.limit));
+        const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+        return request('GET', `/api/v1/projects/${projectId}/edit-events${suffix}`, projectEditEventPageSchema);
+      },
       /** 渲染前预检（P07-05；项目当前状态，只读） */
       renderPrecheck: (projectId: string) => request('GET', `/api/v1/projects/${projectId}/render-precheck`, qaReportSchema),
       addScene: (projectId, input, mutation) =>
@@ -1745,6 +2063,23 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: createUploadIntentRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
+      getUploadIntent: (workspaceId, intentId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema),
+      createUploadPartTarget: (workspaceId, intentId, partNumber) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}`,
+          uploadPartTargetResponseSchema,
+        ),
+      completeUploadPart: (workspaceId, intentId, partNumber, input) =>
+        request(
+          'POST',
+          `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}/parts/${String(partNumber)}/complete`,
+          uploadIntentStatusSchema,
+          { body: input, bodySchema: completeUploadPartRequestSchema },
+        ),
+      cancelUpload: (workspaceId, intentId) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/upload-intents/${intentId}`, uploadIntentStatusSchema),
       confirm: (workspaceId, assetId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/confirm`, assetDetailSchema, {
           body: input,
@@ -1768,50 +2103,103 @@ export function createClient(options: ClientOptions): AncsClient {
           idempotencyKey: mutation?.idempotencyKey,
         }),
       get: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}`, assetDetailSchema),
+      lifecycle: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/lifecycle`, assetLifecycleSchema),
+      updateRights: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/rights`, assetLifecycleSchema, {
+        body: input, bodySchema: updateAssetRightsRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
+      requestPrivacyDeletion: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/privacy-deletion`, assetPrivacyDeletionResultSchema, {
+        body: input, bodySchema: requestAssetPrivacyDeletionSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
+      relinkState: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink-state`, assetRelinkStateSchema),
+      preflightRelink: (workspaceId, assetId, input) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink-preflight`, assetRelinkComparisonSchema, {
+        body: input, bodySchema: preflightAssetRelinkRequestSchema,
+      }),
+      applyRelink: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink`, assetRelinkResultSchema, {
+        body: input, bodySchema: applyAssetRelinkRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),
-      upload: async (workspaceId, input, mutation) => {
-        const checksumSha256 = await sha256Hex(input.data);
-        const intent = await request('POST', `/api/v1/workspaces/${workspaceId}/assets/upload-intents`, uploadIntentResponseSchema, {
-          body: {
-            assetType: input.assetType,
-            filename: input.filename,
-            contentType: input.contentType,
-            sizeBytes: input.data.byteLength,
-            ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
-            ...(input.sceneId !== undefined ? { sceneId: input.sceneId } : {}),
-            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
-            ...(input.license !== undefined ? { license: input.license } : {}),
-          },
-          bodySchema: createUploadIntentRequestSchema,
+      playbackUrl: (workspaceId, assetId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/playback-url`, mediaPlaybackResponseSchema),
+      rebuildProxy: (workspaceId, assetId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/proxy/rebuild`, mediaPlaybackResponseSchema, {
           idempotencyKey: mutation?.idempotencyKey,
-        });
-        if (intent.deduped) {
-          return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}`, assetDetailSchema);
-        }
-        if (intent.upload === null) {
-          throw new Error('上传意图缺少直传目标（协议不一致）');
-        }
-        // body 用 ArrayBuffer：跨 node/DOM 类型的 BodyInit 均兼容（Uint8Array<ArrayBufferLike> 在 DOM 类型下不被接受）
-        const uploadBody = new Uint8Array(input.data).buffer;
-        const uploadResponse = await doFetch(intent.upload.url, {
-          method: intent.upload.method,
-          headers: intent.upload.headers,
-          body: uploadBody,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`直传失败：HTTP ${String(uploadResponse.status)}`);
-        }
-        return request('POST', `/api/v1/workspaces/${workspaceId}/assets/${intent.asset.id}/confirm`, assetDetailSchema, {
-          body: {
-            ...(checksumSha256 !== null ? { checksumSha256 } : {}),
-            width: input.width ?? undefined,
-            height: input.height ?? undefined,
-            durationMs: input.durationMs ?? undefined,
+        }),
+      mediaIndex: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams();
+        if (query?.kind !== undefined) search.set('kind', query.kind);
+        if (query?.cursor !== undefined) search.set('cursor', query.cursor);
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index${search.size > 0 ? `?${search.toString()}` : ''}`, mediaIndexPageSchema);
+      },
+      mediaIndexRecords: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams();
+        if (query?.kind !== undefined) search.set('kind', query.kind);
+        if (query?.sourceStartPts !== undefined) search.set('sourceStartPts', query.sourceStartPts);
+        if (query?.sourceEndPts !== undefined) search.set('sourceEndPts', query.sourceEndPts);
+        if (query?.timeBaseNumerator !== undefined) search.set('timeBaseNumerator', String(query.timeBaseNumerator));
+        if (query?.timeBaseDenominator !== undefined) search.set('timeBaseDenominator', String(query.timeBaseDenominator));
+        if (query?.cursor !== undefined) search.set('cursor', String(query.cursor));
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index-records${search.size > 0 ? `?${search.toString()}` : ''}`, unifiedMediaIndexPageSchema);
+      },
+      mediaEvidence: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams({ consumer: query.consumer, analysisConfigHash: query.analysisConfigHash });
+        if (query.kind !== undefined) search.set('kind', query.kind);
+        if (query.sourceStartPts !== undefined) search.set('sourceStartPts', query.sourceStartPts);
+        if (query.sourceEndPts !== undefined) search.set('sourceEndPts', query.sourceEndPts);
+        if (query.timeBaseNumerator !== undefined) search.set('timeBaseNumerator', String(query.timeBaseNumerator));
+        if (query.timeBaseDenominator !== undefined) search.set('timeBaseDenominator', String(query.timeBaseDenominator));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-evidence?${search.toString()}`, mediaEvidenceBundleSchema);
+      },
+      analysisStages: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages`, mediaAnalysisGraphSchema),
+      rebuildAnalysisStage: (workspaceId, assetId, stage, detectorConfigHash, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages/${stage}/rebuild`, mediaAnalysisGraphSchema, { body: { detectorConfigHash }, idempotencyKey: mutation?.idempotencyKey }),
+      cancelAnalysisStage: (workspaceId, assetId, stage, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages/${stage}/cancel`, mediaAnalysisGraphSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      rebuildMediaIndex: (workspaceId, assetId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      searchSegments: (workspaceId, query) => {
+        const search = new URLSearchParams({ q: query.q });
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/segment-search?${search.toString()}`, mediaSegmentSearchResponseSchema);
+      },
+      listRangeTags: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags`, mediaRangeTagListSchema),
+      createRangeTag: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags`, mediaRangeTagSchema, { body: input, bodySchema: createMediaRangeTagRequestSchema, idempotencyKey: mutation?.idempotencyKey }),
+      deleteRangeTag: (workspaceId, assetId, tagId, mutation) => request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags/${tagId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
+      transcript: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript`, mediaTranscriptSchema),
+      retryTranscript: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/retry`, mediaTranscriptSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      correctTranscriptSegment: (workspaceId, assetId, input, mutation) => request('PATCH', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/segments`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
+      updateTranscriptTerminology: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/terminology`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
+      upload: async (workspaceId, input, mutation) =>
+        uploadResumableImpl(
+          workspaceId,
+          {
+            ...input,
+            checksumSha256: await sha256Hex(input.data) ?? undefined,
+            data: {
+              size: input.data.byteLength,
+              slice: (start = 0, end = input.data.byteLength) => {
+                const source = input.data.subarray(start, end);
+                const copy = new Uint8Array(source.byteLength);
+                copy.set(source);
+                return new Blob([copy.buffer], { type: input.contentType });
+              },
+            },
           },
-          bodySchema: confirmUploadRequestSchema,
-          idempotencyKey: mutation?.idempotencyKey,
-        });
+          mutation,
+        ),
+      uploadResumable: (workspaceId, input, options) => uploadResumableImpl(workspaceId, input, options),
+      uploadBatch: async (workspaceId, inputs, options) => {
+        const results: BatchUploadResult[] = [];
+        // 逐文件建立意图，避免并发额度检查越过 workspace 上限；单文件内部仍按分片限并发。
+        for (const input of inputs) {
+          try {
+            const asset = await uploadResumableImpl(workspaceId, input, options);
+            results.push({ status: 'fulfilled', filename: input.filename, asset });
+          } catch (error) {
+            results.push({ status: 'rejected', filename: input.filename, error });
+          }
+        }
+        return results;
       },
     },
 
@@ -2260,11 +2648,10 @@ export function createClient(options: ClientOptions): AncsClient {
       overview: () => request('GET', '/api/v1/admin/overview', opsOverviewSchema),
       jobs: async (query) => {
         const search = new URLSearchParams();
-        if (query?.status !== undefined) search.set('status', query.status);
-        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
-        if (query?.limit !== undefined) search.set('limit', String(query.limit));
-        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
-        return (await request('GET', `/api/v1/admin/jobs${suffix}`, z.object({ items: z.array(jobSchemaForGeneration) }))).items;
+        search.set('workspaceId', query.workspaceId);
+        if (query.status !== undefined) search.set('status', query.status);
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return (await request('GET', `/api/v1/admin/jobs?${search.toString()}`, z.object({ items: z.array(opsJobSummarySchema) }))).items;
       },
       retryJob: (jobId, input, mutation) =>
         request('POST', `/api/v1/admin/jobs/${jobId}/retry`, jobSchemaForGeneration, {
@@ -2310,17 +2697,13 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       projects: async (query) => {
         const search = new URLSearchParams();
-        if (query?.query !== undefined) search.set('query', query.query);
-        if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
-        if (query?.limit !== undefined) search.set('limit', String(query.limit));
-        const suffix = search.size === 0 ? '' : `?${search.toString()}`;
-        return (await request('GET', `/api/v1/admin/projects${suffix}`, z.object({ items: z.array(adminProjectSummarySchema) }))).items;
+        search.set('workspaceId', query.workspaceId);
+        if (query.status !== undefined) search.set('status', query.status);
+        if (query.limit !== undefined) search.set('limit', String(query.limit));
+        return (await request('GET', `/api/v1/admin/projects?${search.toString()}`, z.object({ items: z.array(opsProjectSummarySchema) }))).items;
       },
       providerStatus: () => request('GET', '/api/v1/admin/provider-status', adminProviderStatusSchema),
-      storage: (query) => {
-        const suffix = query?.limit === undefined ? '' : `?limit=${String(query.limit)}`;
-        return request('GET', `/api/v1/admin/storage${suffix}`, adminStorageSummarySchema);
-      },
+      storage: (query) => request('GET', `/api/v1/admin/storage?workspaceId=${encodeURIComponent(query.workspaceId)}`, opsWorkspaceStorageSummarySchema),
       auditLog: async (query) => {
         const search = new URLSearchParams();
         if (query?.workspaceId !== undefined) search.set('workspaceId', query.workspaceId);
@@ -2356,8 +2739,8 @@ export function createClient(options: ClientOptions): AncsClient {
           bodySchema: setWorkspaceAbuseStateRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      supportGrants: async (workspaceId) =>
-        (await request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, z.object({ items: z.array(supportAccessGrantSchema) }))).items,
+      supportGrants: async (workspaceId, ticketId) =>
+        (await request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-grants?ticketId=${encodeURIComponent(ticketId)}`, z.object({ items: z.array(opsSupportGrantSummarySchema) }))).items,
       createSupportGrant: (workspaceId, input, mutation) =>
         request('POST', `/api/v1/admin/workspaces/${workspaceId}/support-grants`, supportAccessGrantSchema, {
           body: input,
@@ -2368,7 +2751,7 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/admin/support-grants/${grantId}/revoke`, supportAccessGrantSchema, {
           idempotencyKey: mutation?.idempotencyKey,
         }),
-      supportView: (workspaceId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-view`, supportViewSchema),
+      supportView: (workspaceId, ticketId) => request('GET', `/api/v1/admin/workspaces/${workspaceId}/support-view?ticketId=${encodeURIComponent(ticketId)}`, supportViewSchema),
     },
     plans: {
       list: async (query) => {

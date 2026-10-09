@@ -3,13 +3,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
+import { applyAppearance, deviceAppearance, saveDeviceAppearance, type AppearanceMode } from '@/lib/appearance';
 import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from './QuietIcon';
 
-type WorkspaceSelection = { workspaceId: string | null; selectWorkspace: (id: string) => void; toggleTheme: () => void; openHelp: () => void };
-const WorkspaceSelectionContext = createContext<WorkspaceSelection>({ workspaceId: null, selectWorkspace: () => undefined, toggleTheme: () => undefined, openHelp: () => undefined });
+type WorkspaceSelection = {
+  workspaceId: string | null; selectWorkspace: (id: string) => void;
+  appearanceMode: AppearanceMode; accountAppearanceMode: AppearanceMode; deviceOverride: AppearanceMode | null;
+  appearancePending: boolean; appearanceError: boolean;
+  refetchAppearance: () => void;
+  setAccountAppearance: (mode: AppearanceMode) => Promise<void>;
+  setDeviceOverride: (mode: AppearanceMode | null) => void;
+  toggleTheme: () => void; openHelp: () => void;
+};
+const WorkspaceSelectionContext = createContext<WorkspaceSelection>({
+  workspaceId: null, selectWorkspace: () => undefined, appearanceMode: 'system', accountAppearanceMode: 'system', deviceOverride: null,
+  appearancePending: false, appearanceError: false, refetchAppearance: () => undefined, setAccountAppearance: async () => undefined, setDeviceOverride: () => undefined,
+  toggleTheme: () => undefined, openHelp: () => undefined,
+});
 export const useWorkspaceSelection = () => useContext(WorkspaceSelectionContext);
 
 const LABELS: Record<string, string> = {
@@ -28,13 +41,29 @@ function Brand({ href = '/' }: { href?: string }) {
 
 function PrivateShell({ children, pathname }: { children: ReactNode; pathname: string }) {
   const client = useAncsClient();
+  const queryClient = useQueryClient();
   const session = useSession();
+  const userId = session.data?.user?.id ?? null;
+  const accountAppearance = useQuery({
+    queryKey: ['user', userId, 'appearance'],
+    queryFn: () => client.auth.getAppearance(),
+    enabled: userId !== null,
+  });
   const workspaces = useWorkspaces();
+  const opsSession = useQuery({
+    queryKey: ['ops', 'session'],
+    queryFn: () => client.ops.session(),
+    enabled: userId !== null,
+    retry: false,
+    staleTime: 30_000,
+  });
   const [chosenWorkspaceId, setChosenWorkspaceId] = useState<string | null>(null);
   const [panel, setPanel] = useState<'workspace' | 'command' | 'notifications' | 'help' | null>(null);
   const [command, setCommand] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [deviceOverride, setDeviceOverrideState] = useState<AppearanceMode | null>(null);
+  const accountAppearanceMode = accountAppearance.data?.mode ?? 'system';
+  const appearanceMode = deviceOverride ?? accountAppearanceMode;
   const triggerRef = useRef<HTMLElement | null>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -70,14 +99,19 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     if (requested && workspaces.data.some((item) => item.id === requested)) setChosenWorkspaceId(requested);
   }, [pathname, workspaces.data]);
   useEffect(() => {
-    const saved = window.localStorage.getItem('ancs-qf-theme');
-    if (saved === 'dark') setTheme('dark');
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    const onSystemChange = () => {
+      if (document.body.dataset['appearanceMode'] === 'system') applyAppearance('system');
+    };
+    media?.addEventListener('change', onSystemChange);
+    return () => media?.removeEventListener('change', onSystemChange);
   }, []);
   useEffect(() => {
-    document.body.classList.toggle('theme-dark', theme === 'dark');
-    window.localStorage.setItem('ancs-qf-theme', theme);
-    return () => document.body.classList.remove('theme-dark');
-  }, [theme]);
+    if (session.isPending) return;
+    const override = userId ? deviceAppearance(userId) : null;
+    setDeviceOverrideState(override);
+    if (override !== null || !userId || (!accountAppearance.isPending && !accountAppearance.isError)) applyAppearance(override ?? accountAppearanceMode);
+  }, [session.isPending, userId, accountAppearance.isPending, accountAppearance.isError, accountAppearanceMode]);
   useEffect(() => {
     setMobileOpen(false);
     setPanel(null);
@@ -136,6 +170,17 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     setChosenWorkspaceId(id);
     if (pathname === '/') window.history.replaceState(null, '', `/?workspaceId=${encodeURIComponent(id)}`);
   };
+  const setDeviceOverride = (mode: AppearanceMode | null) => {
+    setDeviceOverrideState(mode);
+    applyAppearance(mode ?? accountAppearanceMode);
+    if (userId) saveDeviceAppearance(userId, mode);
+  };
+  const setAccountAppearance = async (mode: AppearanceMode) => {
+    const saved = await client.auth.setAppearance({ mode });
+    queryClient.setQueryData(['user', userId, 'appearance'], saved);
+    if (deviceOverride === null) applyAppearance(saved.mode);
+  };
+  const toggleTheme = () => setDeviceOverride(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
   const workspaceLinks = workspaceId ? [
     { href: homeHref, label: '创作台', icon: 'grid' },
     { href: `${base}/assets`, label: '素材库', icon: 'folder' },
@@ -157,12 +202,16 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
       { href: `${base}/team`, label: '团队', icon: 'voice' },
       { href: `${base}/billing`, label: '账单', icon: 'file' },
     ] : []),
+    ...(opsSession.data ? [{ href: '/admin', label: '运营诊断', icon: 'shield' }] : []),
   ];
 
-  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, toggleTheme: () => setTheme((current) => current === 'light' ? 'dark' : 'light'), openHelp: () => open('help') }}>
+  return <WorkspaceSelectionContext.Provider value={{ workspaceId, selectWorkspace, appearanceMode, accountAppearanceMode, deviceOverride, appearancePending: session.isPending || (userId !== null && accountAppearance.isPending), appearanceError: accountAppearance.isError, refetchAppearance: () => { void accountAppearance.refetch(); }, setAccountAppearance, setDeviceOverride, toggleTheme, openHelp: () => open('help') }}>
     <div className="app">
       <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="主导航" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen ? 'true' : undefined}>
-        <Brand href={homeHref} />
+        <div className="qf-sidebar-head">
+          <Brand href={homeHref} />
+          <button type="button" className="btn icononly ghost qf-sidebar-close" aria-label="关闭导航" onClick={() => setMobileOpen(false)}><QuietIcon name="close" /></button>
+        </div>
         <button type="button" className="workspace-switch" onClick={() => open('workspace')} aria-label="切换工作区">
           <span className="circle">{initial}</span><span className="grow small">{workspaceName}</span><QuietIcon name="down" />
         </button>
@@ -176,13 +225,14 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
         <div className="sidebottom">
           <button type="button" className="navitem" aria-label="快速搜索" onClick={() => open('command')}><QuietIcon name="search" /><span className="grow">快速搜索</span><span className="kbd">⌘ K</span></button>
           {workspaceId ? <Link href={`${base}/settings`} className={`navitem ${pathname.includes('/settings') ? 'active' : ''}`} aria-label="设置与用量"><QuietIcon name="settings" /><span>设置与用量</span></Link> : null}
+          {opsSession.data ? <Link href="/admin" className={`navitem ${pathname === '/admin' ? 'active' : ''}`} aria-label="运营诊断"><QuietIcon name="shield" /><span>运营诊断</span></Link> : null}
           <button type="button" className="navitem" aria-label="帮助与快捷键" onClick={() => open('help')}><QuietIcon name="help" /><span>帮助与快捷键</span></button>
           <div className="userrow"><span className="circle">{userName.slice(0, 1).toUpperCase()}</span><span className="grow"><strong className="small">{userName}</strong><br /><span className="small muted">{workspaceName}</span></span></div>
         </div>
       </aside>
       <header className="topbar">
         <div className="row"><button ref={mobileTriggerRef} type="button" className="btn icononly ghost mobile-menu" aria-label={mobileOpen ? '关闭导航' : '打开导航'} onClick={() => setMobileOpen(!mobileOpen)}><QuietIcon name={mobileOpen ? 'close' : 'menu'} /></button><div className="breadcrumb"><span className="desktop-only">工作空间</span><QuietIcon name="chevron" className="desktop-only" /><strong>{title}</strong></div></div>
-        <div className="top-actions"><button type="button" className="btn icononly ghost desktop-only" aria-label="切换浅深色" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}><QuietIcon name="sun" /></button><button type="button" className="btn icononly ghost" aria-label="打开任务通知" onClick={() => open('notifications')}><QuietIcon name="bell" /></button><span className="circle" style={{ width: 28, height: 28 }}>{userName.slice(0, 1).toUpperCase()}</span></div>
+        <div className="top-actions"><button type="button" className="btn icononly ghost desktop-only" aria-label="切换浅深色" onClick={toggleTheme}><QuietIcon name="sun" /></button><button type="button" className="btn icononly ghost" aria-label="打开任务通知" onClick={() => open('notifications')}><QuietIcon name="bell" /></button><span className="circle" style={{ width: 28, height: 28 }}>{userName.slice(0, 1).toUpperCase()}</span></div>
       </header>
       <main id="main" className={pathname.includes('/storyboard') || pathname.includes('/editor') ? 'editor-page' : ''}>{children}</main>
     </div>

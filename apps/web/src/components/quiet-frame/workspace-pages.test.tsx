@@ -81,6 +81,27 @@ describe('Quiet Frame 工作区与公开页', () => {
     await waitFor(() => expect(setBudget).toHaveBeenCalledWith('ws_1', { period: 'MONTHLY', limitCredits: 25, perJobMaxCredits: 0 }));
   });
 
+  it('新能力页显示服务端有效状态，选择偏好不会冒充能力已发布', async () => {
+    const setFeature = vi.fn().mockResolvedValue({});
+    const feature = {
+      key: 'V04_MEDIA_EDITING', label: '素材剪辑', description: '纯素材导入、预览与非破坏性剪辑。',
+      platforms: ['WEB'], minimumCapabilityLevel: 'INTERNAL_VALIDATED', releaseGate: 'G0', releaseReady: false,
+      requestedEnabled: false, effectiveState: 'OFF', reason: 'WORKSPACE_DISABLED', updatedAt: null,
+    };
+    const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ name: '工作区', role: 'OWNER', privacyTier: 'STANDARD' }), features: vi.fn().mockResolvedValue([feature]), setFeature },
+      providerConnections: { list: vi.fn().mockResolvedValue([]) },
+      providerSettings: { list: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<WorkspaceSettings workspaceId="ws_1" />, client);
+    await userEvent.click(screen.getByRole('button', { name: '新能力' }));
+    await screen.findByText('素材剪辑');
+    expect(screen.getByText('未选择')).toBeTruthy();
+    expect(screen.getByText(/选择不会触发生成、扣费或改写旧项目/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '选择此能力' }));
+    await waitFor(() => expect(setFeature).toHaveBeenCalledWith('ws_1', 'V04_MEDIA_EDITING', true));
+  });
+
   it('BYOK 密钥只在创建请求中提交一次，响应仅显示掩码', async () => {
     const fixture = 'synthetic-ui-value';
     const create = vi.fn().mockResolvedValue({ id: 'pcon_1', maskedToken: '••••abcd' });
@@ -100,14 +121,21 @@ describe('Quiet Frame 工作区与公开页', () => {
     expect(screen.queryByText(fixture)).toBeNull();
   });
 
-  it('欢迎页的入口可导航，设计系统中的操作样本不伪装成真实数据', () => {
-    const client = mockClient({});
+  it('欢迎页匿名入口前往登录，设计系统中的操作样本不伪装成真实数据', () => {
+    const client = mockClient({ auth: { session: vi.fn().mockRejectedValue(new Error('未登录')) } });
     const landing = renderWithClient(<WelcomePage />, client);
-    expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/');
-    expect(screen.getByLabelText('静态产品界面示意，不含真实项目数据')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/sign-in');
+    expect(screen.getByRole('link', { name: /进入工作室/ }).getAttribute('href')).toBe('/sign-in');
+    expect(screen.getByLabelText('导演工作台布局示意，未载入真实素材或任务')).toBeTruthy();
     landing.unmount();
     renderWithClient(<DesignSystemPage />, client);
     expect(screen.getByText('Quiet Frame · 静框')).toBeTruthy();
     expect(screen.getByRole('link', { name: /返回创作台/ }).getAttribute('href')).toBe('/');
+  });
+
+  it('欢迎页已有会话时直接进入创作台', async () => {
+    const client = mockClient({ auth: { session: vi.fn().mockResolvedValue({ user: { id: 'usr_1', email: 'a@test.local' } }) } });
+    renderWithClient(<WelcomePage />, client);
+    await waitFor(() => expect(screen.getByRole('link', { name: /开始你的第一部作品/ }).getAttribute('href')).toBe('/'));
   });
 });

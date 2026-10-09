@@ -2,13 +2,17 @@ import { and, eq, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  GENERATION_POLICY_FIELDS,
   GENERATE_JOB_TYPE,
+  type GovernedGenerationCapability,
   type Job,
+  type ProductionPolicy,
   type ProviderRouteDecision,
 } from '@ancs/contracts';
 import { jobs, projects, scenes } from '@ancs/db';
 import { createJob, toJobDto } from './jobs.js';
 import { resolveProviderRoute } from './credentials.js';
+import { assertProjectGenerationAllowed } from './project-document.js';
 import type { DomainDeps } from './channels.js';
 
 /**
@@ -72,6 +76,16 @@ export async function requestSceneGeneration(
   const project = projectRows[0];
   if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
 
+  // N01-02: policy is enforced before Provider routing, task creation or cost.
+  let productionPolicy: ProductionPolicy | null = null;
+  if (Object.prototype.hasOwnProperty.call(GENERATION_POLICY_FIELDS, capability)) {
+    productionPolicy = await assertProjectGenerationAllowed(deps, {
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      capability: capability as GovernedGenerationCapability,
+    });
+  }
+
   // ① AI Video 使用边界（§14.4）：数据/证据类一律禁止
   if (capability === 'video.generate') {
     if (AI_VIDEO_FORBIDDEN_SEMANTIC.has(scene.semanticType) || AI_VIDEO_FORBIDDEN_SCENE_TYPES.has(scene.sceneType)) {
@@ -112,6 +126,17 @@ export async function requestSceneGeneration(
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, `能力「${capability}」当前没有可用 Provider：生成被明确阻止`, 501, {
       reason: 'NO_CALLABLE_PROVIDER',
       capability,
+    });
+  }
+  if (
+    productionPolicy !== null &&
+    productionPolicy.allowedProviderIds.length > 0 &&
+    !productionPolicy.allowedProviderIds.includes(route.decision.providerId)
+  ) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '项目制作规则不允许使用所选 Provider', 409, {
+      reason: 'PROVIDER_NOT_ALLOWED_BY_PROJECT',
+      capability,
+      providerId: route.decision.providerId,
     });
   }
 

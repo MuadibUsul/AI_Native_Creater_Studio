@@ -57,12 +57,13 @@ export function registerDirectorRoutes(app: FastifyInstance, deps: AuthDeps): vo
       },
     },
     async (request) => {
-      await app.requireWorkspace(request, request.params.id, 'project:read');
+      const { context, membership } = await app.requireWorkspace(request, request.params.id, 'project:read');
       const policy = parsePolicyQuery(request.query.policy);
       return planDirector(domain, {
         workspaceId: request.params.id,
         projectId: request.params.projectId,
         planId: request.params.planId,
+        evidencePermissionContext: `${request.params.id}:${context.userId}:${membership.role}:project:read`,
         ...(policy !== undefined ? { policy } : {}),
       });
     },

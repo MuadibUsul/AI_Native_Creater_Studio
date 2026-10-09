@@ -7,9 +7,9 @@ import { createDefaultRegistry, JobHandlerRegistry, noopHandler } from './handle
  */
 
 describe('JobHandlerRegistry', () => {
-  it('默认注册 V1 处理器集合（含 CMS 回写）', () => {
+  it('默认注册基础处理器集合（含 CMS 回写、ASR 与视觉分析）', () => {
     const registry = createDefaultRegistry();
-    expect(registry.types().sort()).toEqual(['CMS_WRITEBACK', 'MAINTENANCE_NOTIFICATION_DISPATCH', 'MAINTENANCE_RETENTION_SWEEP', 'NOOP']);
+    expect(registry.types().sort()).toEqual(['CMS_WRITEBACK', 'MAINTENANCE_NOTIFICATION_DISPATCH', 'MAINTENANCE_RETENTION_SWEEP', 'MEDIA_AUDIO_ANALYSIS', 'MEDIA_TRANSCRIPT', 'MEDIA_VISUAL_ANALYSIS', 'NOOP']);
     expect(registry.get('NOOP')).toBeDefined();
     expect(registry.get('NOT_REGISTERED')).toBeUndefined();
   });

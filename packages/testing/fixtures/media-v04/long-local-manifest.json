@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0",
+  "fixtureId": "n00-04-pexels-rice-repeated-20m",
+  "storage": "ignored-local-cache-only",
+  "cacheFile": ".artifacts/n00-04-long/pexels-rice-repeated-20m-320x180.mp4",
+  "sourceFixtureId": "pexels-3148931-fractional-landscape",
+  "sourceManifest": "pexels-local-manifest.json",
+  "sourceSha256": "e34e4e145565ac0bb5bdba639ee48f451d431dd66156f65f9e1b1ede698b39db",
+  "sourcePage": "https://www.pexels.com/video/a-river-stream-cutting-through-rice-field-terraces-3148931/",
+  "license": "https://www.pexels.com/license/",
+  "createdAt": "2026-10-08",
+  "generationScript": "generate-long-local.ps1",
+  "derivation": "The 80.063333-second licensed source video and its audio were looped 15 times, downscaled and re-encoded, then trimmed to exactly 20 minutes. This is a repeated stress fixture, not 20 minutes of continuous original capture.",
+  "sha256": "51848876321c37b7797007f3983c5e2850a6ce437982cb753e91d6ea85accf12",
+  "sizeBytes": 55416389,
+  "expected": {
+    "containerDurationSeconds": 1200,
+    "video": "H.264 320x180, 30000/1001 CFR, 35964 frames, stream duration 1199.998800 seconds",
+    "audio": "AAC stereo 48000 Hz, stream duration 1200.000000 seconds",
+    "audioVideoEndDifferenceMilliseconds": 1.2,
+    "fullDecode": "success",
+    "seekAt": "00:19:58",
+    "seekDecode": "success",
+    "videoAndAudioPacketPts": "strictly increasing"
+  },
+  "notEvidenceFor": [
+    "20 minutes of continuous camera footage",
+    "24-hour physical media",
+    "browser playback or editor responsiveness",
+    "phone-captured VFR"
+  ]
+}

@@ -1,8 +1,10 @@
 # V1 验收账本（§77 / §78 / 附录 C / §96）
 
+> 历史账本提示（2026-10-09）：本表保留旧 V1/P 系列的验收和未完成项；当前 v0.4 N 系列任务与阶段门见 `docs/requirements/ai-native-v04-acceptance-ledger.md`。旧状态不因 v0.4 初始 TODO 清零，旧 P15/P16 暂停不等于新 N15/N16 暂停。N01-05—09 已 VERIFIED：0060—0062 完成单写迁移、对象锁、补偿快照；N01-09 交付带 schema 协商的 ProjectState/EditEvent API 与 SDK。N02-14 已 VERIFIED，迁移最新仍为 0074；不修改本表既有 P 系列结论。
+
 - 任务：P00-01（计划 §12 覆盖索引要求"验收清单 附录 C、96 → P00 逐项建账，阶段门逐项关闭"）
 - 用途：G4（内部生产可用）与 G8（全规范覆盖）的逐项关闭清单；P08-06 对账依据。
-- 2026-10-08 界面验收备注：Quiet Frame Web 重构的页面覆盖、视觉差异和本地功能回归单独记录于 `docs/verification/QUIET-FRAME-REBUILD.md`；演示夹具与 Mock 不改变本表原有条目状态。按用户要求，Web 人工检查前不推进 P15/P16。
+- 2026-10-09 界面验收备注：Quiet Frame Web 重构的页面覆盖、视觉差异和本地功能回归记录于 `docs/verification/QUIET-FRAME-REBUILD.md` 与 `docs/verification/N16-global-web.md`；现有 21 路由已完成 63 次真实页面检查，演示夹具与 Mock 不改变本表原有条目状态。用户已取消旧的 Web 人工检查暂停，要求连续推进全部 v0.4。
 - 规则：
   1. 每项初始 `TODO`；关闭时须有可执行证据（测试、脚本输出、账号截图、人工评审记录），记录在 `docs/verification/`。
   2. Mock 验证通过不等于真实 Provider 验证通过；接口存在不等于功能交付。

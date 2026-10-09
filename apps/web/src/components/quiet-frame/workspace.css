@@ -21,6 +21,13 @@
 .qf-pack-note { max-width: 75ch; }
 .qf-pack-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; margin: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); background: var(--panel); box-shadow: 0 28px 80px #0a150d40; }
 .qf-pack-dialog::backdrop { background: #1420178c; }
+.qf-pack-card .pack-icon { background: var(--ui-selection-bg); color: var(--ui-fg-primary); border: 1px solid var(--ui-border-subtle); }
+.qf-pack-card .qf-pack-status.green { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+.qf-identity-onboarding { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--ui-border-subtle); }
+.qf-identity-step { min-width: 0; padding: 24px; background: var(--ui-bg-elevated); }
+.qf-identity-step strong { display: block; margin-bottom: 8px; }
+.qf-identity-step p { color: var(--ui-fg-secondary); font-size: var(--ui-type-body); line-height: 1.6; }
+.qf-identity-step-index { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 18px; border: 1px solid var(--ui-border-control); border-radius: 50%; color: var(--ui-fg-secondary); font-variant-numeric: tabular-nums; }
 .qf-settings-content { min-width: 0; }
 .qf-setting-nav button { width: 100%; text-align: left; }
 .qf-provider-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -33,6 +40,7 @@
 .qf-provider-button .grow { display: flex; flex-direction: column; }
 .qf-provider-button .grow small { color: var(--muted); }
 .qf-settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.qf-settings-content .btn.qf-feature-action { min-height: 40px; height: auto; flex: 0 0 auto; }
 .qf-metric-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .qf-metric-row > div { border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 .qf-metric-row h2 { margin-top: 8px; }
@@ -56,9 +64,11 @@
   .qf-consent-grid { grid-template-columns: 1fr; }
   .qf-budget-fields { grid-template-columns: 1fr; }
   .qf-metric-row { grid-template-columns: 1fr; }
+  .qf-identity-onboarding { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .qf-provider-form { grid-template-columns: 1fr; }
   .qf-provider-form .qf-span-2 { grid-column: auto; }
   .qf-landing .mini-inspector, .qf-landing .mini-side { display: none; }
+  .qf-settings-content .btn.qf-feature-action { min-height: 44px; }
 }

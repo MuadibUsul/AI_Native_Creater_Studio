@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { legacyMillisecondsToMediaTime } from '@ancs/contracts';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import {
   createDb,
@@ -13,21 +14,29 @@ import {
   resolveTestDatabaseUrl,
   runMigrations,
   uploadIntents,
+  scenes,
   workspaces,
   type DbHandle,
 } from '@ancs/db';
 import {
   addScene,
+  applyAssetRelink,
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,
   createAssetDownloadUrl,
   createChannel,
+  createClip,
   createProject,
+  createSequence,
+  createTrack,
   createUploadIntent,
   getAsset,
+  getAssetRelinkState,
+  listProjectComposition,
   listAssets,
   processEdits,
+  preflightAssetRelink,
   redoProject,
   undoProject,
   type DomainDeps,
@@ -110,7 +119,7 @@ async function makeWorkspace(name = '资产租户'): Promise<{ workspaceId: stri
 
 /** 走完整链路：意图 → 直传（adapter 写入）→ 确认 */
 async function uploadAsset(
-  input: { workspaceId: string; projectId?: string | null; assetType?: 'USER_UPLOAD' | 'SOURCE_IMAGE'; bytes?: Uint8Array; contentType?: string; declareChecksum?: boolean },
+  input: { workspaceId: string; projectId?: string | null; assetType?: 'USER_UPLOAD' | 'SOURCE_IMAGE'; bytes?: Uint8Array; contentType?: string; declareChecksum?: boolean; relinkTargetVersionId?: string },
 ) {
   const bytes = input.bytes ?? makePng(640, 360);
   const checksumSha256 = input.declareChecksum === true ? await sha256(bytes) : undefined;
@@ -124,6 +133,7 @@ async function uploadAsset(
       sizeBytes: bytes.byteLength,
       projectId: input.projectId ?? null,
       ...(checksumSha256 !== undefined ? { checksumSha256 } : {}),
+      ...(input.relinkTargetVersionId !== undefined ? { relinkTargetVersionId: input.relinkTargetVersionId } : {}),
     },
   });
   if (intent.upload === null) throw new Error('unexpected dedupe');
@@ -141,6 +151,7 @@ describe('资产上传链路（§26.1：意图 → 直传 → 确认）', () => 
     const detail = await confirmUpload(deps(), { workspaceId, assetId: intent.asset.id, input: {} });
     expect(detail.status).toBe('READY');
     expect(detail.retentionClass).toBe('KEEP_USER_SOURCE');
+    expect(detail.metadata['filename']).toBe('cover.png');
     expect(detail.license.type).toBe('USER_OWNED');
     expect(detail.versions).toHaveLength(1);
     const version = detail.versions[0];
@@ -496,5 +507,64 @@ describe('replace_asset：Scene 绑定与撤销（§4.6 / §23）', () => {
       },
     });
     expect(restored.response.scenes[0]?.assetBindings).toEqual([{ assetId: intent.asset.id, role: 'visual' }]);
+  });
+});
+
+describe('N02-08 缺失媒体重新链接', () => {
+  const mt = (milliseconds: number) => legacyMillisecondsToMediaTime(milliseconds);
+  const range = (start: number, end: number) => ({ start: mt(start), end: mt(end) });
+
+  it('精确原件恢复复用旧版本，并保留旧剪辑的裁剪范围', async () => {
+    const { workspaceId, projectId } = await makeWorkspace('精确恢复');
+    const original = await uploadAsset({ workspaceId, projectId, declareChecksum: true });
+    const originalDetail = await confirmUpload(deps(), { workspaceId, assetId: original.intent.asset.id, input: { durationMs: 10_000 } });
+    const originalVersion = originalDetail.versions[0]!;
+    const sequence = await createSequence(deps(), { workspaceId, projectId, input: { name: '主序列', frameRate: { num: 30, den: 1 }, duration: mt(10_000) } });
+    const track = await createTrack(deps(), { workspaceId, projectId, sequenceId: sequence.id, input: { kind: 'VIDEO', position: 0, name: 'V1' } });
+    const clip = await createClip(deps(), {
+      workspaceId, projectId, sequenceId: sequence.id,
+      input: { trackId: track.id, assetVersionId: originalVersion.id, sourceRange: range(1_000, 4_000), sequenceRange: range(0, 3_000), timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true } },
+    });
+    await storage.deleteObject(originalVersion.storageKey);
+    expect((await getAssetRelinkState(deps(), { workspaceId, assetId: originalDetail.id })).versions[0]?.availability).toBe('MISSING');
+
+    const candidate = await uploadAsset({ workspaceId, projectId, bytes: original.bytes, declareChecksum: true, relinkTargetVersionId: originalVersion.id });
+    expect(candidate.intent.deduped).toBe(false);
+    await confirmUpload(deps(), { workspaceId, assetId: candidate.intent.asset.id, input: { durationMs: 10_000 } });
+    const comparison = await preflightAssetRelink(deps(), { workspaceId, assetId: originalDetail.id, request: { targetVersionId: originalVersion.id, candidateAssetId: candidate.intent.asset.id } });
+    expect(comparison).toMatchObject({ mode: 'EXACT_RESTORE', checksumMatches: true, activeClipReferences: 1, confirmationText: '恢复原件', reviewRequired: false });
+    const restored = await applyAssetRelink(deps(), { workspaceId, assetId: originalDetail.id, userId: null, request: { targetVersionId: originalVersion.id, candidateAssetId: candidate.intent.asset.id, expectedCandidateChecksumSha256: comparison.candidateChecksumSha256, confirmationText: '恢复原件' } });
+    expect(restored).toMatchObject({ action: 'EXACT_RESTORE', restoredVersionId: originalVersion.id, createdVersionId: null, activeClipReferencesPreserved: 1, reviewRequired: false });
+    expect((await storage.probeObject(originalVersion.storageKey)).exists).toBe(true);
+    expect((await getAsset(deps(), { workspaceId, assetId: originalDetail.id })).versions).toHaveLength(1);
+    expect((await listProjectComposition(deps(), { workspaceId, projectId })).clips.find((row) => row.id === clip.id)?.sourceRange).toEqual(range(1_000, 4_000));
+  });
+
+  it('同名不同内容必须明确确认，替代后形成新版本并把相关场景标为待审', async () => {
+    const { workspaceId, projectId } = await makeWorkspace('显式替代');
+    const original = await uploadAsset({ workspaceId, projectId, declareChecksum: true });
+    const originalDetail = await confirmUpload(deps(), { workspaceId, assetId: original.intent.asset.id, input: {} });
+    const originalVersion = originalDetail.versions[0]!;
+    const scene = await addScene(deps(), { workspaceId, projectId, input: { sceneType: 'IMAGE_FULL', semanticType: 'NARRATIVE', durationMs: 5_000 } });
+    await processEdits(deps(), {
+      workspaceId, projectId, actor: { type: 'USER', id: 'u_relink' },
+      request: { baseProjectRevision: scene.project.revision, expectedSceneRevisions: { [scene.scene.id]: scene.scene.revision }, operations: [{ op: 'replace_asset', sceneId: scene.scene.id, role: 'visual', newAssetId: originalDetail.id }], idempotencyKey: `idem_relink_bind_${randomUUID()}` },
+    });
+    await storage.deleteObject(originalVersion.storageKey);
+    const replacementBytes = makePng(800, 450);
+    const candidate = await uploadAsset({ workspaceId, projectId, bytes: replacementBytes, declareChecksum: true, relinkTargetVersionId: originalVersion.id });
+    await confirmUpload(deps(), { workspaceId, assetId: candidate.intent.asset.id, input: {} });
+    const comparison = await preflightAssetRelink(deps(), { workspaceId, assetId: originalDetail.id, request: { targetVersionId: originalVersion.id, candidateAssetId: candidate.intent.asset.id } });
+    expect(comparison).toMatchObject({ mode: 'REPLACEMENT', checksumMatches: false, confirmationText: '确认替换', reviewRequired: true });
+    await expect(applyAssetRelink(deps(), { workspaceId, assetId: originalDetail.id, userId: null, request: { targetVersionId: originalVersion.id, candidateAssetId: candidate.intent.asset.id, expectedCandidateChecksumSha256: comparison.candidateChecksumSha256, confirmationText: '恢复原件' } })).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    const result = await applyAssetRelink(deps(), { workspaceId, assetId: originalDetail.id, userId: null, request: { targetVersionId: originalVersion.id, candidateAssetId: candidate.intent.asset.id, expectedCandidateChecksumSha256: comparison.candidateChecksumSha256, confirmationText: '确认替换' } });
+    expect(result.action).toBe('REPLACEMENT');
+    expect(result.createdVersionId).not.toBeNull();
+    const detail = await getAsset(deps(), { workspaceId, assetId: originalDetail.id });
+    expect(detail.versions).toHaveLength(2);
+    expect(detail.currentVersionId).toBe(result.createdVersionId);
+    expect(detail.versions.find((version) => version.id === originalVersion.id)?.storageKey).toBe(originalVersion.storageKey);
+    const sceneRows = await handle.db.select().from(scenes).where(eq(scenes.id, scene.scene.id));
+    expect(sceneRows[0]?.needsReview).toBe(true);
   });
 });

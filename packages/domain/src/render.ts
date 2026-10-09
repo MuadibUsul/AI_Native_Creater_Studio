@@ -17,6 +17,7 @@ import { createJobInTx } from './jobs.js';
 import { scheduleCmsWritebackInTx } from './cms.js';
 import { assertRenderProfileAllowed, resolveRenderPriority } from './plans.js';
 import { createProjectVersionInTx } from './versions.js';
+import { listProjectCompositionObjects } from './composition-objects.js';
 import type { DomainDeps } from './channels.js';
 
 /**
@@ -65,6 +66,25 @@ export async function createRender(
   input: { workspaceId: string; projectId: string; request: CreateRenderRequest; createdBy?: string | null },
 ): Promise<RenderRecord> {
   await loadProjectRow(deps.db, input.workspaceId, input.projectId);
+  // N01-04 fail-closed: the legacy renderer does not yet consume normalized composition objects.
+  // Reject before entitlement, snapshot, job or cost work so no object/effect is silently omitted.
+  const compositionObjects = await listProjectCompositionObjects(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+  });
+  const unsupportedCounts = {
+    visualObjects: compositionObjects.visualObjects.length,
+    effects: compositionObjects.effects.filter((effect) => effect.enabled).length,
+    animations: compositionObjects.animations.length,
+    captions: compositionObjects.captions.length,
+    audioRegions: compositionObjects.audioRegions.length,
+  };
+  if (Object.values(unsupportedCounts).some((count) => count > 0)) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '当前渲染器尚未声明规范化 Composition 对象执行能力', 409, {
+      reason: 'NORMALIZED_COMPOSITION_RENDER_UNAVAILABLE',
+      unsupportedCounts,
+    });
+  }
   // P09-01：渲染档位权益（4K 需 fourK）+ 渲染优先级（映射 jobs.priority）
   await assertRenderProfileAllowed(deps, { workspaceId: input.workspaceId, profile: input.request.profile });
   const renderPriority = await resolveRenderPriority(deps, { workspaceId: input.workspaceId });

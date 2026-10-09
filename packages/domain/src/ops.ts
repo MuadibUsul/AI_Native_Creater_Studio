@@ -1,8 +1,8 @@
 import { and, count, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
-import { opsAuditEntrySchema, opsOverviewSchema, type Job, type OpsAuditEntry, type OpsOverview } from '@ancs/contracts';
+import { opsAuditEntrySchema, opsJobSummarySchema, opsOverviewSchema, type Job, type JobStatus, type OpsAuditEntry, type OpsJobSummary, type OpsOverview } from '@ancs/contracts';
 import { creditLedger, jobs, outboxEvents, providerGenerations, renderApprovals, renderEvents, renderQaReports, renders } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
-import { listJobs, loadJobRow, retryJob } from './jobs.js';
+import { loadJobRow, retryJob } from './jobs.js';
 
 /**
  * 最小运营服务（P08-02 / 规范 §67）。
@@ -72,48 +72,48 @@ export async function getOpsOverview(deps: DomainDeps): Promise<OpsOverview> {
   return opsOverviewSchema.parse({ ...overview, alerts: evaluateOpsAlerts(overview) });
 }
 
-/** 跨 workspace 任务列表（admin 面；按创建时间新→旧）。 */
+/** Scoped, allowlisted Admin job view; tenant filtering happens before LIMIT. */
 export async function listOpsJobs(
   deps: DomainDeps,
-  input: { status?: Job['status']; workspaceId?: string; limit?: number } = {},
-): Promise<Job[]> {
-  if (input.workspaceId !== undefined) {
-    return listJobs(deps, { workspaceId: input.workspaceId, ...(input.status !== undefined ? { status: input.status } : {}), limit: input.limit });
-  }
-  // 跨工作区查询：jobs 表无 workspace 收窄条件（admin 守卫在 API 层）
-  const conditions = [];
+  input: { workspaceId: string; status?: JobStatus; limit?: number },
+): Promise<OpsJobSummary[]> {
+  const conditions = [eq(jobs.workspaceId, input.workspaceId)];
   if (input.status !== undefined) conditions.push(eq(jobs.status, input.status));
   const rows = await deps.db
-    .select()
+    .select({
+      id: jobs.id,
+      workspaceId: jobs.workspaceId,
+      projectId: jobs.projectId,
+      status: jobs.status,
+      submitState: jobs.submitState,
+      attempts: jobs.attempts,
+      maxAttempts: jobs.maxAttempts,
+      needsReconciliation: jobs.needsReconciliation,
+      nextAttemptAt: jobs.nextAttemptAt,
+      createdAt: jobs.createdAt,
+      updatedAt: jobs.updatedAt,
+      hasError: sql<boolean>`${jobs.error} is not null`,
+    })
     .from(jobs)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(desc(jobs.createdAt))
     .limit(Math.min(Math.max(input.limit ?? 50, 1), 200));
-  return rows.map((row) => {
-    // 与 jobs.ts 的 DTO 形状一致（此处内联转换，避免导出内部映射）
-    return {
+  return rows.map((row) =>
+    opsJobSummarySchema.parse({
       id: row.id,
       workspaceId: row.workspaceId,
       projectId: row.projectId,
-      type: row.type,
       status: row.status,
-      stage: row.stage,
       submitState: row.submitState,
-      input: row.input as Record<string, unknown>,
-      result: row.result as Record<string, unknown> | null,
-      error: row.error as Record<string, unknown> | null,
       attempts: row.attempts,
       maxAttempts: row.maxAttempts,
-      priority: row.priority,
       needsReconciliation: row.needsReconciliation,
       nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
-      enqueuedAt: row.enqueuedAt?.toISOString() ?? null,
-      startedAt: row.startedAt?.toISOString() ?? null,
-      completedAt: row.completedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
-    } as Job;
-  });
+      errorCategory: row.status === 'FAILED_RETRYABLE' ? 'RETRYABLE' : row.status === 'FAILED_FINAL' ? 'FINAL' : row.hasError ? 'OTHER' : null,
+    }),
+  );
 }
 
 /** 人工重试（admin）：复用任务服务（预算/幂等/版本规则不变；审计经 job 事件与 actor 记录）。 */

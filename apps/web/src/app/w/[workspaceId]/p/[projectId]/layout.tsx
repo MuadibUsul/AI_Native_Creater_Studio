@@ -36,7 +36,7 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
 
   return <>
     <div className="projectbar">
-      <div className="row gap8">
+      <div className="row gap8 qf-project-identity">
         <Link className="btn ghost icononly small" href={`/?workspaceId=${encodeURIComponent(params.workspaceId)}`} aria-label="返回创作台"><QuietIcon name="chevron" style={{ transform: 'rotate(180deg)' }} /></Link>
         <span className="title qf-ellipsis">{project.data?.title ?? (project.isPending ? '正在加载作品…' : '作品信息暂不可用')}</span>
         {project.isError ? <button type="button" className="textbtn small" onClick={() => void project.refetch()}>重试</button> : null}

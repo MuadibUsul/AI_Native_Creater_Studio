@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,12 +82,16 @@ afterAll(async () => {
   await rm(rootDir, { recursive: true, force: true });
 });
 
-async function newSignedInClient(): Promise<AncsClient> {
+async function newSignedInIdentity(fetchImpl?: typeof fetch): Promise<{ client: AncsClient; email: string }> {
   const email = `assets-${randomUUID()}@test.local`;
   await createInternalUser(auth, { email, password: PASSWORD, name: '资产测试' });
-  const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
+  const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0', fetchImpl });
   await client.auth.signIn({ email, password: PASSWORD });
-  return client;
+  return { client, email };
+}
+
+async function newSignedInClient(fetchImpl?: typeof fetch): Promise<AncsClient> {
+  return (await newSignedInIdentity(fetchImpl)).client;
 }
 
 async function makeWorkspace(client: AncsClient): Promise<string> {
@@ -96,6 +100,84 @@ async function makeWorkspace(client: AncsClient): Promise<string> {
 }
 
 describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
+  it('分片断点续传：跳过服务端已确认分片，流式合并后字节与校验和一致', async () => {
+    const putParts: string[] = [];
+    const recordingFetch: typeof fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/v1/storage/upload') && init?.method === 'PUT') putParts.push(url);
+      return fetch(input, init);
+    };
+    const client = await newSignedInClient(recordingFetch);
+    const workspaceId = await makeWorkspace(client);
+    const bytes = new Uint8Array(600_000);
+    bytes.set(makePng(1920, 1080));
+    const intent = await client.assets.createUploadIntent(workspaceId, {
+      assetType: 'USER_UPLOAD',
+      filename: 'resume.png',
+      contentType: 'image/png',
+      sizeBytes: bytes.byteLength,
+      uploadMode: 'MULTIPART',
+      partSizeBytes: 256 * 1024,
+    });
+    expect(intent.upload).toBeNull();
+    expect(intent.partCount).toBe(3);
+    const firstTarget = await client.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1);
+    const first = bytes.subarray(0, 256 * 1024);
+    expect((await fetch(firstTarget.upload!.url, { method: 'PUT', headers: firstTarget.upload!.headers, body: first })).status).toBe(200);
+    await client.assets.completeUploadPart(workspaceId, intent.intentId!, 1, {
+      checksumSha256: createHash('sha256').update(first).digest('hex'),
+    });
+    putParts.length = 0;
+
+    const result = await client.assets.uploadResumable(
+      workspaceId,
+      {
+        assetType: 'USER_UPLOAD',
+        filename: 'resume.png',
+        contentType: 'image/png',
+        data: new Blob([bytes]),
+        resumeIntentId: intent.intentId!,
+      },
+      { partSizeBytes: 256 * 1024, concurrency: 2 },
+    );
+    expect(result.status).toBe('READY');
+    expect(result.versions[0]?.checksumSha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(putParts).toHaveLength(2);
+  });
+
+  it('错误分片 checksum、跨租户 complete 与超过套餐存储额度均被拒绝', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const bytes = makePng(10, 10);
+    const intent = await owner.assets.createUploadIntent(workspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'bad-checksum.png', contentType: 'image/png', sizeBytes: bytes.byteLength,
+      uploadMode: 'MULTIPART', partSizeBytes: 256 * 1024,
+    });
+    const target = await owner.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1);
+    await fetch(target.upload!.url, { method: 'PUT', headers: target.upload!.headers, body: bytes });
+    const badChecksum = await owner.assets.completeUploadPart(workspaceId, intent.intentId!, 1, { checksumSha256: '0'.repeat(64) }).catch((error: unknown) => error);
+    expect(badChecksum).toMatchObject({ status: 409, details: { reason: 'PART_CHECKSUM_MISMATCH' } });
+    const hidden = await stranger.assets.completeUploadPart(workspaceId, intent.intentId!, 1, { checksumSha256: '0'.repeat(64) }).catch((error: unknown) => error);
+    expect(hidden).toMatchObject({ status: 404 });
+    const cancelled = await owner.assets.cancelUpload(workspaceId, intent.intentId!);
+    expect(cancelled.status).toBe('CANCELLED');
+    const afterCancel = await owner.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1).catch((error: unknown) => error);
+    expect(afterCancel).toMatchObject({ status: 409, details: { reason: 'INTENT_CANCELLED' } });
+    const previousPlan = process.env['ANCS_DEFAULT_PLAN'];
+    process.env['ANCS_DEFAULT_PLAN'] = 'FREE';
+    try {
+      const quota = await owner.assets.createUploadIntent(workspaceId, {
+        assetType: 'USER_UPLOAD', filename: 'too-large.mp4', contentType: 'video/mp4', sizeBytes: 3 * 1024 * 1024 * 1024,
+        uploadMode: 'MULTIPART',
+      }).catch((error: unknown) => error);
+      expect(quota).toMatchObject({ status: 422, details: { reason: 'STORAGE_QUOTA_EXCEEDED' } });
+    } finally {
+      if (previousPlan === undefined) delete process.env['ANCS_DEFAULT_PLAN'];
+      else process.env['ANCS_DEFAULT_PLAN'] = previousPlan;
+    }
+  });
+
   it('SDK 一体化上传：意图 → 直传 → 确认（真实探测）→ 下载 Signed URL 可取回原始字节', async () => {
     const client = await newSignedInClient();
     const workspaceId = await makeWorkspace(client);
@@ -129,6 +211,42 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(response.status).toBe(200);
     const downloaded = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(downloaded)).toEqual(Array.from(bytes));
+  });
+
+  it('转写 HTTP / SDK 读取按 workspace 隔离且无转写时返回明确空状态', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const asset = await owner.assets.upload(workspaceId, { assetType: 'SOURCE_IMAGE', filename: 'still.png', contentType: 'image/png', data: makePng(24, 24) });
+    expect(await owner.assets.transcript(workspaceId, asset.id)).toMatchObject({ runId: null, sourceAssetVersionId: asset.currentVersionId, status: null, currentVersion: null });
+    const hidden = await stranger.assets.transcript(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hidden).toMatchObject({ status: 404 });
+  });
+
+  it('片段标签与搜索通过 SDK 往返，并在 HTTP 层保持 workspace 隔离', async () => {
+    const owner = await newSignedInClient();
+    const stranger = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const asset = await owner.assets.upload(workspaceId, { assetType: 'SOURCE_IMAGE', filename: 'product.png', contentType: 'image/png', data: makePng(64, 64) });
+    const tag = await owner.assets.createRangeTag(workspaceId, asset.id, { label: '产品近景', sourceStartPts: '0', sourceEndPts: '1000', timeBase: { numerator: 1, denominator: 1000 } });
+    expect(await owner.assets.listRangeTags(workspaceId, asset.id)).toEqual({ items: [tag] });
+    const unified = await owner.assets.mediaIndexRecords(workspaceId, asset.id, { kind: 'USER_MARKER', sourceStartPts: '0', sourceEndPts: '1000', timeBaseNumerator: 1, timeBaseDenominator: 1000 });
+    expect(unified).toMatchObject({ sourceAssetVersionId: asset.currentVersionId, items: [{ id: tag.id, kind: 'USER_MARKER', basis: 'USER_SUPPLIED', payload: { label: '产品近景' } }] });
+    expect(unified.capabilities).toHaveLength(17);
+    const analysis = await owner.assets.analysisStages(workspaceId, asset.id);
+    expect(analysis).toMatchObject({ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, playable: true, stages: expect.arrayContaining([expect.objectContaining({ stage: 'VISION', status: 'NOT_REQUESTED' }), expect.objectContaining({ stage: 'OCR', status: 'DISABLED' })]) });
+    expect(analysis.stages).toHaveLength(11);
+    expect(await owner.assets.searchSegments(workspaceId, { q: '产品近景' })).toMatchObject({ items: [{ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, evidence: 'USER_ASSERTED', contentTreatment: 'REFERENCE_DATA_ONLY' }] });
+    const hiddenList = await stranger.assets.listRangeTags(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hiddenList).toMatchObject({ status: 404 });
+    const hiddenSearch = await stranger.assets.searchSegments(workspaceId, { q: '产品近景' }).catch((error: unknown) => error);
+    expect(hiddenSearch).toMatchObject({ status: 404 });
+    const hiddenUnified = await stranger.assets.mediaIndexRecords(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hiddenUnified).toMatchObject({ status: 404 });
+    const hiddenAnalysis = await stranger.assets.analysisStages(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hiddenAnalysis).toMatchObject({ status: 404 });
+    await owner.assets.deleteRangeTag(workspaceId, asset.id, tag.id);
+    expect(await owner.assets.listRangeTags(workspaceId, asset.id)).toEqual({ items: [] });
   });
 
   it('workspace 内去重（SDK）：相同字节第二次上传直接命中既有资产', async () => {
@@ -269,7 +387,56 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(getFailure).toMatchObject({ status: 404 });
     const downloadFailure = await stranger.assets.downloadUrl(workspaceId, asset.id).catch((error: unknown) => error);
     expect(downloadFailure).toMatchObject({ status: 404 });
+    const playbackFailure = await stranger.assets.playbackUrl(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(playbackFailure).toMatchObject({ status: 404 });
+    const rebuildFailure = await stranger.assets.rebuildProxy(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(rebuildFailure).toMatchObject({ status: 404 });
     const listFailure = await stranger.assets.list(workspaceId).catch((error: unknown) => error);
     expect(listFailure).toMatchObject({ status: 404 });
+  });
+
+  it('撤销成员后旧索引 cursor 立即失效，响应禁止共享缓存，同内容不跨租户复用', async () => {
+    const owner = await newSignedInClient();
+    const cacheHeaders: string[] = [];
+    const memberIdentity = await newSignedInIdentity(async (input, init) => {
+      const response = await fetch(input, init);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/media-index-records')) cacheHeaders.push(response.headers.get('cache-control') ?? '');
+      return response;
+    });
+    const workspaceId = await makeWorkspace(owner);
+    const bytes = makePng(40, 40);
+    const ownerAsset = await owner.assets.upload(workspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'same-content.png', contentType: 'image/png', data: bytes,
+    });
+    const member = await owner.workspaces.members.add(workspaceId, { email: memberIdentity.email, role: 'EDITOR' });
+    const firstPage = await memberIdentity.client.assets.mediaIndexRecords(workspaceId, ownerAsset.id, { cursor: 0, limit: 1 });
+    expect(firstPage.sourceAssetVersionId).toBe(ownerAsset.currentVersionId);
+    expect(cacheHeaders).toContain('private, no-store');
+
+    const memberWorkspaceId = await makeWorkspace(memberIdentity.client);
+    const memberAsset = await memberIdentity.client.assets.upload(memberWorkspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'same-content.png', contentType: 'image/png', data: bytes,
+    });
+    expect(memberAsset.id).not.toBe(ownerAsset.id);
+    expect(memberAsset.currentVersionId).not.toBe(ownerAsset.currentVersionId);
+    await owner.workspaces.members.remove(workspaceId, member.userId);
+    const revokedCursor = await memberIdentity.client.assets.mediaIndexRecords(workspaceId, ownerAsset.id, { cursor: 0, limit: 1 }).catch((error: unknown) => error);
+    expect(revokedCursor).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    const crossTenant = await owner.assets.mediaIndexRecords(memberWorkspaceId, memberAsset.id, { cursor: 0, limit: 1 }).catch((error: unknown) => error);
+    expect(crossTenant).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
+
+  it('按服务端成员上下文复用范围证据并记录命中，跨租户无法读取缓存', async () => {
+    const owner = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const uploaded = await owner.assets.upload(workspaceId, { assetType: 'USER_UPLOAD', filename: 'evidence.png', contentType: 'image/png', data: makePng(48, 48) });
+    const query = { consumer: 'SELECTION' as const, analysisConfigHash: 'e'.repeat(64), sourceStartPts: '0', sourceEndPts: '1000', timeBaseNumerator: 1, timeBaseDenominator: 1000 };
+    const first = await owner.assets.mediaEvidence(workspaceId, uploaded.id, query);
+    const second = await owner.assets.mediaEvidence(workspaceId, uploaded.id, query);
+    expect(first).toMatchObject({ cacheStatus: 'MISS', sourceAssetVersionId: uploaded.currentVersionId, usage: { hitCount: 0, analysisReadCount: 1, rangeReadCount: 1 } });
+    expect(second).toMatchObject({ cacheStatus: 'HIT', cacheKey: first.cacheKey, usage: { hitCount: 1, analysisReadCount: 1, rangeReadCount: 1 } });
+    const stranger = await newSignedInClient();
+    await expect(stranger.assets.mediaEvidence(workspaceId, uploaded.id, query)).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 });

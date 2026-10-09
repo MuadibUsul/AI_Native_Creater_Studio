@@ -1,5 +1,7 @@
 # 会话交接文档（Session Handoff）
 
+> **2026-10-09 当前状态优先：** 用户已明确取消旧的 Web 人工验收暂停，要求连续推进全部 v0.4。当前分支 `codex/v04-foundation`；N00-01—07、N01-01—11、N02-01—14、N15-01/02、N16-01/02 共 **36/219** 项 VERIFIED（16.44%），剩余 183 项（83.56%）。N02-14 已完成 ASR 人工纠错覆盖、删除/恢复索引同步、成员撤销旧 cursor 失效和客户端缓存清理；迁移仍为 0074，`pnpm verify` **1062/1062**。第三方 ASR/视觉/音频分析 Provider 无凭据，保持未验证；下一任务 N02-15。以下 P14/main/暂停内容是 2026-10-07 历史交接，若冲突以本段和 v0.4 验收账本为准。
+
 - **交接时点**：2026-10-07（P14 阶段 5/5 全部完成；按用户指令暂停验收）
 - **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
 - **P14 交付提交**：`06c979e` `feat(p14): Analytics Director 与 Finance Pack Web 闭环`；最终功能/验收头 `34b68c4`；GitHub CI run `37611980360` 全绿

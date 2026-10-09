@@ -4,13 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { auditLog, createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
-import { createJob, ensureDefaultPlans, recordAudit, type DomainDeps } from '@ancs/domain';
+import { adminPrincipals, adminRoleGrants, adminRoleScopes, auditLog, createDb, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, supportAccessGrants, workspaces, type DbHandle } from '@ancs/db';
+import { createJob, createSupportGrant, ensureDefaultPlans, recordAudit, revokeSupportGrant, type DomainDeps } from '@ancs/domain';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 import { createStorageDeps } from './plugins/storage.js';
 
 /**
@@ -30,6 +32,7 @@ let baseUrl: string;
 let rootDir: string;
 let storage: LocalObjectStorage;
 let adminEmail = '';
+let adminTotpUri = '';
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
 
@@ -75,6 +78,7 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'security-ops-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `secops-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'secops-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     storage: createStorageDeps(storage, {
@@ -90,11 +94,12 @@ beforeAll(async () => {
         });
       },
     }),
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
   storage.publicBaseUrl = baseUrl;
 });
 
@@ -120,7 +125,7 @@ async function newClient(tag: string): Promise<AncsClient> {
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 
@@ -176,109 +181,97 @@ describe('SaaS 安全运营（P09-05）', () => {
     expect((await fetched.arrayBuffer()).byteLength).toBe(33);
   }, 120_000);
 
-  it('滥用处理：标记创建/解决 + 限制状态阻止新任务（403），解除即恢复；全程审计', async () => {
+  it('旧运营直写在 AdminAction 接线前全部拒绝且不产生副作用', async () => {
     const owner = await newClient('secops-abuse');
     const admin = await newAdminClient();
     const workspace = await owner.workspaces.create({ name: `滥用-${randomUUID().slice(0, 8)}` });
 
-    // 标记：创建 → OPEN；解决 → RESOLVED（重复解决 409）
-    const flag = await admin.admin.createAbuseFlag(workspace.id, { category: 'SPAM', severity: 'HIGH', note: '批量垃圾项目（人工核查）' });
-    expect(flag.status).toBe('OPEN');
-    expect((await admin.admin.abuseFlags({ workspaceId: workspace.id })).map((item) => item.id)).toContain(flag.id);
-    const resolved = await admin.admin.resolveAbuseFlag(flag.id, { resolutionNote: '已警告并清理' });
-    expect(resolved.status).toBe('RESOLVED');
-    await expectApiError(admin.admin.resolveAbuseFlag(flag.id, { resolutionNote: '重复' }), 409);
-
-    // 限制：RESTRICTED → **新任务被阻止**（域闸门，全 API 路径共用）
-    await admin.admin.setAbuseState(workspace.id, { abuseState: 'RESTRICTED', note: '调查中' });
-    const blocked = await createJob(deps(), { workspaceId: workspace.id, type: 'NOOP_TEST' }).catch((error: unknown) => error);
-    expect((blocked as { httpStatus?: number }).httpStatus).toBe(403);
-    expect(((blocked as { details?: { reason?: string } }).details ?? {}).reason).toBe('WORKSPACE_RESTRICTED');
-
-    // 解除 → 恢复
-    await admin.admin.setAbuseState(workspace.id, { abuseState: 'NORMAL', note: '解除' });
+    await expectApiError(admin.admin.createAbuseFlag(workspace.id, { category: 'SPAM', severity: 'HIGH', note: '批量垃圾项目（人工核查）' }), 403);
+    await expectApiError(admin.admin.setAbuseState(workspace.id, { abuseState: 'RESTRICTED', note: '调查中' }), 403);
+    await expectApiError(admin.admin.resolveAbuseFlag(`abf_${randomUUID()}`, { resolutionNote: '错误复核' }), 403);
+    await expectApiError(admin.admin.assignPlan(workspace.id, { planKey: 'FREE' }), 403);
+    expect((await handle.db.select({ abuseState: workspaces.abuseState }).from(workspaces))[0]?.abuseState).toBe('NORMAL');
     const job = await createJob(deps(), { workspaceId: workspace.id, type: 'NOOP_TEST' });
     expect(job.status).toBe('QUEUED');
-
-    // 审计：flag 创建/解决 + 状态设置
-    const auditLogRows = await admin.admin.auditLog({ workspaceId: workspace.id });
-    const actions = auditLogRows.map((row) => row.action);
-    expect(actions).toContain('abuse.flag.create');
-    expect(actions).toContain('abuse.flag.resolve');
-    expect(actions).toContain('abuse.state.set');
+    const auditLogRows = await handle.db.select().from(auditLog);
+    expect(auditLogRows.some((row) => row.workspaceId === workspace.id && row.action.startsWith('abuse.'))).toBe(false);
   }, 120_000);
 
-  it('支持访问不可无痕：无授权 403；授权对成员可见；每次访问留痕 + 成员可见事件；撤销后 403', async () => {
+  it('旧支持授权直写关闭，未授权视图与跨工作区读取被拒绝且不留伪访问记录', async () => {
     const owner = await newClient('secops-support');
     const admin = await newAdminClient();
     const workspace = await owner.workspaces.create({ name: `支持-${randomUUID().slice(0, 8)}` });
-
-    // 无授权 → 403（明确 reason）
-    await expectApiError(admin.admin.supportView(workspace.id), 403, 'SUPPORT_GRANT_REQUIRED');
-
-    // 授权创建 → **成员可见事件**（不可无痕）
-    const grant = await admin.admin.createSupportGrant(workspace.id, { purpose: '排查渲染失败工单 #42', ttlHours: 2 });
-    expect(grant.status).toBe('ACTIVE');
-    const eventsAfterGrant = await owner.events.list(workspace.id, { cursor: 0 });
-    const grantEvent = eventsAfterGrant.events.find((event) => event.eventType === 'support.access_granted');
-    expect(grantEvent).toBeDefined();
-    expect(grantEvent?.payload['purpose']).toBe('排查渲染失败工单 #42');
-
-    // 支持视图：仅元数据摘要（无项目内容/素材字节/Prompt）
-    const view = await admin.admin.supportView(workspace.id);
-    expect(view.workspaceId).toBe(workspace.id);
-    expect(view.counts.members).toBe(1);
-    expect(view.grant.id).toBe(grant.id);
-    expect(JSON.stringify(view)).not.toMatch(/prompt|narration|sourceText/i);
-
-    // 每次访问留痕：成员可见 `support.viewed` 事件 + audit_log 行
-    const eventsAfterView = await owner.events.list(workspace.id, { cursor: 0 });
-    expect(eventsAfterView.events.some((event) => event.eventType === 'support.viewed')).toBe(true);
-    const auditRows = await admin.admin.auditLog({ workspaceId: workspace.id });
-    expect(auditRows.some((row) => row.action === 'support.view' && row.actorKind === 'PLATFORM_ADMIN')).toBe(true);
-    expect(auditRows.some((row) => row.action === 'support.grant.create')).toBe(true);
-
-    // 撤销 → 再访问 403；重复撤销 409
-    await admin.admin.revokeSupportGrant(grant.id);
-    await expectApiError(admin.admin.supportView(workspace.id), 403, 'SUPPORT_GRANT_REQUIRED');
-    await expectApiError(admin.admin.revokeSupportGrant(grant.id), 409);
+    await expectApiError(admin.admin.supportView(workspace.id, 'ticket-42'), 403);
+    await expectApiError(admin.admin.createSupportGrant(workspace.id, {
+      purpose: '排查渲染失败工单 #42', ticketId: 'ticket-42',
+      beneficiaryPrincipalId: `oppr_${randomUUID()}`, scope: 'SUMMARY_READ', ttlHours: 2,
+    }), 403);
+    const events = await owner.events.list(workspace.id, { cursor: 0 });
+    expect(events.events.some((event) => event.eventType === 'support.access_granted' || event.eventType === 'support.viewed')).toBe(false);
+    expect((await handle.db.select().from(auditLog)).some((row) => row.workspaceId === workspace.id && row.action === 'support.view')).toBe(false);
   }, 120_000);
 
-  it('完整 Admin（§67）：users/workspaces/projects/provider-status/storage/credits 只读聚合 + 审计表', async () => {
+  it('支持视图逐人、逐工单、逐工作区授权；其他运营者不能借同一 scope 横向访问', async () => {
+    const owner = await newClient('support-owner');
+    const workspace = await owner.workspaces.create({ name: `支持范围-${randomUUID().slice(0, 8)}` });
+    const otherWorkspace = await owner.workspaces.create({ name: `其他范围-${randomUUID().slice(0, 8)}` });
+    const ticketId = `ticket-${randomUUID()}`;
+    async function supportOperator(label: string) {
+      const email = `support-${label}-${randomUUID()}@test.local`;
+      const created = await createInternalUser(auth, { email, password: ADMIN_PASSWORD, name: label });
+      const principalId = `oppr_${randomUUID()}`;
+      const roleGrantId = `oprg_${randomUUID()}`;
+      await handle.db.insert(adminPrincipals).values({ id: principalId, userId: created.id, environment: 'TEST' });
+      await handle.db.insert(adminRoleGrants).values({ id: roleGrantId, principalId, role: 'SUPPORT_L2' });
+      await handle.db.insert(adminRoleScopes).values({
+        id: `opsc_${randomUUID()}`, roleGrantId, scopeKind: 'WORKSPACE', workspaceId: workspace.id,
+        ticketId, expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      const uri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), email, ADMIN_PASSWORD);
+      const operator = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
+      await signInTestOpsClient(operator, email, ADMIN_PASSWORD, uri);
+      return { operator, principalId, userId: created.id };
+    }
+    const alice = await supportOperator('alice');
+    const bob = await supportOperator('bob');
+    await expectApiError(alice.operator.admin.supportView(workspace.id, ticketId), 403, 'SUPPORT_GRANT_REQUIRED');
+
+    // This fixture represents an independently approved grant; the old direct-write API stays closed.
+    const grant = await createSupportGrant(deps(), {
+      workspaceId: workspace.id, actorUserId: alice.userId,
+      request: { purpose: '调查工单渲染异常', ticketId, beneficiaryPrincipalId: alice.principalId, scope: 'SUMMARY_READ', ttlHours: 2 },
+    });
+    await expectApiError(bob.operator.admin.supportView(workspace.id, ticketId), 403, 'SUPPORT_GRANT_REQUIRED');
+    await expectApiError(alice.operator.admin.supportView(workspace.id, 'different-ticket'), 403);
+    await createSupportGrant(deps(), {
+      workspaceId: otherWorkspace.id, actorUserId: alice.userId,
+      request: { purpose: '另一工作区的工单', ticketId, beneficiaryPrincipalId: alice.principalId, scope: 'SUMMARY_READ', ttlHours: 2 },
+    });
+    await expectApiError(alice.operator.admin.supportView(otherWorkspace.id, ticketId), 403);
+    const view = await alice.operator.admin.supportView(workspace.id, ticketId);
+    expect(view.grant.id).toBe(grant.id);
+    expect(view.workspaceId).toBe(workspace.id);
+    expect(JSON.stringify(view)).not.toMatch(/prompt|narration|sourceText/i);
+    expect((await handle.db.select().from(auditLog)).filter((row) => row.action === 'support.view' && row.workspaceId === workspace.id)).toHaveLength(1);
+
+    await handle.db.update(supportAccessGrants).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(supportAccessGrants.id, grant.id));
+    await expectApiError(alice.operator.admin.supportView(workspace.id, ticketId), 403, 'SUPPORT_GRANT_REQUIRED');
+    await revokeSupportGrant(deps(), { grantId: grant.id, actorUserId: alice.userId });
+    await expectApiError(alice.operator.admin.supportView(workspace.id, ticketId), 403, 'SUPPORT_GRANT_REQUIRED');
+  }, 120_000);
+
+  it('未完成安全投影的旧 Admin 列表拒绝，已审查的 Provider 聚合仍可读取', async () => {
     const owner = await newClient('secops-admin-views');
     const admin = await newAdminClient();
     const workspace = await owner.workspaces.create({ name: `总览-${randomUUID().slice(0, 8)}` });
-    const ownerEmail = (await owner.auth.session()).user.email;
-
-    // 上传一张图 → storage 聚合非零
     await owner.assets.upload(workspace.id, { assetType: 'USER_UPLOAD', filename: 'a.png', contentType: 'image/png', data: makePng() });
-
-    // users：包含 owner（含参与 Workspace 数）
-    const users = await admin.admin.users({ query: 'secops-admin-views' });
-    const ownerRow = users.find((row) => row.email === ownerEmail);
-    expect(ownerRow?.workspaceCount).toBeGreaterThanOrEqual(1);
-
-    // workspaces：包含该 workspace（套餐/成员/存储/积分/限制状态字段齐全）
-    const workspaceRows = await admin.admin.workspaces();
-    const workspaceRow = workspaceRows.find((row) => row.id === workspace.id);
-    expect(workspaceRow?.membersUsed).toBe(1);
-    expect(workspaceRow?.abuseState).toBe('NORMAL');
-    expect(workspaceRow?.storageBytesUsed).toBeGreaterThan(0);
-
-    // 套餐指派 → 审计 `plan.assign`；credits 平台视图
-    await admin.admin.assignPlan(workspace.id, { planKey: 'FREE' });
-    const credits = await admin.admin.workspaceCredits(workspace.id);
-    expect(credits.balanceCredits).toBe(0);
-    const auditRows = await admin.admin.auditLog({ workspaceId: workspace.id });
-    expect(auditRows.some((row) => row.action === 'plan.assign')).toBe(true);
-
-    // storage / provider-status / projects 形状
-    const storageSummary = await admin.admin.storage();
-    expect(storageSummary.totalBytes).toBeGreaterThan(0);
-    expect(storageSummary.items.some((item) => item.workspaceId === workspace.id)).toBe(true);
+    await expectApiError(admin.admin.users({ query: 'secops-admin-views' }), 403);
+    await expectApiError(admin.admin.workspaces(), 403);
+    await expectApiError(admin.admin.projects({ workspaceId: workspace.id }), 403);
+    await expectApiError(admin.admin.storage({ workspaceId: workspace.id }), 403);
+    await expectApiError(admin.admin.workspaceCredits(workspace.id), 403);
+    await expectApiError(admin.admin.auditLog({ workspaceId: workspace.id }), 403);
     const providerStatus = await admin.admin.providerStatus();
     expect(Array.isArray(providerStatus.items)).toBe(true);
-    const projects = await admin.admin.projects({ workspaceId: workspace.id });
-    expect(Array.isArray(projects)).toBe(true);
   }, 120_000);
 });

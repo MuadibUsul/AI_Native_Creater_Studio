@@ -17,7 +17,7 @@
 | `ANCS_PAYMENTS_DRIVER=stripe` | mock 渠道无真实扣款能力，不得承载正式收款（真实适配器接入前 live 恒失败） | 同上 |
 | `ANCS_STORAGE_DRIVER≠local` | 生产需对象存储（S3/R2 适配器未实现 → live 恒失败——诚实标注） | 同上 |
 | `BETTER_AUTH_URL=https://…` | 生产会话基址必须 https | 同上 |
-| `ANCS_PLATFORM_ADMINS` 非空 | 运营面不可缺席 | 同上 |
+| `ANCS_OPS_ENVIRONMENT=PRODUCTION` 且 `NODE_ENV=production` | 运营会话环境必须隔离；旧白名单不授予权限 | 同上；实际生产 principal/MFA 另需运维验收 |
 | 公开注册未开启 | 账号经内部 CLI 创建（P01-02）；**无公开注册端点**——与门禁一致 | 代码现状 |
 
 ## 放行台账（人工条件；现状全部 BLOCKED）

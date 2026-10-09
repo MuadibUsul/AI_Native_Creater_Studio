@@ -5,6 +5,8 @@ import {
   createDb,
   editEvents,
   outboxEvents,
+  projectObjectLocks,
+  scenes,
   redactDatabaseUrl,
   resolveTestDatabaseUrl,
   runMigrations,
@@ -17,6 +19,8 @@ import {
   assembleSceneGraph,
   createChannel,
   createProject,
+  createSequence,
+  createTrack,
   getProject,
   processEdits,
   type DomainDeps,
@@ -238,6 +242,93 @@ describe('编辑事务（§4.6）', () => {
     expect(afterUnlock.response.scenes.find((s) => s.id === sceneId)?.narration).toBe('合法修改');
   });
 
+  it('N01-07 内容锁允许移动，时位锁阻止无 sceneId 的重排；同批显式解锁后可继续', async () => {
+    const fixture = await makeFixture();
+    const [a, b, c] = fixture.sceneIds as [string, string, string];
+
+    const contentLocked = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['CONTENT'], locked: true, reason: '用户保护文案' }],
+    }));
+    const moved = await edit(fixture, makeRequest({
+      baseProjectRevision: contentLocked.response.project.revision,
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [c, b, a] }],
+    }));
+    expect(moved.response.scenes.map((scene) => scene.id)).toEqual([c, b, a]);
+
+    const positionLocked = await edit(fixture, makeRequest({
+      baseProjectRevision: moved.response.project.revision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['POSITION'], locked: true }],
+    }));
+    const beforeBlockedRevision = positionLocked.response.project.revision;
+    const blocked = await edit(fixture, makeRequest({
+      baseProjectRevision: beforeBlockedRevision,
+      operations: [{ op: 'reorder_scenes', orderedSceneIds: [a, b, c] }],
+    })).catch((error: unknown) => error as { code?: string; details?: { reason?: string; blockedDimensions?: string[] } });
+    expect(blocked).toMatchObject({ code: 'PRECONDITION_FAILED', details: { reason: 'EDIT_IMPACT_LOCKED', blockedDimensions: ['POSITION'] } });
+    expect((await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId })).revision).toBe(beforeBlockedRevision);
+
+    const unlockedAndMoved = await edit(fixture, makeRequest({
+      baseProjectRevision: beforeBlockedRevision,
+      operations: [
+        { op: 'set_object_lock', objectKind: 'SCENE', objectId: a, dimensions: ['POSITION'], locked: false },
+        { op: 'reorder_scenes', orderedSceneIds: [a, b, c] },
+      ],
+    }));
+    expect(unlockedAndMoved.response.scenes.map((scene) => scene.id)).toEqual([a, b, c]);
+    expect(unlockedAndMoved.response.editEvents.map((event) => event.action)).toEqual(['SET_OBJECT_LOCK', 'REORDER_SCENES']);
+    const persisted = await handle.db.select().from(projectObjectLocks).where(eq(projectObjectLocks.projectId, fixture.projectId));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.dimensions).toEqual(['CONTENT']);
+  });
+
+  it('N01-07 时长涟漪命中后续时位锁时整批回滚', async () => {
+    const fixture = await makeFixture();
+    const [a, b] = fixture.sceneIds as [string, string, string];
+    const locked = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'SCENE', objectId: b, dimensions: ['POSITION'], locked: true }],
+    }));
+    const base = locked.response.project.revision;
+    const failure = await edit(fixture, makeRequest({
+      baseProjectRevision: base,
+      expectedSceneRevisions: { [a]: 1 },
+      operations: [
+        { op: 'update_project', changes: { title: '不应提交' } },
+        { op: 'update_scene', sceneId: a, changes: { durationMs: 8_000 } },
+      ],
+    })).catch((error: unknown) => error as { code?: string; details?: { reason?: string; impact?: { objectId?: string; direct?: boolean } } });
+    expect(failure).toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      details: { reason: 'EDIT_IMPACT_LOCKED', impact: { objectId: b, direct: false } },
+    });
+    const fresh = await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId });
+    expect(fresh.revision).toBe(base);
+    expect(fresh.title).toBe('编辑项目');
+    const graph = await assembleSceneGraph(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId });
+    expect(graph.scenes[0]?.durationMs).toBe(5_000);
+  });
+
+  it('N01-07 非场景锁目标按工作区和项目隔离', async () => {
+    const fixture = await makeFixture();
+    const other = await makeFixture();
+    const sequence = await createSequence(deps(), {
+      workspaceId: other.workspaceId,
+      projectId: other.projectId,
+      input: { name: '其他项目序列', frameRate: { num: 30, den: 1 }, duration: { ticks: '10000', timebase: { num: 1, den: 1_000 } } },
+    });
+    const track = await createTrack(deps(), {
+      workspaceId: other.workspaceId,
+      projectId: other.projectId,
+      sequenceId: sequence.id,
+      input: { kind: 'VIDEO', position: 0, name: 'V1' },
+    });
+    await expect(edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [{ op: 'set_object_lock', objectKind: 'TRACK', objectId: track.id, dimensions: ['TRACK'], locked: true }],
+    }))).rejects.toMatchObject({ code: 'NOT_FOUND', httpStatus: 404, details: { reason: 'EDIT_LOCK_TARGET_MISSING' } });
+  });
+
   it('缺失 expectedSceneRevisions → 400；同一请求对同一 Scene 的多个操作按顺序应用（预期只校验一次）', async () => {
     const fixture = await makeFixture();
     const [a] = fixture.sceneIds;
@@ -335,5 +426,55 @@ describe('编辑事务（§4.6）', () => {
     expect(result.response.project.title).toBe('新标题');
     expect(result.response.editEvents[0]?.sceneId).toBeNull();
     expect(result.response.editEvents[0]?.action).toBe('UPDATE_PROJECT');
+  });
+
+  it('N01-06：A 创建的 Scene 可被 B 引用，整批只推进一次 Project revision', async () => {
+    const fixture = await makeFixture();
+    const createdSceneId = `scn_batch_${randomUUID()}`;
+    const result = await edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [
+        {
+          op: 'insert_scene',
+          afterSceneId: fixture.sceneIds[0] ?? null,
+          createdSceneId,
+          sceneDraft: {
+            sceneType: 'HOST_FULL', semanticType: 'DETAIL', durationMs: 3_000,
+            narration: '', visualIntent: '', componentId: null, componentVersion: null, props: {},
+            providerRequirement: null, sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+          },
+        },
+        { op: 'update_scene', sceneId: createdSceneId, changes: { narration: '批内后续操作已生效', durationMs: 2_500 } },
+      ],
+    }));
+
+    expect(result.response.project.revision).toBe(fixture.projectRevision + 1);
+    expect(result.createdSceneIds).toEqual([createdSceneId]);
+    expect(result.response.scenes.find((scene) => scene.id === createdSceneId)).toMatchObject({ narration: '批内后续操作已生效', durationMs: 2_500, revision: 2 });
+    expect(result.response.editEvents.map((event) => event.action)).toEqual(['INSERT_SCENE', 'UPDATE_SCENE']);
+  });
+
+  it('N01-06：候选状态中 B 无效时，A 及全部事件均不落库', async () => {
+    const fixture = await makeFixture();
+    const createdSceneId = `scn_rollback_${randomUUID()}`;
+    const beforeEvents = await handle.db.select().from(editEvents).where(eq(editEvents.projectId, fixture.projectId));
+    await expect(edit(fixture, makeRequest({
+      baseProjectRevision: fixture.projectRevision,
+      operations: [
+        {
+          op: 'insert_scene', afterSceneId: null, createdSceneId,
+          sceneDraft: {
+            sceneType: 'HOST_FULL', semanticType: 'DETAIL', durationMs: 2_000,
+            narration: '', visualIntent: '', componentId: null, componentVersion: null, props: {},
+            providerRequirement: null, sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+          },
+        },
+        { op: 'split_scene', sceneId: createdSceneId, atMs: 2_000 },
+      ],
+    }))).rejects.toMatchObject({ details: { reason: 'EDIT_CANDIDATE_SPLIT_OUT_OF_RANGE' } });
+
+    expect(await handle.db.select().from(scenes).where(eq(scenes.id, createdSceneId))).toHaveLength(0);
+    expect((await getProject(deps(), { workspaceId: fixture.workspaceId, projectId: fixture.projectId })).revision).toBe(fixture.projectRevision);
+    expect(await handle.db.select().from(editEvents).where(eq(editEvents.projectId, fixture.projectId))).toHaveLength(beforeEvents.length);
   });
 });

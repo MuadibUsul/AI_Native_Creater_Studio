@@ -65,6 +65,98 @@ export const ASSET_VERSION_STATUSES = ['UPLOADING', 'READY', 'FAILED', 'SUPERSED
 export const assetVersionStatusSchema = z.enum(ASSET_VERSION_STATUSES);
 export type AssetVersionStatus = z.infer<typeof assetVersionStatusSchema>;
 
+export const MEDIA_PROBE_STATUSES = ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'READY', 'FAILED'] as const;
+export const mediaProbeStatusSchema = z.enum(MEDIA_PROBE_STATUSES);
+export type MediaProbeStatus = z.infer<typeof mediaProbeStatusSchema>;
+
+export const MEDIA_CAPABILITY_STATES = ['AVAILABLE', 'PROXY_REQUIRED', 'TRANSCODE_REQUIRED', 'UNAVAILABLE', 'UNKNOWN'] as const;
+export const mediaCapabilityStateSchema = z.enum(MEDIA_CAPABILITY_STATES);
+export type MediaCapabilityState = z.infer<typeof mediaCapabilityStateSchema>;
+
+const integerStringSchema = z.string().regex(/^-?\d+$/);
+export const mediaRationalSchema = z.object({
+  numerator: z.number().int(),
+  denominator: z.number().int().positive(),
+});
+export type MediaRational = z.infer<typeof mediaRationalSchema>;
+
+export const mediaStreamProbeSchema = z.object({
+  index: z.number().int().nonnegative(),
+  type: z.enum(['VIDEO', 'AUDIO', 'SUBTITLE', 'DATA', 'ATTACHMENT', 'UNKNOWN']),
+  codecName: z.string().nullable(),
+  codecLongName: z.string().nullable(),
+  profile: z.string().nullable(),
+  timeBase: mediaRationalSchema.nullable(),
+  startPts: integerStringSchema.nullable(),
+  durationTicks: integerStringSchema.nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  rotationDegrees: z.number().int().min(-360).max(360).nullable(),
+  pixelFormat: z.string().nullable(),
+  colorRange: z.string().nullable(),
+  colorSpace: z.string().nullable(),
+  colorTransfer: z.string().nullable(),
+  colorPrimaries: z.string().nullable(),
+  nominalFrameRate: mediaRationalSchema.nullable(),
+  averageFrameRate: mediaRationalSchema.nullable(),
+  frameCount: integerStringSchema.nullable(),
+  sampleRate: z.number().int().positive().nullable(),
+  channels: z.number().int().positive().nullable(),
+  channelLayout: z.string().nullable(),
+  cadence: z.enum(['CONSTANT', 'VARIABLE', 'UNKNOWN']),
+  sampledPacketCount: z.number().int().nonnegative(),
+  sampledPtsDeltaTicks: z.array(integerStringSchema).max(32),
+});
+export type MediaStreamProbe = z.infer<typeof mediaStreamProbeSchema>;
+
+export const mediaCapabilitySummarySchema = z.object({
+  upload: mediaCapabilityStateSchema,
+  decode: mediaCapabilityStateSchema,
+  preview: mediaCapabilityStateSchema,
+  export: mediaCapabilityStateSchema,
+  reasons: z.array(
+    z.object({
+      code: z.string().min(1).max(80),
+      message: z.string().min(1).max(500),
+      nextAction: z.string().min(1).max(500).nullable(),
+    }),
+  ),
+});
+export type MediaCapabilitySummary = z.infer<typeof mediaCapabilitySummarySchema>;
+
+export const sourceMediaProbeResultSchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  status: z.enum(['READY', 'FAILED']),
+  formatNames: z.array(z.string().min(1)).max(20),
+  formatLongName: z.string().nullable(),
+  startTimeMs: z.number().int().nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  bitRate: z.number().int().nonnegative().nullable(),
+  streams: z.array(mediaStreamProbeSchema).max(128),
+  decodeCheck: z.object({
+    status: z.enum(['PASSED', 'FAILED']),
+    errorCode: z.string().max(80).nullable(),
+    message: z.string().max(500).nullable(),
+  }),
+  capabilities: mediaCapabilitySummarySchema,
+});
+export type SourceMediaProbeResult = z.infer<typeof sourceMediaProbeResultSchema>;
+
+export const mediaProbeJobInputSchema = z.object({
+  assetId: opaqueIdSchema,
+  assetVersionId: opaqueIdSchema,
+  storageKey: z.string().min(1).max(512),
+  declaredMimeType: z.string().min(3).max(120),
+});
+export type MediaProbeJobInput = z.infer<typeof mediaProbeJobInputSchema>;
+
+/** Worker I/O seam；实现必须在隔离子进程中探测，不让解析器在 API/domain 进程内执行。 */
+export interface SourceMediaProbe {
+  readonly kind: string;
+  probe(input: { filePath: string; declaredMimeType: string }): Promise<SourceMediaProbeResult>;
+}
+
 /** Scene 资产绑定角色（与 assetBindingSchema.role 对齐；P02-04 定稿） */
 export const ASSET_ROLES = ['visual', 'audio', 'avatar', 'broll', 'music', 'thumbnail', 'voice_sample', 'source', 'chart', 'subtitle'] as const;
 export const assetRoleSchema = z.enum(ASSET_ROLES);
@@ -116,6 +208,10 @@ export const ASSET_DEFAULT_RETENTION: Readonly<Record<AssetType, RetentionClass>
 
 /** 授权元数据（LicenseMetadata）：用于资产来源/授权状态审计（§24、§67） */
 export const LICENSE_TYPES = ['USER_OWNED', 'LICENSED', 'PUBLIC_DOMAIN', 'PROVIDER_TERMS', 'UNKNOWN'] as const;
+export const ASSET_PERMITTED_USES = ['EDIT', 'PUBLISH', 'COMMERCIAL', 'AI_ANALYSIS', 'MODEL_TRAINING'] as const;
+export const assetPermittedUseSchema = z.enum(ASSET_PERMITTED_USES);
+export const ASSET_SENSITIVITY_CLASSES = ['PUBLIC', 'INTERNAL', 'SENSITIVE', 'RESTRICTED'] as const;
+export const assetSensitivityClassSchema = z.enum(ASSET_SENSITIVITY_CLASSES);
 export const licenseMetadataSchema = z.object({
   type: z.enum(LICENSE_TYPES),
   holder: z.string().max(200).nullable().default(null),
@@ -125,6 +221,9 @@ export const licenseMetadataSchema = z.object({
   notes: z.string().max(1000).nullable().default(null),
   confirmedBy: z.string().nullable().default(null),
   confirmedAt: isoDateTimeSchema.nullable().default(null),
+  userOwnedDeclared: z.boolean().default(false),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length).default(['EDIT', 'PUBLISH']),
+  expiresAt: isoDateTimeSchema.nullable().default(null),
 });
 
 export type LicenseMetadata = z.infer<typeof licenseMetadataSchema>;
@@ -137,7 +236,31 @@ export const licenseInputSchema = z.object({
   sourceUrl: z.string().max(2000).optional(),
   termsUrl: z.string().max(2000).optional(),
   notes: z.string().max(1000).optional(),
+  userOwnedDeclared: z.boolean().optional(),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length).optional(),
+  expiresAt: isoDateTimeSchema.nullable().optional(),
 });
+
+export const updateAssetRightsRequestSchema = z.object({
+  type: z.enum(LICENSE_TYPES),
+  holder: z.string().trim().max(200).nullable(),
+  attribution: z.string().trim().max(500).nullable(),
+  sourceUrl: z.string().url().max(2000).nullable(),
+  termsUrl: z.string().url().max(2000).nullable(),
+  notes: z.string().trim().max(1000).nullable(),
+  userOwnedDeclared: z.boolean(),
+  permittedUses: z.array(assetPermittedUseSchema).max(ASSET_PERMITTED_USES.length),
+  expiresAt: isoDateTimeSchema.nullable(),
+  sensitivityClass: assetSensitivityClassSchema,
+}).strict().superRefine((value, context) => {
+  if (value.type === 'USER_OWNED' && !value.userOwnedDeclared) {
+    context.addIssue({ code: 'custom', path: ['userOwnedDeclared'], message: '自有素材必须明确声明权利' });
+  }
+  if (value.type !== 'USER_OWNED' && value.userOwnedDeclared) {
+    context.addIssue({ code: 'custom', path: ['userOwnedDeclared'], message: '仅自有素材可作自有权利声明' });
+  }
+});
+export type UpdateAssetRightsRequest = z.infer<typeof updateAssetRightsRequestSchema>;
 
 export const assetVersionSchema = z.object({
   id: opaqueIdSchema,
@@ -157,6 +280,8 @@ export const assetVersionSchema = z.object({
   width: z.number().int().positive().nullable().default(null),
   height: z.number().int().positive().nullable().default(null),
   status: assetVersionStatusSchema,
+  probeStatus: mediaProbeStatusSchema.default('NOT_REQUIRED'),
+  mediaProbe: sourceMediaProbeResultSchema.nullable().default(null),
   metadata: z.record(z.string(), z.unknown()).default({}),
   createdAt: isoDateTimeSchema,
 });
@@ -175,6 +300,8 @@ export const assetSchema = z.object({
   status: assetStatusSchema,
   retentionClass: retentionClassSchema,
   license: licenseMetadataSchema,
+  sensitivityClass: assetSensitivityClassSchema.default('INTERNAL'),
+  privacyDeletionRequestedAt: isoDateTimeSchema.nullable().default(null),
   metadata: z.record(z.string(), z.unknown()).default({}),
   currentVersionId: opaqueIdSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
@@ -189,8 +316,153 @@ export const assetDetailSchema = assetSchema.extend({
 
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 
+export const assetReferenceSchema = z.object({
+  kind: z.enum(['SCENE', 'PROJECT_VERSION']),
+  projectId: opaqueIdSchema,
+  projectTitle: z.string().min(1),
+  projectRevision: z.number().int().nonnegative(),
+  sceneId: opaqueIdSchema.nullable(),
+  sceneRevision: z.number().int().nonnegative().nullable(),
+  role: assetRoleSchema.nullable(),
+  projectVersionId: opaqueIdSchema.nullable(),
+  versionNumber: z.number().int().positive().nullable(),
+  versionReason: z.string().nullable(),
+});
+export type AssetReference = z.infer<typeof assetReferenceSchema>;
+
+export const assetDerivationSchema = z.object({
+  direction: z.enum(['SOURCE', 'DERIVED']),
+  kind: z.string().min(1).max(80),
+  assetId: opaqueIdSchema,
+  assetVersionId: opaqueIdSchema,
+  relatedAssetId: opaqueIdSchema,
+  relatedAssetVersionId: opaqueIdSchema,
+  createdAt: isoDateTimeSchema,
+});
+export type AssetDerivation = z.infer<typeof assetDerivationSchema>;
+
+export const assetLicenseStateSchema = z.enum(['ACTIVE', 'EXPIRED', 'PUBLISH_NOT_PERMITTED', 'UNCONFIRMED']);
+export const assetLifecycleSchema = z.object({
+  asset: assetSchema,
+  licenseState: assetLicenseStateSchema,
+  references: z.array(assetReferenceSchema),
+  derivations: z.array(assetDerivationSchema),
+  gcProtected: z.boolean(),
+  gcProtectionReasons: z.array(z.enum(['ACTIVE_SCENE_REFERENCE', 'FROZEN_VERSION_REFERENCE', 'DERIVATION_REFERENCE'])),
+});
+export type AssetLifecycle = z.infer<typeof assetLifecycleSchema>;
+
+export const requestAssetPrivacyDeletionSchema = z.object({
+  confirmationAssetId: opaqueIdSchema,
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+export type RequestAssetPrivacyDeletion = z.infer<typeof requestAssetPrivacyDeletionSchema>;
+
+export const assetPrivacyDeletionResultSchema = z.object({
+  assetId: opaqueIdSchema,
+  status: z.enum(['SCHEDULED', 'DEFERRED_BY_REFERENCES']),
+  requestedAt: isoDateTimeSchema,
+  missingDependencies: z.array(assetReferenceSchema),
+});
+export type AssetPrivacyDeletionResult = z.infer<typeof assetPrivacyDeletionResultSchema>;
+
+export const ASSET_RELINK_ERROR_REASONS = {
+  TARGET_VERSION_NOT_FOUND: 'TARGET_VERSION_NOT_FOUND',
+  TARGET_OBJECT_STILL_AVAILABLE: 'TARGET_OBJECT_STILL_AVAILABLE',
+  CANDIDATE_NOT_READY: 'CANDIDATE_NOT_READY',
+  CANDIDATE_OBJECT_MISSING: 'CANDIDATE_OBJECT_MISSING',
+  MEDIA_PROBE_REQUIRED: 'MEDIA_PROBE_REQUIRED',
+  CONFIRMATION_MISMATCH: 'CONFIRMATION_MISMATCH',
+  CANDIDATE_CHANGED: 'CANDIDATE_CHANGED',
+  STORAGE_COPY_UNAVAILABLE: 'STORAGE_COPY_UNAVAILABLE',
+} as const;
+export type AssetRelinkErrorReason = (typeof ASSET_RELINK_ERROR_REASONS)[keyof typeof ASSET_RELINK_ERROR_REASONS];
+
+export const assetRelinkTrackSchema = z.object({
+  type: z.enum(['VIDEO', 'AUDIO', 'SUBTITLE', 'DATA', 'ATTACHMENT', 'UNKNOWN']),
+  codecName: z.string().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  channels: z.number().int().positive().nullable(),
+  sampleRate: z.number().int().positive().nullable(),
+});
+export type AssetRelinkTrack = z.infer<typeof assetRelinkTrackSchema>;
+
+export const assetRelinkVersionStateSchema = z.object({
+  assetVersionId: opaqueIdSchema,
+  versionNumber: z.number().int().positive(),
+  current: z.boolean(),
+  availability: z.enum(['AVAILABLE', 'MISSING']),
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  tracks: z.array(assetRelinkTrackSchema),
+  activeClipReferences: z.number().int().nonnegative(),
+});
+export type AssetRelinkVersionState = z.infer<typeof assetRelinkVersionStateSchema>;
+
+export const assetRelinkStateSchema = z.object({
+  assetId: opaqueIdSchema,
+  versions: z.array(assetRelinkVersionStateSchema),
+});
+export type AssetRelinkState = z.infer<typeof assetRelinkStateSchema>;
+
+export const preflightAssetRelinkRequestSchema = z.object({
+  targetVersionId: opaqueIdSchema,
+  candidateAssetId: opaqueIdSchema,
+}).strict();
+export type PreflightAssetRelinkRequest = z.infer<typeof preflightAssetRelinkRequestSchema>;
+
+export const assetRelinkComparisonSchema = z.object({
+  mode: z.enum(['EXACT_RESTORE', 'REPLACEMENT']),
+  targetVersionId: opaqueIdSchema,
+  candidateAssetId: opaqueIdSchema,
+  candidateVersionId: opaqueIdSchema,
+  candidateChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  checksumMatches: z.boolean(),
+  duration: z.object({
+    targetMs: z.number().int().nonnegative().nullable(),
+    candidateMs: z.number().int().nonnegative().nullable(),
+    deltaMs: z.number().int().nullable(),
+    matches: z.boolean(),
+  }),
+  tracks: z.object({
+    target: z.array(assetRelinkTrackSchema),
+    candidate: z.array(assetRelinkTrackSchema),
+    matches: z.boolean(),
+  }),
+  activeClipReferences: z.number().int().nonnegative(),
+  affectedProjectIds: z.array(opaqueIdSchema),
+  confirmationText: z.enum(['恢复原件', '确认替换']),
+  reviewRequired: z.boolean(),
+});
+export type AssetRelinkComparison = z.infer<typeof assetRelinkComparisonSchema>;
+
+export const applyAssetRelinkRequestSchema = preflightAssetRelinkRequestSchema.extend({
+  expectedCandidateChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  confirmationText: z.enum(['恢复原件', '确认替换']),
+}).strict();
+export type ApplyAssetRelinkRequest = z.infer<typeof applyAssetRelinkRequestSchema>;
+
+export const assetRelinkResultSchema = z.object({
+  relinkId: opaqueIdSchema,
+  assetId: opaqueIdSchema,
+  action: z.enum(['EXACT_RESTORE', 'REPLACEMENT']),
+  restoredVersionId: opaqueIdSchema,
+  createdVersionId: opaqueIdSchema.nullable(),
+  activeClipReferencesPreserved: z.number().int().nonnegative(),
+  reviewRequired: z.boolean(),
+  state: assetRelinkStateSchema,
+});
+export type AssetRelinkResult = z.infer<typeof assetRelinkResultSchema>;
+
 /** 单文件上限 5 GiB（§26.1：大文件必须直传对象存储，不经 Web App Server） */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
+export const DEFAULT_UPLOAD_PART_SIZE_BYTES = 8 * 1024 * 1024;
+export const MAX_UPLOAD_PARTS = 10_000;
+export const MULTIPART_UPLOAD_INTENT_TTL_SECONDS = 24 * 60 * 60;
+
+export const uploadModeSchema = z.enum(['SINGLE', 'MULTIPART']);
+export type UploadMode = z.infer<typeof uploadModeSchema>;
 
 export const createUploadIntentRequestSchema = z.object({
   assetType: assetTypeSchema,
@@ -206,6 +478,11 @@ export const createUploadIntentRequestSchema = z.object({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
   license: licenseInputSchema.optional(),
+  /** 新客户端统一使用 MULTIPART；SINGLE 仅保留旧 SDK/API 兼容。 */
+  uploadMode: uploadModeSchema.default('SINGLE'),
+  partSizeBytes: z.number().int().min(256 * 1024).max(64 * 1024 * 1024).optional(),
+  /** 缺失原件恢复候选；服务端只在目标版本确实缺失时跳过哈希去重。 */
+  relinkTargetVersionId: opaqueIdSchema.optional(),
 });
 
 export type CreateUploadIntentRequest = z.infer<typeof createUploadIntentRequestSchema>;
@@ -222,12 +499,52 @@ export const uploadIntentResponseSchema = z
     /** 命中 workspace 内哈希去重：未创建新对象，客户端可直接绑定 asset */
     deduped: z.boolean(),
     asset: assetSchema,
+    uploadMode: uploadModeSchema.default('SINGLE'),
+    partSizeBytes: z.number().int().positive().nullable().default(null),
+    partCount: z.number().int().positive().nullable().default(null),
   })
-  .refine((value) => (value.deduped ? value.upload === null && value.intentId === null : value.upload !== null && value.intentId !== null), {
+  .refine((value) => (value.deduped ? value.upload === null && value.intentId === null : value.intentId !== null), {
     message: 'deduped 与 upload/intentId 必须一致（去重时无直传目标）',
+  })
+  .refine((value) => (value.deduped || value.uploadMode !== 'MULTIPART' ? true : value.upload === null && value.partSizeBytes !== null && value.partCount !== null), {
+    message: 'MULTIPART 意图必须返回分片参数且不返回整对象上传地址',
   });
 
 export type UploadIntentResponse = z.infer<typeof uploadIntentResponseSchema>;
+
+export const uploadPartStatusSchema = z.enum(['PENDING', 'COMPLETED']);
+export const uploadPartSchema = z.object({
+  partNumber: z.number().int().positive(),
+  status: uploadPartStatusSchema,
+  sizeBytes: z.number().int().nonnegative().nullable().default(null),
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
+  completedAt: isoDateTimeSchema.nullable().default(null),
+});
+export type UploadPart = z.infer<typeof uploadPartSchema>;
+
+export const uploadIntentStatusSchema = z.object({
+  intentId: opaqueIdSchema,
+  assetId: opaqueIdSchema,
+  status: z.enum(['PENDING', 'COMPLETED', 'EXPIRED', 'FAILED', 'CANCELLED']),
+  uploadMode: uploadModeSchema,
+  partSizeBytes: z.number().int().positive().nullable(),
+  partCount: z.number().int().positive().nullable(),
+  expiresAt: isoDateTimeSchema,
+  parts: z.array(uploadPartSchema),
+});
+export type UploadIntentStatus = z.infer<typeof uploadIntentStatusSchema>;
+
+export const uploadPartTargetResponseSchema = z.object({
+  partNumber: z.number().int().positive(),
+  alreadyCompleted: z.boolean(),
+  upload: uploadTargetSchema.nullable(),
+});
+export type UploadPartTargetResponse = z.infer<typeof uploadPartTargetResponseSchema>;
+
+export const completeUploadPartRequestSchema = z.object({
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type CompleteUploadPartRequest = z.infer<typeof completeUploadPartRequestSchema>;
 
 export const confirmUploadRequestSchema = z.object({
   checksumSha256: z

@@ -245,6 +245,9 @@ const toGrantDto = (row: typeof supportAccessGrants.$inferSelect): SupportAccess
     id: row.id,
     workspaceId: row.workspaceId,
     requestedByUserId: row.requestedByUserId,
+    ticketId: row.ticketId,
+    beneficiaryPrincipalId: row.beneficiaryPrincipalId,
+    scope: row.scope,
     purpose: row.purpose,
     status,
     createdAt: row.createdAt.toISOString(),
@@ -270,6 +273,9 @@ export async function createSupportGrant(
       id: `sag_${randomUUID()}`,
       workspaceId: input.workspaceId,
       requestedByUserId: input.actorUserId,
+      ticketId: body.ticketId,
+      beneficiaryPrincipalId: body.beneficiaryPrincipalId,
+      scope: body.scope,
       purpose: body.purpose,
       status: 'ACTIVE',
       expiresAt,
@@ -282,7 +288,7 @@ export async function createSupportGrant(
     id: `obx_${randomUUID()}`,
     workspaceId: input.workspaceId,
     type: 'support.access_granted',
-    payload: { grantId: row.id, purpose: body.purpose, expiresAt: expiresAt.toISOString(), actorType: 'PLATFORM_ADMIN', actorId: input.actorUserId },
+    payload: { grantId: row.id, purpose: body.purpose, ticketId: body.ticketId, expiresAt: expiresAt.toISOString(), actorType: 'PLATFORM_ADMIN', actorId: input.actorUserId },
   });
   await recordAudit(deps, {
     actorKind: 'PLATFORM_ADMIN',
@@ -291,7 +297,7 @@ export async function createSupportGrant(
     targetType: 'support_grant',
     targetId: row.id,
     workspaceId: input.workspaceId,
-    details: { purpose: body.purpose.slice(0, 200), ttlHours: body.ttlHours },
+    details: { purpose: body.purpose.slice(0, 200), ticketId: body.ticketId, beneficiaryPrincipalId: body.beneficiaryPrincipalId, scope: body.scope, ttlHours: body.ttlHours },
   });
   return toGrantDto(row);
 }
@@ -344,13 +350,16 @@ export async function listSupportGrants(
  * 支持视图（**需有效授权**；只含非私密元数据摘要）。
  * 每次访问：①audit_log（support.view）②工作区可见事件（support.viewed）——"不可无痕"。
  */
-export async function getSupportView(deps: DomainDeps, input: { workspaceId: string; actorUserId: string }): Promise<SupportView> {
+export async function getSupportView(deps: DomainDeps, input: { workspaceId: string; actorUserId: string; actorPrincipalId: string; ticketId: string }): Promise<SupportView> {
   const grantRows = await deps.db
     .select()
     .from(supportAccessGrants)
     .where(
       and(
         eq(supportAccessGrants.workspaceId, input.workspaceId),
+        eq(supportAccessGrants.beneficiaryPrincipalId, input.actorPrincipalId),
+        eq(supportAccessGrants.ticketId, input.ticketId),
+        eq(supportAccessGrants.scope, 'SUMMARY_READ'),
         eq(supportAccessGrants.status, 'ACTIVE'),
         gt(supportAccessGrants.expiresAt, new Date()),
       ),
@@ -358,7 +367,7 @@ export async function getSupportView(deps: DomainDeps, input: { workspaceId: str
     .orderBy(desc(supportAccessGrants.createdAt))
     .limit(1);
   const grantRow = grantRows[0];
-  if (grantRow === undefined) {
+  if (grantRow === undefined || !Number.isFinite(grantRow.expiresAt.getTime())) {
     throw new ApiFailure(ERROR_CODES.FORBIDDEN, '无有效支持访问授权（需先创建时限授权）', 403, { reason: SUPPORT_ERROR_REASONS.SUPPORT_GRANT_REQUIRED });
   }
 
@@ -395,13 +404,13 @@ export async function getSupportView(deps: DomainDeps, input: { workspaceId: str
     targetType: 'workspace',
     targetId: input.workspaceId,
     workspaceId: input.workspaceId,
-    details: { grantId: grantRow.id, purpose: grantRow.purpose.slice(0, 200) },
+    details: { grantId: grantRow.id, ticketId: input.ticketId, purpose: grantRow.purpose.slice(0, 200) },
   });
   await deps.db.insert(outboxEvents).values({
     id: `obx_${randomUUID()}`,
     workspaceId: input.workspaceId,
     type: 'support.viewed',
-    payload: { grantId: grantRow.id, actorType: 'PLATFORM_ADMIN', actorId: input.actorUserId, viewedAt: viewedAt.toISOString() },
+    payload: { grantId: grantRow.id, ticketId: input.ticketId, actorType: 'PLATFORM_ADMIN', actorId: input.actorUserId, viewedAt: viewedAt.toISOString() },
   });
 
   return supportViewSchema.parse({
@@ -537,9 +546,7 @@ export async function getAdminProviderStatus(deps: DomainDeps): Promise<AdminPro
       .orderBy(desc(providerGenerations.updatedAt))
       .limit(1);
     const failure = failureRows[0];
-    const errorRecord = (failure?.error ?? null) as Record<string, unknown> | null;
-    const categoryRaw = errorRecord === null ? null : (errorRecord['code'] ?? errorRecord['category'] ?? errorRecord['message'] ?? null);
-    const lastErrorCategory = categoryRaw === null ? null : String(categoryRaw).slice(0, 120);
+    const lastErrorCategory = safeProviderErrorCategory(failure?.error ?? null);
     items.push({
       providerId,
       byStatus,
@@ -549,6 +556,15 @@ export async function getAdminProviderStatus(deps: DomainDeps): Promise<AdminPro
   }
   items.sort((a, b) => a.providerId.localeCompare(b.providerId));
   return adminProviderStatusSchema.parse({ items });
+}
+
+/** Provider error JSON is untrusted. No free text, URLs or credential fragments leave the admin projection. */
+export function safeProviderErrorCategory(error: unknown): 'PROVIDER_FAILED' | 'RESULT_URL_EXPIRED' | 'OTHER' | null {
+  if (error === null || error === undefined) return null;
+  if (typeof error !== 'object' || Array.isArray(error)) return 'OTHER';
+  const record = error as Record<string, unknown>;
+  const category = record['code'] ?? record['category'] ?? record['reason'];
+  return category === 'PROVIDER_FAILED' || category === 'RESULT_URL_EXPIRED' ? category : 'OTHER';
 }
 
 /** 存储用量（按工作区聚合，Top-N；含总量）。 */

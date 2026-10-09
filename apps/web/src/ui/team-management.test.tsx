@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { mockClient, renderWithClient } from '@/test-utils.js';
@@ -82,17 +82,28 @@ describe('团队与隐私（P09-04）', () => {
     const updateRole = vi.fn().mockResolvedValue(member({ role: 'ADMIN' }));
     const remove = vi.fn().mockResolvedValue(undefined);
     const client = teamClient({
-      members: { list: vi.fn().mockResolvedValue([member()]), add: vi.fn(), updateRole, remove },
+      members: { list: vi.fn().mockResolvedValue([member(), member({ userId: 'usr_2', email: 'co-owner@test.local', name: 'Co-owner' })]), add: vi.fn(), updateRole, remove },
     });
     renderWithClient(<TeamPage />, client);
 
-    expect(await screen.findByText(/owner@test\.local/)).toBeTruthy();
+    expect(await screen.findByText('owner@test.local')).toBeTruthy();
     await userEvent.selectOptions(screen.getByLabelText('角色-owner@test.local'), 'ADMIN');
     await waitFor(() => expect(updateRole).toHaveBeenCalledWith('ws_1', 'usr_1', { role: 'ADMIN' }));
 
-    await userEvent.click(screen.getByRole('button', { name: '移除' }));
+    await userEvent.click(within(screen.getByTestId('member-usr_1')).getByRole('button', { name: '移除' }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith('ws_1', 'usr_1'));
     expect((await screen.findByTestId('team-notice')).textContent).toMatch(/立即失效/);
+  });
+
+  it('最后一名所有者不能在界面中降级或移除，并解释原因', async () => {
+    renderWithClient(<TeamPage />, teamClient());
+
+    const role = await screen.findByLabelText('角色-owner@test.local');
+    const remove = screen.getByRole('button', { name: '移除' });
+    expect((role as HTMLSelectElement).disabled).toBe(true);
+    expect(role.getAttribute('title')).toMatch(/至少一名所有者/);
+    expect((remove as HTMLButtonElement).disabled).toBe(true);
+    expect(remove.getAttribute('title')).toMatch(/最后一名所有者/);
   });
 
   it('邀请：创建（邮箱+角色）与撤销调用 SDK；PENDING 唯一与接受条件有明确说明', async () => {

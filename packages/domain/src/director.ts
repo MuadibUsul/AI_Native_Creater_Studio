@@ -17,8 +17,9 @@ import {
   type VisualPlan,
   type VisualPlanItem,
 } from '@ancs/contracts';
-import { and, eq, inArray } from 'drizzle-orm';
-import { claims as claimsTable, scenes as scenesTable } from '@ancs/db';
+import { createHash } from 'node:crypto';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { assets, claims as claimsTable, scenes as scenesTable } from '@ancs/db';
 import { getBillingStatus } from './billing.js';
 import { getCurrentCatalog } from './catalog.js';
 import { resolveProviderRoute } from './credentials.js';
@@ -27,6 +28,7 @@ import { getPlan } from './narrative.js';
 import { getProject } from './projects.js';
 import { planVisual } from './visual-plan.js';
 import type { DomainDeps } from './channels.js';
+import { getMediaEvidenceBundle } from './media-evidence.js';
 
 /**
  * Director 服务（P04-05 / 规范 §9；计划 §8 P04-05）。
@@ -466,7 +468,7 @@ export async function checkBudget(
 /** 组装 Director 计划（不落库；多次调用结果一致）。 */
 export async function planDirector(
   deps: DomainDeps,
-  input: { workspaceId: string; projectId: string; planId: string; policy?: DirectorPolicyInput },
+  input: { workspaceId: string; projectId: string; planId: string; policy?: DirectorPolicyInput; evidencePermissionContext?: string },
 ): Promise<DirectorPlan> {
   const plan = await getPlan(deps, { workspaceId: input.workspaceId, projectId: input.projectId, planId: input.planId });
   const visual = await planVisual(deps, input);
@@ -478,6 +480,12 @@ export async function planDirector(
   const budget = await checkBudget(deps, { workspaceId: input.workspaceId });
   const warnings = [...sceneWarnings, ...jobWarnings, ...budget.warnings];
   const estimatedDurationMs = scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
+  const projectAssets = await deps.db.select({ id: assets.id }).from(assets).where(and(eq(assets.workspaceId, input.workspaceId), eq(assets.projectId, input.projectId), isNull(assets.deletedAt))).orderBy(asc(assets.createdAt), asc(assets.id)).limit(20);
+  const directorConfigHash = createHash('sha256').update(`director-media-evidence\0${DIRECTOR_PLAN_VERSION}`).digest('hex');
+  const mediaEvidence = await Promise.all(projectAssets.map(async (asset) => {
+    const bundle = await getMediaEvidenceBundle(deps, { workspaceId: input.workspaceId, assetId: asset.id, permissionContext: input.evidencePermissionContext ?? `${input.workspaceId}:system:DIRECTOR`, request: { consumer: 'DIRECTOR', analysisConfigHash: directorConfigHash } });
+    return { assetId: asset.id, sourceAssetVersionId: bundle.sourceAssetVersionId, cacheStatus: bundle.cacheStatus, recordIds: bundle.page.items.map((item) => item.id).slice(0, 100), whyFetched: bundle.whyFetched };
+  }));
 
   const chartScenes = scenes.filter((scene) => CHART_SCENE_TYPES.has(scene.sceneType)).length;
   const degradedScenes = scenes.filter((scene) => scene.degraded).length;
@@ -501,6 +509,7 @@ export async function planDirector(
     scenes,
     assetPlan,
     providerJobs: jobs,
+    mediaEvidence,
     estimatedDurationMs,
     estimatedCost: cost,
     warnings,
@@ -560,7 +569,7 @@ export function validateDirectorPlanForApply(
  * 应用 Director 计划 = 编辑协议的一次**原子**请求（insert_scene × N）。
  *
  * - 仅允许**空项目**（已有场景的项目走编辑协议，避免覆盖作者工作）；
- * - 逆序插入（每次插到最前）保证最终顺序 = 规划顺序（编辑协议不预知新场景 id）；
+ * - 使用规划的稳定 sceneId 顺序追加；已锁定的早期 Scene 不会被后续插入间接位移；
  * - 幂等键由 (planId, narrativePlanRevision) 派生：同计划重复应用由编辑幂等保证不重复插入；
  * - 锁定旁白 → 锁定场景（sceneDraft.locked；作者仍可显式 set_scene_lock 解锁）；
  * - 来源绑定：Scene.sourceBindings 按 Claim 的来源分组（携带 claimIds/datasetIds），
@@ -607,8 +616,8 @@ export async function applyDirectorPlan(
           .where(and(eq(claimsTable.workspaceId, input.workspaceId), inArray(claimsTable.id, allClaimIds)));
   const sourcesByClaim = new Map(claimRows.map((row) => [row.id, row.sourceIds as string[]]));
 
-  // 逆序插入：每次插到项目最前 → 最终顺序即规划顺序
-  const operations = [...plan.scenes].reverse().map((scene) => {
+  // N01-06 起批内创建 ID 是公共契约；顺序追加避免后续 insert 移动已锁定 Scene。
+  const operations = plan.scenes.map((scene, index) => {
     const bySource = new Map<string, string[]>();
     for (const claimId of scene.claimIds) {
       for (const sourceId of sourcesByClaim.get(claimId) ?? []) {
@@ -619,7 +628,8 @@ export async function applyDirectorPlan(
     }
     return {
       op: 'insert_scene' as const,
-      afterSceneId: null,
+      afterSceneId: index === 0 ? null : (plan.scenes[index - 1]?.sceneId ?? null),
+      createdSceneId: scene.sceneId,
       sceneDraft: {
         sceneType: scene.sceneType,
         semanticType: scene.semanticType,

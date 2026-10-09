@@ -5,10 +5,11 @@ import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, creditLedger, plans, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaceSubscriptions, workspaces, type DbHandle } from '@ancs/db';
 import { eq } from 'drizzle-orm';
-import { createPlanVersion, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
+import { assignWorkspacePlan, createPlanVersion, ensureDefaultPlans, type DomainDeps } from '@ancs/domain';
 import { LocalCredentialVault } from '@ancs/providers-credential-vault-local';
 import { parsePlatformCredentials } from './plugins/credentials.js';
 import { buildServer } from './server.js';
+import { enrollTestOpsTotp, provisionTestOpsPrincipal, signInTestOpsClient, testOpsDeps } from './test-helpers/ops-auth.js';
 
 /**
  * P09-01 验收（真实 DB）：
@@ -23,6 +24,7 @@ let auth: AuthInstance;
 let app: Awaited<ReturnType<typeof buildServer>>;
 let baseUrl: string;
 let adminEmail = '';
+let adminTotpUri = '';
 const ADMIN_PASSWORD = 'admin-password-1234'; // secrets:check-ignore：测试专用假密钥
 const PASSWORD = 'password-1234';
 
@@ -41,14 +43,16 @@ beforeAll(async () => {
   auth = createAuth({ db: handle.db, secret: 'plans-secret-0123456789', baseUrl: 'http://localhost:3001' }); // secrets:check-ignore：测试专用假密钥
   adminEmail = `plans-admin-${randomUUID()}@test.local`;
   const adminUser = await createInternalUser(auth, { email: adminEmail, password: ADMIN_PASSWORD, name: 'plans-admin' });
+  await provisionTestOpsPrincipal(handle.db, adminUser.id);
   app = await buildServer({
     auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
     credentials: { cipher: new LocalCredentialVault({ keys: 'v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }), platformCredentials: parsePlatformCredentials(undefined) },
-    admin: { userIds: [adminUser.id] },
+    admin: testOpsDeps(handle.db),
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${String(address.port)}`;
+  adminTotpUri = await enrollTestOpsTotp(createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' }), adminEmail, ADMIN_PASSWORD);
 });
 
 afterAll(async () => {
@@ -71,7 +75,7 @@ async function newClient(tag: string): Promise<AncsClient> {
 
 async function newAdminClient(): Promise<AncsClient> {
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0' });
-  await client.auth.signIn({ email: adminEmail, password: ADMIN_PASSWORD });
+  await signInTestOpsClient(client, adminEmail, ADMIN_PASSWORD, adminTotpUri);
   return client;
 }
 
@@ -118,7 +122,11 @@ describe('套餐权益（P09-01）', () => {
 
     const ledgerRowsBefore = await handle.db.select().from(creditLedger).where(eq(creditLedger.workspaceId, workspace.id));
 
-    const first = await admin.admin.assignPlan(workspace.id, { planKey: 'CREATOR', note: '试用转正' });
+    const deniedAssign = await admin.admin.assignPlan(workspace.id, { planKey: 'CREATOR', note: '试用转正' }).catch((error: unknown) => error);
+    expect((deniedAssign as AncsApiError).status).toBe(403);
+    expect(await handle.db.select().from(workspaceSubscriptions).where(eq(workspaceSubscriptions.workspaceId, workspace.id))).toHaveLength(0);
+
+    const first = await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'CREATOR', note: '试用转正', assignedBy: 'test-domain' });
     expect(first.planKey).toBe('CREATOR');
     expect(first.planVersion).toBe(1);
 
@@ -128,7 +136,7 @@ describe('套餐权益（P09-01）', () => {
     expect(afterFirst.entitlements.storageBytes).toBe(50 * 1024 * 1024 * 1024);
 
     // 换套餐 → 新行；旧行被标记 supersededAt（内容不改写）
-    const second = await admin.admin.assignPlan(workspace.id, { planKey: 'PRO' });
+    const second = await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'PRO', assignedBy: 'test-domain' });
     expect(second.planKey).toBe('PRO');
     const subscriptionRows = await handle.db.select().from(workspaceSubscriptions).where(eq(workspaceSubscriptions.workspaceId, workspace.id)).orderBy(workspaceSubscriptions.startedAt);
     expect(subscriptionRows).toHaveLength(2);
@@ -152,7 +160,9 @@ describe('套餐权益（P09-01）', () => {
     const user = await newClient('plans-enforce');
     const admin = await newAdminClient();
     const workspace = await user.workspaces.create({ name: `额度-${randomUUID().slice(0, 8)}` });
-    await admin.admin.assignPlan(workspace.id, { planKey: 'FREE' });
+    const deniedAssign = await admin.admin.assignPlan(workspace.id, { planKey: 'FREE' }).catch((error: unknown) => error);
+    expect((deniedAssign as AncsApiError).status).toBe(403);
+    await assignWorkspacePlan(deps(), { workspaceId: workspace.id, planKey: 'FREE', assignedBy: 'test-domain' });
 
     // FREE：maxChannels=1 —— 第 2 个栏目被阻止
     await user.channels.create(workspace.id, { name: '栏目 1' });

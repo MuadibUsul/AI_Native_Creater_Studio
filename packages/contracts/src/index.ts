@@ -6,6 +6,32 @@ export { opaqueIdSchema } from './common/ids.js';
 export type { OpaqueId } from './common/ids.js';
 export { isoDateTimeSchema, isoDateOrDateTimeSchema, videoMsSchema, durationMsSchema } from './common/time.js';
 export type { IsoDateTime, VideoMs } from './common/time.js';
+export {
+  rationalSchema,
+  frameRateSchema,
+  mediaTicksSchema,
+  mediaTimeSchema,
+  mediaRangeSchema,
+  MEDIA_ROUNDING_MODES,
+  mediaRoundingSchema,
+  normalizeRational,
+  compareMediaTime,
+  isMediaTimeInRange,
+  rescaleMediaTime,
+  frameIndexToMediaTime,
+  mediaTimeToFrameIndex,
+  isMediaTimeFrameAligned,
+  sampleIndexToMediaTime,
+  mediaTimeToSampleIndex,
+  legacyMillisecondsToMediaTime,
+  mediaTimeToLegacyMilliseconds,
+  legacyFpsToFrameRate,
+  mapRangeBoundary,
+  mediaRangeDuration,
+  sourcePtsToSequenceTime,
+  sequenceTimeToSourcePts,
+} from './common/media-time.js';
+export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
 export type { Revision } from './common/revision.js';
 export { moneySchema, creditsSchema } from './common/money.js';
@@ -49,6 +75,330 @@ export type {
   AudioTrack,
   ProviderRequirement,
 } from './scene-graph.js';
+
+export {
+  PROJECT_DOCUMENT_SCHEMA_VERSION,
+  PROJECT_MODES,
+  projectModeSchema,
+  projectBriefSchema,
+  productionPolicySchema,
+  productionPolicyOverridesSchema,
+  defaultProductionPolicy,
+  semanticSceneSchema,
+  semanticPlanSchema,
+  compositionObjectSchema,
+  projectCompositionSchema,
+  projectDocumentSchema,
+  GENERATION_POLICY_FIELDS,
+} from './project-document.js';
+export type {
+  ProjectMode,
+  ProjectBrief,
+  ProductionPolicy,
+  ProductionPolicyOverrides,
+  ProjectDocument,
+  GovernedGenerationCapability,
+} from './project-document.js';
+export {
+  PROJECT_API_SCHEMA_VERSION,
+  projectStateSchema,
+  projectEditEventSchema,
+  projectEditEventPageSchema,
+} from './project-api.js';
+export type { ProjectState, ProjectEditEvent, ProjectEditEventPage } from './project-api.js';
+export {
+  MEDIA_DERIVATIVE_KINDS,
+  MEDIA_DERIVATIVE_STATUSES,
+  mediaDerivativeSchema,
+  mediaSourceViewSchema,
+  clipInstanceViewSchema,
+  legacyClipProjectionSchema,
+} from './media-source.js';
+export type { MediaDerivative, MediaSourceView, ClipInstanceView, LegacyClipProjection } from './media-source.js';
+export {
+  MEDIA_PROXY_PROFILE_KEYS,
+  MEDIA_PROXY_PLAYBACK_STATUSES,
+  mediaProxyProfileKeySchema,
+  mediaProxyTimeAnchorSchema,
+  mediaProxyStreamTimeMapSchema,
+  mediaProxyTranscodeResultSchema,
+  mediaProxyJobInputSchema,
+  mediaPlaybackResponseSchema,
+  mapSourcePtsToProxyPts,
+  mapProxyPtsToSourcePts,
+} from './media-proxy.js';
+export {
+  MEDIA_INDEX_JOB_TYPE,
+  MEDIA_INDEX_PROCESSOR_VERSION,
+  MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
+  MEDIA_INDEX_VERSION,
+  MEDIA_INDEX_STATUSES,
+  MEDIA_INDEX_KINDS,
+  mediaIndexStatusSchema,
+  mediaIndexKindSchema,
+  mediaIndexJobInputSchema,
+  generatedMediaIndexEntrySchema,
+  generatedMediaIndexSchema,
+  mediaIndexEntrySchema,
+  mediaIndexPageSchema,
+  mediaIndexQuerySchema,
+} from './media-index.js';
+export type { MediaIndexJobInput, GeneratedMediaIndexEntry, GeneratedMediaIndex, MediaIndexEntry, MediaIndexPage, SourceMediaIndexer } from './media-index.js';
+export {
+  UNIFIED_MEDIA_INDEX_KINDS,
+  MEDIA_INDEX_BASIS,
+  MEDIA_INDEX_CALIBRATION_STATUSES,
+  MEDIA_INDEX_CAPABILITY_STATUSES,
+  unifiedMediaIndexKindSchema,
+  mediaIndexBasisSchema,
+  mediaIndexCalibrationStatusSchema,
+  mediaIndexCapabilityStatusSchema,
+  mediaIndexSourceRangeSchema,
+  mediaIndexEvidenceRefSchema,
+  mediaIndexRecordSchema,
+  mediaIndexCapabilitySchema,
+  unifiedMediaIndexQuerySchema,
+  unifiedMediaIndexPageSchema,
+  MEDIA_EVIDENCE_CONSUMERS,
+  mediaEvidenceConsumerSchema,
+  mediaEvidenceRequestSchema,
+  mediaEvidenceBundleSchema,
+} from './unified-media-index.js';
+export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage, MediaEvidenceConsumer, MediaEvidenceRequest, MediaEvidenceBundle } from './unified-media-index.js';
+export {
+  MEDIA_ANALYSIS_STAGES,
+  MEDIA_ANALYSIS_STAGE_STATUSES,
+  mediaAnalysisStageNameSchema,
+  mediaAnalysisStageStatusSchema,
+  mediaAnalysisCheckpointSchema,
+  mediaAnalysisStageSchema,
+  mediaAnalysisGraphSchema,
+  rebuildMediaAnalysisStageRequestSchema,
+} from './media-analysis.js';
+export type { MediaAnalysisStageName, MediaAnalysisStageStatus, MediaAnalysisStage, MediaAnalysisGraph, RebuildMediaAnalysisStageRequest } from './media-analysis.js';
+export {
+  MEDIA_VISUAL_ANALYSIS_JOB_TYPE,
+  MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  visualSourceAnchorSchema,
+  visualEvidenceFrameSchema,
+  visualTrackKeyframeSchema,
+  generatedObjectTrackSchema,
+  generatedPersonTrackSchema,
+  generatedVisualEventSchema,
+  generatedMotionIntensitySchema,
+  generatedMediaVisualAnalysisSchema,
+  mediaVisualAnalysisJobInputSchema,
+} from './media-visual-analysis.js';
+export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter } from './media-visual-analysis.js';
+export {
+  MEDIA_AUDIO_ANALYSIS_JOB_TYPE,
+  MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,
+  MEDIA_AUDIO_EVENT_TYPES,
+  audioSourceAnchorSchema,
+  audioEvidenceWindowSchema,
+  generatedAudioEventSchema,
+  generatedMusicBeatSchema,
+  generatedMediaAudioAnalysisSchema,
+  mediaAudioAnalysisJobInputSchema,
+} from './media-audio-analysis.js';
+export type { GeneratedMediaAudioAnalysis, MediaAudioAnalysisJobInput, MediaAudioAnalysisAdapter } from './media-audio-analysis.js';
+export {
+  MEDIA_TRANSCRIPT_JOB_TYPE,
+  MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
+  MEDIA_TRANSCRIPT_STATUSES,
+  mediaTranscriptStatusSchema,
+  transcriptAnchorSchema,
+  transcriptSpeakerSchema,
+  transcriptWordSchema,
+  transcriptSegmentSchema,
+  mediaTranscriptSnapshotSchema,
+  generatedMediaTranscriptSchema,
+  mediaTranscriptJobInputSchema,
+  mediaTranscriptVersionSchema,
+  mediaTranscriptSchema,
+  correctTranscriptSegmentRequestSchema,
+  updateTranscriptTerminologyRequestSchema,
+} from './media-transcript.js';
+export {
+  MEDIA_SEARCH_MODALITIES,
+  MEDIA_SEARCH_EVIDENCE,
+  mediaSearchModalitySchema,
+  mediaSearchEvidenceSchema,
+  mediaRangeTagSchema,
+  createMediaRangeTagRequestSchema,
+  mediaRangeTagListSchema,
+  mediaSegmentSearchQuerySchema,
+  mediaSegmentSearchResultSchema,
+  mediaSegmentSearchResponseSchema,
+} from './media-search.js';
+export type { MediaRangeTag, CreateMediaRangeTagRequest, MediaSegmentSearchResult, MediaSegmentSearchResponse } from './media-search.js';
+export type {
+  TranscriptSpeaker,
+  TranscriptWord,
+  TranscriptSegment,
+  MediaTranscriptSnapshot,
+  GeneratedMediaTranscript,
+  MediaTranscriptJobInput,
+  MediaTranscriptVersion,
+  MediaTranscript,
+  CorrectTranscriptSegmentRequest,
+  UpdateTranscriptTerminologyRequest,
+  SpeechRecognitionAdapter,
+} from './media-transcript.js';
+export type {
+  MediaProxyProfileKey,
+  MediaProxyStreamTimeMap,
+  MediaProxyTranscodeResult,
+  MediaProxyJobInput,
+  MediaPlaybackResponse,
+  SourceMediaTranscoder,
+} from './media-proxy.js';
+export {
+  TRACK_KINDS,
+  trackKindSchema,
+  clipTimeMappingSchema,
+  sequenceSchema,
+  trackSchema,
+  clipSchema,
+  createSequenceRequestSchema,
+  createTrackRequestSchema,
+  createClipRequestSchema,
+  visualParametersSchema,
+} from './composition.js';
+export {
+  DEFAULT_VISUAL_PARAMETERS,
+  VISUAL_KEYFRAME_PATHS,
+  VISUAL_PARAMETER_SCHEMA_VERSION,
+  hitTestVisualObject,
+  invertVisualPoint,
+  projectVisualPoint,
+  visualAnchorSchema,
+  visualCropSchema,
+  visualKeyframePathSchema,
+  visualOffsetSchema,
+  visualParametersSchema as visualParametersNamespaceSchema,
+  visualScaleSchema,
+  visualTransformSchema,
+} from './visual-transform.js';
+export {
+  AUDIO_MIX_GUARD_REASONS,
+  DEFAULT_SOURCE_PEAK_DB,
+  dbToLinear,
+  equalPowerFadeGains,
+  linearToDb,
+  sampleEqualPowerCurve,
+} from './audio-crossfade.js';
+export type { AudioMixGuardReason } from './audio-crossfade.js';
+export {
+  PLAYBACK_BACKEND_KINDS,
+  PLAYBACK_CAPABILITY_FLAGS,
+  PLAYBACK_ERROR_REASONS,
+  PLAYBACK_PRECISIONS,
+  PLAYBACK_SNAPSHOT_VERSION,
+  playbackAudioSegmentSchema,
+  playbackBackendKindSchema,
+  playbackCapabilitiesSchema,
+  playbackCaptionCueSchema,
+  playbackFrameAt,
+  playbackPrecisionSchema,
+  playbackSnapshotSchema,
+  playbackVideoSegmentSchema,
+} from './playback.js';
+export type {
+  PlaybackAudioSegment,
+  PlaybackBackendKind,
+  PlaybackCapabilities,
+  PlaybackCapabilityFlag,
+  PlaybackCaptionCue,
+  PlaybackErrorReason,
+  PlaybackSnapshot,
+  PlaybackVideoSegment,
+} from './playback.js';
+export {
+  NEGATION_MARKERS,
+  captionTextFromWords,
+  containsDigits,
+  containsNegation,
+  preservationTokens,
+  removeWordRange,
+  splitWordsAt,
+} from './caption-text.js';
+export type { CaptionWord } from './caption-text.js';
+export type { VisualCrop, VisualKeyframePath, VisualParameters, VisualPoint, VisualTransform, VisualViewport } from './visual-transform.js';
+export {
+  TIME_BINDING_BASES,
+  VISUAL_OBJECT_KINDS,
+  EFFECT_TARGET_KINDS,
+  ANIMATION_TARGET_KINDS,
+  KEYFRAME_INTERPOLATIONS,
+  SUPPORTED_EFFECTS,
+  timeBindingSchema,
+  versionedParametersSchema,
+  componentReferenceSchema,
+  visualObjectSchema,
+  effectInstanceSchema,
+  animationBindingSchema,
+  keyframeSchema,
+  captionWordTimingSchema,
+  captionSpanSchema,
+  audioChannelMappingSchema,
+  audioRegionSchema,
+  createVisualObjectRequestSchema,
+  repositionVisualObjectRequestSchema,
+  createEffectInstanceRequestSchema,
+  createAnimationBindingRequestSchema,
+  createCaptionSpanRequestSchema,
+  createAudioRegionRequestSchema,
+} from './composition-objects.js';
+export type {
+  TimeBindingBase,
+  TimeBinding,
+  VisualObjectKind,
+  VisualObject,
+  EffectTargetKind,
+  EffectInstance,
+  AnimationTargetKind,
+  AnimationBinding,
+  CaptionSpan,
+  AudioRegion,
+  CreateVisualObjectRequest,
+  RepositionVisualObjectRequest,
+  CreateEffectInstanceRequest,
+  CreateAnimationBindingRequest,
+  CreateCaptionSpanRequest,
+  CreateAudioRegionRequest,
+} from './composition-objects.js';
+export type {
+  TrackKind,
+  ClipTimeMapping,
+  Sequence,
+  Track,
+  Clip,
+  CreateSequenceRequest,
+  CreateTrackRequest,
+  CreateClipRequest,
+} from './composition.js';
+
+export {
+  COMPOSITION_MIGRATION_STATUSES,
+  COMPOSITION_MIGRATION_STEPS,
+  COMPOSITION_AUTHORITY_MODES,
+  COMPOSITION_MIGRATION_ERROR_REASONS,
+  compositionMigrationStatusSchema,
+  compositionMigrationStepSchema,
+  compositionAuthorityModeSchema,
+  compositionMigrationSchema,
+  projectVersionCompositionProjectionSchema,
+  projectVersionProjectionRecordSchema,
+} from './composition-migration.js';
+export type {
+  CompositionMigrationStatus,
+  CompositionMigrationStep,
+  CompositionAuthorityMode,
+  CompositionMigration,
+  ProjectVersionCompositionProjection,
+  ProjectVersionProjectionRecord,
+} from './composition-migration.js';
 
 export {
   contentDocumentSchema,
@@ -104,6 +454,14 @@ export {
   editRequestSchema,
   editOperationSchema,
   EDIT_OPERATION_TYPES,
+  EDIT_EXECUTION_BACKENDS,
+  EDIT_OPERATION_AVAILABILITIES,
+  EDIT_COMPENSATION_MODES,
+  EDIT_OPERATION_REGISTRY,
+  editExecutionBackendSchema,
+  editOperationAvailabilitySchema,
+  editCompensationModeSchema,
+  editOperationDefinitionSchema,
   sceneDraftSchema,
   projectChangesSchema,
   sceneChangesSchema,
@@ -122,7 +480,90 @@ export {
   restoreSceneOperationSchema,
   restoreProjectVersionOperationSchema,
 } from './edits.js';
-export type { EditRequest, EditOperation, EditOperationType, ProjectChanges, SceneChanges } from './edits.js';
+export type { EditRequest, EditOperation, EditOperationType, EditExecutionBackend, EditOperationDefinition, ProjectChanges, SceneChanges } from './edits.js';
+export {
+  SOURCE_EDIT_OPERATION_TYPES,
+  EDIT_OPERATION_V2_RESOLUTIONS,
+  EDIT_OPERATION_V2_CATEGORIES,
+  EDIT_OPERATION_V2_COST_CATEGORIES,
+  EDIT_OPERATION_V2_ENTRYPOINTS,
+  EDIT_OPERATION_V2_TARGET_KINDS,
+  EDIT_OPERATION_V2_INPUT_SCHEMAS,
+  EDIT_OPERATION_V2_REGISTRY,
+  editOperationV2RegistrationSchema,
+  editOperationV2EntrypointSchema,
+  moveClipSourceOperationSchema,
+  trimClipSourceOperationSchema,
+  slipClipSourceOperationSchema,
+  setClipSpeedSourceOperationSchema,
+  keyframeSourceOperationSchema,
+  setAudioGainSourceOperationSchema,
+  setAudioFadeSourceOperationSchema,
+  setAudioPanSourceOperationSchema,
+  setAudioAutomationSourceOperationSchema,
+  canonicalEditOperationSchema,
+} from './edit-operation-v2.js';
+export type {
+  SourceEditOperationType,
+  EditOperationV2Resolution,
+  EditOperationV2Category,
+  EditOperationV2Entrypoint,
+  EditOperationV2Registration,
+} from './edit-operation-v2.js';
+export {
+  updateClipChangesSchema,
+  updateClipOperationSchema,
+  CLIP_INSERT_MODES,
+  clipInsertModeSchema,
+  insertClipOperationSchema,
+  deleteClipOperationSchema,
+  splitClipOperationSchema,
+  trimClipOperationSchema,
+  moveClipOperationSchema,
+  duplicateClipOperationSchema,
+  replaceClipSourceOperationSchema,
+  slipClipOperationSchema,
+  slideClipOperationSchema,
+  rollClipOperationSchema,
+  CLIP_RIPPLE_ACTIONS,
+  clipRippleActionSchema,
+  rippleClipOperationSchema,
+  AV_CUT_KINDS,
+  avCutKindSchema,
+  splitAvCutOperationSchema,
+  createTrackOperationSchema,
+  moveTrackOperationSchema,
+  NON_EMPTY_TRACK_POLICIES,
+  nonEmptyTrackPolicySchema,
+  deleteTrackOperationSchema,
+  trackChangesSchema,
+  updateTrackOperationSchema,
+  setAvLinkOperationSchema,
+  setClipTransformOperationSchema,
+  setClipCropOperationSchema,
+  setClipOpacityOperationSchema,
+  applyAudioCrossfadeOperationSchema,
+  splitCaptionOperationSchema,
+  CAPTION_CUT_MODES,
+  captionCutModeSchema,
+  cutCaptionRangeOperationSchema,
+  createCaptionOperationSchema,
+  deleteCaptionOperationSchema,
+  updateAnimationOperationSchema,
+  updateAudioRegionChangesSchema,
+  updateAudioRegionOperationSchema,
+} from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
+
+export {
+  OBJECT_LOCK_DIMENSIONS,
+  OBJECT_LOCK_KINDS,
+  objectLockDimensionSchema,
+  objectLockKindSchema,
+  objectLockSchema,
+  setObjectLockOperationSchema,
+} from './object-locks.js';
+export type { ObjectLockDimension, ObjectLockKind, ObjectLock } from './object-locks.js';
 
 // 认证契约（P01-02）
 export {
@@ -130,6 +571,7 @@ export {
   sessionInfoSchema,
   signInRequestSchema,
   signInResponseSchema,
+  verifyTotpRequestSchema,
   nativeAuthorizeQuerySchema,
   authorizationCodeGrantSchema,
   refreshTokenGrantSchema,
@@ -147,9 +589,29 @@ export type {
   RevokeTokenRequest,
 } from './auth.js';
 
+export { OPS_ENVIRONMENTS, opsEnvironmentSchema, OPS_ROLES, opsRoleSchema, opsSessionSchema, opsMfaEnrollmentRequestSchema, opsMfaEnrollmentSchema, opsRevokeSessionRequestSchema } from './ops-auth.js';
+export type { OpsEnvironment, OpsRole, OpsSession } from './ops-auth.js';
+export {
+  OPS_ACTIONS, opsActionSchema, OPS_SCOPE_KINDS, opsScopeKindSchema,
+  OPS_RESOURCE_KINDS, opsResourceKindSchema, opsPermissionTargetSchema,
+  OPS_PERMISSION_DENIALS, opsPermissionDenialSchema, opsPermissionDecisionSchema,
+} from './ops-permissions.js';
+export type { OpsAction, OpsScopeKind, OpsResourceKind, OpsPermissionTarget, OpsPermissionDenial, OpsPermissionDecision } from './ops-permissions.js';
+export { opsJobSummarySchema } from './ops.js';
+export type { OpsJobSummary } from './ops.js';
+export { opsProjectSummarySchema, opsProjectListQuerySchema } from './ops-project.js';
+export type { OpsProjectSummary, OpsProjectListQuery } from './ops-project.js';
+export { opsWorkspaceStorageSummarySchema } from './ops-storage.js';
+export type { OpsWorkspaceStorageSummary } from './ops-storage.js';
+export { opsSupportGrantSummarySchema, opsSupportGrantListQuerySchema } from './ops-support-grants.js';
+export type { OpsSupportGrantSummary } from './ops-support-grants.js';
+export { OPS_PERMISSION_POLICY_STATUSES, opsPermissionPolicyStatusSchema, opsPermissionPolicyVersionSchema, OPS_EMERGENCY_ACTIONS, opsEmergencyActionSchema, opsEmergencyTargetKindSchema, opsEmergencyGrantSchema, OPS_EMERGENCY_DENIALS, opsEmergencyEligibilitySchema } from './ops-governance.js';
+export type { OpsPermissionPolicyVersion, OpsEmergencyAction, OpsEmergencyGrant, OpsEmergencyEligibility } from './ops-governance.js';
+
 // 编辑历史与版本契约（P02-02/P02-03 / §23、§24）
 export {
   EDIT_ACTOR_TYPES,
+  EDIT_EVENT_OBJECT_KINDS,
   editEventSchema,
   VERSION_REASONS,
   versionReasonSchema,
@@ -160,6 +622,7 @@ export {
 } from './history.js';
 export type {
   EditEvent,
+  EditEventObjectKind,
   VersionReason,
   ProjectVersionSnapshot,
   ProjectVersion,
@@ -789,6 +1252,8 @@ export {
   RENDER_FINAL_JOB_TYPE,
   MOTION_GENERATE_JOB_TYPE,
   RENDER_QA_JOB_TYPE,
+  MEDIA_PROBE_JOB_TYPE,
+  MEDIA_PROXY_JOB_TYPE,
   JOB_STATUSES,
   jobStatusSchema,
   JOB_TERMINAL_STATUSES,
@@ -823,6 +1288,15 @@ export {
   assetStatusSchema,
   ASSET_VERSION_STATUSES,
   assetVersionStatusSchema,
+  MEDIA_PROBE_STATUSES,
+  mediaProbeStatusSchema,
+  MEDIA_CAPABILITY_STATES,
+  mediaCapabilityStateSchema,
+  mediaRationalSchema,
+  mediaStreamProbeSchema,
+  mediaCapabilitySummarySchema,
+  sourceMediaProbeResultSchema,
+  mediaProbeJobInputSchema,
   ASSET_ROLES,
   assetRoleSchema,
   RETENTION_CLASSES,
@@ -830,14 +1304,42 @@ export {
   RETENTION_TTL_SECONDS,
   ASSET_DEFAULT_RETENTION,
   LICENSE_TYPES,
+  ASSET_PERMITTED_USES,
+  assetPermittedUseSchema,
+  ASSET_SENSITIVITY_CLASSES,
+  assetSensitivityClassSchema,
   licenseMetadataSchema,
   licenseInputSchema,
+  updateAssetRightsRequestSchema,
   assetVersionSchema,
   assetSchema,
   assetDetailSchema,
+  assetReferenceSchema,
+  assetDerivationSchema,
+  assetLicenseStateSchema,
+  assetLifecycleSchema,
+  requestAssetPrivacyDeletionSchema,
+  assetPrivacyDeletionResultSchema,
+  ASSET_RELINK_ERROR_REASONS,
+  assetRelinkTrackSchema,
+  assetRelinkVersionStateSchema,
+  assetRelinkStateSchema,
+  preflightAssetRelinkRequestSchema,
+  assetRelinkComparisonSchema,
+  applyAssetRelinkRequestSchema,
+  assetRelinkResultSchema,
   MAX_UPLOAD_BYTES,
+  DEFAULT_UPLOAD_PART_SIZE_BYTES,
+  MAX_UPLOAD_PARTS,
+  MULTIPART_UPLOAD_INTENT_TTL_SECONDS,
+  uploadModeSchema,
   createUploadIntentRequestSchema,
   uploadIntentResponseSchema,
+  uploadPartStatusSchema,
+  uploadPartSchema,
+  uploadIntentStatusSchema,
+  uploadPartTargetResponseSchema,
+  completeUploadPartRequestSchema,
   confirmUploadRequestSchema,
   downloadUrlResponseSchema,
   DIRECT_UPLOAD_ASSET_TYPES,
@@ -847,15 +1349,42 @@ export type {
   AssetOrigin,
   AssetStatus,
   AssetVersionStatus,
+  MediaProbeStatus,
+  MediaCapabilityState,
+  MediaRational,
+  MediaStreamProbe,
+  MediaCapabilitySummary,
+  SourceMediaProbeResult,
+  MediaProbeJobInput,
+  SourceMediaProbe,
   AssetRole,
   RetentionClass,
   LicenseMetadata,
+  UpdateAssetRightsRequest,
   Asset,
   AssetDetail,
+  AssetReference,
+  AssetDerivation,
+  AssetLifecycle,
+  RequestAssetPrivacyDeletion,
+  AssetPrivacyDeletionResult,
+  AssetRelinkErrorReason,
+  AssetRelinkTrack,
+  AssetRelinkVersionState,
+  AssetRelinkState,
+  PreflightAssetRelinkRequest,
+  AssetRelinkComparison,
+  ApplyAssetRelinkRequest,
+  AssetRelinkResult,
   AssetVersion,
   CreateUploadIntentRequest,
   CreateUploadIntentInput,
   UploadIntentResponse,
+  UploadMode,
+  UploadPart,
+  UploadIntentStatus,
+  UploadPartTargetResponse,
+  CompleteUploadPartRequest,
   ConfirmUploadRequest,
   DownloadUrlResponse,
 } from './assets.js';
@@ -1161,6 +1690,32 @@ export type { WorkspaceRole, Workspace, WorkspaceWithRole, WorkspaceMember, Priv
 // 隐私档位与邀请契约（P09-04）
 export { PRIVACY_TIERS, privacyTierSchema, setPrivacyTierRequestSchema } from './workspaces.js';
 export {
+  WORKSPACE_FEATURE_KEYS,
+  workspaceFeatureKeySchema,
+  FEATURE_RELEASE_GATES,
+  featureReleaseGateSchema,
+  FEATURE_CAPABILITY_LEVELS,
+  featureCapabilityLevelSchema,
+  FEATURE_PLATFORMS,
+  featurePlatformSchema,
+  FEATURE_EFFECTIVE_STATES,
+  featureEffectiveStateSchema,
+  FEATURE_AVAILABILITY_REASONS,
+  featureAvailabilityReasonSchema,
+  workspaceFeatureSchema,
+  workspaceFeatureListSchema,
+  setWorkspaceFeatureRequestSchema,
+  WORKSPACE_FEATURE_ERROR_REASONS,
+} from './workspace-features.js';
+export type {
+  WorkspaceFeatureKey,
+  FeatureReleaseGate,
+  FeatureEffectiveState,
+  WorkspaceFeature,
+  WorkspaceFeatureList,
+  SetWorkspaceFeatureRequest,
+} from './workspace-features.js';
+export {
   INVITATION_STORED_STATUSES,
   INVITATION_STATUSES,
   invitationStatusSchema,
@@ -1199,6 +1754,7 @@ export {
   supportAccessGrantSchema,
   SUPPORT_GRANT_MAX_HOURS,
   createSupportGrantRequestSchema,
+  supportViewQuerySchema,
   supportViewSchema,
   SUPPORT_ERROR_REASONS,
   AUDIT_ACTOR_KINDS,
@@ -1546,3 +2102,12 @@ export type {
   TranslateNarrationRequest,
   MultilingualErrorReason,
 } from './multilingual.js';
+
+// N16-02 user-level UI appearance preference (separate from project theme tokens).
+export {
+  APPEARANCE_MODES,
+  appearanceModeSchema,
+  userAppearancePreferenceSchema,
+  setUserAppearancePreferenceRequestSchema,
+} from './appearance.js';
+export type { AppearanceMode, UserAppearancePreference, SetUserAppearancePreferenceRequest } from './appearance.js';

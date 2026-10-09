@@ -6,10 +6,11 @@ import type { CreatorLearningAction } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { StateBlock } from './StateBlock';
+import ui from './Monochrome.module.css';
 
-const panel = 'rounded border border-slate-800 bg-slate-900/60 p-4';
-const input = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm';
-const button = 'rounded border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50';
+const panel = `${ui['panel']} p-4`;
+const input = ui['field'];
+const button = ui['button'];
 
 const metric = (value: number | null, suffix = ''): string => value === null ? '未知（平台未返回）' : `${value.toLocaleString()}${suffix}`;
 const errorText = (error: unknown): string => describeError(error).message;
@@ -65,24 +66,24 @@ export function AnalyticsWorkspace({ workspaceId, projectId }: { workspaceId: st
   const performance = performances.data?.items.find((item) => item.id === activePerformanceId) ?? performances.data?.items[0];
   return (
     <section className="flex flex-col gap-5" data-testid="analytics-workspace">
-      <div><h1 className="text-xl font-semibold">Analytics & Learning</h1><p className="mt-1 text-sm text-slate-400">发布后表现、场景相关性与可控学习建议。未知指标始终显示为未知，不按 0 处理。</p></div>
-      {notice !== null ? <p role="status" className="rounded border border-sky-900 bg-sky-950/40 p-3 text-sm text-sky-200">{notice}</p> : null}
+      <div><h1 className="text-xl font-semibold">Analytics & Learning</h1><p className={`mt-1 text-sm ${ui['secondaryText']}`}>发布后表现、场景相关性与可控学习建议。未知指标始终显示为未知，不按 0 处理。</p></div>
+      {notice !== null ? <p role="status" className={`text-sm ${ui['notice']}`}>{notice}</p> : null}
 
       <div className={panel}>
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-semibold">发布表现</h2><p className="text-xs text-slate-400">授权撤销后服务端停止采集；每份记录保留平台、区间、粒度、时区和抓取时间。</p></div>
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-semibold">发布表现</h2><p className={`text-xs ${ui['secondaryText']}`}>授权撤销后服务端停止采集；每份记录保留平台、区间、粒度、时区和抓取时间。</p></div>
           <div className="flex gap-2"><select aria-label="选择发布" value={activePublicationId} onChange={(event) => { setSelectedPublicationId(event.target.value); setSelectedPerformanceId(''); }} className={input}><option value="">选择发布</option>{publications.data?.items.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.platformId}</option>)}</select><button className={button} disabled={!activePublicationId || collect.isPending} onClick={() => collect.mutate()}>采集最新表现</button></div>
         </div>
-        {activePublicationId && performances.isPending ? <p className="mt-3 text-sm text-slate-400">正在加载表现…</p> : performance === undefined ? <p className="mt-3 text-sm text-slate-400">尚无表现快照。</p> : <div className="mt-4 grid gap-3 md:grid-cols-4"><Metric label="播放" value={metric(performance.metrics.views)} /><Metric label="曝光" value={metric(performance.metrics.impressions)} /><Metric label="点击率" value={metric(performance.metrics.clickThroughRate === null ? null : performance.metrics.clickThroughRate * 100, '%')} /><Metric label="观看时长" value={metric(performance.metrics.watchTimeMs, ' ms')} /><p className="md:col-span-4 text-xs text-slate-500">{performance.platformId} · {performance.sampling.granularity} · {performance.sampling.timezone} · 抓取于 {new Date(performance.sampling.fetchedAt).toLocaleString()}</p></div>}
+        {activePublicationId && performances.isPending ? <p className={`mt-3 text-sm ${ui['secondaryText']}`}>正在加载表现…</p> : performance === undefined ? <p className={`mt-3 text-sm ${ui['secondaryText']}`}>尚无表现快照。</p> : <div className="mt-4 grid gap-3 md:grid-cols-4"><Metric label="播放" value={metric(performance.metrics.views)} /><Metric label="曝光" value={metric(performance.metrics.impressions)} /><Metric label="点击率" value={metric(performance.metrics.clickThroughRate === null ? null : performance.metrics.clickThroughRate * 100, '%')} /><Metric label="观看时长" value={metric(performance.metrics.watchTimeMs, ' ms')} /><p className={`md:col-span-4 text-xs ${ui['mutedText']}`}>{performance.platformId} · {performance.sampling.granularity} · {performance.sampling.timezone} · 抓取于 {new Date(performance.sampling.fetchedAt).toLocaleString()}</p></div>}
       </div>
 
       <div className={panel}>
-        <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">场景归因</h2><p className="text-xs text-amber-300">仅表示相关性，不代表因果。归因基于发布时冻结的 Scene Graph 和留存采样。</p></div><button className={button} disabled={!activePerformanceId || attribute.isPending} onClick={() => attribute.mutate()}>计算场景归因</button></div>
-        <ul className="mt-3 grid gap-2 md:grid-cols-2">{scenes.data?.items.map((scene) => <li key={scene.id} className="rounded border border-slate-800 p-3 text-sm"><span className="font-medium">#{scene.position + 1} {scene.sceneType}</span><p className="mt-1 text-slate-400">留存：{metric(scene.retentionRate === null ? null : scene.retentionRate * 100, '%')} · 样本点 {scene.derivation.sampleCount}</p></li>)}</ul>
+        <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">场景归因</h2><p className={`text-xs ${ui['secondaryText']}`}>仅表示相关性，不代表因果。归因基于发布时冻结的 Scene Graph 和留存采样。</p></div><button className={button} disabled={!activePerformanceId || attribute.isPending} onClick={() => attribute.mutate()}>计算场景归因</button></div>
+        <ul className="mt-3 grid gap-2 md:grid-cols-2">{scenes.data?.items.map((scene) => <li key={scene.id} className={`${ui['inset']} p-3 text-sm`}><span className="font-medium">#{scene.position + 1} {scene.sceneType}</span><p className={`mt-1 ${ui['secondaryText']}`}>留存：{metric(scene.retentionRate === null ? null : scene.retentionRate * 100, '%')} · 样本点 {scene.derivation.sampleCount}</p></li>)}</ul>
       </div>
 
       <div className={panel}>
-        <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">学习建议</h2><p className="text-xs text-slate-400">建议可接受、禁用与恢复；任何操作都不会静默修改 Channel。</p></div><button className={button} disabled={generate.isPending} onClick={() => generate.mutate()}>生成建议</button></div>
-        <ul className="mt-3 flex flex-col gap-2">{learnings.data?.items.map((learning) => <li key={learning.id} className="rounded border border-slate-800 p-3 text-sm"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-medium">{learning.title} <span className="text-xs text-sky-300">{learning.status}</span></p><p className="mt-1 text-slate-400">{learning.explanation}</p><p className="mt-1 text-xs text-amber-300">相关性证据 · {learning.evidence.sampleCount} 个样本 · 未修改 Channel</p></div><div className="flex gap-2">{learning.status === 'ACTIVE' ? <><button className={button} onClick={() => act.mutate({ id: learning.id, action: 'ACCEPT' })}>接受</button><button className={button} onClick={() => act.mutate({ id: learning.id, action: 'DISABLE' })}>禁用</button></> : <button className={button} onClick={() => act.mutate({ id: learning.id, action: 'RESTORE' })}>恢复</button>}</div></div></li>)}</ul>
+        <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">学习建议</h2><p className={`text-xs ${ui['secondaryText']}`}>建议可接受、禁用与恢复；任何操作都不会静默修改 Channel。</p></div><button className={button} disabled={generate.isPending} onClick={() => generate.mutate()}>生成建议</button></div>
+        <ul className="mt-3 flex flex-col gap-2">{learnings.data?.items.map((learning) => <li key={learning.id} className={`${ui['inset']} p-3 text-sm`}><div className="flex flex-wrap justify-between gap-3"><div><p className="font-medium">{learning.title} <span className={`text-xs ${ui['secondaryText']}`}>{learning.status}</span></p><p className={`mt-1 ${ui['secondaryText']}`}>{learning.explanation}</p><p className={`mt-1 text-xs ${ui['secondaryText']}`}>相关性证据 · {learning.evidence.sampleCount} 个样本 · 未修改 Channel</p></div><div className="flex gap-2">{learning.status === 'ACTIVE' ? <><button className={button} onClick={() => act.mutate({ id: learning.id, action: 'ACCEPT' })}>接受</button><button className={button} onClick={() => act.mutate({ id: learning.id, action: 'DISABLE' })}>禁用</button></> : <button className={button} onClick={() => act.mutate({ id: learning.id, action: 'RESTORE' })}>恢复</button>}</div></div></li>)}</ul>
       </div>
 
     </section>
@@ -90,5 +91,5 @@ export function AnalyticsWorkspace({ workspaceId, projectId }: { workspaceId: st
 }
 
 function Metric({ label, value }: { label: string; value: string }): ReactElement {
-  return <div className="rounded border border-slate-800 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-sm font-medium">{value}</p></div>;
+  return <div className={`${ui['inset']} p-3`}><p className={`text-xs ${ui['mutedText']}`}>{label}</p><p className="mt-1 text-sm font-medium">{value}</p></div>;
 }

@@ -3,9 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
   abuseFlagSchema,
-  adminProjectSummarySchema,
   adminProviderStatusSchema,
-  adminStorageSummarySchema,
   adminUserSummarySchema,
   adminWorkspaceSummarySchema,
   auditLogEntrySchema,
@@ -14,9 +12,15 @@ import {
   creditStatementSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
+  opsProjectListQuerySchema,
+  opsProjectSummarySchema,
+  opsSupportGrantListQuerySchema,
+  opsSupportGrantSummarySchema,
+  opsWorkspaceStorageSummarySchema,
   resolveAbuseFlagRequestSchema,
   setWorkspaceAbuseStateRequestSchema,
   supportAccessGrantSchema,
+  supportViewQuerySchema,
   supportViewSchema,
   workspaceAbuseStateSchema,
 } from '@ancs/contracts';
@@ -24,15 +28,15 @@ import {
   createAbuseFlag,
   createSupportGrant,
   getAdminProviderStatus,
-  getAdminStorageSummary,
+  getOpsWorkspaceStorageSummary,
   getCreditStatement,
   getSupportView,
   listAbuseFlags,
-  listAdminProjects,
+  listOpsProjects,
   listAdminUsers,
   listAdminWorkspaces,
   listAuditLog,
-  listSupportGrants,
+  listOpsSupportGrantsForTicket,
   resolveAbuseFlag,
   revokeSupportGrant,
   setWorkspaceAbuseState,
@@ -111,22 +115,14 @@ export function registerAdminSecurityRoutes(app: FastifyInstance, deps: AuthDeps
     {
       schema: {
         tags: ['admin'],
-        summary: 'Project 列表（查询标题/按 Workspace）',
-        querystring: z.object({
-          query: z.string().max(120).optional(),
-          workspaceId: opaqueIdSchema.optional(),
-          limit: z.coerce.number().int().positive().max(200).optional(),
-        }),
-        response: { 200: z.object({ items: z.array(adminProjectSummarySchema) }), ...ERROR_RESPONSES },
+        summary: '指定 Workspace 的项目状态摘要（不含标题或内容）',
+        querystring: opsProjectListQuerySchema,
+        response: { 200: z.object({ items: z.array(opsProjectSummarySchema) }), ...ERROR_RESPONSES },
       },
     },
     async (request) => {
       await app.requirePlatformAdmin(request);
-      const items = await listAdminProjects(domain, {
-        ...(request.query.query !== undefined ? { query: request.query.query } : {}),
-        ...(request.query.workspaceId !== undefined ? { workspaceId: request.query.workspaceId } : {}),
-        ...(request.query.limit !== undefined ? { limit: request.query.limit } : {}),
-      });
+      const items = await listOpsProjects(domain, request.query);
       return { items };
     },
   );
@@ -151,14 +147,14 @@ export function registerAdminSecurityRoutes(app: FastifyInstance, deps: AuthDeps
     {
       schema: {
         tags: ['admin'],
-        summary: '存储用量（按 Workspace Top-N + 总量）',
-        querystring: z.object({ limit: z.coerce.number().int().positive().max(100).optional() }),
-        response: { 200: adminStorageSummarySchema, ...ERROR_RESPONSES },
+        summary: '指定 Workspace 的存储用量摘要',
+        querystring: z.object({ workspaceId: opaqueIdSchema }),
+        response: { 200: opsWorkspaceStorageSummarySchema, ...ERROR_RESPONSES },
       },
     },
     async (request) => {
       await app.requirePlatformAdmin(request);
-      return getAdminStorageSummary(domain, { ...(request.query.limit !== undefined ? { limit: request.query.limit } : {}) });
+      return getOpsWorkspaceStorageSummary(domain, { workspaceId: request.query.workspaceId });
     },
   );
 
@@ -291,14 +287,19 @@ export function registerAdminSecurityRoutes(app: FastifyInstance, deps: AuthDeps
     {
       schema: {
         tags: ['admin'],
-        summary: '支持访问授权列表（ACTIVE/REVOKED/EXPIRED 推导）',
+        summary: '当前受益者与工单范围内的支持访问授权摘要',
         params: workspaceParamsSchema,
-        response: { 200: z.object({ items: z.array(supportAccessGrantSchema) }), ...ERROR_RESPONSES },
+        querystring: opsSupportGrantListQuerySchema,
+        response: { 200: z.object({ items: z.array(opsSupportGrantSummarySchema) }), ...ERROR_RESPONSES },
       },
     },
     async (request) => {
-      await app.requirePlatformAdmin(request);
-      const items = await listSupportGrants(domain, { workspaceId: request.params.workspaceId });
+      const { opsSession } = await app.requirePlatformAdmin(request);
+      const items = await listOpsSupportGrantsForTicket(domain, {
+        workspaceId: request.params.workspaceId,
+        principalId: opsSession.principalId,
+        ticketId: request.query.ticketId,
+      });
       return { items };
     },
   );
@@ -344,12 +345,18 @@ export function registerAdminSecurityRoutes(app: FastifyInstance, deps: AuthDeps
         tags: ['admin'],
         summary: '支持视图（**需有效授权**；仅元数据摘要；每次访问留痕 + 工作区可见事件）',
         params: workspaceParamsSchema,
+        querystring: supportViewQuerySchema,
         response: { 200: supportViewSchema, ...ERROR_RESPONSES },
       },
     },
     async (request) => {
-      const { context } = await app.requirePlatformAdmin(request);
-      return getSupportView(domain, { workspaceId: request.params.workspaceId, actorUserId: context.userId });
+      const { context, opsSession } = await app.requirePlatformAdmin(request);
+      return getSupportView(domain, {
+        workspaceId: request.params.workspaceId,
+        actorUserId: context.userId,
+        actorPrincipalId: opsSession.principalId,
+        ticketId: request.query.ticketId,
+      });
     },
   );
 }

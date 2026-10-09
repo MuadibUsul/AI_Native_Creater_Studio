@@ -84,6 +84,25 @@ describe('引用校验与锁定剔除（§4.7 / §52）', () => {
     expect(warnings[0]).toContain('已跳过对锁定场景');
     expect(warnings[0]).toContain('请先显式解锁');
   });
+
+  it('N01-06 按顺序校验批内创建与删除的引用', () => {
+    const createdId = 'scn_created_in_batch';
+    expect(() => assertSceneReferences(scenes, [
+      {
+        op: 'insert_scene', afterSceneId: 'scn_1', createdSceneId: createdId,
+        sceneDraft: {
+          sceneType: 'HOST_FULL', semanticType: 'DETAIL', durationMs: 1_000,
+          narration: '', visualIntent: '', componentId: null, componentVersion: null, props: {},
+          providerRequirement: null, sourceBindings: [], dataBindings: [], assetBindings: [], narrationBlockIds: [], locked: false,
+        },
+      },
+      { op: 'update_scene', sceneId: createdId, changes: { narration: '继续编辑' } },
+    ])).not.toThrow();
+    expect(() => assertSceneReferences(scenes, [
+      { op: 'delete_scene', sceneId: 'scn_1' },
+      { op: 'update_scene', sceneId: 'scn_1', changes: { narration: '已删除对象不可引用' } },
+    ])).toThrowError(/不存在的场景/);
+  });
 });
 
 describe('影响估算（结构推导，不伪造）', () => {

@@ -65,10 +65,11 @@ async function newClient(tag: string): Promise<AncsClient> {
   return client;
 }
 
-async function makeProject(client: AncsClient): Promise<{ workspaceId: string; projectId: string }> {
+async function makeProject(client: AncsClient, mode: 'FOOTAGE_EDIT' | 'GENERATIVE' | 'HYBRID' = 'GENERATIVE'): Promise<{ workspaceId: string; projectId: string }> {
   const workspace = await client.workspaces.create({ name: `生成-${randomUUID().slice(0, 8)}` });
   const channel = await client.channels.create(workspace.id, { name: '栏目' });
-  const project = await client.projects.create(workspace.id, { title: '生成项目', channelId: channel.id });
+  const request = { title: '生成项目', channelId: channel.id, mode };
+  const project = await client.projects.create(workspace.id, request);
   return { workspaceId: workspace.id, projectId: project.id };
 }
 
@@ -141,6 +142,27 @@ async function seedVerifiedCatalog(workspaceId: string): Promise<void> {
 }
 
 describe('显式生成动作（P06-05 非凭据部分）', () => {
+  it('N01-02 纯素材模式在 Provider 路由和任务创建前拒绝新画面', async () => {
+    const client = await newClient('gen-policy');
+    const { workspaceId, projectId } = await makeProject(client, 'FOOTAGE_EDIT');
+    const created = await client.projects.addScene(projectId, {
+      sceneType: 'AI_VIDEO',
+      semanticType: 'CONCEPT',
+      narration: '',
+      visualIntent: '不应被提交的新镜头',
+      durationMs: 5000,
+    });
+    await seedVerifiedCatalog(workspaceId);
+
+    const blocked = await client.projects.generateScene(projectId, created.scene.id, { capability: 'video.generate' }).catch((error: unknown) => error);
+    expect(blocked).toBeInstanceOf(AncsApiError);
+    expect(blocked).toMatchObject({
+      status: 409,
+      details: { reason: 'PRODUCTION_POLICY_BLOCKED', policyField: 'allowGeneratedVideo', mode: 'FOOTAGE_EDIT' },
+    });
+    expect((await client.jobs.list(workspaceId)).filter((job) => job.type === 'GENERATE')).toEqual([]);
+  });
+
   it('能力缺失（未核验目录）：生成被明确阻止（501），不排队空任务；双击只提交一次（去重）', async () => {
     const client = await newClient('gen-gate');
     const { workspaceId, projectId } = await makeProject(client);

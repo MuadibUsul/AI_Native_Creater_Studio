@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -112,5 +112,39 @@ describe('本地对象存储适配器', () => {
     await writeFile(partialPath, Buffer.from('half'));
     expect((await storage.probeObject(key)).exists).toBe(false);
     expect(await storage.computeObjectSha256(key)).toBeNull();
+  });
+
+  it('按顺序流式合并分片并原子暴露最终对象', async () => {
+    await storage.putObject('multipart/upi_1/part-00001', new TextEncoder().encode('alpha'));
+    await storage.putObject('multipart/upi_1/part-00002', new TextEncoder().encode('-beta'));
+    await storage.composeObjects({
+      sourceKeys: ['multipart/upi_1/part-00001', 'multipart/upi_1/part-00002'],
+      destinationKey: 'workspaces/ws_1/uploads/combined.bin',
+    });
+    expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/uploads/combined.bin') ?? new Uint8Array())).toBe('alpha-beta');
+    expect((await storage.probeObject('workspaces/ws_1/uploads/combined.bin')).sizeBytes).toBe(10);
+  });
+
+  it('在存储内部原子复制对象供缺失原件恢复', async () => {
+    await storage.putObject('workspaces/ws_1/relink/candidate.bin', new TextEncoder().encode('exact-original'));
+    await storage.copyObject({ sourceKey: 'workspaces/ws_1/relink/candidate.bin', destinationKey: 'workspaces/ws_1/relink/original.bin' });
+    expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/relink/original.bin') ?? new Uint8Array())).toBe('exact-original');
+    expect(await storage.computeObjectSha256('workspaces/ws_1/relink/original.bin')).toBe(await storage.computeObjectSha256('workspaces/ws_1/relink/candidate.bin'));
+  });
+
+  it('以流式临时文件物化对象供隔离媒体工具读取', async () => {
+    const key = 'workspaces/ws_1/uploads/probe-source.bin';
+    const destination = join(rootDir, 'worker-temp', 'source.bin');
+    await storage.putObject(key, new TextEncoder().encode('bounded-source'));
+    await storage.materializeObject({ key, destinationPath: destination });
+    expect((await readFile(destination)).toString('utf8')).toBe('bounded-source');
+  });
+
+  it('将 Worker 本地结果流式原子写回对象存储', async () => {
+    const sourcePath = join(rootDir, 'worker-temp', 'proxy.mp4');
+    await mkdir(join(rootDir, 'worker-temp'), { recursive: true });
+    await writeFile(sourcePath, Buffer.from('proxy-bytes'));
+    await storage.persistFile({ sourcePath, destinationKey: 'workspaces/ws_1/renders/proxy.mp4', contentType: 'video/mp4' });
+    expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/renders/proxy.mp4') ?? new Uint8Array())).toBe('proxy-bytes');
   });
 });

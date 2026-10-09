@@ -11,12 +11,14 @@ import {
 } from '@ancs/db';
 import {
   addScene,
+  assembleProjectDocument,
   assembleSceneGraph,
   createChannel,
   createProject,
   getProject,
   getProjectDetail,
   listProjects,
+  requestSceneGeneration,
   updateChannel,
   type DomainDeps,
 } from './index.js';
@@ -212,5 +214,71 @@ describe('Scene 追加与 SceneGraph 组装（P02-01 验收）', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     expect(await listProjects(deps(), { workspaceId: wsB })).toEqual([]);
+  });
+});
+
+describe('N01-02 ProjectDocument 与模式硬约束', () => {
+  it('纯素材空工程无需文章、NarrativePlan 或旁白即可读取统一文档', async () => {
+    const workspaceId = await createWorkspaceRow();
+    const channel = await createChannel(deps(), { workspaceId, input: { name: '素材栏目' } });
+    const project = await createProject(deps(), {
+      workspaceId,
+      input: { title: '纯素材空工程', channelId: channel.id, mode: 'FOOTAGE_EDIT', brief: {} },
+    });
+
+    const document = await assembleProjectDocument(deps(), { workspaceId, projectId: project.id });
+    expect(document.schemaVersion).toBe('1.0');
+    expect(document.semanticPlan).toBeNull();
+    expect(document.composition.objects).toEqual([]);
+    expect(document.productionPolicy).toMatchObject({
+      mode: 'FOOTAGE_EDIT',
+      allowGeneratedVideo: false,
+      allowScriptRewrite: false,
+      preserveOriginalSpeech: true,
+    });
+    expect(document.compatibility.sceneGraph.projectId).toBe(project.id);
+  });
+
+  it('禁用新画面时在 Provider 路由和任务创建前拒绝生成镜头', async () => {
+    const workspaceId = await createWorkspaceRow();
+    const channel = await createChannel(deps(), { workspaceId, input: { name: '保留素材栏目' } });
+    const project = await createProject(deps(), {
+      workspaceId,
+      input: { title: '禁止新画面', channelId: channel.id, mode: 'FOOTAGE_EDIT' },
+    });
+    const created = await addScene(deps(), {
+      workspaceId,
+      projectId: project.id,
+      input: sceneDraft({ sceneType: 'AI_VIDEO', semanticType: 'BROLL', narration: '', visualIntent: '生成不存在的新镜头' }),
+    });
+
+    const error = await requestSceneGeneration(deps(), {
+      workspaceId,
+      projectId: project.id,
+      sceneId: created.scene.id,
+      capability: 'video.generate',
+    }).catch((cause: unknown) => cause);
+    expect(error).toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+      httpStatus: 409,
+      details: {
+        reason: 'PRODUCTION_POLICY_BLOCKED',
+        capability: 'video.generate',
+        policyField: 'allowGeneratedVideo',
+        mode: 'FOOTAGE_EDIT',
+      },
+    });
+  });
+
+  it('旧创建调用保持生成兼容默认，并继续提供 SceneGraph 兼容投影', async () => {
+    const workspaceId = await createWorkspaceRow();
+    const channel = await createChannel(deps(), { workspaceId, input: { name: '旧项目栏目' } });
+    const project = await createProject(deps(), { workspaceId, input: { title: '旧调用项目', channelId: channel.id } });
+    await addScene(deps(), { workspaceId, projectId: project.id, input: sceneDraft({ narration: '' }) });
+
+    const document = await assembleProjectDocument(deps(), { workspaceId, projectId: project.id });
+    expect(document.productionPolicy).toMatchObject({ mode: 'GENERATIVE', allowGeneratedVideo: true });
+    expect(document.compatibility.sceneGraph.scenes).toHaveLength(1);
+    expect(document.semanticPlan?.narrativePlanId).toBeNull();
   });
 });

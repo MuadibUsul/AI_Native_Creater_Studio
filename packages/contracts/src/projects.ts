@@ -5,6 +5,11 @@ import { isoDateTimeSchema } from './common/time.js';
 import { revisionSchema } from './common/revision.js';
 import { sceneDraftSchema } from './edits.js';
 import { editEventSchema } from './history.js';
+import {
+  projectBriefSchema,
+  projectModeSchema,
+  productionPolicyOverridesSchema,
+} from './project-document.js';
 import { sceneSchema } from './scene-graph.js';
 
 /**
@@ -85,6 +90,12 @@ export const createProjectRequestSchema = z.object({
   aspectRatio: z.string().min(1).max(16).optional(),
   /** 覆盖由样式范围推导的目标时长（可选） */
   targetDurationMs: z.number().int().positive().optional(),
+  /** v0.4 production mode; omitted keeps existing projects on GENERATIVE-compatible defaults. */
+  mode: projectModeSchema.default('GENERATIVE'),
+  /** Empty is valid for footage-first projects. */
+  brief: projectBriefSchema.optional(),
+  /** Fine-grained overrides are merged onto the server-owned mode defaults. */
+  productionPolicy: productionPolicyOverridesSchema.optional(),
 });
 
 /** 客户端入参类型（z.input：带 default 的字段可省略，如 sourceType） */

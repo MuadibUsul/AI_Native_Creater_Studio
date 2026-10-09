@@ -7,6 +7,7 @@ import { AncsApiError } from '@ancs/sdk';
 import { useAncsClient } from '@/lib/client';
 import { useEntitlements, useWorkspace, useWorkspaceInvitations, useWorkspaceMembers } from '@/lib/queries';
 import { StateBlock } from './StateBlock';
+import ui from './Monochrome.module.css';
 
 /**
  * 团队与隐私（P09-04 / 规范 §22、§20.4）：
@@ -98,7 +99,7 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
   const doRemove = useMutation({
     mutationFn: (userId: string) => client.workspaces.members.remove(workspaceId, userId),
     onSuccess: async () => {
-      setNotice('成员已移除：其访问**立即失效**（下一请求即 404）。');
+      setNotice('成员已移除：其访问立即失效（下一次请求会返回未找到）。');
       await invalidateTeam();
     },
     onError: (error: unknown) => setNotice(`移除失败：${errorText(error)}（不得移除最后一名 OWNER）`),
@@ -129,46 +130,48 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
   }
 
   const currentTier = workspace.data.privacyTier;
+  const ownerCount = members.data.filter((member) => member.role === 'OWNER').length;
 
   return (
     <section data-testid="team-management" className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">团队与隐私</h1>
-      <p className="text-sm text-slate-400">
-        我的角色：<span className="text-slate-200">{workspace.data.role}</span>
+      <p className={`text-sm ${ui['secondaryText']}`}>
+        我的角色：<span className={ui['primaryText']}>{workspace.data.role}</span>
         {canManage ? '（可管理成员与邀请）' : '（只读——成员管理需 OWNER/ADMIN）'}
       </p>
 
       {overCommitted.length > 0 ? (
-        <div data-testid="over-committed" className="rounded border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-200">
+        <div data-testid="over-committed" className={`text-sm ${ui['notice']}`}>
           已超出当前套餐上限：{overCommitted.map((dimension) => OVER_COMMITTED_LABEL[dimension] ?? dimension).join('、')}。
           新增会被阻止；「现有成员与数据保留」（系统不会自动移除/删除）。请升级套餐或显式调整。
         </div>
       ) : null}
 
       {notice !== null ? (
-        <p data-testid="team-notice" className="text-sm text-slate-300">
+        <p data-testid="team-notice" role="status" className={`text-sm ${ui['notice']}`}>
           {notice}
         </p>
       ) : null}
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">成员（{members.data.length}）</h2>
+      <div className={`${ui['panel']} p-4`}>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>成员（{members.data.length}）</h2>
         <ul className="mt-3 flex flex-col">
           {members.data.map((member) => (
-            <li key={member.userId} data-testid={`member-${member.userId}`} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 py-2 text-sm last:border-b-0">
+            <li key={member.userId} data-testid={`member-${member.userId}`} className={`flex flex-wrap items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0 ${ui['divider']}`}>
               <div className="flex flex-col">
-                <span className="text-slate-200">
-                  {member.name} <span className="text-xs text-slate-400">{member.email}</span>
+                <span className={ui['primaryText']}>
+                  {member.name} <span className={`text-xs ${ui['secondaryText']}`}>{member.email}</span>
                 </span>
-                <span className="text-xs text-slate-500">加入于 {new Date(member.joinedAt).toLocaleString()}</span>
+                <span className={`text-xs ${ui['mutedText']}`}>加入于 {new Date(member.joinedAt).toLocaleString()}</span>
               </div>
               <div className="flex items-center gap-2">
                 <select
                   aria-label={`角色-${member.email}`}
-                  disabled={!canManage || doRole.isPending}
+                  disabled={!canManage || doRole.isPending || (member.role === 'OWNER' && ownerCount === 1)}
+                  title={member.role === 'OWNER' && ownerCount === 1 ? '工作区必须保留至少一名所有者' : undefined}
                   value={member.role}
                   onChange={(event) => doRole.mutate({ userId: member.userId, role: event.target.value as WorkspaceRole })}
-                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs disabled:opacity-50"
+                  className={ui['field']}
                 >
                   {ROLES.map((role) => (
                     <option key={role} value={role}>
@@ -178,9 +181,10 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
                 </select>
                 <button
                   type="button"
-                  disabled={!canManage || doRemove.isPending}
+                  disabled={!canManage || doRemove.isPending || (member.role === 'OWNER' && ownerCount === 1)}
+                  title={member.role === 'OWNER' && ownerCount === 1 ? '不能移除工作区最后一名所有者' : undefined}
                   onClick={() => doRemove.mutate(member.userId)}
-                  className="rounded border border-rose-800 px-2 py-1 text-xs text-rose-300 hover:bg-rose-950 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={ui['dangerButton']}
                 >
                   移除
                 </button>
@@ -190,26 +194,26 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
         </ul>
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">邀请</h2>
+      <div className={`${ui['panel']} p-4`}>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>邀请</h2>
         <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-          <label className="flex flex-col gap-1 text-slate-300">
+          <label className={`flex flex-col gap-1 ${ui['secondaryText']}`}>
             邮箱
             <input
               aria-label="邀请邮箱"
               value={inviteEmail}
               onChange={(event) => setInviteEmail(event.target.value)}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+              className={ui['field']}
               placeholder="name@example.com"
             />
           </label>
-          <label className="flex flex-col gap-1 text-slate-300">
+          <label className={`flex flex-col gap-1 ${ui['secondaryText']}`}>
             角色
             <select
               aria-label="邀请角色"
               value={inviteRole}
               onChange={(event) => setInviteRole(event.target.value as WorkspaceRole)}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+              className={ui['field']}
             >
               {ROLES.map((role) => (
                 <option key={role} value={role}>
@@ -222,7 +226,7 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
             type="button"
             disabled={!canManage || inviteEmail === '' || doInvite.isPending}
             onClick={() => doInvite.mutate()}
-            className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className={ui['primaryButton']}
           >
             邀请
           </button>
@@ -231,49 +235,49 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
             disabled={!canManage || inviteEmail === '' || doAdd.isPending}
             onClick={() => doAdd.mutate()}
             title="对方账号已存在时可直接添加为成员"
-            className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className={ui['button']}
           >
             直接添加成员
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">接受条件：登录邮箱 = 邀请邮箱；接受时按套餐席位权威复查（降级后可能被阻止）。</p>
+        <p className={`mt-2 text-xs ${ui['mutedText']}`}>接受条件：登录邮箱 = 邀请邮箱；接受时按套餐席位权威复查（降级后可能被阻止）。</p>
         <ul className="mt-3 flex flex-col">
           {(invitations.data ?? []).map((invitation) => (
-            <li key={invitation.id} data-testid={`invitation-${invitation.id}`} className="flex items-center justify-between gap-3 border-b border-slate-800 py-2 text-sm last:border-b-0">
+            <li key={invitation.id} data-testid={`invitation-${invitation.id}`} className={`flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0 ${ui['divider']}`}>
               <div className="flex flex-col">
-                <span className="text-slate-200">
-                  {invitation.email} <span className="text-xs text-slate-400">{invitation.role}</span>
+                <span className={ui['primaryText']}>
+                  {invitation.email} <span className={`text-xs ${ui['secondaryText']}`}>{invitation.role}</span>
                 </span>
-                <span className={`text-xs ${invitation.status === 'PENDING' ? 'text-amber-300' : 'text-slate-500'}`}>{invitation.status}</span>
+                <span className={`text-xs ${invitation.status === 'PENDING' ? ui['emphasis'] : ui['mutedText']}`}>{invitation.status}</span>
               </div>
               <button
                 type="button"
                 disabled={!canManage || invitation.status !== 'PENDING' || doRevoke.isPending}
                 onClick={() => doRevoke.mutate(invitation.id)}
-                className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className={ui['button']}
               >
                 撤销
               </button>
             </li>
           ))}
-          {(invitations.data ?? []).length === 0 ? <li className="py-2 text-sm text-slate-400">暂无邀请。</li> : null}
+          {(invitations.data ?? []).length === 0 ? <li className={`py-2 text-sm ${ui['secondaryText']}`}>暂无邀请。</li> : null}
         </ul>
       </div>
 
-      <div className="rounded border border-slate-800 bg-slate-900/60 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">隐私档位（§20.4）</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          当前：<span data-testid="privacy-tier" className="text-slate-200">{currentTier}</span>
+      <div className={`${ui['panel']} p-4`}>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>隐私档位（§20.4）</h2>
+        <p className={`mt-1 text-xs ${ui['secondaryText']}`}>
+          当前：<span data-testid="privacy-tier" className={ui['primaryText']}>{currentTier}</span>
           {!privacyAllowed ? '（当前套餐不含隐私模式权益——PRIVATE/ENTERPRISE 不可设置）' : ''}
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-3 text-sm">
-          <label className="flex flex-col gap-1 text-slate-300">
+          <label className={`flex flex-col gap-1 ${ui['secondaryText']}`}>
             档位
             <select
               aria-label="隐私档位"
               value={privacyTier}
               onChange={(event) => setPrivacyTier(event.target.value as PrivacyTier)}
-              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+              className={ui['field']}
             >
               {PRIVACY_TIERS.map((tier) => (
                 <option key={tier} value={tier}>
@@ -287,12 +291,12 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
             disabled={!canManage || doPrivacy.isPending || (privacyTier !== 'STANDARD' && !privacyAllowed)}
             title={privacyTier !== 'STANDARD' && !privacyAllowed ? '需要套餐权益 privacyMode（升级后设置）' : undefined}
             onClick={() => doPrivacy.mutate()}
-            className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className={ui['primaryButton']}
           >
             应用档位
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">降级套餐不会静默改写档位（进入"超额"清单，由你显式调整）。</p>
+        <p className={`mt-2 text-xs ${ui['mutedText']}`}>降级套餐不会静默改写档位（进入"超额"清单，由你显式调整）。</p>
       </div>
     </section>
   );

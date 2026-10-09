@@ -7,6 +7,7 @@ export {
   updateChannel,
 } from './channels.js';
 export type { DomainDeps } from './channels.js';
+export { getUserAppearance, setUserAppearance } from './appearance.js';
 export {
   createCreatorIdentity,
   getCreatorIdentity,
@@ -30,6 +31,18 @@ export {
 } from './projects.js';
 export { processEdits, replaySceneContent } from './edits.js';
 export type { ProcessEditsInput, ProcessEditsResult, SceneContentSnapshot } from './edits.js';
+export {
+  EDIT_OPERATION_ERROR_REASONS,
+  requireEditOperationDefinition,
+  validateEditOperationCandidate,
+} from './edit-operation-registry.js';
+export type {
+  EditCandidateLock,
+  EditCandidateResult,
+  EditCandidateScene,
+  EditImpact,
+  EditImpactDependency,
+} from './edit-operation-registry.js';
 export {
   AUTO_SNAPSHOT_INTERVAL,
   buildSnapshotPayload,
@@ -224,7 +237,11 @@ export {
 } from './plans.js';
 export { evaluateOpsAlerts, getOpsOverview, listOpsAudit, listOpsJobs, OPS_ALERT_THRESHOLDS, retryOpsJob } from './ops.js';
 export type { OpsAlert } from './ops.js';
+export { listOpsProjects } from './ops-project.js';
+export { getOpsWorkspaceStorageSummary } from './ops-storage.js';
+export { listOpsSupportGrantsForTicket } from './ops-support-grants.js';
 export { createJobInTx } from './jobs.js';
+export { beginAssetMediaProbe, completeAssetMediaProbe } from './media-probes.js';
 export {
   assertDependenciesAllowed,
   buildMotionDesignPrompts,
@@ -370,6 +387,61 @@ export {
 } from './billing.js';
 export type { BillingPolicy } from './billing.js';
 export {
+  WORKSPACE_FEATURE_DEFINITIONS,
+  assertWorkspaceFeatureWriteAllowed,
+  listWorkspaceFeatures,
+  setWorkspaceFeaturePreference,
+} from './workspace-features.js';
+export {
+  projectDocumentFromSceneGraph,
+  assembleProjectDocument,
+  getProjectProductionPolicy,
+  assertProjectGenerationAllowed,
+} from './project-document.js';
+export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
+export { clipInstanceToLegacyProjection, compileLegacyClipProjectionUpdate, listProjectMediaViews, upsertMediaDerivativeState } from './media-sources.js';
+export {
+  beginMediaProxy,
+  completeMediaProxy,
+  createAssetPlaybackUrl,
+  failMediaProxy,
+  rebuildMediaProxy,
+  scheduleMediaProxyInTx,
+  selectMediaProxyProfile,
+} from './media-proxies.js';
+export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV2 } from './edit-operation-v2.js';
+export { AUDIO_MIX_PLAN_VERSION, planClipAudioMix } from './audio-mix.js';
+export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, playbackSupports, playbackTimeOfFrame } from './playback.js';
+export type { ServerSynthesisPlan } from './playback.js';
+export type { ClipMixPlan, ClipMixTrackPlan } from './audio-mix.js';
+export type { ProcessEditsV2Input } from './edit-operation-v2.js';
+export {
+  createSequence,
+  createTrack,
+  createClip,
+  listProjectComposition,
+} from './composition.js';
+export {
+  canonicalCompositionJson,
+  compositionDigestSha256,
+  setProjectCompositionMigrationEnabled,
+  getProjectCompositionMigration,
+  assertLegacyProjectWriteAllowed,
+  migrateLegacyProjectComposition,
+  listProjectVersionCompositionProjections,
+} from './composition-migration.js';
+export type { CompositionMigrationHooks } from './composition-migration.js';
+export {
+  assertEffectExecutionSupported,
+  createAnimationBinding,
+  createAudioRegion,
+  createCaptionSpan,
+  createEffectInstance,
+  createVisualObject,
+  listProjectCompositionObjects,
+  repositionVisualObject,
+} from './composition-objects.js';
+export {
   createConnection,
   getConnection,
   listConnections,
@@ -431,6 +503,7 @@ export {
   DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
   isAssetBoundToScene,
   isAssetReferencedByVersionSnapshot,
+  isAssetReferencedByDerivation,
   listTrashedAssets,
   listTrashedProjects,
   restoreAsset,
@@ -442,12 +515,62 @@ export {
 } from './retention.js';
 export type { RetentionConfig, RetentionSweepReport } from './retention.js';
 export {
+  beginMediaIndex,
+  completeMediaIndex,
+  failMediaIndex,
+  listMediaIndex,
+  rebuildMediaIndex,
+  scheduleMediaIndexInTx,
+} from './media-index.js';
+export {
+  beginMediaTranscript,
+  completeMediaTranscript,
+  correctTranscriptSegment,
+  failMediaTranscript,
+  getMediaTranscript,
+  retryMediaTranscript,
+  scheduleMediaTranscriptInTx,
+  updateTranscriptTerminology,
+} from './media-transcripts.js';
+export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMediaSegments } from './media-search.js';
+export { listUnifiedMediaIndex } from './unified-media-index.js';
+export { getMediaEvidenceBundle } from './media-evidence.js';
+export { cancelMediaAnalysisStage, getMediaAnalysisGraph, rebuildMediaAnalysisStage } from './media-analysis.js';
+export {
+  MEDIA_VISUAL_ANALYSIS_CONFIG_HASH,
+  beginMediaVisualAnalysis,
+  completeMediaVisualAnalysis,
+  failMediaVisualAnalysis,
+  retryMediaVisualAnalysis,
+  scheduleMediaVisualAnalysisInTx,
+} from './media-visual-analysis.js';
+export {
+  MEDIA_AUDIO_ANALYSIS_CONFIG_HASH,
+  beginMediaAudioAnalysis,
+  completeMediaAudioAnalysis,
+  failMediaAudioAnalysis,
+  retryMediaAudioAnalysis,
+  scheduleMediaAudioAnalysisInTx,
+} from './media-audio-analysis.js';
+export {
+  assertProjectVersionAssetRights,
+  getAssetLifecycle,
+  listAssetReferences,
+  requestAssetPrivacyDeletion,
+  updateAssetRights,
+} from './asset-lifecycle.js';
+export { applyAssetRelink, getAssetRelinkState, preflightAssetRelink } from './asset-relink.js';
+export {
   assertAssetBindable,
   buildStorageKey,
   confirmUpload,
+  cancelUploadIntent,
+  completeUploadPart,
+  createUploadPartTarget,
   createAssetDownloadUrl,
   createUploadIntent,
   getAsset,
+  getUploadIntentStatus,
   listAssets,
   sanitizeFilename,
 } from './assets.js';

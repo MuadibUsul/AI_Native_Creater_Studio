@@ -3,6 +3,8 @@ import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { revisionSchema } from './common/revision.js';
 import { sceneGraphSchema } from './scene-graph.js';
+import { projectDocumentSchema } from './project-document.js';
+import { objectLockSchema } from './object-locks.js';
 
 /**
  * 编辑历史契约（规范 §23、§24 / P02-02）。
@@ -12,6 +14,8 @@ import { sceneGraphSchema } from './scene-graph.js';
  */
 
 export const EDIT_ACTOR_TYPES = ['USER', 'AI', 'SYSTEM'] as const;
+export const EDIT_EVENT_OBJECT_KINDS = ['PROJECT', 'SCENE', 'SEQUENCE', 'TRACK', 'CLIP', 'VISUAL_OBJECT', 'EFFECT', 'ANIMATION', 'CAPTION', 'AUDIO_REGION', 'OBJECT_LOCK'] as const;
+export type EditEventObjectKind = (typeof EDIT_EVENT_OBJECT_KINDS)[number];
 
 export const editEventSchema = z.object({
   id: opaqueIdSchema,
@@ -19,9 +23,11 @@ export const editEventSchema = z.object({
   projectId: opaqueIdSchema,
   /** 与具体 Scene 无关的操作（如 update_project）为 null */
   sceneId: z.string().nullable().default(null),
+  objectKind: z.enum(EDIT_EVENT_OBJECT_KINDS).nullable().default(null),
+  objectId: z.string().nullable().default(null),
   actorType: z.enum(EDIT_ACTOR_TYPES),
   actorId: z.string().nullable().default(null),
-  /** 操作类型（§4.6 的 14 种操作名，大写形式，如 UPDATE_SCENE） */
+  /** 操作类型（编辑注册表操作名的大写形式，如 UPDATE_SCENE / UPDATE_CLIP） */
   action: z.string().min(1),
   /** 用户/AI 的自然语言意图（可空；History UI 展示用，§5.7） */
   intentText: z.string().nullable().default(null),
@@ -55,6 +61,8 @@ export type VersionReason = z.infer<typeof versionReasonSchema>;
 export const projectVersionSnapshotSchema = z.object({
   schemaVersion: z.string().min(1),
   graph: sceneGraphSchema,
+  document: projectDocumentSchema.optional(),
+  locks: z.array(objectLockSchema).default([]),
   meta: z.record(z.string(), z.unknown()).default({}),
 });
 

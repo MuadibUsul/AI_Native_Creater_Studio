@@ -1,7 +1,10 @@
-export { account, session, user, verification } from './auth.js';
+export { account, session, user, verification, twoFactor } from './auth.js';
+export { userAppearancePreferences } from './appearance.js';
+export { adminPrincipals, adminRoleGrants, adminRoleScopes, adminSessions } from './ops-auth.js';
+export { adminPermissionPolicyVersions, adminEmergencyGrants } from './ops-governance.js';
 export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './auth-native.js';
 export { idempotencyKeys } from './idempotency.js';
-export { workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
+export { workspaceFeaturePreferences, workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
 export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
 export { voiceCloneSamples, voiceClones, voiceConsents } from './voice-clone.js';
 export { contentCores } from './content-core.js';
@@ -28,8 +31,24 @@ export {
   voiceIdentities,
 } from './creator.js';
 export { projectVersions, projects, scenes } from './projects.js';
+export { projectSequences, sequenceTracks, sequenceClips } from './composition.js';
+export { projectObjectLocks } from './object-locks.js';
+export { projectCompositionMigrations, projectVersionCompositionProjections } from './composition-migration.js';
+export {
+  compositionAnimationBindings,
+  compositionAudioRegions,
+  compositionCaptionSpans,
+  compositionEffectInstances,
+  compositionVisualObjects,
+} from './composition-objects.js';
 export { editEvents, outboxEvents } from './history.js';
-export { assetVersions, assets, uploadIntents } from './assets.js';
+export { assetDerivationEdges, assetRelinks, assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
+export { mediaDerivatives } from './media-derivatives.js';
+export { mediaIndexEntries, mediaIndexRuns } from './media-index.js';
+export { mediaEvidenceCaches } from './media-evidence-cache.js';
+export { mediaAnalysisStages } from './media-analysis.js';
+export { mediaTranscriptRuns, mediaTranscriptVersions } from './media-transcripts.js';
+export { mediaRangeTags } from './media-range-tags.js';
 export { notifications } from './notifications.js';
 export { jobDependencies, jobs } from './jobs.js';
 export { providerCatalogVersions } from './providers.js';

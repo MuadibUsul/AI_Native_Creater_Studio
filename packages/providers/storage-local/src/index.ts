@@ -1,8 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { pipeline } from 'node:stream/promises';
+import { finished, pipeline } from 'node:stream/promises';
 import {
   DOWNLOAD_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
@@ -208,6 +208,65 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     const hash = createHash('sha256');
     await pipeline(createReadStream(path), hash);
     return hash.digest('hex');
+  }
+
+  async materializeObject(input: { key: string; destinationPath: string }): Promise<void> {
+    await mkdir(dirname(input.destinationPath), { recursive: true });
+    const partial = `${input.destinationPath}.partial`;
+    try {
+      await pipeline(createReadStream(this.resolveKeyPath(input.key)), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, input.destinationPath);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
+  async persistFile(input: { sourcePath: string; destinationKey: string; contentType: string }): Promise<void> {
+    const destination = this.resolveKeyPath(input.destinationKey);
+    await mkdir(dirname(destination), { recursive: true });
+    const partial = `${destination}.partial`;
+    try {
+      await pipeline(createReadStream(input.sourcePath), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, destination);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
+  async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<void> {
+    if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
+    const destination = this.resolveKeyPath(input.destinationKey);
+    const partial = `${destination}.partial`;
+    await mkdir(dirname(destination), { recursive: true });
+    const output = createWriteStream(partial, { flags: 'w' });
+    try {
+      for (const key of input.sourceKeys) {
+        await pipeline(createReadStream(this.resolveKeyPath(key)), output, { end: false });
+      }
+      output.end();
+      await finished(output);
+      await rename(partial, destination);
+    } catch (error) {
+      output.destroy();
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
+  async copyObject(input: { sourceKey: string; destinationKey: string }): Promise<void> {
+    const source = this.resolveKeyPath(input.sourceKey);
+    const destination = this.resolveKeyPath(input.destinationKey);
+    const partial = `${destination}.partial`;
+    await mkdir(dirname(destination), { recursive: true });
+    try {
+      await pipeline(createReadStream(source), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, destination);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
   }
 
   async deleteObject(key: string): Promise<void> {

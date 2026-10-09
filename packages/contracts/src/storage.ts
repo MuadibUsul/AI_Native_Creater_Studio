@@ -65,6 +65,26 @@ export interface ObjectStorageAdapter {
   /** 对象 SHA-256（十六进制小写）；对象不存在返回 null */
   computeObjectSha256(key: string): Promise<string | null>;
   /**
+   * 将对象以流式方式物化到 Worker 的临时文件。媒体探测与转码使用此 seam，避免
+   * `getObject()` 把数 GiB 原件一次读入内存。实现不得暴露底层永久路径。
+   */
+  materializeObject?(input: { key: string; destinationPath: string }): Promise<void>;
+  /**
+   * 将 Worker 产生的本地文件流式写回对象存储。实现必须先写临时对象再原子发布，
+   * 不得将完整代理或渲染产物一次读入内存。
+   */
+  persistFile?(input: { sourcePath: string; destinationKey: string; contentType: string }): Promise<void>;
+  /**
+   * 将同一上传意图的分片按给定顺序合成为最终对象。实现必须流式复制，不能把所有分片
+   * 同时读入内存；目标写入失败时不得暴露半成品对象。
+   */
+  composeObjects?(input: { sourceKeys: string[]; destinationKey: string }): Promise<void>;
+  /**
+   * 在对象存储内部复制对象。重新链接原件使用此能力恢复既有不可变 AssetVersion 的
+   * storage_key；实现必须先写临时对象再原子发布，不能把大文件读入 API 内存。
+   */
+  copyObject?(input: { sourceKey: string; destinationKey: string }): Promise<void>;
+  /**
    * 服务端写入对象（结果回收 / 渲染产物落库；§75 第 5 条：结果必须落在自有存储）。
    * 客户端上传走 Signed URL（createUploadTarget），不使用本方法。
    */
