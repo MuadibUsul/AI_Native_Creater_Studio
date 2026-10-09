@@ -332,4 +332,39 @@ describe('Quiet Frame asset flow', () => {
     await waitFor(() => expect(requestPrivacyDeletion).toHaveBeenCalledWith('ws_1', asset.id, { confirmationAssetId: asset.id, reason: '本人要求删除' }));
     expect(await screen.findByText(/隐私删除已排入清理/)).toBeTruthy();
   });
+
+  it('compares a missing original with an uploaded candidate and requires explicit replacement confirmation', async () => {
+    const license = { type: 'USER_OWNED', holder: 'Creator', attribution: null, sourceUrl: null, termsUrl: null, notes: null, confirmedBy: 'usr_1', confirmedAt: '2026-10-09T00:00:00.000Z', userOwnedDeclared: true, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: null };
+    const target = { id: 'ast_missing', workspaceId: 'ws_1', projectId: 'prj_1', sceneId: null, assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', retentionClass: 'KEEP_USER_SOURCE', sensitivityClass: 'INTERNAL', privacyDeletionRequestedAt: null, metadata: { filename: '同名.png' }, currentVersionId: 'av_missing', createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', license };
+    const candidate = { ...target, id: 'ast_candidate', currentVersionId: 'av_candidate', metadata: { filename: '同名.png' } };
+    const missingState = { assetId: target.id, versions: [{ assetVersionId: 'av_missing', versionNumber: 1, current: true, availability: 'MISSING', checksumSha256: 'a'.repeat(64), durationMs: 5_000, tracks: [], activeClipReferences: 2 }] };
+    const onlineState = { ...missingState, versions: [{ ...missingState.versions[0], availability: 'AVAILABLE' }] };
+    const comparison = { mode: 'REPLACEMENT', targetVersionId: 'av_missing', candidateAssetId: candidate.id, candidateVersionId: 'av_candidate', candidateChecksumSha256: 'b'.repeat(64), checksumMatches: false, duration: { targetMs: 5_000, candidateMs: 5_500, deltaMs: 500, matches: false }, tracks: { target: [], candidate: [], matches: true }, activeClipReferences: 2, affectedProjectIds: ['prj_1'], confirmationText: '确认替换', reviewRequired: true };
+    const preflightRelink = vi.fn().mockResolvedValue(comparison);
+    const applyRelink = vi.fn().mockResolvedValue({ relinkId: 'arl_1', assetId: target.id, action: 'REPLACEMENT', restoredVersionId: 'av_missing', createdVersionId: 'av_new', activeClipReferencesPreserved: 2, reviewRequired: true, state: onlineState });
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([target, candidate]),
+        get: vi.fn().mockResolvedValue({ ...target, versions: [{ id: 'av_missing', assetId: target.id, versionNumber: 1, storageKey: 'hidden', mimeType: 'image/png', sizeBytes: 10, checksumSha256: 'a'.repeat(64), durationMs: 5_000, width: 640, height: 360, status: 'READY', probeStatus: 'NOT_REQUIRED', mediaProbe: null, metadata: {}, createdAt: target.createdAt }] }),
+        lifecycle: vi.fn().mockResolvedValue({ asset: target, licenseState: 'ACTIVE', references: [], derivations: [], gcProtected: false, gcProtectionReasons: [] }),
+        relinkState: vi.fn().mockResolvedValue(missingState), preflightRelink, applyRelink,
+        downloadUrl: vi.fn().mockRejectedValue(new Error('原件缺失')),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click((await screen.findAllByRole('button', { name: '查看素材 同名.png' }))[0]!);
+    const region = await screen.findByRole('region', { name: '原件在线状态与重新链接' });
+    expect(region.textContent).toContain('1 个版本缺失');
+    await userEvent.selectOptions(screen.getByLabelText('已上传候选素材'), candidate.id);
+    await userEvent.click(screen.getByRole('button', { name: '校验候选文件' }));
+    expect(await screen.findByText('检测到不同内容')).toBeTruthy();
+    expect(region.textContent).toContain('建立新版本并审阅');
+    const confirmButton = screen.getByRole('button', { name: '确认替换' });
+    expect(confirmButton.hasAttribute('disabled')).toBe(true);
+    await userEvent.type(screen.getByLabelText('输入“确认替换”确认'), '确认替换');
+    await userEvent.click(confirmButton);
+    await waitFor(() => expect(applyRelink).toHaveBeenCalledWith('ws_1', target.id, expect.objectContaining({ targetVersionId: 'av_missing', candidateAssetId: candidate.id, confirmationText: '确认替换' })));
+    expect(await screen.findByText('原件在线')).toBeTruthy();
+  });
 });

@@ -536,6 +536,7 @@ export {
   requestAssetPrivacyDeletion,
   updateAssetRights,
 } from './asset-lifecycle.js';
+export { applyAssetRelink, getAssetRelinkState, preflightAssetRelink } from './asset-relink.js';
 export {
   assertAssetBindable,
   buildStorageKey,

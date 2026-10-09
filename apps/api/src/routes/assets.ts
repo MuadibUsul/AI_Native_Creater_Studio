@@ -5,6 +5,11 @@ import {
   assetDetailSchema,
   assetLifecycleSchema,
   assetPrivacyDeletionResultSchema,
+  assetRelinkComparisonSchema,
+  assetRelinkResultSchema,
+  assetRelinkStateSchema,
+  applyAssetRelinkRequestSchema,
+  preflightAssetRelinkRequestSchema,
   requestAssetPrivacyDeletionSchema,
   updateAssetRightsRequestSchema,
   assetSchema,
@@ -39,6 +44,9 @@ import {
   createAssetDownloadUrl,
   createAssetPlaybackUrl,
   createUploadIntent,
+  applyAssetRelink,
+  getAssetRelinkState,
+  preflightAssetRelink,
   getAsset,
   getAssetLifecycle,
   getUploadIntentStatus,
@@ -225,6 +233,39 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return listMediaIndex(domain, { workspaceId: request.params.id, assetId: request.params.assetId, ...request.query });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/relink-state',
+    {
+      schema: { tags: ['assets'], summary: '探测素材各版本是否在线及其活动剪辑引用', params: assetParamsSchema, response: { 200: assetRelinkStateSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return getAssetRelinkState(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/relink-preflight',
+    {
+      schema: { tags: ['assets'], summary: '比对缺失版本与候选文件的校验和、时长和轨道', params: assetParamsSchema, body: preflightAssetRelinkRequestSchema, response: { 200: assetRelinkComparisonSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return preflightAssetRelink(domain, { workspaceId: request.params.id, assetId: request.params.assetId, request: request.body });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/relink',
+    {
+      schema: { tags: ['assets'], summary: '确认恢复精确原件或建立显式替代版本', params: assetParamsSchema, body: applyAssetRelinkRequestSchema, response: { 200: assetRelinkResultSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema, 501: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return applyAssetRelink(domain, { workspaceId: request.params.id, assetId: request.params.assetId, userId: context.userId, request: request.body });
     },
   );
 

@@ -125,6 +125,13 @@ describe('本地对象存储适配器', () => {
     expect((await storage.probeObject('workspaces/ws_1/uploads/combined.bin')).sizeBytes).toBe(10);
   });
 
+  it('在存储内部原子复制对象供缺失原件恢复', async () => {
+    await storage.putObject('workspaces/ws_1/relink/candidate.bin', new TextEncoder().encode('exact-original'));
+    await storage.copyObject({ sourceKey: 'workspaces/ws_1/relink/candidate.bin', destinationKey: 'workspaces/ws_1/relink/original.bin' });
+    expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/relink/original.bin') ?? new Uint8Array())).toBe('exact-original');
+    expect(await storage.computeObjectSha256('workspaces/ws_1/relink/original.bin')).toBe(await storage.computeObjectSha256('workspaces/ws_1/relink/candidate.bin'));
+  });
+
   it('以流式临时文件物化对象供隔离媒体工具读取', async () => {
     const key = 'workspaces/ws_1/uploads/probe-source.bin';
     const destination = join(rootDir, 'worker-temp', 'source.bin');

@@ -366,6 +366,95 @@ export const assetPrivacyDeletionResultSchema = z.object({
 });
 export type AssetPrivacyDeletionResult = z.infer<typeof assetPrivacyDeletionResultSchema>;
 
+export const ASSET_RELINK_ERROR_REASONS = {
+  TARGET_VERSION_NOT_FOUND: 'TARGET_VERSION_NOT_FOUND',
+  TARGET_OBJECT_STILL_AVAILABLE: 'TARGET_OBJECT_STILL_AVAILABLE',
+  CANDIDATE_NOT_READY: 'CANDIDATE_NOT_READY',
+  CANDIDATE_OBJECT_MISSING: 'CANDIDATE_OBJECT_MISSING',
+  MEDIA_PROBE_REQUIRED: 'MEDIA_PROBE_REQUIRED',
+  CONFIRMATION_MISMATCH: 'CONFIRMATION_MISMATCH',
+  CANDIDATE_CHANGED: 'CANDIDATE_CHANGED',
+  STORAGE_COPY_UNAVAILABLE: 'STORAGE_COPY_UNAVAILABLE',
+} as const;
+export type AssetRelinkErrorReason = (typeof ASSET_RELINK_ERROR_REASONS)[keyof typeof ASSET_RELINK_ERROR_REASONS];
+
+export const assetRelinkTrackSchema = z.object({
+  type: z.enum(['VIDEO', 'AUDIO', 'SUBTITLE', 'DATA', 'ATTACHMENT', 'UNKNOWN']),
+  codecName: z.string().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  channels: z.number().int().positive().nullable(),
+  sampleRate: z.number().int().positive().nullable(),
+});
+export type AssetRelinkTrack = z.infer<typeof assetRelinkTrackSchema>;
+
+export const assetRelinkVersionStateSchema = z.object({
+  assetVersionId: opaqueIdSchema,
+  versionNumber: z.number().int().positive(),
+  current: z.boolean(),
+  availability: z.enum(['AVAILABLE', 'MISSING']),
+  checksumSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  tracks: z.array(assetRelinkTrackSchema),
+  activeClipReferences: z.number().int().nonnegative(),
+});
+export type AssetRelinkVersionState = z.infer<typeof assetRelinkVersionStateSchema>;
+
+export const assetRelinkStateSchema = z.object({
+  assetId: opaqueIdSchema,
+  versions: z.array(assetRelinkVersionStateSchema),
+});
+export type AssetRelinkState = z.infer<typeof assetRelinkStateSchema>;
+
+export const preflightAssetRelinkRequestSchema = z.object({
+  targetVersionId: opaqueIdSchema,
+  candidateAssetId: opaqueIdSchema,
+}).strict();
+export type PreflightAssetRelinkRequest = z.infer<typeof preflightAssetRelinkRequestSchema>;
+
+export const assetRelinkComparisonSchema = z.object({
+  mode: z.enum(['EXACT_RESTORE', 'REPLACEMENT']),
+  targetVersionId: opaqueIdSchema,
+  candidateAssetId: opaqueIdSchema,
+  candidateVersionId: opaqueIdSchema,
+  candidateChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  checksumMatches: z.boolean(),
+  duration: z.object({
+    targetMs: z.number().int().nonnegative().nullable(),
+    candidateMs: z.number().int().nonnegative().nullable(),
+    deltaMs: z.number().int().nullable(),
+    matches: z.boolean(),
+  }),
+  tracks: z.object({
+    target: z.array(assetRelinkTrackSchema),
+    candidate: z.array(assetRelinkTrackSchema),
+    matches: z.boolean(),
+  }),
+  activeClipReferences: z.number().int().nonnegative(),
+  affectedProjectIds: z.array(opaqueIdSchema),
+  confirmationText: z.enum(['恢复原件', '确认替换']),
+  reviewRequired: z.boolean(),
+});
+export type AssetRelinkComparison = z.infer<typeof assetRelinkComparisonSchema>;
+
+export const applyAssetRelinkRequestSchema = preflightAssetRelinkRequestSchema.extend({
+  expectedCandidateChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  confirmationText: z.enum(['恢复原件', '确认替换']),
+}).strict();
+export type ApplyAssetRelinkRequest = z.infer<typeof applyAssetRelinkRequestSchema>;
+
+export const assetRelinkResultSchema = z.object({
+  relinkId: opaqueIdSchema,
+  assetId: opaqueIdSchema,
+  action: z.enum(['EXACT_RESTORE', 'REPLACEMENT']),
+  restoredVersionId: opaqueIdSchema,
+  createdVersionId: opaqueIdSchema.nullable(),
+  activeClipReferencesPreserved: z.number().int().nonnegative(),
+  reviewRequired: z.boolean(),
+  state: assetRelinkStateSchema,
+});
+export type AssetRelinkResult = z.infer<typeof assetRelinkResultSchema>;
+
 /** 单文件上限 5 GiB（§26.1：大文件必须直传对象存储，不经 Web App Server） */
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 export const DEFAULT_UPLOAD_PART_SIZE_BYTES = 8 * 1024 * 1024;
@@ -392,6 +481,8 @@ export const createUploadIntentRequestSchema = z.object({
   /** 新客户端统一使用 MULTIPART；SINGLE 仅保留旧 SDK/API 兼容。 */
   uploadMode: uploadModeSchema.default('SINGLE'),
   partSizeBytes: z.number().int().min(256 * 1024).max(64 * 1024 * 1024).optional(),
+  /** 缺失原件恢复候选；服务端只在目标版本确实缺失时跳过哈希去重。 */
+  relinkTargetVersionId: opaqueIdSchema.optional(),
 });
 
 export type CreateUploadIntentRequest = z.infer<typeof createUploadIntentRequestSchema>;

@@ -16,6 +16,11 @@ import {
   assetDetailSchema,
   assetLifecycleSchema,
   assetPrivacyDeletionResultSchema,
+  assetRelinkComparisonSchema,
+  assetRelinkResultSchema,
+  assetRelinkStateSchema,
+  applyAssetRelinkRequestSchema,
+  preflightAssetRelinkRequestSchema,
   assetSchema,
   requestAssetPrivacyDeletionSchema,
   updateAssetRightsRequestSchema,
@@ -292,6 +297,11 @@ import {
   type AssetDetail,
   type AssetLifecycle,
   type AssetPrivacyDeletionResult,
+  type AssetRelinkComparison,
+  type AssetRelinkResult,
+  type AssetRelinkState,
+  type ApplyAssetRelinkRequest,
+  type PreflightAssetRelinkRequest,
   type RequestAssetPrivacyDeletion,
   type UpdateAssetRightsRequest,
   type MediaIndexPage,
@@ -484,6 +494,8 @@ export interface ResumableUploadInput {
   width?: number;
   height?: number;
   checksumSha256?: string;
+  /** 缺失版本恢复候选；仅当服务端确认目标对象缺失时跳过去重。 */
+  relinkTargetVersionId?: string;
   /** 暂停后续传时复用原意图；服务端已确认分片不会重传。 */
   resumeIntentId?: string;
 }
@@ -759,6 +771,9 @@ export interface AncsClient {
     lifecycle(workspaceId: string, assetId: string): Promise<AssetLifecycle>;
     updateRights(workspaceId: string, assetId: string, input: UpdateAssetRightsRequest, options?: MutationOptions): Promise<AssetLifecycle>;
     requestPrivacyDeletion(workspaceId: string, assetId: string, input: RequestAssetPrivacyDeletion, options?: MutationOptions): Promise<AssetPrivacyDeletionResult>;
+    relinkState(workspaceId: string, assetId: string): Promise<AssetRelinkState>;
+    preflightRelink(workspaceId: string, assetId: string, input: PreflightAssetRelinkRequest): Promise<AssetRelinkComparison>;
+    applyRelink(workspaceId: string, assetId: string, input: ApplyAssetRelinkRequest, options?: MutationOptions): Promise<AssetRelinkResult>;
     /** 下载 Signed URL（短 TTL；不经 API 流式代理） */
     downloadUrl(workspaceId: string, assetId: string): Promise<DownloadUrlResponse>;
     /** 播放 Signed URL：优先标准代理，必要时明确回退原件或返回尚未就绪状态。 */
@@ -1366,6 +1381,7 @@ export function createClient(options: ClientOptions): AncsClient {
           checksumSha256: input.checksumSha256,
           uploadMode: 'MULTIPART',
           partSizeBytes: options.partSizeBytes,
+          relinkTargetVersionId: input.relinkTargetVersionId,
         },
         bodySchema: createUploadIntentRequestSchema,
         idempotencyKey: options.idempotencyKey,
@@ -2077,6 +2093,13 @@ export function createClient(options: ClientOptions): AncsClient {
       }),
       requestPrivacyDeletion: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/privacy-deletion`, assetPrivacyDeletionResultSchema, {
         body: input, bodySchema: requestAssetPrivacyDeletionSchema, idempotencyKey: mutation?.idempotencyKey,
+      }),
+      relinkState: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink-state`, assetRelinkStateSchema),
+      preflightRelink: (workspaceId, assetId, input) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink-preflight`, assetRelinkComparisonSchema, {
+        body: input, bodySchema: preflightAssetRelinkRequestSchema,
+      }),
+      applyRelink: (workspaceId, assetId, input, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/relink`, assetRelinkResultSchema, {
+        body: input, bodySchema: applyAssetRelinkRequestSchema, idempotencyKey: mutation?.idempotencyKey,
       }),
       downloadUrl: (workspaceId, assetId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/download-url`, downloadUrlResponseSchema),

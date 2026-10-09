@@ -42,7 +42,7 @@ export {
   compositionVisualObjects,
 } from './composition-objects.js';
 export { editEvents, outboxEvents } from './history.js';
-export { assetDerivationEdges, assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
+export { assetDerivationEdges, assetRelinks, assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
 export { mediaDerivatives } from './media-derivatives.js';
 export { mediaIndexEntries, mediaIndexRuns } from './media-index.js';
 export { mediaTranscriptRuns, mediaTranscriptVersions } from './media-transcripts.js';

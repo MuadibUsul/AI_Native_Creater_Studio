@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ASSET_DEFAULT_RETENTION,
+  ASSET_RELINK_ERROR_REASONS,
   ASSET_MIME_ALLOWLIST,
   DIRECT_UPLOAD_ASSET_TYPES,
   DOWNLOAD_URL_TTL_SECONDS,
@@ -239,8 +240,34 @@ export async function createUploadIntent(
 
   const origin: AssetOrigin = ORIGIN_BY_ASSET_TYPE[request.assetType] ?? 'USER_UPLOAD';
 
+  if (request.relinkTargetVersionId !== undefined) {
+    const targetRows = await deps.db
+      .select({ version: assetVersions, asset: assets })
+      .from(assetVersions)
+      .innerJoin(assets, eq(assets.id, assetVersions.assetId))
+      .where(and(
+        eq(assetVersions.id, request.relinkTargetVersionId),
+        eq(assetVersions.workspaceId, workspaceId),
+        eq(assets.workspaceId, workspaceId),
+        isNull(assetVersions.deletedAt),
+        isNull(assets.deletedAt),
+      ))
+      .limit(1);
+    const target = targetRows[0];
+    if (target === undefined) {
+      throw new ApiFailure(ERROR_CODES.NOT_FOUND, '重新链接的目标版本不存在', 404, {
+        reason: ASSET_RELINK_ERROR_REASONS.TARGET_VERSION_NOT_FOUND,
+      });
+    }
+    if ((await storage.probeObject(target.version.storageKey)).exists) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '目标原件仍可用，无需上传恢复候选', 409, {
+        reason: ASSET_RELINK_ERROR_REASONS.TARGET_OBJECT_STILL_AVAILABLE,
+      });
+    }
+  }
+
   // workspace 内哈希去重（§26.3）：命中则不创建对象，客户端可直接绑定既有资产
-  if (request.checksumSha256 !== undefined) {
+  if (request.checksumSha256 !== undefined && request.relinkTargetVersionId === undefined) {
     const existingRows = await deps.db
       .select({ asset: assets, version: assetVersions })
       .from(assetVersions)
@@ -255,8 +282,14 @@ export async function createUploadIntent(
           isNull(assetVersions.deletedAt),
         ),
       )
-      .limit(1);
-    const existing = existingRows[0];
+      .limit(20);
+    let existing: (typeof existingRows)[number] | undefined;
+    for (const row of existingRows) {
+      if ((await storage.probeObject(row.version.storageKey)).exists) {
+        existing = row;
+        break;
+      }
+    }
     if (existing) {
       return uploadIntentResponseSchema.parse({
         intentId: null,
@@ -690,8 +723,14 @@ export async function confirmUpload(
         isNull(assetVersions.deletedAt),
       ),
     )
-    .limit(1);
-  const duplicate = duplicateRows[0];
+    .limit(20);
+  let duplicate: (typeof duplicateRows)[number] | undefined;
+  for (const row of duplicateRows) {
+    if ((await storage.probeObject(row.version.storageKey)).exists) {
+      duplicate = row;
+      break;
+    }
+  }
 
   const now = new Date();
   let deletedDuplicateObject = false;

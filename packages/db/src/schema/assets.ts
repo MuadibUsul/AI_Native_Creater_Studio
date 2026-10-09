@@ -1,4 +1,4 @@
-import { bigint, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth.js';
 import { projects, scenes } from './projects.js';
@@ -106,6 +106,33 @@ export const assetDerivationEdges = pgTable(
     index('asset_derivation_edges_workspace_derived_idx').on(table.workspaceId, table.derivedAssetId),
     check('asset_derivation_edges_distinct_ck', sql`${table.sourceAssetVersionId} <> ${table.derivedAssetVersionId}`),
     check('asset_derivation_edges_kind_ck', sql`length(btrim(${table.kind})) between 1 and 80`),
+  ],
+);
+
+/** N02-08：缺失媒体精确恢复或显式替代的不可变审计记录。 */
+export const assetRelinks = pgTable(
+  'asset_relinks',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    assetId: text('asset_id').notNull().references(() => assets.id, { onDelete: 'restrict' }),
+    targetVersionId: text('target_version_id').notNull().references(() => assetVersions.id, { onDelete: 'restrict' }),
+    candidateAssetId: text('candidate_asset_id').notNull().references(() => assets.id, { onDelete: 'restrict' }),
+    candidateVersionId: text('candidate_version_id').notNull().references(() => assetVersions.id, { onDelete: 'restrict' }),
+    action: text('action').notNull(),
+    candidateChecksumSha256: text('candidate_checksum_sha256').notNull(),
+    validation: jsonb('validation').notNull(),
+    createdVersionId: text('created_version_id').references(() => assetVersions.id, { onDelete: 'set null' }),
+    activeClipReferencesPreserved: integer('active_clip_references_preserved').notNull().default(0),
+    reviewRequired: boolean('review_required').notNull().default(false),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('asset_relinks_workspace_asset_idx').on(table.workspaceId, table.assetId, table.createdAt),
+    index('asset_relinks_target_version_idx').on(table.targetVersionId),
+    check('asset_relinks_action_ck', sql`${table.action} in ('EXACT_RESTORE','REPLACEMENT')`),
+    check('asset_relinks_checksum_ck', sql`${table.candidateChecksumSha256} ~ '^[0-9a-f]{64}$'`),
   ],
 );
 

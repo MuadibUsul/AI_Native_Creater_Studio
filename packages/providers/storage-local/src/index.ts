@@ -255,6 +255,20 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     }
   }
 
+  async copyObject(input: { sourceKey: string; destinationKey: string }): Promise<void> {
+    const source = this.resolveKeyPath(input.sourceKey);
+    const destination = this.resolveKeyPath(input.destinationKey);
+    const partial = `${destination}.partial`;
+    await mkdir(dirname(destination), { recursive: true });
+    try {
+      await pipeline(createReadStream(source), createWriteStream(partial, { flags: 'w' }));
+      await rename(partial, destination);
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  }
+
   async deleteObject(key: string): Promise<void> {
     await rm(this.resolveKeyPath(key), { force: true });
   }

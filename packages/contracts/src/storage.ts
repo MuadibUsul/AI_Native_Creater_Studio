@@ -80,6 +80,11 @@ export interface ObjectStorageAdapter {
    */
   composeObjects?(input: { sourceKeys: string[]; destinationKey: string }): Promise<void>;
   /**
+   * 在对象存储内部复制对象。重新链接原件使用此能力恢复既有不可变 AssetVersion 的
+   * storage_key；实现必须先写临时对象再原子发布，不能把大文件读入 API 内存。
+   */
+  copyObject?(input: { sourceKey: string; destinationKey: string }): Promise<void>;
+  /**
    * 服务端写入对象（结果回收 / 渲染产物落库；§75 第 5 条：结果必须落在自有存储）。
    * 客户端上传走 Signed URL（createUploadTarget），不使用本方法。
    */
