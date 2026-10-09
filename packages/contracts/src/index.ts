@@ -290,6 +290,25 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  RANGE_EDIT_AUDIO_CLOCK_OPERATIONS,
+  RANGE_EDIT_ERROR_REASONS,
+  RANGE_EDIT_OUT_OF_SCOPE_REASONS,
+  RANGE_EDIT_PLAN_VERSION,
+  createRangeEditPlanRequestSchema,
+  rangeEditBriefSchema,
+  rangeEditOutOfScopeSchema,
+  rangeEditPlanSchema,
+  rangeEditSourceEvidenceSchema,
+} from './range-edit.js';
+export type {
+  CreateRangeEditPlanRequest,
+  RangeEditErrorReason,
+  RangeEditOutOfScope,
+  RangeEditOutOfScopeReason,
+  RangeEditPlan,
+  RangeEditSourceEvidence,
+} from './range-edit.js';
+export {
   PLAYBACK_BACKEND_KINDS,
   PLAYBACK_CAPABILITY_FLAGS,
   PLAYBACK_ERROR_REASONS,

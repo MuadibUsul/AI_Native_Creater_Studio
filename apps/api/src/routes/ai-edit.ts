@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { createEditPlanRequestSchema, editPlanSchema, errorEnvelopeSchema, opaqueIdSchema, type LlmAdapter } from '@ancs/contracts';
-import { planAiEdit, type DomainDeps } from '@ancs/domain';
+import { createEditPlanRequestSchema, createRangeEditPlanRequestSchema, editPlanSchema, errorEnvelopeSchema, opaqueIdSchema, rangeEditPlanSchema, type LlmAdapter } from '@ancs/contracts';
+import { planAiEdit, planRangeEdit, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -36,6 +36,27 @@ export function registerAiEditRoutes(app: FastifyInstance, deps: AuthDeps, llm: 
         workspaceId: request.params.id,
         projectId: request.params.projectId,
         prompt: request.body.prompt,
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/ai-edit/range-plan',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N03-09 范围编辑计划（选中片段 + 允许操作 + 源证据 → 可验证结构化编辑；不落库、零 Provider 媒体调用）',
+        params: projectParamsSchema,
+        body: createRangeEditPlanRequestSchema,
+        response: { 200: rangeEditPlanSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return planRangeEdit(domain, {
+        workspaceId: request.params.id,
+        projectId: request.params.projectId,
+        request: request.body,
       });
     },
   );
