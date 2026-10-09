@@ -38,6 +38,8 @@ import {
   narrationBlockSchema,
   directorApplyRequestSchema,
   createEditPlanRequestSchema,
+  createRangeEditPlanRequestSchema,
+  rangeEditPlanSchema,
   createRenderRequestSchema,
   directorPlanSchema,
   renderRecordSchema,
@@ -355,6 +357,8 @@ import {
   type OpsAuditEntry,
   type RenderStatus,
   type EditPlan,
+  type RangeEditPlan,
+  type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
   type MasterNarration,
   type TranslationResult,
@@ -1020,6 +1024,13 @@ export interface AncsClient {
     /** 混音计划（P06-06）：非旁白轨 + ducking/淡入淡出（纯计算，不调用 TTS） */
     mixPlan(workspaceId: string, projectId: string, planId: string, request: MixPlanRequest): Promise<MixPlan>;
     /** AI Edit 计划（P05-06）：自然语言 → 结构化 operation（不落库；Apply 走编辑协议） */
+    rangeEditPlan(
+      workspaceId: string,
+      projectId: string,
+      input: CreateRangeEditPlanRequest,
+      options?: MutationOptions,
+    ): Promise<RangeEditPlan>;
+
     aiEditPlan(
       workspaceId: string,
       projectId: string,
@@ -2363,6 +2374,12 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/narrative/${planId}/mix-plan`, mixPlanSchema, {
           body,
           bodySchema: mixPlanRequestSchema,
+        }),
+      rangeEditPlan: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/ai-edit/range-plan`, rangeEditPlanSchema, {
+          body: input,
+          bodySchema: createRangeEditPlanRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
         }),
       aiEditPlan: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/ai-edit/plan`, editPlanSchema, {

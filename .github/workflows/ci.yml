@@ -51,6 +51,15 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Install FFmpeg
+        # 真实媒体链路（探测/索引/转码、播放快照的真实解码校验）需要 ffmpeg/ffprobe；
+        # unit 套件按仓库定义保持"无外部依赖"，因此这些用例归入 integration 套件。
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+
       - name: Install
         run: pnpm install --frozen-lockfile
 

@@ -1,3 +1,7 @@
+/**
+ * 真实 FFmpeg 索引（N02-04）：**需要系统 ffmpeg/ffprobe**，因此归入 integration 项目
+ * （unit 项目的定义是"无外部依赖的快速测试"；CI 的 verify 作业会先安装 ffmpeg）。
+ */
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';

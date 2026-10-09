@@ -27,6 +27,10 @@ export const MOCK_LLM_MODES = [
   'ai_edit_bad_scene',
   'ai_edit_locked',
   'ai_edit_invalid_then_valid',
+  // N03-09 范围编辑 AI 入口（completePrompt，purpose='range_edit'）：合法裁剪 / 引用不存在片段 / 超出允许操作
+  'range_edit_trim',
+  'range_edit_hallucinated',
+  'range_edit_disallowed',
   // P07-02 Motion 设计（completePrompt，purpose='motion_design'）：合法 / 危险词法 / 类型错误 / 未注册
   'motion_valid',
   'motion_unsafe',
@@ -147,6 +151,58 @@ export class MockLlmAdapter implements LlmAdapter {
     const promptVersion = /promptVersion:\s*(\S+)/.exec(input.systemPrompt)?.[1] ?? 'ai-edit-v1';
     if (mode === 'timeout') throw new Error('Mock LLM：上游超时（模拟）');
     if (mode === 'error') throw new Error('Mock LLM：上游 500（模拟）');
+
+    // N03-09 范围编辑：从提示词里的"候选片段"清单解析真实片段与区间（确定性 Mock，不做任何素材生成）
+    if (input.purpose === 'range_edit' || mode.startsWith('range_edit_')) {
+      const evidence = [...input.userPrompt.matchAll(/- clip id=(\S+) seqStartMs=(\d+) seqEndMs=(\d+) srcStartMs=(\d+) srcEndMs=(\d+) hasAudio=(true|false)/g)]
+        .map((match) => ({
+          id: match[1]!,
+          seqStartMs: Number(match[2]),
+          seqEndMs: Number(match[3]),
+          srcStartMs: Number(match[4]),
+          srcEndMs: Number(match[5]),
+          hasAudio: match[6] === 'true',
+        }));
+      const first = evidence[0];
+      if (first === undefined) {
+        return { content: JSON.stringify({ rationale: ['没有可用片段'], operations: [], outOfScope: [] }), modelVersion: this.options.modelVersion, promptVersion, usage: {} };
+      }
+      if (mode === 'range_edit_hallucinated') {
+        return {
+          content: JSON.stringify({
+            rationale: ['引用不存在的片段（服务端须拒绝并说明）'],
+            operations: [{ op: 'delete_clip', clipId: 'clp_does_not_exist' }],
+            outOfScope: [],
+          }),
+          modelVersion: this.options.modelVersion, promptVersion, usage: {},
+        };
+      }
+      if (mode === 'range_edit_disallowed') {
+        return {
+          content: JSON.stringify({
+            rationale: ['尝试使用不在允许清单内的操作'],
+            operations: [{ op: 'set_clip_opacity', clipId: first.id, opacity: 0.5 }],
+            outOfScope: [],
+          }),
+          modelVersion: this.options.modelVersion, promptVersion, usage: {},
+        };
+      }
+      // range_edit_trim（默认）：「去掉前面废话但保留原音」→ 掐掉所选片段的头部 1s（源入点前移），不动音频
+      const trimMs = 1_000;
+      return {
+        content: JSON.stringify({
+          rationale: ['按意图去掉片段开头的冗余内容，保留其余画面与原声'],
+          operations: [{
+            op: 'trim_clip',
+            clipId: first.id,
+            sourceRange: { start: { ticks: String(first.srcStartMs + trimMs), timebase: { num: 1, den: 1000 } }, end: { ticks: String(first.srcEndMs), timebase: { num: 1, den: 1000 } } },
+            sequenceRange: { start: { ticks: String(first.seqStartMs), timebase: { num: 1, den: 1000 } }, end: { ticks: String(first.seqEndMs - trimMs), timebase: { num: 1, den: 1000 } } },
+          }],
+          outOfScope: [],
+        }),
+        modelVersion: this.options.modelVersion, promptVersion, usage: {},
+      };
+    }
 
     // P07-02 Motion 设计：purpose 感知（mode='valid' 且 purpose='motion_design' → 合法 Motion 草稿）
     const motionMode =
