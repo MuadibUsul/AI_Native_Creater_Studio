@@ -209,6 +209,26 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         ...(after?.reason !== undefined ? { reason: after.reason } : {}),
       };
     }
+    case 'INSERT_CLIP': {
+      // 原操作（供 Redo 重放）：按 patch.after 原样重建同一 id 的片段。
+      const after = clipSchema.parse(patch.after);
+      return {
+        op: 'insert_clip',
+        sequenceId: after.sequenceId,
+        trackId: after.trackId,
+        assetVersionId: after.assetVersionId,
+        nestedSequenceId: after.nestedSequenceId,
+        sourceStreamId: after.sourceStreamId,
+        sourceRange: after.sourceRange,
+        mode: 'INSERT',
+        sequenceStart: after.sequenceRange.start,
+        linkAudio: false,
+        audioTrackId: null,
+        restoreClipId: event.objectId ?? after.id,
+      };
+    }
+    case 'DELETE_CLIP':
+      return { op: 'delete_clip', clipId: event.objectId ?? '' };
     case 'UPDATE_CLIP': {
       const after = clipSchema.parse(patch.after);
       return { op: 'update_clip', clipId: after.id, changes: {
@@ -345,6 +365,28 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
       } }];
     }
 
+    case 'INSERT_CLIP': {
+      // 逆操作：删除该事件插入的片段（AV 关联的音频片段有自己的事件，按事件粒度逐个撤销）。
+      const objectId = event.objectId ?? String((patch as { objectId?: unknown }).objectId ?? '');
+      return [{ op: 'delete_clip', clipId: objectId }];
+    }
+    case 'DELETE_CLIP': {
+      const before = clipSchema.parse(patch.before);
+      return [{
+        op: 'insert_clip',
+        sequenceId: before.sequenceId,
+        trackId: before.trackId,
+        assetVersionId: before.assetVersionId,
+        nestedSequenceId: before.nestedSequenceId,
+        sourceStreamId: before.sourceStreamId,
+        sourceRange: before.sourceRange,
+        mode: 'INSERT',
+        sequenceStart: before.sequenceRange.start,
+        linkAudio: false,
+        audioTrackId: null,
+        restoreClipId: before.id,
+      }];
+    }
     case 'INSERT_SCENE':
     case 'DUPLICATE_SCENE': {
       const sceneId = event.sceneId ?? '';

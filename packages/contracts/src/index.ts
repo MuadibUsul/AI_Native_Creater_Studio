@@ -452,11 +452,15 @@ export type {
 export {
   updateClipChangesSchema,
   updateClipOperationSchema,
+  CLIP_INSERT_MODES,
+  clipInsertModeSchema,
+  insertClipOperationSchema,
+  deleteClipOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

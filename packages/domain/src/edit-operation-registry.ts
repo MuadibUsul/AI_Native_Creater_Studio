@@ -165,6 +165,15 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       if (operation.changes.trackId !== undefined) dimensions.push('TRACK', 'POSITION');
       return dimensions.length === 0 ? [] : [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(dimensions), direct: true, via: null }];
     }
+    case 'insert_clip': {
+      // N03-01：插入/覆盖改动目标轨的时序与内容（锁定轨道或锁定片段由执行器逐项拒绝）
+      const dimensions: ObjectLockDimension[] = ['POSITION', 'DURATION'];
+      if (operation.mode === 'OVERWRITE') dimensions.push('CONTENT');
+      return [{ objectKind: 'TRACK', objectId: operation.trackId, dimensions: uniqueDimensions(dimensions), direct: true, via: null }];
+    }
+    case 'delete_clip': {
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: ['CONTENT', 'POSITION', 'DURATION'], direct: true, via: null }];
+    }
     case 'update_animation': {
       const objectKind = operation.targetKind === 'VISUAL_OBJECT' ? 'VISUAL_OBJECT' : operation.targetKind === 'AUDIO_REGION' ? 'AUDIO_REGION' : null;
       return objectKind === null ? [] : [{ objectKind, objectId: operation.targetId, dimensions: ['STYLE'], direct: true, via: operation.animationId }];
@@ -344,6 +353,8 @@ export function validateEditOperationCandidate(input: {
         else lockMap.set(key, { objectKind: operation.objectKind, objectId: operation.objectId, dimensions, reason: operation.reason !== undefined ? operation.reason : current?.reason });
         break;
       }
+      case 'insert_clip':
+      case 'delete_clip':
       case 'update_clip':
       case 'update_animation':
       case 'update_audio_region': break;

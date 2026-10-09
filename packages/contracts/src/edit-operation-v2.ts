@@ -3,6 +3,7 @@ import { opaqueIdSchema } from './common/ids.js';
 import { mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versionedParametersSchema } from './composition-objects.js';
 import { clipTimeMappingSchema, createTrackRequestSchema } from './composition.js';
+import { insertClipOperationSchema } from './composition-edits.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperationType } from './edits.js';
 
 export const SOURCE_EDIT_OPERATION_TYPES = [
@@ -103,7 +104,6 @@ export const setAudioAutomationSourceOperationSchema = z.object({
 }).strict();
 
 const plannedSchemas = {
-  insert_clip: z.object({ op: z.literal('insert_clip'), sequenceId: opaqueIdSchema, trackId: opaqueIdSchema, sourceAssetVersionId: opaqueIdSchema, sourceRange: mediaRangeSchema, sequenceRange: mediaRangeSchema }).strict(),
   delete_clip: z.object({ op: z.literal('delete_clip'), ...clipId }).strict(),
   split_clip: z.object({ op: z.literal('split_clip'), ...clipId, at: mediaTimeSchema }).strict(),
   duplicate_clip: z.object({ op: z.literal('duplicate_clip'), ...clipId, afterClipId: opaqueIdSchema.nullable(), createdClipId: opaqueIdSchema.optional() }).strict(),
@@ -130,7 +130,7 @@ const plannedSchemas = {
 } as const;
 
 export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperationType, z.ZodType>> = {
-  insert_clip: plannedSchemas.insert_clip,
+  insert_clip: insertClipOperationSchema,
   delete_clip: plannedSchemas.delete_clip,
   move_clip: moveClipSourceOperationSchema,
   trim_clip: trimClipSourceOperationSchema,
@@ -181,6 +181,21 @@ const alias = (
   limitations: options.limitations ?? [], testIds: ['N01-11_CONTRACT', 'N01-11_ALIAS_INTEGRATION'],
   ...(options.plannedTask === undefined ? {} : { plannedTask: options.plannedTask }),
 });
+/** NATIVE：源操作本身即权威操作（在 PROJECT_DOCUMENT_V2 后端原生执行，无别名编译）。 */
+const native = (
+  operation: SourceEditOperationType & EditOperationType,
+  targetKinds: EditOperationV2Registration['targetKinds'],
+  readSet: string[],
+  writeSet: string[],
+  testIds: string[] = ['N01-11_CONTRACT', 'N03-01_NATIVE_INTEGRATION'],
+): EditOperationV2Registration => ({
+  operation, schemaVersion: '1.0', resolution: 'NATIVE', category: 'EDIT', canonicalOperation: operation,
+  targetKinds, inputSchemaId: `ancs.edit-operation-v2.${operation}.1.0`, requiredPermission: 'project:write',
+  readSet, writeSet, preconditions: ['TARGET_EXISTS', 'PROJECT_REVISION_MATCHES', 'OBJECT_LOCKS_ALLOW_CHANGE'],
+  postconditions: ['CANONICAL_EDIT_VALIDATED', 'PROJECT_REVISION_ADVANCES'], costCategory: 'LOCAL',
+  compensation: 'CANONICAL_EDIT_EVENT_INVERSE', supportedBackends: ['PROJECT_DOCUMENT_V2'], plannedTask: null,
+  limitations: [], testIds,
+});
 const planned = (
   operation: SourceEditOperationType,
   category: EditOperationV2Category,
@@ -197,7 +212,7 @@ const planned = (
 });
 
 export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType, EditOperationV2Registration>> = {
-  insert_clip: planned('insert_clip', 'EDIT', ['SEQUENCE', 'TRACK', 'CLIP'], 'N03-01'),
+  insert_clip: native('insert_clip', ['SEQUENCE', 'TRACK', 'CLIP'], ['SEQUENCE', 'TRACK', 'CLIP'], ['CLIP', 'SEQUENCE'], ['N01-11_CONTRACT', 'N03-01_NATIVE_INTEGRATION']),
   delete_clip: planned('delete_clip', 'EDIT', ['CLIP'], 'N03-02'),
   move_clip: alias('move_clip', 'update_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP']),
   trim_clip: alias('trim_clip', 'update_clip', ['CLIP'], ['CLIP'], ['CLIP']),

@@ -26,6 +26,8 @@ N02-13 已按范围 VERIFIED：音频事件、beat/downbeat、逐 beat tempo、�
 
 N02-15 已按范围 VERIFIED：Director、选区解析与参考分析经同一媒体证据读投影读取已授权 MediaIndex，缓存 key 含源版本/范围/分析配置/权限上下文，命中与用量落库（MISS→HIT），源版本或索引数据变化只使相关缓存失效（旧行保留），跨租户 404 且响应 no-store；真实浏览器完成"检索命中→带到编辑器→选区 banner（空分镜同样可见）→取消"并以已认证会话断言 MISS→HIT（见 `docs/verification/N02-15.md`）。V04-06 的 N02-12/15 已全部完成，更新为 `VERIFIED`；V04-07 的 N02-13/15 已全部完成，更新为 `VERIFIED`；V04-09 仍需 N07-13/N10-13，更新为 `IN_PROGRESS`。
 
+N03-01 已按范围 VERIFIED：素材可直接落轨，`insert_clip` 覆盖 INSERT（涟漪右移 + 跨越插入点切分）／OVERWRITE（删除/裁切/内部切分，源范围同步对齐）／APPEND（轨尾落位）三种语义，`delete_clip` 与 `restoreClipId` 提供删除与精确复原；源含音频流时按 `avGroupId` 建关联音频片段；轨道锁经统一影响面门 409 `EDIT_IMPACT_LOCKED`、片段锁 409 `CLIP_LOCKED`，源缺校验和/越界/结果超序列时长均 fail-closed；**无 NarrativePlan 的纯素材工程**（`scenes`/`narrative_plans` 为 0 行）插入后取播放地址可读真实字节（见 `docs/verification/N03-01.md`）。V03-14 的 N03-01 已完成但 N03-02/03/07/10 与 N04-07 未完成，保持 `IN_PROGRESS`；V03-15 仍需 N03-03/04 与 N11/N12 相关任务，保持 `IN_PROGRESS`；V03-03 仍需 N03-08/N03-10 与生成侧任务，保持 `IN_PROGRESS`。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

@@ -12,7 +12,7 @@ import {
   sourceBindingSchema,
 } from './scene-graph.js';
 import { setObjectLockOperationSchema } from './object-locks.js';
-import { updateAnimationOperationSchema, updateAudioRegionOperationSchema, updateClipOperationSchema } from './composition-edits.js';
+import { deleteClipOperationSchema, insertClipOperationSchema, updateAnimationOperationSchema, updateAudioRegionOperationSchema, updateClipOperationSchema } from './composition-edits.js';
 
 /**
  * 编辑协议契约（计划 §4.6）：客户端不得提交任意数据库补丁，只能提交显式类型的操作。
@@ -39,6 +39,8 @@ export const EDIT_OPERATION_TYPES = [
   'update_audio_track',
   'set_scene_lock',
   'set_object_lock',
+  'insert_clip',
+  'delete_clip',
   'update_clip',
   'update_animation',
   'update_audio_region',
@@ -97,6 +99,8 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   set_scene_lock: { ...common, operation: 'set_scene_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['SCENE'], writeSet: ['SCENE.LOCK'], preconditions: ['SCENE_EXISTS', 'EXPECTED_REVISION_MATCHES'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_object_lock: { ...common, operation: 'set_object_lock', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['OBJECT_LOCK'], writeSet: ['OBJECT_LOCK'], preconditions: ['LOCK_TARGET_EXISTS'], postconditions: ['LOCK_STATE_UPDATED'], invalidates: [], compensation: 'EVENT_INVERSE' },
   update_clip: { ...common, operation: 'update_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP'], preconditions: ['CLIP_EXISTS', 'PROJECT_REVISION_MATCHES', 'RESULTING_CLIP_VALID'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  insert_clip: { ...common, operation: 'insert_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'TRACK', 'CLIP', 'ASSET_VERSION'], writeSet: ['CLIP', 'CLIP_ORDER', 'SEQUENCE'], preconditions: ['SEQUENCE_EXISTS', 'TRACK_EXISTS', 'TARGET_TRACK_UNLOCKED', 'SOURCE_VERSION_READY', 'RESULTING_CLIP_VALID'], postconditions: ['CREATED_CLIP_REFERENCE_AVAILABLE', 'TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  delete_clip: { ...common, operation: 'delete_clip', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['CLIP_REFERENCE_REMOVED', 'TIMELINE_RECOMPUTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   update_animation: { ...common, operation: 'update_animation', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['ANIMATION_BINDING'], writeSet: ['ANIMATION_BINDING.KEYFRAMES'], preconditions: ['ANIMATION_EXISTS', 'TARGET_MATCHES', 'PROJECT_REVISION_MATCHES'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   update_audio_region: { ...common, operation: 'update_audio_region', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['AUDIO_REGION', 'TRACK'], writeSet: ['AUDIO_REGION'], preconditions: ['AUDIO_REGION_EXISTS', 'PROJECT_REVISION_MATCHES', 'RESULTING_AUDIO_REGION_VALID'], postconditions: ['PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   restore_scene: { ...common, operation: 'restore_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'EDIT_EVENT'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'TARGET_REVISION_REPLAYABLE'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
@@ -287,6 +291,8 @@ export const editOperationSchema = z.discriminatedUnion('op', [
   updateAudioTrackOperationSchema,
   setSceneLockOperationSchema,
   setObjectLockOperationSchema,
+  insertClipOperationSchema,
+  deleteClipOperationSchema,
   updateClipOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionOperationSchema,
