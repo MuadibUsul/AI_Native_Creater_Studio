@@ -461,11 +461,20 @@ export {
   moveClipOperationSchema,
   duplicateClipOperationSchema,
   replaceClipSourceOperationSchema,
+  slipClipOperationSchema,
+  slideClipOperationSchema,
+  rollClipOperationSchema,
+  CLIP_RIPPLE_ACTIONS,
+  clipRippleActionSchema,
+  rippleClipOperationSchema,
+  AV_CUT_KINDS,
+  avCutKindSchema,
+  splitAvCutOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

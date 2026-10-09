@@ -14,7 +14,6 @@ import {
   setAudioGainSourceOperationSchema,
   setAudioPanSourceOperationSchema,
   setClipSpeedSourceOperationSchema,
-  slipClipSourceOperationSchema,
   type EditOperation,
   type EditOperationV2Entrypoint,
   type EditRequest,
@@ -123,11 +122,6 @@ export async function compileEditOperationsV2(
 
     let operation: EditOperation | null = null;
     switch (definition.operation) {
-      case 'slip_clip': {
-        const value = slipClipSourceOperationSchema.parse(raw);
-        operation = { op: 'update_clip', clipId: value.clipId, changes: { sourceRange: value.sourceRange } };
-        break;
-      }
       case 'set_clip_speed': {
         const value = setClipSpeedSourceOperationSchema.parse(raw);
         operation = { op: 'update_clip', clipId: value.clipId, changes: {

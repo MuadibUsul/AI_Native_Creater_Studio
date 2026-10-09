@@ -30,6 +30,8 @@ N03-01 已按范围 VERIFIED：素材可直接落轨，`insert_clip` 覆盖 INSE
 
 N03-02 已按范围 VERIFIED：`split_clip`（切点必须在片段内部、右段带 `parentClipId` 子片段血缘、AV 关联片段同步切分、两段序列时长与源范围拼接守恒）、`trim_clip`（源/序列 1:1 时长、越界/时长不等/重叠 fail-closed、AV 同步裁剪）、`move_clip`（保持时长与轨类型、目标轨锁与重叠拒绝、`CLIP_LOCAL` 绑定音频区域随片段平移）、`duplicate_clip`（复制时间线引用而不复制二进制原件、AV 对一并复制）、`replace_clip_source`（新源时长必须匹配、缺校验和/越界拒绝、换源推进 revision 使既有渲染批准在 revision 维度过期）；v2 覆盖层 `move_clip`／`trim_clip` 由 COMPILED_ALIAS 提升为 NATIVE、`split_clip`／`duplicate_clip`／`delete_clip` 翻为 NATIVE 并新增来源操作 `replace_clip_source`（见 `docs/verification/N03-02.md`）。V03-14 的 N03-01/02 已完成但 N03-03/07/10 与 N04-07 未完成，保持 `IN_PROGRESS`；V03-10 仍需 N03-02 之外的 N01-03/08、N02-02/07、N13-05，保持 `IN_PROGRESS`；V03-16 仍需 N11-01 等，保持 `IN_PROGRESS`。
 
+N03-03 已按范围 VERIFIED：`slip_clip`（只平移源入出点，序列位置/时长不变，AV 同步滑移）、`slide_clip`（左右相邻片段伸缩吸收位移、合成时长守恒、邻居内容在时间线上不动）、`roll_clip`（移动剪辑点、两段合成不变、源入出点同步）、`ripple_clip`（**唯一**显式收缝原语：删除/掐头/去尾；单轨收缝若破坏 AV 同步则 409；每个被平移片段逐条落事件报告位置变化，其他原语不得隐式涟漪）、`split_av_cut`（J = 音频先入、L = 音频后出，音频源范围保持连续即原音连续）；v2 覆盖层 `slip_clip` 由别名提升为原生并新增四个来源操作（见 `docs/verification/N03-03.md`）。V03-14 的 N03-01/02/03 已完成但仍需 N03-07/10 与 N04-07，保持 `IN_PROGRESS`；V03-15 仍缺 N03-04 与 N11/N12 相关任务，保持 `IN_PROGRESS`；V03-16 仍缺 N11-02、N12-04 等，保持 `IN_PROGRESS`；V03-32 仍缺 N03-15、N13 相关任务，保持 `IN_PROGRESS`。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

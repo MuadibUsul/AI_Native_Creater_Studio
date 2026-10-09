@@ -4,14 +4,14 @@
 
 来源：`docs/V04/ANCS_AI_Native_v0.4.md` §21—§24、任务清单和包内 `task_index.json`。本文件仅追踪仓库执行；来源中的 P15—P23/T1—T6 不是另一组可执行任务。缺少真实媒体、浏览器或 Provider 证据时，不能把依赖于它们的任务标为 VERIFIED。
 
-当前：N00-01—07、N01-01—11、N02-01—15、**N03-01/02**、N15-01/02、N16-01/02 共 39 项 `VERIFIED`（39/219，17.81%）；剩余 180 项（82.19%）。D0/D1、O0 与 G0—G4 总门仍未通过。N00、N01 基础阶段已经全部关闭，**N02 素材输入阶段全部关闭**，N03 时间线原语已开局。N02-15 已完成 Director/选区/参考分析共用 MediaIndex 读投影、来源版本+索引指纹+权限上下文的缓存 key、命中与用量记录、跨租户 404/no-store，并修复空分镜分支不显示带入片段的真实缺陷（浏览器 E2E 抓出）；迁移已到 0075。N03-01 交付 `insert_clip`（INSERT／OVERWRITE／APPEND，含涟漪切分、AV 关联与三种负路径）与 `delete_clip` 规范原语，v2 覆盖层 `insert_clip` 由 PLANNED 翻为 NATIVE，并修掉两个真实缺陷（执行器按自造字段形状判定原声导致 AV 关联永不触发；undo/redo 对 INSERT_CLIP／DELETE_CLIP 的两组 case 放反）；下一项 N03-03。第三方 ASR/视觉/音频分析 Provider 因无授权凭据保持 `UNVERIFIED_CREDENTIALS_REQUIRED`，不把脚本 Adapter 当真实 Provider。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。N03-02 交付 `split_clip`（右段为子片段、AV 同步切分）、`trim_clip`（入出点，越界/时长不等/重叠 fail-closed）、`move_clip`（保持时长与轨类型）、`duplicate_clip`（只复制引用不复制二进制）与 `replace_clip_source`（时长匹配 + 批准按 revision 失效），v2 覆盖层把 move/trim 由别名提升为原生、split/duplicate/delete 翻为 NATIVE，并修掉裁剪时 AV 关联片段源出点被放大 1000 倍的真实缺陷；下一项 N03-03。当前 `pnpm verify` 为 1086/1086 项已实现断言。
+当前：N00-01—07、N01-01—11、N02-01—15、**N03-01/02/03**、N15-01/02、N16-01/02 共 40 项 `VERIFIED`（40/219，18.26%）；剩余 179 项（81.74%）。D0/D1、O0 与 G0—G4 总门仍未通过。N00、N01 基础阶段已经全部关闭，**N02 素材输入阶段全部关闭**，N03 时间线原语已开局。N02-15 已完成 Director/选区/参考分析共用 MediaIndex 读投影、来源版本+索引指纹+权限上下文的缓存 key、命中与用量记录、跨租户 404/no-store，并修复空分镜分支不显示带入片段的真实缺陷（浏览器 E2E 抓出）；迁移已到 0075。N03-01 交付 `insert_clip`（INSERT／OVERWRITE／APPEND，含涟漪切分、AV 关联与三种负路径）与 `delete_clip` 规范原语，v2 覆盖层 `insert_clip` 由 PLANNED 翻为 NATIVE，并修掉两个真实缺陷（执行器按自造字段形状判定原声导致 AV 关联永不触发；undo/redo 对 INSERT_CLIP／DELETE_CLIP 的两组 case 放反）；下一项 N03-03。第三方 ASR/视觉/音频分析 Provider 因无授权凭据保持 `UNVERIFIED_CREDENTIALS_REQUIRED`，不把脚本 Adapter 当真实 Provider。N15-03 已落地 0053—0055 权限策略、工作区项目/存储与工单支持授权安全读投影；独立复核与生产发布尚未交付。全局 Web 已按 v0.4 黑白语义层迁移并完成 21 个现存路由的多视口检查；用户已要求不再等待 Web 检查，继续全量 v0.4。N16-03 仍缺原型图标权利和 macOS/Safari 实机证据；N16-10 仍需正式 ProjectDocument 内容 hash 证据。所有 `IN_PROGRESS` 均不计入完成。N03-02 交付 `split_clip`（右段为子片段、AV 同步切分）、`trim_clip`（入出点，越界/时长不等/重叠 fail-closed）、`move_clip`（保持时长与轨类型）、`duplicate_clip`（只复制引用不复制二进制）与 `replace_clip_source`（时长匹配 + 批准按 revision 失效），v2 覆盖层把 move/trim 由别名提升为原生、split/duplicate/delete 翻为 NATIVE，并修掉裁剪时 AV 关联片段源出点被放大 1000 倍的真实缺陷；下一项 N03-03。N03-03 交付 `slip_clip`（滑移素材内容）、`slide_clip`（邻居伸缩吸收位移）、`roll_clip`（卷动剪辑点）、`ripple_clip`（**显式**涟漪收缝，逐条事件报告被平移片段）与 `split_av_cut`（J/L cut，音频切点错开且原音连续），`slip_clip` 由别名提升为原生；并修掉五个真实缺陷（涟漪 TRIM_TAIL 源出点为负导致 500、TRIM_HEAD 留缺口反压、slide 邻居语义写反、slip 的 AV 同步量取错、roll 的 undo 锚点取错）；下一项 N03-04。当前 `pnpm verify` 为 1095/1095 项已实现断言。
 
 | 工作流 | 任务数 | VERIFIED | 说明 |
 |---|---:|---:|---|
 | N00 | 7 | 7 | 基础阶段全部 VERIFIED |
 | N01 | 11 | 11 | N01 全部 VERIFIED |
 | N02 | 15 | 15 | **N02 全部 VERIFIED**（素材输入阶段关闭） |
-| N03 | 16 | 2 | N03-01／N03-02 VERIFIED（插入·覆盖·追加 + 拆分/裁剪/移动/复制/换源）；下一项 N03-03 |
+| N03 | 16 | 3 | N03-01／02／03 VERIFIED（时间线原语 + 精剪 ripple/roll/slip/slide/J-L cut）；下一项 N03-04 |
 | N04 | 11 | 0 | 以任务表逐项证据为准 |
 | N05 | 8 | 0 | 以任务表逐项证据为准 |
 | N06 | 11 | 0 | 以任务表逐项证据为准 |
@@ -82,7 +82,7 @@
 |---|---|---|---|---|
 | N03-01 | 素材到序列的插入／覆盖／追加 | N01-09, N02-03 | VERIFIED | [`验证`](../verification/N03-01.md) · [`交接`](../handoffs/N03-01.md) |
 | N03-02 | 拆分、裁剪、移动、替换与子片段 | N03-01 | VERIFIED | [`验证`](../verification/N03-02.md) · [`交接`](../handoffs/N03-02.md) |
-| N03-03 | ripple、roll、slip、slide和J/L cut | N03-02, N01-07 | TODO | — |
+| N03-03 | ripple、roll、slip、slide和J/L cut | N03-02, N01-07 | VERIFIED | [`验证`](../verification/N03-03.md) · [`交接`](../handoffs/N03-03.md) |
 | N03-04 | 多轨、AV链接与轨道控制 | N03-02 | TODO | — |
 | N03-05 | 可编辑变换与基础关键帧 | N01-04, N03-02 | TODO | — |
 | N03-06 | 基础混音与原声保护 | N03-04 | TODO | — |

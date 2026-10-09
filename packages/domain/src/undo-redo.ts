@@ -70,6 +70,17 @@ interface StoredPatch {
   assetVersionId?: unknown;
   nestedSequenceId?: unknown;
   sourceStreamId?: unknown;
+  /** N03-03 精剪：滑移/滑动/卷动/涟漪/J-L cut 的参数字段。 */
+  offset?: unknown;
+  leftClipId?: unknown;
+  rightClipId?: unknown;
+  videoClipId?: unknown;
+  audioClipId?: unknown;
+  kind?: unknown;
+  action?: unknown;
+  amount?: unknown;
+  closeAcrossTracks?: unknown;
+  createdVideoClipId?: unknown;
 }
 
 interface SceneMeta {
@@ -284,6 +295,38 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         sourceStreamId: patch.sourceStreamId == null ? null : String(patch.sourceStreamId),
         sourceRange: mediaRangeSchema.parse(patch.sourceRange),
       };
+    case 'SLIP_CLIP':
+      return { op: 'slip_clip', clipId: String(patch.clipId ?? event.objectId ?? ''), sourceRange: mediaRangeSchema.parse(patch.sourceRange) };
+    case 'SLIDE_CLIP':
+      return { op: 'slide_clip', clipId: String(patch.clipId ?? event.objectId ?? ''), offset: mediaTimeSchema.parse(patch.offset) };
+    case 'ROLL_CLIP':
+      return {
+        op: 'roll_clip',
+        leftClipId: String(patch.leftClipId ?? ''),
+        rightClipId: String(patch.rightClipId ?? ''),
+        at: mediaTimeSchema.parse(patch.at),
+      };
+    case 'RIPPLE_CLIP': {
+      const action = patch.action;
+      return {
+        op: 'ripple_clip',
+        clipId: String(patch.clipId ?? event.objectId ?? ''),
+        action: action === 'TRIM_HEAD' || action === 'TRIM_TAIL' ? action : 'DELETE',
+        amount: patch.amount === null || patch.amount === undefined ? null : mediaTimeSchema.parse(patch.amount),
+        closeAcrossTracks: patch.closeAcrossTracks !== false,
+      };
+    }
+    case 'SPLIT_AV_CUT':
+      return {
+        op: 'split_av_cut',
+        videoClipId: String(patch.videoClipId ?? ''),
+        audioClipId: String(patch.audioClipId ?? ''),
+        at: mediaTimeSchema.parse(patch.at),
+        offset: mediaTimeSchema.parse(patch.offset),
+        kind: patch.kind === 'L' ? 'L' : 'J',
+        ...(patch.createdVideoClipId === undefined ? {} : { createdVideoClipId: String(patch.createdVideoClipId) }),
+        ...(patch.createdAudioClipId === undefined ? {} : { createdAudioClipId: String(patch.createdAudioClipId) }),
+      };
     case 'UPDATE_CLIP': {
       const after = clipSchema.parse(patch.after);
       return { op: 'update_clip', clipId: after.id, changes: {
@@ -450,6 +493,55 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
     case 'DUPLICATE_CLIP':
       // 逆操作：删除复制出来的片段（源二进制从未被触碰，无需回滚原件）。
       return [{ op: 'delete_clip', clipId: event.objectId ?? '' }];
+    case 'SLIP_CLIP': {
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'slip_clip', clipId: before.id, sourceRange: before.sourceRange }];
+    }
+    case 'SLIDE_CLIP': {
+      const before = clipSchema.parse(patch.before);
+      const after = clipSchema.parse(patch.after);
+      // 逆操作：反向滑动同样位移（邻居由各自的事件恢复）。
+      const timebase = before.sequenceRange.start.timebase;
+      const deltaTicks = BigInt(after.sequenceRange.start.ticks) - BigInt(before.sequenceRange.start.ticks);
+      return [{ op: 'slide_clip', clipId: before.id, offset: { ticks: (-deltaTicks).toString(), timebase } }];
+    }
+    case 'ROLL_CLIP': {
+      // 逆操作：回到原剪辑点。左段事件的 before.end 与右段事件的 before.start 都是原点。
+      const before = clipSchema.parse(patch.before);
+      const isLeft = String(patch.clipId ?? event.objectId ?? '') === String(patch.leftClipId ?? '');
+      return [{
+        op: 'roll_clip',
+        leftClipId: String(patch.leftClipId ?? ''),
+        rightClipId: String(patch.rightClipId ?? ''),
+        at: isLeft ? before.sequenceRange.end : before.sequenceRange.start,
+      }];
+    }
+    case 'RIPPLE_CLIP': {
+      const before = clipSchema.parse(patch.before);
+      if (patch.action === 'TRIM_HEAD' || patch.action === 'TRIM_TAIL') {
+        return [{ op: 'update_clip', clipId: before.id, changes: { sourceRange: before.sourceRange, sequenceRange: before.sequenceRange } }];
+      }
+      // 涟漪删除的逆操作：把被删片段按原 id/原范围重建；被平移片段由各自事件回位。
+      return [{
+        op: 'insert_clip',
+        sequenceId: before.sequenceId,
+        trackId: before.trackId,
+        assetVersionId: before.assetVersionId,
+        nestedSequenceId: before.nestedSequenceId,
+        sourceStreamId: before.sourceStreamId,
+        sourceRange: before.sourceRange,
+        mode: 'INSERT',
+        sequenceStart: before.sequenceRange.start,
+        linkAudio: false,
+        audioTrackId: null,
+        restoreClipId: before.id,
+      }];
+    }
+    case 'SPLIT_AV_CUT': {
+      // 逆操作：左段恢复成整段；右段由各自的 INSERT_CLIP 事件删除（事件粒度）。
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'update_clip', clipId: before.id, changes: { sourceRange: before.sourceRange, sequenceRange: before.sequenceRange } }];
+    }
     case 'REPLACE_CLIP_SOURCE': {
       const before = clipSchema.parse(patch.before);
       return [{

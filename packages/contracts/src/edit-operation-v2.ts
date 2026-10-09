@@ -9,13 +9,18 @@ import {
   insertClipOperationSchema,
   moveClipOperationSchema,
   replaceClipSourceOperationSchema,
+  rippleClipOperationSchema,
+  rollClipOperationSchema,
+  slideClipOperationSchema,
+  slipClipOperationSchema,
+  splitAvCutOperationSchema,
   splitClipOperationSchema,
   trimClipOperationSchema,
 } from './composition-edits.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperationType } from './edits.js';
 
 export const SOURCE_EDIT_OPERATION_TYPES = [
-  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'replace_clip_source', 'slip_clip',
+  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'replace_clip_source', 'slip_clip', 'slide_clip', 'roll_clip', 'ripple_clip', 'split_av_cut',
   'set_clip_transform', 'set_clip_crop', 'set_clip_opacity', 'set_clip_speed',
   'add_effect', 'update_effect', 'remove_effect',
   'add_keyframe', 'update_keyframe', 'remove_keyframe',
@@ -81,7 +86,8 @@ const animationRef = {
 /** N03-02 起 move_clip／trim_clip 由规范原语直接承载，这里保留导出名指向同一 schema（不再另立一套形状）。 */
 export const moveClipSourceOperationSchema = moveClipOperationSchema;
 export const trimClipSourceOperationSchema = trimClipOperationSchema;
-export const slipClipSourceOperationSchema = z.object({ op: z.literal('slip_clip'), ...clipId, sourceRange: mediaRangeSchema }).strict();
+/** N03-03 起 slip_clip 由规范原语直接承载，保留导出名指向同一 schema。 */
+export const slipClipSourceOperationSchema = slipClipOperationSchema;
 export const setClipSpeedSourceOperationSchema = z.object({
   op: z.literal('set_clip_speed'),
   ...clipId,
@@ -138,7 +144,11 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   trim_clip: trimClipOperationSchema,
   split_clip: splitClipOperationSchema,
   duplicate_clip: duplicateClipOperationSchema,
-  slip_clip: slipClipSourceOperationSchema,
+  slip_clip: slipClipOperationSchema,
+  slide_clip: slideClipOperationSchema,
+  roll_clip: rollClipOperationSchema,
+  ripple_clip: rippleClipOperationSchema,
+  split_av_cut: splitAvCutOperationSchema,
   set_clip_transform: plannedSchemas.set_clip_transform,
   set_clip_crop: plannedSchemas.set_clip_crop,
   set_clip_opacity: plannedSchemas.set_clip_opacity,
@@ -221,7 +231,11 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   split_clip: native('split_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
   duplicate_clip: native('duplicate_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
   replace_clip_source: native('replace_clip_source', ['CLIP', 'SEQUENCE'], ['CLIP', 'SEQUENCE'], ['CLIP'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
-  slip_clip: alias('slip_clip', 'update_clip', ['CLIP'], ['CLIP'], ['CLIP']),
+  slip_clip: native('slip_clip', ['CLIP'], ['CLIP'], ['CLIP'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
+  slide_clip: native('slide_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
+  roll_clip: native('roll_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
+  ripple_clip: native('ripple_clip', ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
+  split_av_cut: native('split_av_cut', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
   set_clip_transform: planned('set_clip_transform', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
   set_clip_crop: planned('set_clip_crop', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
   set_clip_opacity: planned('set_clip_opacity', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),

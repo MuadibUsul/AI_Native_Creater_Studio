@@ -194,6 +194,24 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       return [{ objectKind: 'CLIP', objectId: operation.createdClipId ?? operation.clipId, dimensions: uniqueDimensions(['POSITION']), direct: false, via: 'duplicate_clip' }];
     case 'replace_clip_source':
       return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION']), direct: true, via: null }];
+    // N03-03 精剪：滑移/滑动/卷动/涟漪/J-L cut
+    case 'slip_clip':
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }];
+    case 'slide_clip':
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['POSITION']), direct: true, via: null }];
+    case 'roll_clip':
+      return [
+        { objectKind: 'CLIP', objectId: operation.leftClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
+        { objectKind: 'CLIP', objectId: operation.rightClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
+      ];
+    case 'ripple_clip':
+      // 涟漪是**唯一**会移动其他片段的操作：这里只声明主片段，其余被平移片段在执行器逐段落事件报告。
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null }];
+    case 'split_av_cut':
+      return [
+        { objectKind: 'CLIP', objectId: operation.videoClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
+        { objectKind: 'CLIP', objectId: operation.audioClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
+      ];
     case 'update_animation': {
       const objectKind = operation.targetKind === 'VISUAL_OBJECT' ? 'VISUAL_OBJECT' : operation.targetKind === 'AUDIO_REGION' ? 'AUDIO_REGION' : null;
       return objectKind === null ? [] : [{ objectKind, objectId: operation.targetId, dimensions: ['STYLE'], direct: true, via: operation.animationId }];
@@ -381,6 +399,11 @@ export function validateEditOperationCandidate(input: {
       case 'move_clip':
       case 'duplicate_clip':
       case 'replace_clip_source':
+      case 'slip_clip':
+      case 'slide_clip':
+      case 'roll_clip':
+      case 'ripple_clip':
+      case 'split_av_cut':
       case 'update_animation':
       case 'update_audio_region': break;
       case 'restore_scene': requireUnlocked(requireScene(operation.sceneId, operation), operation); break;

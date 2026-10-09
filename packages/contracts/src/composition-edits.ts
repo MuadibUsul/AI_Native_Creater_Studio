@@ -152,6 +152,86 @@ export const replaceClipSourceOperationSchema = z.object({
 
 export type ReplaceClipSourceOperation = z.infer<typeof replaceClipSourceOperationSchema>;
 
+/** N03-03 slip：在片段**位置不变**的前提下平移源入出点（滑移素材内容）。 */
+export const slipClipOperationSchema = z.object({
+  op: z.literal('slip_clip'),
+  clipId: opaqueIdSchema,
+  sourceRange: mediaRangeSchema,
+}).strict();
+
+export type SlipClipOperation = z.infer<typeof slipClipOperationSchema>;
+
+/** N03-03 slide：片段左右移动，**总时长不变**（缺口由相邻片段变长/变短吸收）。 */
+export const slideClipOperationSchema = z.object({
+  op: z.literal('slide_clip'),
+  clipId: opaqueIdSchema,
+  offset: mediaTimeSchema,
+}).strict().refine((value) => compareMediaTime(value.offset, { ticks: '0', timebase: value.offset.timebase }) !== 0, 'slide_clip offset must be nonzero');
+
+export type SlideClipOperation = z.infer<typeof slideClipOperationSchema>;
+
+/** N03-03 roll：移动相邻两段之间的剪辑点（左段出点与右段入点同时移动，合成不变）。 */
+export const rollClipOperationSchema = z.object({
+  op: z.literal('roll_clip'),
+  leftClipId: opaqueIdSchema,
+  rightClipId: opaqueIdSchema,
+  at: mediaTimeSchema,
+}).strict().refine((value) => value.leftClipId !== value.rightClipId, 'roll_clip requires two distinct adjacent clips');
+
+export type RollClipOperation = z.infer<typeof rollClipOperationSchema>;
+
+/** N03-03 ripple 的显式动作：删除收缝 / 掐头收缝 / 去尾收缝。 */
+export const CLIP_RIPPLE_ACTIONS = ['DELETE', 'TRIM_HEAD', 'TRIM_TAIL'] as const;
+export const clipRippleActionSchema = z.enum(CLIP_RIPPLE_ACTIONS);
+
+export type ClipRippleAction = z.infer<typeof clipRippleActionSchema>;
+
+/**
+ * N03-03 ripple：**显式**收缝（涟漪）。只有本操作会移动其他片段——
+ * 其余原语（insert/trim/move/split…）一律不隐式涟漪，避免"其他别动"被破坏。
+ */
+export const rippleClipOperationSchema = z.object({
+  op: z.literal('ripple_clip'),
+  clipId: opaqueIdSchema,
+  action: clipRippleActionSchema,
+  /** TRIM_HEAD／TRIM_TAIL 的收缝量；DELETE 必须为 null。 */
+  amount: mediaTimeSchema.nullable().default(null),
+  /** DELETE 时默认跨全序列全部轨道收缝（保持声画同步）；TRIM_* 只在同轨收缝。 */
+  closeAcrossTracks: z.boolean().default(true),
+}).strict().superRefine((value, context) => {
+  if ((value.action === 'DELETE') !== (value.amount === null)) {
+    context.addIssue({ code: 'custom', path: ['amount'], message: 'amount is required for TRIM_HEAD／TRIM_TAIL and must be null for DELETE' });
+  }
+});
+
+export type RippleClipOperation = z.infer<typeof rippleClipOperationSchema>;
+
+/** N03-03 J/L cut：视频切点与音频切点错开，切换处原音保持连续。 */
+export const AV_CUT_KINDS = ['J', 'L'] as const;
+export const avCutKindSchema = z.enum(AV_CUT_KINDS);
+
+export type AvCutKind = z.infer<typeof avCutKindSchema>;
+
+export const splitAvCutOperationSchema = z.object({
+  op: z.literal('split_av_cut'),
+  videoClipId: opaqueIdSchema,
+  audioClipId: opaqueIdSchema,
+  /** 视频切点（序列时间）。 */
+  at: mediaTimeSchema,
+  /** 音频切点相对视频切点的错开量（必须为正；方向由 kind 决定）。 */
+  offset: mediaTimeSchema,
+  /** J = 音频先入（音频切点早于视频）；L = 音频后出（音频切点晚于视频）。 */
+  kind: avCutKindSchema,
+  createdVideoClipId: opaqueIdSchema.optional(),
+  createdAudioClipId: opaqueIdSchema.optional(),
+}).strict().refine(
+  (value) => compareMediaTime(value.offset, { ticks: '0', timebase: value.offset.timebase }) > 0,
+  'split_av_cut offset must be positive',
+);
+
+export type SplitAvCutOperation = z.infer<typeof splitAvCutOperationSchema>;
+
+
 export const updateAnimationOperationSchema = z.object({
   op: z.literal('update_animation'),
   animationId: opaqueIdSchema,
