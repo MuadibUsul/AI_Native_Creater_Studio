@@ -229,6 +229,9 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     const unified = await owner.assets.mediaIndexRecords(workspaceId, asset.id, { kind: 'USER_MARKER', sourceStartPts: '0', sourceEndPts: '1000', timeBaseNumerator: 1, timeBaseDenominator: 1000 });
     expect(unified).toMatchObject({ sourceAssetVersionId: asset.currentVersionId, items: [{ id: tag.id, kind: 'USER_MARKER', basis: 'USER_SUPPLIED', payload: { label: '产品近景' } }] });
     expect(unified.capabilities).toHaveLength(17);
+    const analysis = await owner.assets.analysisStages(workspaceId, asset.id);
+    expect(analysis).toMatchObject({ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, playable: true, stages: expect.arrayContaining([expect.objectContaining({ stage: 'VISION', status: 'DISABLED' })]) });
+    expect(analysis.stages).toHaveLength(11);
     expect(await owner.assets.searchSegments(workspaceId, { q: '产品近景' })).toMatchObject({ items: [{ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, evidence: 'USER_ASSERTED', contentTreatment: 'REFERENCE_DATA_ONLY' }] });
     const hiddenList = await stranger.assets.listRangeTags(workspaceId, asset.id).catch((error: unknown) => error);
     expect(hiddenList).toMatchObject({ status: 404 });
@@ -236,6 +239,8 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(hiddenSearch).toMatchObject({ status: 404 });
     const hiddenUnified = await stranger.assets.mediaIndexRecords(workspaceId, asset.id).catch((error: unknown) => error);
     expect(hiddenUnified).toMatchObject({ status: 404 });
+    const hiddenAnalysis = await stranger.assets.analysisStages(workspaceId, asset.id).catch((error: unknown) => error);
+    expect(hiddenAnalysis).toMatchObject({ status: 404 });
     await owner.assets.deleteRangeTag(workspaceId, asset.id, tag.id);
     expect(await owner.assets.listRangeTags(workspaceId, asset.id)).toEqual({ items: [] });
   });

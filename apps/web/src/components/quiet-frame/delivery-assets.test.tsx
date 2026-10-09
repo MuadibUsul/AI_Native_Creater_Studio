@@ -232,6 +232,44 @@ describe('Quiet Frame asset flow', () => {
     play.mockRestore();
   });
 
+  it('keeps probed media editable when ASR fails and exposes the recoverable stage', async () => {
+    const asset = { id: 'ast_analysis', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'analysis.mp4' }, license: { type: 'USER_OWNED' } };
+    const mediaProbe = { status: 'READY', streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 24, denominator: 1 }, cadence: 'CONSTANT' }], capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE', reasons: [] } };
+    const stages = ['PROBE', 'PROXY', 'WAVEFORM', 'ASR', 'SHOT', 'SAMPLING', 'VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'].map((stage) => ({
+      stage,
+      status: stage === 'PROBE' ? 'READY' : stage === 'ASR' ? 'FAILED' : ['VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'].includes(stage) ? 'DISABLED' : 'NOT_REQUESTED',
+      dependencies: [],
+      coveragePermille: stage === 'PROBE' ? 1000 : 0,
+      checkpoint: null,
+      detectorConfigHash: 'a'.repeat(64),
+      inputFingerprint: 'b'.repeat(64),
+      jobId: null,
+      budgetMicrocents: null,
+      spentMicrocents: 0,
+      errorSummary: stage === 'ASR' ? '语音服务暂时不可用' : null,
+      invalidatedAt: null,
+      startedAt: null,
+      completedAt: stage === 'PROBE' ? '2026-10-09T00:00:00.000Z' : null,
+      updatedAt: '2026-10-09T00:00:00.000Z',
+    }));
+    const client = mockClient({ assets: {
+      list: vi.fn().mockResolvedValue([asset]),
+      get: vi.fn().mockResolvedValue({ ...asset, currentVersionId: 'av_source', versions: [{ id: 'av_source', mimeType: 'video/mp4', probeStatus: 'READY', mediaProbe }] }),
+      downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+      playbackUrl: vi.fn().mockResolvedValue({ assetId: asset.id, sourceVersionId: 'av_source', rendition: 'ORIGINAL', renditionVersionId: 'av_source', mimeType: 'video/mp4', url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z', proxyStatus: 'NOT_REQUIRED', proxyProfileKey: null, timeMappings: [], message: null }),
+      mediaIndex: vi.fn().mockResolvedValue({ runId: null, sourceAssetVersionId: 'av_source', processorVersion: 'source-index-v1', status: 'EMPTY', coveragePermille: 0, checkpointMs: 0, errorSummary: null, items: [], nextCursor: null }),
+      analysisStages: vi.fn().mockResolvedValue({ assetId: asset.id, sourceAssetVersionId: 'av_source', playable: true, deterministicEditingReady: true, stages }),
+      rebuildAnalysisStage: vi.fn(),
+      cancelAnalysisStage: vi.fn(),
+    }, billing: { externalResults: vi.fn().mockResolvedValue([]) } });
+    renderWithClient(<DeliveryAssets workspaceId="ws_1" projectId="prj_1" />, client);
+    await userEvent.click(await screen.findByRole('button', { name: '查看素材 analysis.mp4' }));
+    expect(await screen.findByText('渐进分析 · 可剪辑')).toBeTruthy();
+    expect(await screen.findByText(/语音或深度分析失败不会阻止/)).toBeTruthy();
+    expect(await screen.findByText('语音服务暂时不可用')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重试本阶段' })).toBeTruthy();
+  });
+
   it('searches real source ranges, labels evidence, and plays the selected interval', async () => {
     const asset = { id: 'ast_search', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'product.mp4' }, license: { type: 'USER_OWNED' } };
     const mediaProbe = { status: 'READY', streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 24, denominator: 1 }, cadence: 'CONSTANT' }], capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE', reasons: [] } };

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -117,7 +117,6 @@ export async function completeMediaIndex(
       .where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(assetVersions.workspaceId, input.workspaceId), eq(assets.workspaceId, input.workspaceId))).limit(1);
     if (current[0]?.run.sourceChecksumSha256 !== jobInput.sourceChecksumSha256) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'source checksum changed while indexing', 409);
     privacyClass = current[0].asset.sensitivityClass === 'SENSITIVE' || current[0].asset.sensitivityClass === 'RESTRICTED' ? 'SENSITIVE' : 'WORKSPACE';
-    await tx.delete(mediaIndexEntries).where(and(eq(mediaIndexEntries.runId, jobInput.runId), eq(mediaIndexEntries.workspaceId, input.workspaceId)));
   });
   const kinds = ['THUMBNAIL', 'WAVEFORM', 'SHOT', 'QUALITY'] as const;
   let written = 0;
@@ -126,7 +125,7 @@ export async function completeMediaIndex(
     if (entries.length === 0) continue;
     written += entries.length;
     await deps.db.transaction(async (tx) => {
-      await tx.insert(mediaIndexEntries).values(entries.map((entry) => ({
+      const rows = entries.map((entry) => ({
         id: stableId('mie', jobInput.runId, entry.kind, String(entry.ordinal)),
         workspaceId: input.workspaceId,
         runId: jobInput.runId,
@@ -153,11 +152,16 @@ export async function completeMediaIndex(
         accessPolicyRef: 'workspace:read',
         lifecycleState: 'ACTIVE',
         storageKey: entry.localFilename === null ? null : input.storageKeys.get(entry.localFilename) ?? null,
-      })));
+      }));
+      for (const row of rows) await tx.insert(mediaIndexEntries).values(row).onConflictDoUpdate({
+        target: [mediaIndexEntries.runId, mediaIndexEntries.kind, mediaIndexEntries.ordinal],
+        set: { sourceStartPts: row.sourceStartPts, sourceEndPts: row.sourceEndPts, timeBaseNumerator: row.timeBaseNumerator, timeBaseDenominator: row.timeBaseDenominator, streamId: row.streamId, confidencePermille: row.confidencePermille, payload: row.payload, evidenceRefs: row.evidenceRefs, observedBy: row.observedBy, observedAt: new Date(), basis: row.basis, confidenceMethod: row.confidenceMethod, calibrationStatus: row.calibrationStatus, toolId: row.toolId, toolVersion: row.toolVersion, analysisConfigHash: row.analysisConfigHash, indexVersion: row.indexVersion, privacyClass: row.privacyClass, lifecycleState: 'ACTIVE', storageKey: row.storageKey },
+      });
       await tx.update(mediaIndexRuns).set({ status: 'PARTIAL', coveragePermille: Math.max(1, Math.floor(written / result.entries.length * 999)), checkpointMs: Math.floor(result.durationMs * written / result.entries.length), updatedAt: new Date() }).where(eq(mediaIndexRuns.id, jobInput.runId));
     });
   }
   const status = result.entries.length === 0 ? 'EMPTY' as const : 'READY' as const;
+  await deps.db.delete(mediaIndexEntries).where(and(eq(mediaIndexEntries.runId, jobInput.runId), eq(mediaIndexEntries.workspaceId, input.workspaceId), ne(mediaIndexEntries.lifecycleState, 'ACTIVE')));
   await deps.db.update(mediaIndexRuns).set({ status, coveragePermille: 1000, checkpointMs: result.durationMs, errorSummary: null, updatedAt: new Date() }).where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId)));
   return { runId: jobInput.runId, status, entryCount: result.entries.length };
 }
@@ -220,6 +224,7 @@ export async function rebuildMediaIndex(deps: DomainDeps, input: { workspaceId: 
   const jobInput = mediaIndexJobInputSchema.parse({ runId: run.id, sourceAssetId: row.asset.id, sourceAssetVersionId: row.version.id, sourceStorageKey: row.version.storageKey, sourceChecksumSha256: row.version.checksumSha256, processorVersion: MEDIA_INDEX_PROCESSOR_VERSION, analysisConfigHash: MEDIA_INDEX_ANALYSIS_CONFIG_HASH, indexVersion: MEDIA_INDEX_VERSION });
   await deps.db.transaction(async (tx) => {
     await tx.update(mediaIndexRuns).set({ status: 'QUEUED', coveragePermille: 0, checkpointMs: 0, errorSummary: null, sourceChecksumSha256: row.version.checksumSha256!, updatedAt: new Date() }).where(eq(mediaIndexRuns.id, run.id));
+    await tx.update(mediaIndexEntries).set({ lifecycleState: 'STALE' }).where(and(eq(mediaIndexEntries.workspaceId, input.workspaceId), eq(mediaIndexEntries.runId, run.id)));
     await createJobInTx(tx, { workspaceId: input.workspaceId, projectId: row.asset.projectId, type: MEDIA_INDEX_JOB_TYPE, input: jobInput, maxAttempts: 2, createdBy: row.asset.createdBy, classification: 'SYSTEM' });
   });
   return listMediaIndex(deps, input);

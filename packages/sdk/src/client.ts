@@ -135,6 +135,7 @@ import {
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
   unifiedMediaIndexPageSchema,
+  mediaAnalysisGraphSchema,
   mediaRangeTagListSchema,
   mediaRangeTagSchema,
   mediaSegmentSearchResponseSchema,
@@ -308,6 +309,8 @@ import {
   type MediaIndexPage,
   type UnifiedMediaIndexPage,
   type UnifiedMediaIndexKind,
+  type MediaAnalysisGraph,
+  type MediaAnalysisStageName,
   type MediaRangeTag,
   type MediaSegmentSearchResponse,
   type CreateMediaRangeTagRequest,
@@ -787,6 +790,9 @@ export interface AncsClient {
     mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
     /** 统一读取所有媒体分析、转写和用户标记的来源证据。 */
     mediaIndexRecords(workspaceId: string, assetId: string, query?: { kind?: UnifiedMediaIndexKind; sourceStartPts?: string; sourceEndPts?: string; timeBaseNumerator?: number; timeBaseDenominator?: number; cursor?: number; limit?: number }): Promise<UnifiedMediaIndexPage>;
+    analysisStages(workspaceId: string, assetId: string): Promise<MediaAnalysisGraph>;
+    rebuildAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, detectorConfigHash: string, options?: MutationOptions): Promise<MediaAnalysisGraph>;
+    cancelAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, options?: MutationOptions): Promise<MediaAnalysisGraph>;
     /** 重新生成索引；原件与代理不变。 */
     rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
     /** 跨视觉、音频、转写和用户标签检索真实源片段。 */
@@ -2132,6 +2138,9 @@ export function createClient(options: ClientOptions): AncsClient {
         if (query?.limit !== undefined) search.set('limit', String(query.limit));
         return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index-records${search.size > 0 ? `?${search.toString()}` : ''}`, unifiedMediaIndexPageSchema);
       },
+      analysisStages: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages`, mediaAnalysisGraphSchema),
+      rebuildAnalysisStage: (workspaceId, assetId, stage, detectorConfigHash, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages/${stage}/rebuild`, mediaAnalysisGraphSchema, { body: { detectorConfigHash }, idempotencyKey: mutation?.idempotencyKey }),
+      cancelAnalysisStage: (workspaceId, assetId, stage, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages/${stage}/cancel`, mediaAnalysisGraphSchema, { idempotencyKey: mutation?.idempotencyKey }),
       rebuildMediaIndex: (workspaceId, assetId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
       searchSegments: (workspaceId, query) => {

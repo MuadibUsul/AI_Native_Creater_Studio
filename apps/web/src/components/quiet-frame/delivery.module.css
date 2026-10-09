@@ -40,6 +40,10 @@
 .waveform { display:flex; width:88px; height:42px; flex:0 0 auto; align-items:center; justify-content:center; gap:1px; overflow:hidden; }
 .waveform i { width:2px; max-height:38px; flex:0 0 auto; border-radius:1px; background:currentColor; opacity:.72; }
 .capabilityPanel { background:var(--ui-surface-subtle); }
+.analysisStages { display:flex; margin-top:14px; flex-direction:column; }
+.analysisStage { display:grid; grid-template-columns:minmax(0,1fr) auto; padding:10px 0; border-top:1px solid var(--ui-border-subtle); align-items:center; gap:8px 12px; }
+.analysisStage > div:first-child { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.analysisStage > p { grid-column:1 / -1; margin:0; color:var(--bad); }
 .rightsPanel { background:var(--ui-surface-subtle); }
 .rightsSummary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 18px; margin:18px 0 0; }
 .rightsSummary div { min-width:0; }
@@ -97,3 +101,4 @@
 .emptyChart { height:100%; display:grid; place-items:center; text-align:center; color:var(--muted); font-size:12px; padding:20px; }
 .tableScroller { overflow-x:auto; }
 .advanced { margin-top:22px; }
+@media(max-width:760px) { .analysisStage { grid-template-columns:1fr; } .analysisStage > :global(.row) { justify-content:space-between; } }

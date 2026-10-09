@@ -23,6 +23,9 @@ import {
   mediaIndexQuerySchema,
   unifiedMediaIndexPageSchema,
   unifiedMediaIndexQuerySchema,
+  mediaAnalysisGraphSchema,
+  mediaAnalysisStageNameSchema,
+  rebuildMediaAnalysisStageRequestSchema,
   mediaRangeTagListSchema,
   mediaRangeTagSchema,
   mediaSegmentSearchQuerySchema,
@@ -57,6 +60,9 @@ import {
   rebuildMediaProxy,
   listMediaIndex,
   listUnifiedMediaIndex,
+  getMediaAnalysisGraph,
+  rebuildMediaAnalysisStage,
+  cancelMediaAnalysisStage,
   listMediaRangeTags,
   createMediaRangeTag,
   deleteMediaRangeTag,
@@ -83,6 +89,7 @@ import type { StorageDeps } from '../plugins/storage.js';
 
 const wsParamsSchema = z.object({ id: opaqueIdSchema });
 const assetParamsSchema = z.object({ id: opaqueIdSchema, assetId: opaqueIdSchema });
+const analysisStageParamsSchema = assetParamsSchema.extend({ stage: mediaAnalysisStageNameSchema });
 const rangeTagParamsSchema = assetParamsSchema.extend({ tagId: opaqueIdSchema });
 const intentParamsSchema = z.object({ id: opaqueIdSchema, intentId: opaqueIdSchema });
 const partParamsSchema = intentParamsSchema.extend({ partNumber: z.coerce.number().int().positive() });
@@ -257,6 +264,33 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         assetId: request.params.assetId,
         query: request.query,
       });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/analysis-stages',
+    { schema: { tags: ['assets'], summary: '读取素材渐进分析 DAG、检查点和可用性', params: assetParamsSchema, response: { 200: mediaAnalysisGraphSchema, ...ERROR_RESPONSES } } },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return getMediaAnalysisGraph(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/analysis-stages/:stage/rebuild',
+    { schema: { tags: ['assets'], summary: '仅失效并重建选定分析阶段及其依赖下游', params: analysisStageParamsSchema, body: rebuildMediaAnalysisStageRequestSchema, response: { 200: mediaAnalysisGraphSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } } },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return rebuildMediaAnalysisStage(domain, { workspaceId: request.params.id, assetId: request.params.assetId, stage: request.params.stage, request: request.body });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/analysis-stages/:stage/cancel',
+    { schema: { tags: ['assets'], summary: '协作式取消单个媒体分析阶段', params: analysisStageParamsSchema, response: { 200: mediaAnalysisGraphSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } } },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return cancelMediaAnalysisStage(domain, { workspaceId: request.params.id, assetId: request.params.assetId, stage: request.params.stage });
     },
   );
 

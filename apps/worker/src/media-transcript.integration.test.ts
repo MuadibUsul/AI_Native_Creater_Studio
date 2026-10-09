@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, type SpeechRecognitionAdapter } from '@ancs/contracts';
-import { claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaTranscript, listUnifiedMediaIndex, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
+import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
 import { assets, assetVersions, createDb, jobs, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createDefaultRegistry } from './handlers.js';
@@ -180,5 +180,40 @@ describe('N02-10 unified media index evidence', () => {
     const otherWorkspaceId = `ws_${randomUUID()}`;
     await handle.db.insert(workspaces).values({ id: otherWorkspaceId, name: '隔离工作区' });
     await expect(listUnifiedMediaIndex(deps(), { workspaceId: otherWorkspaceId, assetId: created.assetId })).rejects.toMatchObject({ httpStatus: 404 });
+  });
+});
+
+describe('N02-11 progressive media analysis DAG', () => {
+  it('keeps editing available after ASR cancellation and resumes an index stage from a persisted crash checkpoint', { timeout: 180_000 }, async () => {
+    const created = await uploadAndProbe();
+    const jobsBeforeRead = (await handle.db.select().from(jobs).where(eq(jobs.workspaceId, created.workspaceId))).length;
+    const initial = await getMediaAnalysisGraph(deps(), created);
+    expect(initial).toMatchObject({ playable: true, deterministicEditingReady: true });
+    expect(initial.stages.find((stage) => stage.stage === 'PROBE')).toMatchObject({ status: 'READY', reusable: true });
+    expect(initial.stages.find((stage) => stage.stage === 'ASR')).toMatchObject({ status: 'QUEUED' });
+    expect(initial.stages.find((stage) => stage.stage === 'VISION')).toMatchObject({ status: 'DISABLED' });
+    await getMediaAnalysisGraph(deps(), created);
+    expect(await handle.db.select().from(jobs).where(eq(jobs.workspaceId, created.workspaceId))).toHaveLength(jobsBeforeRead);
+
+    const cancelled = await cancelMediaAnalysisStage(deps(), { ...created, stage: 'ASR' });
+    expect(cancelled).toMatchObject({ deterministicEditingReady: true });
+    expect(cancelled.stages.find((stage) => stage.stage === 'ASR')).toMatchObject({ status: 'CANCELLED' });
+    expect((await executeIndex()).outcome).toBe('succeeded');
+
+    const newConfig = 'c'.repeat(64);
+    const rebuilding = await rebuildMediaAnalysisStage(deps(), { ...created, stage: 'SHOT', request: { detectorConfigHash: newConfig } });
+    expect(rebuilding.stages.find((stage) => stage.stage === 'SHOT')).toMatchObject({ status: 'QUEUED', detectorConfigHash: newConfig });
+    expect(rebuilding.stages.find((stage) => stage.stage === 'PROBE')).toMatchObject({ status: 'READY', reusable: true });
+
+    const crashed = await claimJob(deps(), { workerId: 'crashed-index', leaseSeconds: 1, types: [MEDIA_INDEX_JOB_TYPE] });
+    expect(crashed).not.toBeNull();
+    await handle.db.update(mediaIndexRuns).set({ status: 'PARTIAL', coveragePermille: 500, checkpointMs: 1000 }).where(and(eq(mediaIndexRuns.workspaceId, created.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, created.version.id)));
+    const partial = await getMediaAnalysisGraph(deps(), created);
+    expect(partial.stages.find((stage) => stage.stage === 'SHOT')).toMatchObject({ status: 'PARTIAL', coveragePermille: 500, checkpoint: { cursor: '1000', completedUnits: 1000 } });
+    expect(await requeueExpiredLeases(deps(), { now: new Date(Date.now() + 10_000) })).toMatchObject({ requeued: 1 });
+    expect((await executeIndex()).outcome).toBe('succeeded');
+    const recovered = await getMediaAnalysisGraph(deps(), created);
+    expect(recovered.stages.find((stage) => stage.stage === 'SHOT')).toMatchObject({ status: 'READY', coveragePermille: 1000 });
+    expect(recovered.stages.find((stage) => stage.stage === 'ASR')).toMatchObject({ status: 'CANCELLED' });
   });
 });

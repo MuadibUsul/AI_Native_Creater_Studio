@@ -162,6 +162,17 @@ export {
 } from './unified-media-index.js';
 export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage } from './unified-media-index.js';
 export {
+  MEDIA_ANALYSIS_STAGES,
+  MEDIA_ANALYSIS_STAGE_STATUSES,
+  mediaAnalysisStageNameSchema,
+  mediaAnalysisStageStatusSchema,
+  mediaAnalysisCheckpointSchema,
+  mediaAnalysisStageSchema,
+  mediaAnalysisGraphSchema,
+  rebuildMediaAnalysisStageRequestSchema,
+} from './media-analysis.js';
+export type { MediaAnalysisStageName, MediaAnalysisStageStatus, MediaAnalysisStage, MediaAnalysisGraph, RebuildMediaAnalysisStageRequest } from './media-analysis.js';
+export {
   MEDIA_TRANSCRIPT_JOB_TYPE,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_STATUSES,

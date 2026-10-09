@@ -45,6 +45,7 @@ export { editEvents, outboxEvents } from './history.js';
 export { assetDerivationEdges, assetRelinks, assetVersions, assets, uploadIntents, uploadParts } from './assets.js';
 export { mediaDerivatives } from './media-derivatives.js';
 export { mediaIndexEntries, mediaIndexRuns } from './media-index.js';
+export { mediaAnalysisStages } from './media-analysis.js';
 export { mediaTranscriptRuns, mediaTranscriptVersions } from './media-transcripts.js';
 export { mediaRangeTags } from './media-range-tags.js';
 export { notifications } from './notifications.js';
