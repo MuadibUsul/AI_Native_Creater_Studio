@@ -498,6 +498,13 @@
       "when": 1791502407924,
       "tag": "0070_mature_kree",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1791506145288,
+      "tag": "0071_fixed_grandmaster",
+      "breakpoints": true
     }
   ]
 }

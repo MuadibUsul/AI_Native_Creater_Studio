@@ -21,6 +21,8 @@ import {
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
   mediaIndexQuerySchema,
+  unifiedMediaIndexPageSchema,
+  unifiedMediaIndexQuerySchema,
   mediaRangeTagListSchema,
   mediaRangeTagSchema,
   mediaSegmentSearchQuerySchema,
@@ -54,6 +56,7 @@ import {
   restoreAsset,
   rebuildMediaProxy,
   listMediaIndex,
+  listUnifiedMediaIndex,
   listMediaRangeTags,
   createMediaRangeTag,
   deleteMediaRangeTag,
@@ -233,6 +236,27 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return listMediaIndex(domain, { workspaceId: request.params.id, assetId: request.params.assetId, ...request.query });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/media-index-records',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '统一读取带来源证据、能力覆盖与源时间范围的媒体索引记录',
+        params: assetParamsSchema,
+        querystring: unifiedMediaIndexQuerySchema,
+        response: { 200: unifiedMediaIndexPageSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listUnifiedMediaIndex(domain, {
+        workspaceId: request.params.id,
+        assetId: request.params.assetId,
+        query: request.query,
+      });
     },
   );
 

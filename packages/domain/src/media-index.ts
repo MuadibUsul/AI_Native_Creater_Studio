@@ -4,7 +4,9 @@ import {
   ApiFailure,
   ERROR_CODES,
   MEDIA_INDEX_JOB_TYPE,
+  MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
   MEDIA_INDEX_PROCESSOR_VERSION,
+  MEDIA_INDEX_VERSION,
   generatedMediaIndexSchema,
   mediaIndexJobInputSchema,
   mediaIndexPageSchema,
@@ -46,6 +48,11 @@ export async function scheduleMediaIndexInTx(
     sourceAssetVersionId: input.sourceVersion.id,
     sourceChecksumSha256: input.sourceVersion.checksumSha256,
     processorVersion: MEDIA_INDEX_PROCESSOR_VERSION,
+    analysisConfigHash: MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
+    indexVersion: MEDIA_INDEX_VERSION,
+    toolId: 'ffmpeg',
+    toolVersion: MEDIA_INDEX_PROCESSOR_VERSION,
+    supportedKinds: ['THUMBNAIL', 'WAVEFORM', 'SHOT_BOUNDARY', 'QUALITY'],
     status: 'QUEUED',
     createdAt: now,
     updatedAt: now,
@@ -58,6 +65,8 @@ export async function scheduleMediaIndexInTx(
     sourceStorageKey: input.sourceVersion.storageKey,
     sourceChecksumSha256: input.sourceVersion.checksumSha256,
     processorVersion: MEDIA_INDEX_PROCESSOR_VERSION,
+    analysisConfigHash: MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
+    indexVersion: MEDIA_INDEX_VERSION,
   });
   await createJobInTx(tx, {
     workspaceId: input.workspaceId,
@@ -100,9 +109,14 @@ export async function completeMediaIndex(
 ): Promise<{ runId: string; status: 'READY' | 'EMPTY'; entryCount: number }> {
   const jobInput = mediaIndexJobInputSchema.parse(input.jobInput);
   const result = generatedMediaIndexSchema.parse(input.result);
+  let privacyClass: 'WORKSPACE' | 'SENSITIVE' = 'WORKSPACE';
   await deps.db.transaction(async (tx) => {
-    const current = await tx.select().from(mediaIndexRuns).where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId))).limit(1);
-    if (current[0]?.sourceChecksumSha256 !== jobInput.sourceChecksumSha256) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'source checksum changed while indexing', 409);
+    const current = await tx.select({ run: mediaIndexRuns, asset: assets }).from(mediaIndexRuns)
+      .innerJoin(assetVersions, eq(assetVersions.id, mediaIndexRuns.sourceAssetVersionId))
+      .innerJoin(assets, eq(assets.id, assetVersions.assetId))
+      .where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(assetVersions.workspaceId, input.workspaceId), eq(assets.workspaceId, input.workspaceId))).limit(1);
+    if (current[0]?.run.sourceChecksumSha256 !== jobInput.sourceChecksumSha256) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'source checksum changed while indexing', 409);
+    privacyClass = current[0].asset.sensitivityClass === 'SENSITIVE' || current[0].asset.sensitivityClass === 'RESTRICTED' ? 'SENSITIVE' : 'WORKSPACE';
     await tx.delete(mediaIndexEntries).where(and(eq(mediaIndexEntries.runId, jobInput.runId), eq(mediaIndexEntries.workspaceId, input.workspaceId)));
   });
   const kinds = ['THUMBNAIL', 'WAVEFORM', 'SHOT', 'QUALITY'] as const;
@@ -122,8 +136,22 @@ export async function completeMediaIndex(
         sourceEndPts: entry.sourceEndPts,
         timeBaseNumerator: entry.timeBase.numerator,
         timeBaseDenominator: entry.timeBase.denominator,
+        streamId: entry.streamId,
         confidencePermille: entry.confidencePermille,
         payload: entry.payload,
+        payloadSchemaVersion: '1.0',
+        evidenceRefs: [{ type: entry.kind === 'WAVEFORM' ? 'AUDIO_WINDOW' : entry.kind === 'THUMBNAIL' ? 'FRAME' : 'SOURCE_RANGE', refId: `${jobInput.sourceAssetVersionId}:${entry.streamId}:${entry.sourceStartPts}-${entry.sourceEndPts}`, sourceRange: { startPts: entry.sourceStartPts, endPts: entry.sourceEndPts, timeBase: entry.timeBase } }],
+        observedBy: 'ffmpeg-source-media-indexer',
+        basis: 'MEASURED',
+        confidenceMethod: entry.kind === 'SHOT' ? 'FFMPEG_SCENE_SCORE' : entry.kind === 'QUALITY' ? 'FFMPEG_DETECTOR' : null,
+        calibrationStatus: entry.kind === 'THUMBNAIL' || entry.kind === 'WAVEFORM' ? 'NOT_APPLICABLE' : 'UNCALIBRATED',
+        toolId: 'ffmpeg',
+        toolVersion: jobInput.processorVersion,
+        analysisConfigHash: jobInput.analysisConfigHash,
+        indexVersion: jobInput.indexVersion,
+        privacyClass,
+        accessPolicyRef: 'workspace:read',
+        lifecycleState: 'ACTIVE',
         storageKey: entry.localFilename === null ? null : input.storageKeys.get(entry.localFilename) ?? null,
       })));
       await tx.update(mediaIndexRuns).set({ status: 'PARTIAL', coveragePermille: Math.max(1, Math.floor(written / result.entries.length * 999)), checkpointMs: Math.floor(result.durationMs * written / result.entries.length), updatedAt: new Date() }).where(eq(mediaIndexRuns.id, jobInput.runId));
@@ -167,6 +195,7 @@ export async function listMediaIndex(
       sourceStartPts: entry.sourceStartPts,
       sourceEndPts: entry.sourceEndPts,
       timeBase: { numerator: entry.timeBaseNumerator, denominator: entry.timeBaseDenominator },
+      streamId: entry.streamId,
       confidencePermille: entry.confidencePermille,
       payload: entry.payload as Record<string, unknown>,
       previewUrl: signed?.url ?? null,
@@ -188,7 +217,7 @@ export async function rebuildMediaIndex(deps: DomainDeps, input: { workspaceId: 
     return listMediaIndex(deps, input);
   }
   if (run.status === 'QUEUED' || run.status === 'RUNNING' || run.status === 'PARTIAL') throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'media index is already queued or processing', 409, { reason: 'MEDIA_INDEX_ALREADY_RUNNING' });
-  const jobInput = mediaIndexJobInputSchema.parse({ runId: run.id, sourceAssetId: row.asset.id, sourceAssetVersionId: row.version.id, sourceStorageKey: row.version.storageKey, sourceChecksumSha256: row.version.checksumSha256, processorVersion: MEDIA_INDEX_PROCESSOR_VERSION });
+  const jobInput = mediaIndexJobInputSchema.parse({ runId: run.id, sourceAssetId: row.asset.id, sourceAssetVersionId: row.version.id, sourceStorageKey: row.version.storageKey, sourceChecksumSha256: row.version.checksumSha256, processorVersion: MEDIA_INDEX_PROCESSOR_VERSION, analysisConfigHash: MEDIA_INDEX_ANALYSIS_CONFIG_HASH, indexVersion: MEDIA_INDEX_VERSION });
   await deps.db.transaction(async (tx) => {
     await tx.update(mediaIndexRuns).set({ status: 'QUEUED', coveragePermille: 0, checkpointMs: 0, errorSummary: null, sourceChecksumSha256: row.version.checksumSha256!, updatedAt: new Date() }).where(eq(mediaIndexRuns.id, run.id));
     await createJobInTx(tx, { workspaceId: input.workspaceId, projectId: row.asset.projectId, type: MEDIA_INDEX_JOB_TYPE, input: jobInput, maxAttempts: 2, createdBy: row.asset.createdBy, classification: 'SYSTEM' });

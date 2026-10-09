@@ -5,6 +5,8 @@ import { mediaRationalSchema, sourceMediaProbeResultSchema } from './assets.js';
 
 export const MEDIA_INDEX_JOB_TYPE = 'MEDIA_INDEX';
 export const MEDIA_INDEX_PROCESSOR_VERSION = 'source-index-v1';
+export const MEDIA_INDEX_ANALYSIS_CONFIG_HASH = '5718708ba312bf304e8b86a3f160ffa383a565b1dea6163806a8a4bc0a8eb585';
+export const MEDIA_INDEX_VERSION = 1;
 export const MEDIA_INDEX_STATUSES = ['QUEUED', 'RUNNING', 'PARTIAL', 'READY', 'EMPTY', 'FAILED', 'STALE'] as const;
 export const MEDIA_INDEX_KINDS = ['THUMBNAIL', 'WAVEFORM', 'SHOT', 'QUALITY'] as const;
 export const mediaIndexStatusSchema = z.enum(MEDIA_INDEX_STATUSES);
@@ -18,6 +20,8 @@ export const mediaIndexJobInputSchema = z.object({
   sourceStorageKey: z.string().min(1).max(512),
   sourceChecksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
   processorVersion: z.literal(MEDIA_INDEX_PROCESSOR_VERSION),
+  analysisConfigHash: z.literal(MEDIA_INDEX_ANALYSIS_CONFIG_HASH),
+  indexVersion: z.literal(MEDIA_INDEX_VERSION),
 }).strict();
 export type MediaIndexJobInput = z.infer<typeof mediaIndexJobInputSchema>;
 
@@ -27,6 +31,7 @@ export const generatedMediaIndexEntrySchema = z.object({
   sourceStartPts: ptsSchema,
   sourceEndPts: ptsSchema,
   timeBase: mediaRationalSchema,
+  streamId: z.string().min(1).max(120),
   confidencePermille: z.number().int().min(0).max(1000).nullable(),
   payload: z.record(z.string(), z.unknown()),
   localFilename: z.string().min(1).max(160).nullable(),

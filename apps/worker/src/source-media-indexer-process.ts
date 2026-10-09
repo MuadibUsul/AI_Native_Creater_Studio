@@ -65,7 +65,7 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
         names.forEach((name, ordinal) => {
           const start = clampMs(ordinal * intervalSeconds * 1000, total);
           const end = clampMs(Math.min(total, start + intervalSeconds * 1000), total);
-          entries.push({ kind: 'THUMBNAIL', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end }, localFilename: name });
+          entries.push({ kind: 'THUMBNAIL', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end }, localFilename: name });
         });
 
         const detected = await run({ executable: ffmpegPath, args: ['-nostdin', '-hide_banner', '-i', input.sourcePath, '-map', '0:v:0', '-vf', "select='gt(scene,0.3)',showinfo", '-an', '-f', 'null', '-'], timeoutMs, maxOutputBytes });
@@ -76,14 +76,14 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
           const start = boundaries[ordinal]!;
           const end = boundaries[ordinal + 1]!;
           if (end <= start) continue;
-          entries.push({ kind: 'SHOT', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), confidencePermille: ordinal === 0 ? 1000 : 700, payload: { sourceStartMs: start, sourceEndMs: end, transitionType: ordinal === 0 ? 'START' : 'CUT', detectionBasis: 'FFMPEG_SCENE_SCORE_GT_0_3', errorMarginMs: 250 }, localFilename: null });
+          entries.push({ kind: 'SHOT', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: ordinal === 0 ? 1000 : 700, payload: { sourceStartMs: start, sourceEndMs: end, transitionType: ordinal === 0 ? 'START' : 'CUT', detectionBasis: 'FFMPEG_SCENE_SCORE_GT_0_3', errorMarginMs: 250 }, localFilename: null });
         }
         const black = await run({ executable: ffmpegPath, args: ['-nostdin', '-hide_banner', '-i', input.sourcePath, '-map', '0:v:0', '-vf', 'blackdetect=d=0.5:pix_th=0.10', '-an', '-f', 'null', '-'], timeoutMs, maxOutputBytes });
         if (black.code !== 0) throw new Error('黑场检测失败');
         let qualityOrdinal = 0;
         for (const match of black.stderr.matchAll(/black_start:([0-9.]+)\s+black_end:([0-9.]+)/g)) {
           const start = clampMs(Number(match[1]) * 1000, total); const end = clampMs(Number(match[2]) * 1000, total);
-          entries.push({ kind: 'QUALITY', ordinal: qualityOrdinal++, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), confidencePermille: 900, payload: { sourceStartMs: start, sourceEndMs: end, marker: 'BLACK_FRAME', detectionBasis: 'FFMPEG_BLACKDETECT' }, localFilename: null });
+          entries.push({ kind: 'QUALITY', ordinal: qualityOrdinal++, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: 900, payload: { sourceStartMs: start, sourceEndMs: end, marker: 'BLACK_FRAME', detectionBasis: 'FFMPEG_BLACKDETECT' }, localFilename: null });
         }
       }
 
@@ -96,14 +96,14 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
           const slice = values.subarray(offset, Math.min(values.length, offset + chunkSize));
           const peaks = Array.from(slice, (value) => Math.round(Math.min(1, Math.abs(value)) * 1000));
           const start = clampMs(offset * 10, total); const end = clampMs(Math.min(values.length, offset + chunkSize) * 10, total);
-          entries.push({ kind: 'WAVEFORM', ordinal, sourceStartPts: ticksAt(start, audio), sourceEndPts: ticksAt(end, audio), timeBase: baseOf(audio), confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end, sampleIntervalMs: 10, peaks }, localFilename: null });
+          entries.push({ kind: 'WAVEFORM', ordinal, sourceStartPts: ticksAt(start, audio), sourceEndPts: ticksAt(end, audio), timeBase: baseOf(audio), streamId: `audio:${String(audio.index)}`, confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end, sampleIntervalMs: 10, peaks }, localFilename: null });
         }
         const silence = await run({ executable: ffmpegPath, args: ['-nostdin', '-hide_banner', '-i', input.sourcePath, '-map', '0:a:0', '-af', 'silencedetect=n=-50dB:d=0.5', '-vn', '-f', 'null', '-'], timeoutMs, maxOutputBytes });
         if (silence.code !== 0) throw new Error('静音检测失败');
         let qualityOrdinal = entries.filter((entry) => entry.kind === 'QUALITY').length;
         for (const match of silence.stderr.matchAll(/silence_start:\s*([0-9.]+)[\s\S]*?silence_end:\s*([0-9.]+)/g)) {
           const start = clampMs(Number(match[1]) * 1000, total); const end = clampMs(Number(match[2]) * 1000, total);
-          entries.push({ kind: 'QUALITY', ordinal: qualityOrdinal++, sourceStartPts: ticksAt(start, audio), sourceEndPts: ticksAt(end, audio), timeBase: baseOf(audio), confidencePermille: 900, payload: { sourceStartMs: start, sourceEndMs: end, marker: 'SILENCE', detectionBasis: 'FFMPEG_SILENCEDETECT' }, localFilename: null });
+          entries.push({ kind: 'QUALITY', ordinal: qualityOrdinal++, sourceStartPts: ticksAt(start, audio), sourceEndPts: ticksAt(end, audio), timeBase: baseOf(audio), streamId: `audio:${String(audio.index)}`, confidencePermille: 900, payload: { sourceStartMs: start, sourceEndMs: end, marker: 'SILENCE', detectionBasis: 'FFMPEG_SILENCEDETECT' }, localFilename: null });
         }
       }
       return generatedMediaIndexSchema.parse({ schemaVersion: '1.0', processorVersion: MEDIA_INDEX_PROCESSOR_VERSION, durationMs: total, entries });

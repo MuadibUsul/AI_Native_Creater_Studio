@@ -8,6 +8,7 @@ describe('N02-04 media index contracts', () => {
     sourceStartPts: '0',
     sourceEndPts: '15360',
     timeBase: { numerator: 1, denominator: 15360 },
+    streamId: 'video:0',
     confidencePermille: 700,
     payload: { sourceStartMs: 0, sourceEndMs: 1000, detectionBasis: 'FFMPEG_SCENE_SCORE_GT_0_3' },
     localFilename: null,

@@ -130,6 +130,8 @@ export {
 export {
   MEDIA_INDEX_JOB_TYPE,
   MEDIA_INDEX_PROCESSOR_VERSION,
+  MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
+  MEDIA_INDEX_VERSION,
   MEDIA_INDEX_STATUSES,
   MEDIA_INDEX_KINDS,
   mediaIndexStatusSchema,
@@ -142,6 +144,23 @@ export {
   mediaIndexQuerySchema,
 } from './media-index.js';
 export type { MediaIndexJobInput, GeneratedMediaIndexEntry, GeneratedMediaIndex, MediaIndexEntry, MediaIndexPage, SourceMediaIndexer } from './media-index.js';
+export {
+  UNIFIED_MEDIA_INDEX_KINDS,
+  MEDIA_INDEX_BASIS,
+  MEDIA_INDEX_CALIBRATION_STATUSES,
+  MEDIA_INDEX_CAPABILITY_STATUSES,
+  unifiedMediaIndexKindSchema,
+  mediaIndexBasisSchema,
+  mediaIndexCalibrationStatusSchema,
+  mediaIndexCapabilityStatusSchema,
+  mediaIndexSourceRangeSchema,
+  mediaIndexEvidenceRefSchema,
+  mediaIndexRecordSchema,
+  mediaIndexCapabilitySchema,
+  unifiedMediaIndexQuerySchema,
+  unifiedMediaIndexPageSchema,
+} from './unified-media-index.js';
+export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage } from './unified-media-index.js';
 export {
   MEDIA_TRANSCRIPT_JOB_TYPE,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,

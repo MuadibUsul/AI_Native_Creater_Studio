@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, type SpeechRecognitionAdapter } from '@ancs/contracts';
-import { claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaTranscript, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
-import { assetVersions, createDb, jobs, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
+import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, type SpeechRecognitionAdapter } from '@ancs/contracts';
+import { claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaTranscript, listUnifiedMediaIndex, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
+import { assets, assetVersions, createDb, jobs, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createDefaultRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 
 let handle: DbHandle;
 let storageRoot: string;
@@ -66,6 +67,13 @@ async function executeTranscript(adapter?: SpeechRecognitionAdapter) {
   const job = await claimJob(deps(), { workerId: 'asr', leaseSeconds: 120, types: [MEDIA_TRANSCRIPT_JOB_TYPE] });
   expect(job).not.toBeNull();
   const outcome = await executeJob(deps(), createDefaultRegistry({ speechRecognitionAdapter: adapter }), { workerId: 'asr', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
+  return { job: job!, outcome };
+}
+
+async function executeIndex() {
+  const job = await claimJob(deps(), { workerId: 'index', leaseSeconds: 120, types: [MEDIA_INDEX_JOB_TYPE] });
+  expect(job).not.toBeNull();
+  const outcome = await executeJob(deps(), createDefaultRegistry({ sourceMediaIndexer: createFfmpegMediaIndexer({ timeoutMs: 30_000 }) }), { workerId: 'index', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
   return { job: job!, outcome };
 }
 
@@ -135,5 +143,42 @@ describe('N02-06 semantic source-range search', () => {
     const otherWorkspaceId = `ws_${randomUUID()}`;
     await handle.db.insert(workspaces).values({ id: otherWorkspaceId, name: '隔离工作区' });
     expect((await searchMediaSegments(deps(), { workspaceId: otherWorkspaceId, query: '产品近景' })).items).toEqual([]);
+  });
+});
+
+describe('N02-10 unified media index evidence', () => {
+  it('cross-queries measured, inferred, and user evidence by source PTS with complete capability states', { timeout: 180_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect((await executeTranscript(successfulAdapter)).outcome).toBe('succeeded');
+    await handle.db.update(assets).set({ sensitivityClass: 'SENSITIVE' }).where(and(eq(assets.id, created.assetId), eq(assets.workspaceId, created.workspaceId)));
+    expect((await executeIndex()).outcome).toBe('succeeded');
+    await createMediaRangeTag(deps(), { ...created, userId: null, request: { label: '重点片段', sourceStartPts: '250', sourceEndPts: '900', timeBase: { numerator: 1, denominator: 1000 } } });
+
+    const page = await listUnifiedMediaIndex(deps(), { ...created, query: { sourceStartPts: '0', sourceEndPts: '1100', timeBaseNumerator: 1, timeBaseDenominator: 1000, limit: 100 } });
+    expect(page.items.map((item) => item.kind)).toEqual(expect.arrayContaining(['SHOT_BOUNDARY', 'TRANSCRIPT_WORD', 'TRANSCRIPT_SEGMENT', 'SPEAKER_SEGMENT', 'USER_MARKER']));
+    expect(page.items.find((item) => item.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ basis: 'MODEL_INFERRED', streamId: expect.stringMatching(/^audio:/), evidenceRefs: [expect.objectContaining({ type: 'AUDIO_WINDOW' })] });
+    expect(page.items.find((item) => item.kind === 'SHOT_BOUNDARY')).toMatchObject({ basis: 'MEASURED', streamId: expect.stringMatching(/^video:/), toolId: 'ffmpeg', privacyClass: 'SENSITIVE' });
+    expect(page.capabilities).toHaveLength(17);
+    expect(page.capabilities.find((item) => item.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ supported: true, status: 'READY', recordCount: 2 });
+    expect(page.capabilities.find((item) => item.kind === 'SHOT_BOUNDARY')).toMatchObject({ supported: true, status: 'READY' });
+    expect(page.capabilities.find((item) => item.kind === 'USER_MARKER')).toMatchObject({ supported: true, status: 'READY', recordCount: 1 });
+    expect(page.capabilities.find((item) => item.kind === 'OCR_TEXT')).toMatchObject({ supported: false, status: 'UNSUPPORTED' });
+
+    const failed = await uploadAndProbe();
+    expect((await executeTranscript()).outcome).toBe('failed');
+    expect((await listUnifiedMediaIndex(deps(), { ...failed, query: { kind: 'TRANSCRIPT_SEGMENT' } })).capabilities.find((item) => item.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ status: 'FAILED', recordCount: 0, errorSummary: expect.stringContaining('尚未配置') });
+
+    const untouched = await uploadAndProbe();
+    await handle.db.delete(jobs).where(eq(jobs.workspaceId, untouched.workspaceId));
+    await handle.db.delete(mediaIndexRuns).where(eq(mediaIndexRuns.workspaceId, untouched.workspaceId));
+    await handle.db.delete(mediaTranscriptRuns).where(eq(mediaTranscriptRuns.workspaceId, untouched.workspaceId));
+    const notAnalyzed = await listUnifiedMediaIndex(deps(), { ...untouched });
+    expect(notAnalyzed.capabilities.find((item) => item.kind === 'SHOT_BOUNDARY')).toMatchObject({ status: 'NOT_ANALYZED' });
+    expect(notAnalyzed.capabilities.find((item) => item.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ status: 'NOT_ANALYZED' });
+    expect(notAnalyzed.capabilities.find((item) => item.kind === 'USER_MARKER')).toMatchObject({ status: 'EMPTY' });
+
+    const otherWorkspaceId = `ws_${randomUUID()}`;
+    await handle.db.insert(workspaces).values({ id: otherWorkspaceId, name: '隔离工作区' });
+    await expect(listUnifiedMediaIndex(deps(), { workspaceId: otherWorkspaceId, assetId: created.assetId })).rejects.toMatchObject({ httpStatus: 404 });
   });
 });

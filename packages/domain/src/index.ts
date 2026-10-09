@@ -529,6 +529,7 @@ export {
   updateTranscriptTerminology,
 } from './media-transcripts.js';
 export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMediaSegments } from './media-search.js';
+export { listUnifiedMediaIndex } from './unified-media-index.js';
 export {
   assertProjectVersionAssetRights,
   getAssetLifecycle,

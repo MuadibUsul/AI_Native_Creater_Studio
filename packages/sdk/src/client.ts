@@ -134,6 +134,7 @@ import {
   downloadUrlResponseSchema,
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
+  unifiedMediaIndexPageSchema,
   mediaRangeTagListSchema,
   mediaRangeTagSchema,
   mediaSegmentSearchResponseSchema,
@@ -305,6 +306,8 @@ import {
   type RequestAssetPrivacyDeletion,
   type UpdateAssetRightsRequest,
   type MediaIndexPage,
+  type UnifiedMediaIndexPage,
+  type UnifiedMediaIndexKind,
   type MediaRangeTag,
   type MediaSegmentSearchResponse,
   type CreateMediaRangeTagRequest,
@@ -782,6 +785,8 @@ export interface AncsClient {
     rebuildProxy(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaPlaybackResponse>;
     /** 分页读取源时间媒体索引。 */
     mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
+    /** 统一读取所有媒体分析、转写和用户标记的来源证据。 */
+    mediaIndexRecords(workspaceId: string, assetId: string, query?: { kind?: UnifiedMediaIndexKind; sourceStartPts?: string; sourceEndPts?: string; timeBaseNumerator?: number; timeBaseDenominator?: number; cursor?: number; limit?: number }): Promise<UnifiedMediaIndexPage>;
     /** 重新生成索引；原件与代理不变。 */
     rebuildMediaIndex(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaIndexPage>;
     /** 跨视觉、音频、转写和用户标签检索真实源片段。 */
@@ -2115,6 +2120,17 @@ export function createClient(options: ClientOptions): AncsClient {
         if (query?.cursor !== undefined) search.set('cursor', query.cursor);
         if (query?.limit !== undefined) search.set('limit', String(query.limit));
         return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index${search.size > 0 ? `?${search.toString()}` : ''}`, mediaIndexPageSchema);
+      },
+      mediaIndexRecords: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams();
+        if (query?.kind !== undefined) search.set('kind', query.kind);
+        if (query?.sourceStartPts !== undefined) search.set('sourceStartPts', query.sourceStartPts);
+        if (query?.sourceEndPts !== undefined) search.set('sourceEndPts', query.sourceEndPts);
+        if (query?.timeBaseNumerator !== undefined) search.set('timeBaseNumerator', String(query.timeBaseNumerator));
+        if (query?.timeBaseDenominator !== undefined) search.set('timeBaseDenominator', String(query.timeBaseDenominator));
+        if (query?.cursor !== undefined) search.set('cursor', String(query.cursor));
+        if (query?.limit !== undefined) search.set('limit', String(query.limit));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index-records${search.size > 0 ? `?${search.toString()}` : ''}`, unifiedMediaIndexPageSchema);
       },
       rebuildMediaIndex: (workspaceId, assetId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index/rebuild`, mediaIndexPageSchema, { idempotencyKey: mutation?.idempotencyKey }),
