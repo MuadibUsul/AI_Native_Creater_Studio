@@ -290,6 +290,31 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  PLAYBACK_BACKEND_KINDS,
+  PLAYBACK_CAPABILITY_FLAGS,
+  PLAYBACK_ERROR_REASONS,
+  PLAYBACK_PRECISIONS,
+  PLAYBACK_SNAPSHOT_VERSION,
+  playbackAudioSegmentSchema,
+  playbackBackendKindSchema,
+  playbackCapabilitiesSchema,
+  playbackCaptionCueSchema,
+  playbackFrameAt,
+  playbackPrecisionSchema,
+  playbackSnapshotSchema,
+  playbackVideoSegmentSchema,
+} from './playback.js';
+export type {
+  PlaybackAudioSegment,
+  PlaybackBackendKind,
+  PlaybackCapabilities,
+  PlaybackCapabilityFlag,
+  PlaybackCaptionCue,
+  PlaybackErrorReason,
+  PlaybackSnapshot,
+  PlaybackVideoSegment,
+} from './playback.js';
+export {
   NEGATION_MARKERS,
   captionTextFromWords,
   containsDigits,
