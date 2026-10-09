@@ -13,6 +13,7 @@ import {
 } from './scene-graph.js';
 import { setObjectLockOperationSchema } from './object-locks.js';
 import {
+  applyAudioCrossfadeOperationSchema,
   createTrackOperationSchema,
   setClipCropOperationSchema,
   setClipOpacityOperationSchema,
@@ -83,6 +84,7 @@ export const EDIT_OPERATION_TYPES = [
   'set_clip_transform',
   'set_clip_crop',
   'set_clip_opacity',
+  'apply_audio_crossfade',
   'update_clip',
   'update_animation',
   'update_audio_region',
@@ -157,6 +159,7 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   update_track: { ...common, operation: 'update_track', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['TRACK'], writeSet: ['TRACK'], preconditions: ['TRACK_EXISTS'], postconditions: ['TRACK_STATE_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_clip_transform: { ...common, operation: 'set_clip_transform', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['TRANSFORM_UPDATED', 'NO_REGENERATION_TRIGGERED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_clip_crop: { ...common, operation: 'set_clip_crop', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'CROP_AREA_NONEMPTY'], postconditions: ['CROP_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  apply_audio_crossfade: { ...common, operation: 'apply_audio_crossfade', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['AUDIO_REGION', 'TRACK'], writeSet: ['AUDIO_REGION'], preconditions: ['REGIONS_ADJACENT', 'CROSSFADE_WITHIN_REGION_DURATION'], postconditions: ['NON_DESTRUCTIVE_CHAIN_ONLY', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_clip_opacity: { ...common, operation: 'set_clip_opacity', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['OPACITY_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_av_link: { ...common, operation: 'set_av_link', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP'], preconditions: ['CLIPS_EXIST', 'LINK_TARGETS_COMPATIBLE'], postconditions: ['AV_LINK_STATE_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   split_av_cut: { ...common, operation: 'split_av_cut', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['CLIP', 'TRACK'], writeSet: ['CLIP', 'CLIP_ORDER'], preconditions: ['CLIPS_AV_LINKED', 'CUT_POINTS_INSIDE_CLIPS', 'AUDIO_SOURCE_CONTINUITY'], postconditions: ['AUDIO_CLOCK_CONTINUOUS', 'SPLIT_POINTS_OFFSET_REPORTED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
@@ -367,6 +370,7 @@ export const editOperationSchema = z.discriminatedUnion('op', [
   setClipOpacityOperationSchema,
   setClipTransformOperationSchema,
   splitAvCutOperationSchema,
+  applyAudioCrossfadeOperationSchema,
   createTrackOperationSchema,
   moveTrackOperationSchema,
   deleteTrackOperationSchema,

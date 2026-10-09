@@ -4,6 +4,7 @@ import { mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versionedParametersSchema } from './composition-objects.js';
 import { clipTimeMappingSchema } from './composition.js';
 import {
+  applyAudioCrossfadeOperationSchema,
   createTrackOperationSchema,
   setClipCropOperationSchema,
   setClipOpacityOperationSchema,
@@ -33,7 +34,7 @@ export const SOURCE_EDIT_OPERATION_TYPES = [
   'add_effect', 'update_effect', 'remove_effect',
   'add_keyframe', 'update_keyframe', 'remove_keyframe',
   'create_track', 'move_track', 'delete_track',
-  'set_audio_gain', 'set_audio_fade', 'set_audio_pan', 'set_audio_automation',
+  'set_audio_gain', 'set_audio_fade', 'set_audio_pan', 'set_audio_automation', 'apply_audio_crossfade',
   'add_marker', 'update_marker', 'remove_marker',
   'update_caption_segment', 'regenerate_region', 'replace_region',
   'create_preview_branch', 'commit_preview_branch', 'discard_preview_branch',
@@ -168,6 +169,7 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   set_audio_fade: setAudioFadeSourceOperationSchema,
   set_audio_pan: setAudioPanSourceOperationSchema,
   set_audio_automation: setAudioAutomationSourceOperationSchema,
+  apply_audio_crossfade: applyAudioCrossfadeOperationSchema,
   add_marker: plannedSchemas.add_marker,
   update_marker: plannedSchemas.update_marker,
   remove_marker: plannedSchemas.remove_marker,
@@ -258,6 +260,7 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   set_audio_gain: alias('set_audio_gain', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
   set_audio_fade: alias('set_audio_fade', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
   set_audio_pan: alias('set_audio_pan', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
+  apply_audio_crossfade: native('apply_audio_crossfade', ['AUDIO_REGION', 'TRACK'], ['AUDIO_REGION', 'TRACK'], ['AUDIO_REGION'], ['N01-11_CONTRACT', 'N03-06_NATIVE_INTEGRATION']),
   set_audio_automation: alias('set_audio_automation', 'update_animation', ['AUDIO_REGION', 'ANIMATION_BINDING'], ['AUDIO_REGION', 'ANIMATION_BINDING'], ['ANIMATION_BINDING'], { limitations: ['EXISTING_AUTOMATION_BINDING_REQUIRED', 'LINEAR_AND_HOLD_INTERPOLATION_ONLY'], plannedTask: 'N11-08' }),
   add_marker: planned('add_marker', 'EDIT', ['MARKER'], 'N03-09'),
   update_marker: planned('update_marker', 'EDIT', ['MARKER'], 'N03-09'),

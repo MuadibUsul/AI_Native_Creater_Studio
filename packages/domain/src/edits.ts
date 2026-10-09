@@ -12,6 +12,7 @@ import {
   audioRegionSchema,
   clipSchema,
   trackSchema,
+  AUDIO_MIX_GUARD_REASONS,
   visualCropSchema,
   visualParametersSchema,
   visualTransformSchema,
@@ -493,6 +494,26 @@ async function splitClipRow(
   };
   await tx.insert(sequenceClips).values(rightRow);
   eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: rightRow.id, patch: { op: 'insert_clip', clipId: rightRow.id, after: clipSnapshot(rightRow) } });
+}
+
+/**
+ * N03-06 原声保护：项目策略 `preserveOriginalSpeech=true` 时，音频区域只允许**非破坏性混音**改动
+ * （增益/淡入淡出/声像/声道映射/参数），任何改动源流或局部时间的编辑都必须拒绝——不得改变语言内容。
+ */
+async function assertOriginalSpeechPreserved(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; touchesSourceClock: boolean },
+): Promise<void> {
+  if (!input.touchesSourceClock) return;
+  const rows = await tx.select({ productionPolicy: projects.productionPolicy }).from(projects).where(and(
+    eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId),
+  )).limit(1);
+  const policy = rows[0]?.productionPolicy as { preserveOriginalSpeech?: boolean } | null | undefined;
+  if (policy?.preserveOriginalSpeech === true) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'original speech protection forbids changing the source clock', 409, {
+      reason: AUDIO_MIX_GUARD_REASONS.ORIGINAL_SPEECH_PROTECTED,
+    });
+  }
 }
 
 /** N03-05：把局部变更合并进片段参数命名空间（保持其余参数与组件自定义 values 不变）。 */
@@ -2250,7 +2271,59 @@ async function applyEditsInTransaction(
           break;
         }
 
+        case 'apply_audio_crossfade': {
+          const load = async (regionId: string) => {
+            const rows = await tx.select().from(compositionAudioRegions).where(and(
+              eq(compositionAudioRegions.id, regionId),
+              eq(compositionAudioRegions.workspaceId, input.workspaceId),
+              eq(compositionAudioRegions.projectId, input.projectId),
+            )).limit(1);
+            const row = rows[0];
+            if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'audio region not found', 404);
+            return row;
+          };
+          const left = await load(operation.leftRegionId);
+          const right = await load(operation.rightRegionId);
+          if (left.sequenceId !== right.sequenceId) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'crossfade requires both regions in the same sequence', 422, { reason: 'CROSSFADE_REGIONS_NOT_ADJACENT' });
+          }
+          const { timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: left.sequenceId });
+          const leftSpan = ticksInRange(left.sequenceRange, timebase);
+          const rightSpan = ticksInRange(right.sequenceRange, timebase);
+          if (leftSpan.end !== rightSpan.start) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'crossfade requires adjacent regions (no gap, no overlap)', 422, { reason: 'CROSSFADE_REGIONS_NOT_ADJACENT' });
+          }
+          const durationTicks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.duration)), timebase);
+          const leftDuration = leftSpan.end - leftSpan.start;
+          const rightDuration = rightSpan.end - rightSpan.start;
+          if (durationTicks <= 0n || durationTicks > leftDuration || durationTicks > rightDuration) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'crossfade duration must fit both regions', 422, { reason: 'CROSSFADE_DURATION_OUT_OF_RANGE' });
+          }
+          const fade = mediaTimeOf(durationTicks, timebase);
+          const now = new Date();
+          for (const [row, changes] of [[left, { fadeOut: fade }], [right, { fadeIn: fade }]] as const) {
+            const before = audioRegionSnapshot(row);
+            const after = audioRegionSnapshot({ ...row, ...changes, updatedAt: now });
+            await tx.update(compositionAudioRegions).set({ ...changes, updatedAt: now }).where(eq(compositionAudioRegions.id, row.id));
+            eventDrafts.push({
+              action: 'APPLY_AUDIO_CROSSFADE', sceneId: null, objectKind: 'AUDIO_REGION', objectId: row.id,
+              patch: { ...operation, audioRegionId: row.id, before, after },
+            });
+          }
+          break;
+        }
+
         case 'update_audio_region': {
+          // 原声保护：改源流或局部时间会改变语言内容，策略开启时拒绝（增益/淡入淡出/声像不受影响）。
+          // 补偿路径（undo/redo）**不受限**：它是把工程恢复到此前已被接受的状态，不是新的内容改动。
+          if (input.compensation === undefined) {
+            await assertOriginalSpeechPreserved(tx, {
+              workspaceId: input.workspaceId, projectId: input.projectId,
+              touchesSourceClock: operation.changes.sourceStreamId !== undefined
+                || operation.changes.localRange !== undefined
+                || operation.changes.timeBinding !== undefined,
+            });
+          }
           const rows = await tx.select().from(compositionAudioRegions).where(and(
             eq(compositionAudioRegions.id, operation.audioRegionId),
             eq(compositionAudioRegions.workspaceId, input.workspaceId),

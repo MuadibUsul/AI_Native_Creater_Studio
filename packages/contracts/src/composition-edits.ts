@@ -379,3 +379,13 @@ export type SetClipOpacityOperation = z.infer<typeof setClipOpacityOperationSche
 
 /** 片段参数命名空间版本（与 visualParametersSchema 对齐，供迁移与客户端校验）。 */
 export { VISUAL_PARAMETER_SCHEMA_VERSION };
+
+/** N03-06 基础 crossfade：在相邻两个音频区域的接缝处铺等功率交叉淡入淡出。 */
+export const applyAudioCrossfadeOperationSchema = z.object({
+  op: z.literal('apply_audio_crossfade'),
+  leftRegionId: opaqueIdSchema,
+  rightRegionId: opaqueIdSchema,
+  duration: mediaTimeSchema,
+}).strict().refine((value) => value.leftRegionId !== value.rightRegionId, 'crossfade requires two distinct regions');
+
+export type ApplyAudioCrossfadeOperation = z.infer<typeof applyAudioCrossfadeOperationSchema>;

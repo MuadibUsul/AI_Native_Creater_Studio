@@ -36,6 +36,8 @@ N03-04 已按范围 VERIFIED：`create_track`／`move_track`／`delete_track`／
 
 N03-05 已按范围 VERIFIED：位置/缩放/旋转/锚点/裁切/透明度成为**参数化修改**（`set_clip_transform`／`set_clip_crop`／`set_clip_opacity`，写片段 `parameters` 命名空间，迁移 0077），移动对象不触发镜头重生成（测试断言 Scene 行数不变）；关键帧沿用既有动画绑定（LINEAR／HOLD，属性路径由 `VISUAL_KEYFRAME_PATHS` 固定，重复写入读回一致）；裁切/旋转前后命中坐标走同一纯函数（`projectVisualPoint`／`invertVisualPoint`／`hitTestVisualObject`，正逆互验 + 裁切/旋转用例），旧片段缺省即旧语义、旧组件不受影响（见 `docs/verification/N03-05.md`）。V03-17／V03-18／V03-68 的画布交互与渲染管线消费属 N03-08／N03-16，保持 `IN_PROGRESS`。
 
+N03-06 已按范围 VERIFIED：片段级增益/淡入淡出/声像/声道映射只改对应区域且**源素材零变化**（非破坏），新增 `apply_audio_crossfade` 在严格相邻的两个音频区域间铺等功率交叉淡化（`out²+in²=1`）；`planClipAudioMix` 提供混音读面并 fail-closed——估计峰值超 0 dBFS 拒绝（不静默削波）、有内容却无可听轨拒绝（不意外静音）；`preserveOriginalSpeech` 下改动源流/局部时间的编辑被拒（语言内容未改），增益类仍允许（见 `docs/verification/N03-06.md`）。V03-04 的音频侧约束在本层强制，真实响度归一化与 ducking 仍属 N09，保持 `IN_PROGRESS`；V03-21 的混音面板属 N03-08，保持 `IN_PROGRESS`。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

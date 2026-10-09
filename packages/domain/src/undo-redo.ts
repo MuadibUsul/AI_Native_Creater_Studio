@@ -94,6 +94,10 @@ interface StoredPatch {
   restoreTrackId?: unknown;
   nonEmptyPolicy?: unknown;
   destinationTrackId?: unknown;
+  /** N03-06 crossfade */
+  leftRegionId?: unknown;
+  rightRegionId?: unknown;
+  duration?: unknown;
   /** N03-05 变换参数 */
   transform?: unknown;
   crop?: unknown;
@@ -376,6 +380,13 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
       const before = clipSchema.parse(patch.before);
       return { op: 'set_av_link', linked: patch.linked === true, clipIds: [before.id] };
     }
+    case 'APPLY_AUDIO_CROSSFADE':
+      return {
+        op: 'apply_audio_crossfade',
+        leftRegionId: String(patch.leftRegionId ?? ''),
+        rightRegionId: String(patch.rightRegionId ?? ''),
+        duration: mediaTimeSchema.parse(patch.duration),
+      };
     case 'SET_CLIP_TRANSFORM':
       return { op: 'set_clip_transform', clipId: String(patch.clipId ?? event.objectId ?? ''), transform: visualTransformSchema.parse(patch.transform) };
     case 'SET_CLIP_CROP':
@@ -548,6 +559,11 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
     case 'DUPLICATE_CLIP':
       // 逆操作：删除复制出来的片段（源二进制从未被触碰，无需回滚原件）。
       return [{ op: 'delete_clip', clipId: event.objectId ?? '' }];
+    case 'APPLY_AUDIO_CROSSFADE': {
+      // 逆操作：把该区域自己的淡入/淡出恢复到交叉前的值（另一侧由它自己的事件恢复）。
+      const before = audioRegionSchema.parse(patch.before);
+      return [{ op: 'update_audio_region', audioRegionId: before.id, changes: { fadeIn: before.fadeIn, fadeOut: before.fadeOut } }];
+    }
     case 'SET_CLIP_TRANSFORM': {
       const before = clipSchema.parse(patch.before);
       return [{ op: 'set_clip_transform', clipId: before.id, transform: (before.parameters ?? { transform: undefined }).transform ?? { position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotationDeg: 0, anchor: { x: 0.5, y: 0.5 } } }];

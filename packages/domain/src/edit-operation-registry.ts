@@ -221,6 +221,11 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       }];
     case 'set_av_link':
       return operation.clipIds.map((clipId) => ({ objectKind: 'CLIP' as const, objectId: clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }));
+    case 'apply_audio_crossfade':
+      return [
+        { objectKind: 'AUDIO_REGION', objectId: operation.leftRegionId, dimensions: uniqueDimensions(['STYLE']), direct: true, via: null },
+        { objectKind: 'AUDIO_REGION', objectId: operation.rightRegionId, dimensions: uniqueDimensions(['STYLE']), direct: true, via: null },
+      ];
     case 'set_clip_transform':
     case 'set_clip_crop':
     case 'set_clip_opacity':
@@ -422,6 +427,7 @@ export function validateEditOperationCandidate(input: {
       case 'roll_clip':
       case 'ripple_clip':
       case 'split_av_cut':
+      case 'apply_audio_crossfade':
       case 'set_clip_transform':
       case 'set_clip_crop':
       case 'set_clip_opacity':
