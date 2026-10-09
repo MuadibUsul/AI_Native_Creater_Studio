@@ -131,7 +131,44 @@ export const unifiedMediaIndexPageSchema = z.object({
   }
 });
 
+export const MEDIA_EVIDENCE_CONSUMERS = ['DIRECTOR', 'SELECTION', 'REFERENCE_ANALYSIS'] as const;
+export const mediaEvidenceConsumerSchema = z.enum(MEDIA_EVIDENCE_CONSUMERS);
+export const mediaEvidenceRequestSchema = z.object({
+  consumer: mediaEvidenceConsumerSchema,
+  kind: unifiedMediaIndexKindSchema.optional(),
+  sourceStartPts: ptsSchema.optional(),
+  sourceEndPts: ptsSchema.optional(),
+  timeBaseNumerator: z.coerce.number().int().positive().optional(),
+  timeBaseDenominator: z.coerce.number().int().positive().optional(),
+  analysisConfigHash: sha256Schema,
+}).strict().superRefine((value, context) => {
+  const range = [value.sourceStartPts, value.sourceEndPts, value.timeBaseNumerator, value.timeBaseDenominator];
+  if (range.some((item) => item !== undefined) && range.some((item) => item === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'source range and time base must be provided together' });
+  if (value.sourceStartPts !== undefined && value.sourceEndPts !== undefined && BigInt(value.sourceEndPts) <= BigInt(value.sourceStartPts)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['sourceEndPts'], message: 'source range must be positive' });
+});
+export const mediaEvidenceBundleSchema = z.object({
+  cacheKey: sha256Schema,
+  cacheStatus: z.enum(['HIT', 'MISS']),
+  consumer: mediaEvidenceConsumerSchema,
+  permissionContextHash: sha256Schema,
+  sourceAssetVersionId: opaqueIdSchema,
+  sourceRange: mediaIndexSourceRangeSchema.nullable(),
+  requestedKind: unifiedMediaIndexKindSchema.nullable(),
+  analysisConfigHash: sha256Schema,
+  indexFingerprint: sha256Schema,
+  whyFetched: z.string().min(1).max(300),
+  usage: z.object({
+    hitCount: z.number().int().nonnegative(),
+    analysisReadCount: z.number().int().nonnegative(),
+    rangeReadCount: z.number().int().nonnegative(),
+  }).strict(),
+  page: unifiedMediaIndexPageSchema,
+}).strict();
+
 export type UnifiedMediaIndexKind = z.infer<typeof unifiedMediaIndexKindSchema>;
 export type MediaIndexRecord = z.infer<typeof mediaIndexRecordSchema>;
 export type MediaIndexCapability = z.infer<typeof mediaIndexCapabilitySchema>;
 export type UnifiedMediaIndexPage = z.infer<typeof unifiedMediaIndexPageSchema>;
+export type MediaEvidenceConsumer = z.infer<typeof mediaEvidenceConsumerSchema>;
+export type MediaEvidenceRequest = z.infer<typeof mediaEvidenceRequestSchema>;
+export type MediaEvidenceBundle = z.infer<typeof mediaEvidenceBundleSchema>;

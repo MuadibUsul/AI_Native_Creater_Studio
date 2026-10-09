@@ -530,6 +530,7 @@ export {
 } from './media-transcripts.js';
 export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMediaSegments } from './media-search.js';
 export { listUnifiedMediaIndex } from './unified-media-index.js';
+export { getMediaEvidenceBundle } from './media-evidence.js';
 export { cancelMediaAnalysisStage, getMediaAnalysisGraph, rebuildMediaAnalysisStage } from './media-analysis.js';
 export {
   MEDIA_VISUAL_ANALYSIS_CONFIG_HASH,

@@ -526,6 +526,13 @@
       "when": 1791514734814,
       "tag": "0074_slippery_cerebro",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1791518955704,
+      "tag": "0075_ordinary_colonel_america",
+      "breakpoints": true
     }
   ]
 }

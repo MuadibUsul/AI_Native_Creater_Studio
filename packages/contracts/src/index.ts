@@ -159,8 +159,12 @@ export {
   mediaIndexCapabilitySchema,
   unifiedMediaIndexQuerySchema,
   unifiedMediaIndexPageSchema,
+  MEDIA_EVIDENCE_CONSUMERS,
+  mediaEvidenceConsumerSchema,
+  mediaEvidenceRequestSchema,
+  mediaEvidenceBundleSchema,
 } from './unified-media-index.js';
-export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage } from './unified-media-index.js';
+export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage, MediaEvidenceConsumer, MediaEvidenceRequest, MediaEvidenceBundle } from './unified-media-index.js';
 export {
   MEDIA_ANALYSIS_STAGES,
   MEDIA_ANALYSIS_STAGE_STATUSES,

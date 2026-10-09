@@ -14,6 +14,7 @@ import { PreviewPlayer } from '@/ui/PreviewPlayer';
 import { PropForm } from '@/ui/PropForm';
 import { ScenePreview } from '@/ui/ScenePreview';
 import { StateBlock } from '@/ui/StateBlock';
+import { QuietIcon } from '@/ui/QuietIcon';
 import { useWorkflowDialog } from './workflow-dialog';
 import './workflow.css';
 
@@ -83,6 +84,7 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
   const [showAi, setShowAi] = useState(false);
   const [editPlan, setEditPlan] = useState<EditPlan | null>(null);
   const [directorPreview, setDirectorPreview] = useState<DirectorPlan | null>(null);
+  const [mediaSelection, setMediaSelection] = useState<{ assetId: string; label: string; sourceStartPts: string; sourceEndPts: string; timeBase: { numerator: number; denominator: number } } | null>(null);
   const [editTarget, setEditTarget] = useState<{ sceneId: string; title: string } | null>(null);
   const aiTrigger = useRef<HTMLElement | null>(null);
   const closeAi = (force = false) => {
@@ -100,6 +102,18 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
     if (initialSceneId !== undefined || selectedSceneId === null) return;
     try { sessionStorage.setItem('ancs-director-scene:' + workspaceId + ':' + projectId, selectedSceneId); } catch { /* Selection still works in memory. */ }
   }, [initialSceneId, workspaceId, projectId, selectedSceneId]);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`ancs-media-selection:${workspaceId}:${projectId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as typeof mediaSelection;
+      if (parsed?.assetId && parsed.label && parsed.timeBase) {
+        setMediaSelection(parsed);
+        setTab('source');
+        setShowInspector(true);
+      }
+    } catch { /* A malformed local selection cannot change the project. */ }
+  }, [workspaceId, projectId]);
 
   const boundAssetIds = [...new Set((graph.data?.scenes ?? []).flatMap((scene) => scene.assetBindings.map((binding) => binding.assetId)))].sort();
   const assetVersionSignature = boundAssetIds.map((assetId) => assetId + ':' + (projectAssets.data?.find((asset) => asset.id === assetId)?.currentVersionId ?? '')).join('|');
@@ -226,11 +240,12 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
     return <div className="page qf-workflow"><StateBlock variant={described.kind === 'forbidden' ? 'forbidden' : 'error'} title="加载分镜失败" description={described.message} diagnostics={described.code ?? undefined} action={{ label: '重试', onClick: () => void graph.refetch() }} /></div>;
   }
   const scenes = [...(graph.data?.scenes ?? [])].sort((a, b) => a.position - b.position);
+  const mediaSelectionNotice = mediaSelection === null ? null : <div className="notice" role="status"><QuietIcon name="check" /><div className="grow"><strong>已选择真实片段：{mediaSelection.label}</strong><p className="small mt8">素材 {mediaSelection.assetId} · 源范围 {mediaSelection.sourceStartPts}–{mediaSelection.sourceEndPts}（{mediaSelection.timeBase.numerator}/{mediaSelection.timeBase.denominator}）已带入当前编辑上下文；项目尚未自动修改。</p></div><button type="button" className="textbtn small" onClick={() => { setMediaSelection(null); try { sessionStorage.removeItem(`ancs-media-selection:${workspaceId}:${projectId}`); } catch { /* Optional local state. */ } }}>取消选择</button></div>;
   if (scenes.length === 0) {
     const described = applyDirector.isError ? describeError(applyDirector.error) : previewDirector.isError ? describeError(previewDirector.error) : null;
     const preview = directorPreview && narrative.data && directorPreview.narrativePlanId === narrative.data.id && directorPreview.narrativePlanRevision === narrative.data.revision ? directorPreview : null;
     const canApply = preview !== null && !preview.blocked && preview.estimatedCost.certainty === 'KNOWN' && preview.estimatedCost.total !== null && preview.providerJobs.every((job) => !job.blocked);
-    return <div className="page qf-workflow qf-director-empty"><StateBlock variant={described?.kind === 'conflict' ? 'conflict' : 'empty'} title="分镜还是空的" description="先预览 Director 的场景、素材、任务、费用和告警；确认后才应用。" diagnostics={described?.code ?? undefined} action={preview ? { label: applyDirector.isPending ? '应用中…' : '确认应用计划', onClick: () => applyDirector.mutate(), disabled: !canEdit || !canApply || applyDirector.isPending } : { label: previewDirector.isPending ? '规划中…' : '预览 Director 计划', onClick: () => previewDirector.mutate(), disabled: !canEdit || previewDirector.isPending || !narrative.data }} secondaryAction={preview ? { label: '放弃计划', onClick: () => setDirectorPreview(null), disabled: applyDirector.isPending } : null}>{workspace.isError ? <p role="alert" className="qf-error">无法确认工作区权限：{describeError(workspace.error).message}</p> : !canEdit && workspace.data ? <p className="small muted">当前角色只能查看分镜。</p> : null}{described !== null ? <p className="qf-error">{described.message}</p> : null}{!narrative.data ? <p className="small muted">先在脚本页生成叙事计划。</p> : null}{preview ? <section className="panel pad mt16" aria-label="Director 计划预览"><h3>计划预览 · {preview.scenes.length} 个场景</h3><p className="small muted mt8">{preview.decisionSummary}</p><p className="small mt16">预计片长：{seconds(preview.estimatedDurationMs)} · 素材需求：{preview.assetPlan.length} 项 · Provider 任务：{preview.providerJobs.reduce((sum, job) => sum + job.jobCount, 0)} 项</p><p className="small mt8">费用：{preview.estimatedCost.total ? `${preview.estimatedCost.total.amount} ${preview.estimatedCost.total.currency}` : '未知'}（{preview.estimatedCost.certainty}）</p>{preview.scenes.map((scene) => <p className="small mt8" key={scene.sceneId}>{scene.position + 1}. {scene.sceneType} · {seconds(scene.durationMs)} · {scene.visualIntent || scene.narration || '无描述'}</p>)}{preview.warnings.map((warning) => <p className="small mt8" key={warning.code + warning.message}>{warning.severity}：{warning.message}</p>)}{!canApply ? <p role="alert" className="notice amber mt16">{preview.blockedReasons.join('；') || preview.estimatedCost.note || '计划含阻断项或费用未确定，不能应用。'}</p> : null}</section> : null}</StateBlock></div>;
+    return <div className="page qf-workflow qf-director-empty">{mediaSelectionNotice}<StateBlock variant={described?.kind === 'conflict' ? 'conflict' : 'empty'} title="分镜还是空的" description="先预览 Director 的场景、素材、任务、费用和告警；确认后才应用。" diagnostics={described?.code ?? undefined} action={preview ? { label: applyDirector.isPending ? '应用中…' : '确认应用计划', onClick: () => applyDirector.mutate(), disabled: !canEdit || !canApply || applyDirector.isPending } : { label: previewDirector.isPending ? '规划中…' : '预览 Director 计划', onClick: () => previewDirector.mutate(), disabled: !canEdit || previewDirector.isPending || !narrative.data }} secondaryAction={preview ? { label: '放弃计划', onClick: () => setDirectorPreview(null), disabled: applyDirector.isPending } : null}>{workspace.isError ? <p role="alert" className="qf-error">无法确认工作区权限：{describeError(workspace.error).message}</p> : !canEdit && workspace.data ? <p className="small muted">当前角色只能查看分镜。</p> : null}{described !== null ? <p className="qf-error">{described.message}</p> : null}{!narrative.data ? <p className="small muted">先在脚本页生成叙事计划。</p> : null}{preview ? <section className="panel pad mt16" aria-label="Director 计划预览"><h3>计划预览 · {preview.scenes.length} 个场景</h3><p className="small muted mt8">{preview.decisionSummary}</p><p className="small mt16">预计片长：{seconds(preview.estimatedDurationMs)} · 素材需求：{preview.assetPlan.length} 项 · Provider 任务：{preview.providerJobs.reduce((sum, job) => sum + job.jobCount, 0)} 项</p><p className="small mt8">费用：{preview.estimatedCost.total ? `${preview.estimatedCost.total.amount} ${preview.estimatedCost.total.currency}` : '未知'}（{preview.estimatedCost.certainty}）</p>{preview.scenes.map((scene) => <p className="small mt8" key={scene.sceneId}>{scene.position + 1}. {scene.sceneType} · {seconds(scene.durationMs)} · {scene.visualIntent || scene.narration || '无描述'}</p>)}{preview.warnings.map((warning) => <p className="small mt8" key={warning.code + warning.message}>{warning.severity}：{warning.message}</p>)}{!canApply ? <p role="alert" className="notice amber mt16">{preview.blockedReasons.join('；') || preview.estimatedCost.note || '计划含阻断项或费用未确定，不能应用。'}</p> : null}</section> : null}</StateBlock></div>;
   }
   const path = '/w/' + workspaceId + '/p/' + projectId;
   const selected = scenes.find((scene) => scene.id === selectedSceneId) ?? (initialSceneId === undefined ? scenes[0] : undefined);
@@ -250,6 +265,7 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
   const aspectRatio: AspectRatio = Object.hasOwn(ASPECT_RATIO_SIZES, rawAspectRatio) ? rawAspectRatio as AspectRatio : '16:9';
   return <div className="qf-workflow qf-director-workspace">
     {workspace.isError ? <p role="alert" className="qf-error">无法确认工作区权限：{describeError(workspace.error).message}</p> : !canEdit && workspace.data ? <p className="notice">当前角色只能查看分镜。</p> : null}
+    {mediaSelectionNotice}
     <div className="editor-workspace">
       <aside className="scene-rail" aria-label="分镜列表">
         <div className="row between"><strong className="small">分镜</strong><span className="small muted">{scenes.length}</span></div>

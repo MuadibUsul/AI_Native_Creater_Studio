@@ -168,6 +168,13 @@ export const directorPlanSchema = z.object({
   scenes: z.array(directorSceneSchema).default([]),
   assetPlan: z.array(directorAssetPlanItemSchema).default([]),
   providerJobs: z.array(directorProviderJobPlanSchema).default([]),
+  mediaEvidence: z.array(z.object({
+    assetId: opaqueIdSchema,
+    sourceAssetVersionId: opaqueIdSchema,
+    cacheStatus: z.enum(['HIT', 'MISS']),
+    recordIds: z.array(opaqueIdSchema).max(100),
+    whyFetched: z.string().min(1).max(300),
+  }).strict()).max(20).default([]),
   estimatedDurationMs: z.number().int().nonnegative(),
   estimatedCost: z.object({
     /** KNOWN = 全部可估；PARTIAL = 部分可估；UNKNOWN = 全部不可估（无可用模型/价格） */

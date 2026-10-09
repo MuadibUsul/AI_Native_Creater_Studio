@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   UNIFIED_MEDIA_INDEX_KINDS,
   mediaIndexRecordSchema,
+  mediaEvidenceRequestSchema,
   unifiedMediaIndexPageSchema,
   unifiedMediaIndexQuerySchema,
 } from './unified-media-index.js';
@@ -54,5 +55,12 @@ describe('unified media index contracts', () => {
     expect(unifiedMediaIndexPageSchema.safeParse({ sourceAssetVersionId: 'av_1', indexVersion: 1, capabilities, items: [], nextCursor: null }).success).toBe(true);
     expect(unifiedMediaIndexPageSchema.safeParse({ sourceAssetVersionId: 'av_1', indexVersion: 1, capabilities: capabilities.slice(1), items: [], nextCursor: null }).success).toBe(false);
     expect(unifiedMediaIndexPageSchema.safeParse({ sourceAssetVersionId: 'av_1', indexVersion: 1, capabilities: capabilities.map((row) => ({ ...row, kind: 'THUMBNAIL' })), items: [], nextCursor: null }).success).toBe(false);
+  });
+
+  it('requires a bounded evidence consumer config and complete optional range', () => {
+    const request = { consumer: 'SELECTION', analysisConfigHash: 'b'.repeat(64), sourceStartPts: '200', sourceEndPts: '800', timeBaseNumerator: 1, timeBaseDenominator: 1000 };
+    expect(mediaEvidenceRequestSchema.parse(request)).toMatchObject({ consumer: 'SELECTION', timeBaseDenominator: 1000 });
+    expect(mediaEvidenceRequestSchema.safeParse({ ...request, consumer: 'UNKNOWN' }).success).toBe(false);
+    expect(mediaEvidenceRequestSchema.safeParse({ ...request, sourceEndPts: undefined }).success).toBe(false);
   });
 });

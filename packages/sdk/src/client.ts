@@ -135,6 +135,7 @@ import {
   mediaPlaybackResponseSchema,
   mediaIndexPageSchema,
   unifiedMediaIndexPageSchema,
+  mediaEvidenceBundleSchema,
   mediaAnalysisGraphSchema,
   mediaRangeTagListSchema,
   mediaRangeTagSchema,
@@ -309,6 +310,8 @@ import {
   type MediaIndexPage,
   type UnifiedMediaIndexPage,
   type UnifiedMediaIndexKind,
+  type MediaEvidenceBundle,
+  type MediaEvidenceRequest,
   type MediaAnalysisGraph,
   type MediaAnalysisStageName,
   type MediaRangeTag,
@@ -790,6 +793,8 @@ export interface AncsClient {
     mediaIndex(workspaceId: string, assetId: string, query?: { kind?: 'THUMBNAIL' | 'WAVEFORM' | 'SHOT' | 'QUALITY'; cursor?: string; limit?: number }): Promise<MediaIndexPage>;
     /** 统一读取所有媒体分析、转写和用户标记的来源证据。 */
     mediaIndexRecords(workspaceId: string, assetId: string, query?: { kind?: UnifiedMediaIndexKind; sourceStartPts?: string; sourceEndPts?: string; timeBaseNumerator?: number; timeBaseDenominator?: number; cursor?: number; limit?: number }): Promise<UnifiedMediaIndexPage>;
+    /** 为 Director、选区或参考分析读取并复用同一份已授权范围证据。 */
+    mediaEvidence(workspaceId: string, assetId: string, query: MediaEvidenceRequest): Promise<MediaEvidenceBundle>;
     analysisStages(workspaceId: string, assetId: string): Promise<MediaAnalysisGraph>;
     rebuildAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, detectorConfigHash: string, options?: MutationOptions): Promise<MediaAnalysisGraph>;
     cancelAnalysisStage(workspaceId: string, assetId: string, stage: MediaAnalysisStageName, options?: MutationOptions): Promise<MediaAnalysisGraph>;
@@ -2137,6 +2142,15 @@ export function createClient(options: ClientOptions): AncsClient {
         if (query?.cursor !== undefined) search.set('cursor', String(query.cursor));
         if (query?.limit !== undefined) search.set('limit', String(query.limit));
         return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-index-records${search.size > 0 ? `?${search.toString()}` : ''}`, unifiedMediaIndexPageSchema);
+      },
+      mediaEvidence: (workspaceId, assetId, query) => {
+        const search = new URLSearchParams({ consumer: query.consumer, analysisConfigHash: query.analysisConfigHash });
+        if (query.kind !== undefined) search.set('kind', query.kind);
+        if (query.sourceStartPts !== undefined) search.set('sourceStartPts', query.sourceStartPts);
+        if (query.sourceEndPts !== undefined) search.set('sourceEndPts', query.sourceEndPts);
+        if (query.timeBaseNumerator !== undefined) search.set('timeBaseNumerator', String(query.timeBaseNumerator));
+        if (query.timeBaseDenominator !== undefined) search.set('timeBaseDenominator', String(query.timeBaseDenominator));
+        return request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/media-evidence?${search.toString()}`, mediaEvidenceBundleSchema);
       },
       analysisStages: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages`, mediaAnalysisGraphSchema),
       rebuildAnalysisStage: (workspaceId, assetId, stage, detectorConfigHash, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/analysis-stages/${stage}/rebuild`, mediaAnalysisGraphSchema, { body: { detectorConfigHash }, idempotencyKey: mutation?.idempotencyKey }),

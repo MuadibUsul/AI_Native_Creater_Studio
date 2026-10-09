@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { MEDIA_AUDIO_ANALYSIS_JOB_TYPE, MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION, MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, type MediaAudioAnalysisAdapter, type MediaVisualAnalysisAdapter, type SpeechRecognitionAdapter } from '@ancs/contracts';
-import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, restoreAsset, retryMediaTranscript, searchMediaSegments, softDeleteAsset, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
-import { assets, assetVersions, createDb, jobs, mediaAnalysisStages, mediaIndexEntries, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
+import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaEvidenceBundle, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, restoreAsset, retryMediaTranscript, searchMediaSegments, softDeleteAsset, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
+import { assets, assetVersions, createDb, jobs, mediaAnalysisStages, mediaEvidenceCaches, mediaIndexEntries, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createDefaultRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
@@ -360,5 +360,66 @@ describe('N02-14 correction overlay and deletion authorization sync', () => {
     const afterRestore = await listUnifiedMediaIndex(deps(), { ...created, query: { limit: 100 } });
     expect(afterRestore.items).toEqual([]);
     expect(afterRestore.capabilities.find((capability) => capability.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ status: 'NOT_ANALYZED', recordCount: 0 });
+  });
+});
+
+describe('N02-15 shared range evidence cache', () => {
+  it('reuses one authorized range bundle and separates permission contexts and analysis config', { timeout: 180_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect((await executeVisual(visualAdapter)).outcome).toBe('succeeded');
+    expect((await executeAudio(audioAdapter)).outcome).toBe('succeeded');
+    const request = { consumer: 'SELECTION' as const, analysisConfigHash: 'c'.repeat(64), sourceStartPts: '200', sourceEndPts: '800', timeBaseNumerator: 1, timeBaseDenominator: 1000 };
+    const first = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request });
+    expect(first).toMatchObject({ cacheStatus: 'MISS', sourceAssetVersionId: created.version.id, usage: { hitCount: 0, analysisReadCount: 1, rangeReadCount: 1 } });
+    expect(first.page.items.find((item) => item.kind === 'ACTION_EVENT' && (item.payload as { label?: string }).label === '举起手机')).toBeDefined();
+    const second = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request });
+    expect(second).toMatchObject({ cacheKey: first.cacheKey, cacheStatus: 'HIT', usage: { hitCount: 1, analysisReadCount: 1, rangeReadCount: 1 } });
+    const differentPermission = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_viewer:VIEWER:workspace:read`, request });
+    expect(differentPermission).toMatchObject({ cacheStatus: 'MISS' });
+    expect(differentPermission.cacheKey).not.toBe(first.cacheKey);
+    const differentConfig = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request: { ...request, analysisConfigHash: 'd'.repeat(64) } });
+    expect(differentConfig.cacheKey).not.toBe(first.cacheKey);
+    expect(await handle.db.select().from(mediaEvidenceCaches).where(eq(mediaEvidenceCaches.workspaceId, created.workspaceId))).toHaveLength(3);
+  });
+
+  it('switching to a new source version only invalidates that version and keeps prior evidence intact', { timeout: 180_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect((await executeVisual(visualAdapter)).outcome).toBe('succeeded');
+    const request = { consumer: 'DIRECTOR' as const, analysisConfigHash: 'f'.repeat(64) };
+    const v1First = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request });
+    expect(v1First).toMatchObject({ cacheStatus: 'MISS', sourceAssetVersionId: created.version.id });
+    const v1Second = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request });
+    expect(v1Second).toMatchObject({ cacheStatus: 'HIT', cacheKey: v1First.cacheKey, usage: { hitCount: 1 } });
+
+    // 新源版本（同资产 v2，切换为当前版本）——仅新版本需要新分析读取
+    const v2Rows = await handle.db
+      .insert(assetVersions)
+      .values({
+        id: `av_${randomUUID()}`,
+        assetId: created.assetId,
+        workspaceId: created.workspaceId,
+        versionNumber: 2,
+        storageKey: created.version.storageKey,
+        mimeType: created.version.mimeType,
+        sizeBytes: created.version.sizeBytes,
+        checksumSha256: 'b'.repeat(64),
+        status: 'READY',
+        probeStatus: 'READY',
+      })
+      .returning();
+    const v2 = v2Rows[0]!;
+    await handle.db.update(assets).set({ currentVersionId: v2.id }).where(eq(assets.id, created.assetId));
+
+    const switched = await getMediaEvidenceBundle(deps(), { ...created, permissionContext: `${created.workspaceId}:usr_editor:EDITOR:workspace:read`, request });
+    expect(switched).toMatchObject({ cacheStatus: 'MISS', sourceAssetVersionId: v2.id });
+    expect(switched.cacheKey).not.toBe(v1First.cacheKey);
+
+    // 旧版本缓存行保留且未被清除（仅相关记录失效，不是全量清空）
+    const v1Rows = await handle.db
+      .select()
+      .from(mediaEvidenceCaches)
+      .where(and(eq(mediaEvidenceCaches.workspaceId, created.workspaceId), eq(mediaEvidenceCaches.sourceAssetVersionId, created.version.id)));
+    expect(v1Rows).toHaveLength(1);
+    expect(v1Rows[0]).toMatchObject({ hitCount: 1, cacheKey: v1First.cacheKey });
   });
 });

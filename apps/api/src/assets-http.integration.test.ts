@@ -426,4 +426,17 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     const crossTenant = await owner.assets.mediaIndexRecords(memberWorkspaceId, memberAsset.id, { cursor: 0, limit: 1 }).catch((error: unknown) => error);
     expect(crossTenant).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
+
+  it('按服务端成员上下文复用范围证据并记录命中，跨租户无法读取缓存', async () => {
+    const owner = await newSignedInClient();
+    const workspaceId = await makeWorkspace(owner);
+    const uploaded = await owner.assets.upload(workspaceId, { assetType: 'USER_UPLOAD', filename: 'evidence.png', contentType: 'image/png', data: makePng(48, 48) });
+    const query = { consumer: 'SELECTION' as const, analysisConfigHash: 'e'.repeat(64), sourceStartPts: '0', sourceEndPts: '1000', timeBaseNumerator: 1, timeBaseDenominator: 1000 };
+    const first = await owner.assets.mediaEvidence(workspaceId, uploaded.id, query);
+    const second = await owner.assets.mediaEvidence(workspaceId, uploaded.id, query);
+    expect(first).toMatchObject({ cacheStatus: 'MISS', sourceAssetVersionId: uploaded.currentVersionId, usage: { hitCount: 0, analysisReadCount: 1, rangeReadCount: 1 } });
+    expect(second).toMatchObject({ cacheStatus: 'HIT', cacheKey: first.cacheKey, usage: { hitCount: 1, analysisReadCount: 1, rangeReadCount: 1 } });
+    const stranger = await newSignedInClient();
+    await expect(stranger.assets.mediaEvidence(workspaceId, uploaded.id, query)).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' });
+  });
 });

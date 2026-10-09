@@ -17,8 +17,9 @@ import {
   type VisualPlan,
   type VisualPlanItem,
 } from '@ancs/contracts';
-import { and, eq, inArray } from 'drizzle-orm';
-import { claims as claimsTable, scenes as scenesTable } from '@ancs/db';
+import { createHash } from 'node:crypto';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { assets, claims as claimsTable, scenes as scenesTable } from '@ancs/db';
 import { getBillingStatus } from './billing.js';
 import { getCurrentCatalog } from './catalog.js';
 import { resolveProviderRoute } from './credentials.js';
@@ -27,6 +28,7 @@ import { getPlan } from './narrative.js';
 import { getProject } from './projects.js';
 import { planVisual } from './visual-plan.js';
 import type { DomainDeps } from './channels.js';
+import { getMediaEvidenceBundle } from './media-evidence.js';
 
 /**
  * Director 服务（P04-05 / 规范 §9；计划 §8 P04-05）。
@@ -466,7 +468,7 @@ export async function checkBudget(
 /** 组装 Director 计划（不落库；多次调用结果一致）。 */
 export async function planDirector(
   deps: DomainDeps,
-  input: { workspaceId: string; projectId: string; planId: string; policy?: DirectorPolicyInput },
+  input: { workspaceId: string; projectId: string; planId: string; policy?: DirectorPolicyInput; evidencePermissionContext?: string },
 ): Promise<DirectorPlan> {
   const plan = await getPlan(deps, { workspaceId: input.workspaceId, projectId: input.projectId, planId: input.planId });
   const visual = await planVisual(deps, input);
@@ -478,6 +480,12 @@ export async function planDirector(
   const budget = await checkBudget(deps, { workspaceId: input.workspaceId });
   const warnings = [...sceneWarnings, ...jobWarnings, ...budget.warnings];
   const estimatedDurationMs = scenes.reduce((sum, scene) => sum + scene.durationMs, 0);
+  const projectAssets = await deps.db.select({ id: assets.id }).from(assets).where(and(eq(assets.workspaceId, input.workspaceId), eq(assets.projectId, input.projectId), isNull(assets.deletedAt))).orderBy(asc(assets.createdAt), asc(assets.id)).limit(20);
+  const directorConfigHash = createHash('sha256').update(`director-media-evidence\0${DIRECTOR_PLAN_VERSION}`).digest('hex');
+  const mediaEvidence = await Promise.all(projectAssets.map(async (asset) => {
+    const bundle = await getMediaEvidenceBundle(deps, { workspaceId: input.workspaceId, assetId: asset.id, permissionContext: input.evidencePermissionContext ?? `${input.workspaceId}:system:DIRECTOR`, request: { consumer: 'DIRECTOR', analysisConfigHash: directorConfigHash } });
+    return { assetId: asset.id, sourceAssetVersionId: bundle.sourceAssetVersionId, cacheStatus: bundle.cacheStatus, recordIds: bundle.page.items.map((item) => item.id).slice(0, 100), whyFetched: bundle.whyFetched };
+  }));
 
   const chartScenes = scenes.filter((scene) => CHART_SCENE_TYPES.has(scene.sceneType)).length;
   const degradedScenes = scenes.filter((scene) => scene.degraded).length;
@@ -501,6 +509,7 @@ export async function planDirector(
     scenes,
     assetPlan,
     providerJobs: jobs,
+    mediaEvidence,
     estimatedDurationMs,
     estimatedCost: cost,
     warnings,

@@ -23,6 +23,8 @@ import {
   mediaIndexQuerySchema,
   unifiedMediaIndexPageSchema,
   unifiedMediaIndexQuerySchema,
+  mediaEvidenceBundleSchema,
+  mediaEvidenceRequestSchema,
   mediaAnalysisGraphSchema,
   mediaAnalysisStageNameSchema,
   rebuildMediaAnalysisStageRequestSchema,
@@ -60,6 +62,7 @@ import {
   rebuildMediaProxy,
   listMediaIndex,
   listUnifiedMediaIndex,
+  getMediaEvidenceBundle,
   getMediaAnalysisGraph,
   rebuildMediaAnalysisStage,
   cancelMediaAnalysisStage,
@@ -267,6 +270,30 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         workspaceId: request.params.id,
         assetId: request.params.assetId,
         query: request.query,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/assets/:assetId/media-evidence',
+    {
+      schema: {
+        tags: ['assets'],
+        summary: '按 Director、选区或参考分析上下文复用已授权的范围证据',
+        params: assetParamsSchema,
+        querystring: mediaEvidenceRequestSchema,
+        response: { 200: mediaEvidenceBundleSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request, reply) => {
+      const { context, membership } = await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      reply.header('cache-control', 'private, no-store');
+      reply.header('vary', 'authorization, cookie');
+      return getMediaEvidenceBundle(domain, {
+        workspaceId: request.params.id,
+        assetId: request.params.assetId,
+        permissionContext: `${request.params.id}:${context.userId}:${membership.role}:workspace:read`,
+        request: request.query,
       });
     },
   );
