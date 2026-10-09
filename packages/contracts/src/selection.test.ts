@@ -74,8 +74,9 @@ describe('几何选择契约（点/线/面）', () => {
   });
 
   it('工作区/来源/目标：SOURCE 与 DESTINATION 必须成对，且不能压成单点', () => {
-    const source = polyline([{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }], 'SOURCE');
-    const destination = polyline([{ x: 0.7, y: 0.7 }, { x: 0.8, y: 0.8 }], 'DESTINATION');
+    // 集合级校验作用于**解析后的**几何（default 已填充），因此这里显式 parse
+    const source = geometrySelectionSchema.parse(polyline([{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }], 'SOURCE'));
+    const destination = geometrySelectionSchema.parse(polyline([{ x: 0.7, y: 0.7 }, { x: 0.8, y: 0.8 }], 'DESTINATION'));
     expect(geometrySetIssues([source, destination])).toEqual([]);
     expect(geometrySetIssues([source])[0]).toContain('SOURCE/DESTINATION');
     expect(geometrySelectionSchema.safeParse(point(0.1, 0.1, 'SOURCE')).success).toBe(false); // 单点不能当指示线
