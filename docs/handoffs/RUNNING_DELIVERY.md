@@ -17,7 +17,7 @@
 |---|---|
 | 已完成任务 | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、N15-01/02、N16-01/02 = **47/219（21.46%）** |
 | 剩余 | 172 项 |
-| 本地 `pnpm verify` | 14/14（断言总数见各任务验证文档；最近一次 1141/1141） |
+| 本地 `pnpm verify` | **14/14，1141/1141**（2026-10-10 实测；unit 436 / integration 471） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
@@ -28,7 +28,7 @@
 ### 2026-10-10 · N04-09 SelectionAnchor 归一与旧 Attention 兼容
 - **内容：** 规范 `SelectionAnchor`（几何 × 时间 × 轨道 × 属性 × 区域模式 × 发话时间 + 目标顺序引用与版本 + 解析状态/证据/重映射历史/指纹）持久化为**追加式修订日志**（迁移 0079，行主键 = workspace+project+anchorId+revision）；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经适配器**解析一次**且不丢有理时基；越权与"帧哈希当身份"被拒；重映射把失效选择标成 FAILED／PARTIAL／AMBIGUOUS（附候选证据）／STALE 并记 `remapHistory`；保存锚点**不改工程**（不写 edit_events、不动 revision）。
 - **证据：** `docs/verification/N04-09.md`（4 项集成用例）· `docs/handoffs/N04-09.md`
-- **提交：** 见文末提交序列
+- **提交：** `d7aacea`　**verify：** 14/14（Unit 436 / Web 170 / Motion 19 / Integration 471 / Security 24 / Render 6 / Golden 15 ⇒ **1141/1141**）
 
 ### 2026-10-10 · 增量设计首批契约（N04-09-s1）
 - **内容：** `packages/contracts/src/selection.ts`：`GeometrySelection`（点/线/矩形/多边形/笔刷 × 用途）、`SelectionAnchor` 增量、`IntentRevision` 状态机、`legacySelection` 适配器、指纹输入纯函数；8 项契约单测。
@@ -116,5 +116,6 @@ a76dc66  fix(ci) CI 安装 FFmpeg + 真实媒体用例归 integration
 7881bf9  feat(n03-09) 范围编辑最小 AI 入口 + 差距映射
 ec20a44  feat(n04-09-s1) 点线面 × 时间 × 意图统一契约
 969fe13  test(n04-09-s1) 修正集合级校验用例类型
-（N04-09 主体提交见下次追加）
+d7aacea  feat(n04-09) SelectionAnchor 归一/持久化/兼容/重映射 + CI 测试库守卫修正
+         （同批新增 docs/handoffs/RUNNING_DELIVERY.md 本文件）
 ```
