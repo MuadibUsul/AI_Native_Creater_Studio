@@ -16,8 +16,8 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut，N03-04 增补轨道控制与 AV 链接）', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(35);
+  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut，N03-04 增补轨道控制与 AV 链接，N03-05 增补变换/裁切/透明度）', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(38);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
     expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
@@ -39,6 +39,9 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(EDIT_OPERATION_TYPES).toContain('delete_track');
     expect(EDIT_OPERATION_TYPES).toContain('update_track');
     expect(EDIT_OPERATION_TYPES).toContain('set_av_link');
+    expect(EDIT_OPERATION_TYPES).toContain('set_clip_transform');
+    expect(EDIT_OPERATION_TYPES).toContain('set_clip_crop');
+    expect(EDIT_OPERATION_TYPES).toContain('set_clip_opacity');
     expect(EDIT_OPERATION_TYPES).toContain('update_animation');
     expect(EDIT_OPERATION_TYPES).toContain('update_audio_region');
   });
@@ -307,6 +310,10 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(EDIT_OPERATION_V2_REGISTRY.split_av_cut).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'split_av_cut' });
     // N03-04 起轨道生命周期与轨道控制同样是规范操作本身
     for (const operation of ['create_track', 'move_track', 'delete_track', 'update_track', 'set_av_link'] as const) {
+      expect(EDIT_OPERATION_V2_REGISTRY[operation]).toMatchObject({ resolution: 'NATIVE', canonicalOperation: operation });
+    }
+    // N03-05：变换/裁切/透明度同为由规范原语承载（参数化修改，不重生成镜头）
+    for (const operation of ['set_clip_transform', 'set_clip_crop', 'set_clip_opacity'] as const) {
       expect(EDIT_OPERATION_V2_REGISTRY[operation]).toMatchObject({ resolution: 'NATIVE', canonicalOperation: operation });
     }
     expect(EDIT_OPERATION_V2_REGISTRY.set_audio_gain).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_audio_region' });

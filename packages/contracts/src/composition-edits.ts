@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { compareMediaTime, mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { createTrackRequestSchema } from './composition.js';
+import { VISUAL_PARAMETER_SCHEMA_VERSION, visualCropSchema, visualTransformSchema } from './visual-transform.js';
 import {
   animationTargetKindSchema,
   audioChannelMappingSchema,
@@ -348,3 +349,33 @@ export const updateAudioRegionOperationSchema = z.object({
 
 export type UpdateClipChanges = z.infer<typeof updateClipChangesSchema>;
 export type UpdateAudioRegionChanges = z.infer<typeof updateAudioRegionChangesSchema>;
+
+/** N03-05 变换原语：位置/缩放/旋转/锚点（参数化修改，不触发镜头重生成）。 */
+export const setClipTransformOperationSchema = z.object({
+  op: z.literal('set_clip_transform'),
+  clipId: opaqueIdSchema,
+  transform: visualTransformSchema,
+}).strict();
+
+export type SetClipTransformOperation = z.infer<typeof setClipTransformOperationSchema>;
+
+/** N03-05 裁切原语：归一化四边裁切（必须留出非空可见区域）。 */
+export const setClipCropOperationSchema = z.object({
+  op: z.literal('set_clip_crop'),
+  clipId: opaqueIdSchema,
+  crop: visualCropSchema,
+}).strict();
+
+export type SetClipCropOperation = z.infer<typeof setClipCropOperationSchema>;
+
+/** N03-05 透明度原语。 */
+export const setClipOpacityOperationSchema = z.object({
+  op: z.literal('set_clip_opacity'),
+  clipId: opaqueIdSchema,
+  opacity: z.number().finite().min(0).max(1),
+}).strict();
+
+export type SetClipOpacityOperation = z.infer<typeof setClipOpacityOperationSchema>;
+
+/** 片段参数命名空间版本（与 visualParametersSchema 对齐，供迁移与客户端校验）。 */
+export { VISUAL_PARAMETER_SCHEMA_VERSION };

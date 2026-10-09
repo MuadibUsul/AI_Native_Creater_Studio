@@ -1,0 +1,1 @@
+ALTER TABLE "sequence_clips" ADD COLUMN "parameters" jsonb;

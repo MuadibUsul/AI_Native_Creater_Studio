@@ -12,6 +12,9 @@ import {
   audioRegionSchema,
   clipSchema,
   trackSchema,
+  visualCropSchema,
+  visualParametersSchema,
+  visualTransformSchema,
   compareMediaTime,
   legacyMillisecondsToMediaTime,
   mediaRangeSchema,
@@ -263,8 +266,12 @@ interface EventDraft {
   patch: Record<string, unknown>;
 }
 
-const clipSnapshot = (row: typeof sequenceClips.$inferSelect) => clipSchema.parse({
+/** 片段行（或由行派生的候选对象）：parameters 可缺省，快照时按缺省语义补全。 */
+type ClipRowLike = Omit<typeof sequenceClips.$inferSelect, 'parameters'> & { parameters?: unknown };
+
+const clipSnapshot = (row: ClipRowLike) => clipSchema.parse({
   ...row,
+  parameters: row.parameters === null || row.parameters === undefined ? undefined : visualParametersSchema.parse(row.parameters),
   createdAt: row.createdAt.toISOString(),
 });
 const trackSnapshot = (row: typeof sequenceTracks.$inferSelect) => trackSchema.parse({
@@ -480,11 +487,26 @@ async function splitClipRow(
     id: input.createdId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: input.row.sequenceId, trackId: input.row.trackId,
     assetVersionId: input.row.assetVersionId, nestedSequenceId: input.row.nestedSequenceId, sourceStreamId: input.row.sourceStreamId,
     sourceRange: rightSource, sequenceRange: input.rightRange, timeMapping: input.row.timeMapping, avGroupId: input.row.avGroupId,
+    parameters: input.row.parameters,
     // 右段是原片段的子片段（血缘可追溯）。
     parentClipId: input.row.id, createdAt: new Date(), updatedAt: new Date(),
   };
   await tx.insert(sequenceClips).values(rightRow);
   eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: rightRow.id, patch: { op: 'insert_clip', clipId: rightRow.id, after: clipSnapshot(rightRow) } });
+}
+
+/** N03-05：把局部变更合并进片段参数命名空间（保持其余参数与组件自定义 values 不变）。 */
+function nextVisualParameters(
+  current: unknown,
+  change: Partial<{ transform: unknown; crop: unknown; opacity: number }>,
+): ReturnType<typeof visualParametersSchema.parse> {
+  const base = visualParametersSchema.parse(current ?? {});
+  return visualParametersSchema.parse({
+    ...base,
+    ...(change.transform === undefined ? {} : { transform: change.transform }),
+    ...(change.crop === undefined ? {} : { crop: change.crop }),
+    ...(change.opacity === undefined ? {} : { opacity: change.opacity }),
+  });
 }
 
 /** 轨道重排的两阶段写入：先整体偏移再落位，避免 (sequence_id, position) 唯一索引的瞬时冲突。 */
@@ -1828,6 +1850,41 @@ async function applyEditsInTransaction(
           break;
         }
 
+        // N03-05：变换/裁切/透明度都是**参数化修改**——只改片段参数，不触发镜头重生成、不新增 Scene/Provider 任务。
+        case 'set_clip_transform': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['STYLE'] });
+          const before = clipSnapshot(row);
+          const parameters = nextVisualParameters(row.parameters, { transform: visualTransformSchema.parse(operation.transform) });
+          await tx.update(sequenceClips).set({ parameters, updatedAt: new Date() }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'SET_CLIP_TRANSFORM', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after: clipSnapshot({ ...row, parameters, updatedAt: new Date() }) } });
+          break;
+        }
+
+        case 'set_clip_crop': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['STYLE'] });
+          const before = clipSnapshot(row);
+          const crop = visualCropSchema.parse(operation.crop);
+          if (crop.left + crop.right >= 1 || crop.top + crop.bottom >= 1) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'crop must leave a non-empty visible area', 422, { reason: 'CROP_AREA_EMPTY' });
+          }
+          const parameters = nextVisualParameters(row.parameters, { crop });
+          await tx.update(sequenceClips).set({ parameters, updatedAt: new Date() }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'SET_CLIP_CROP', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after: clipSnapshot({ ...row, parameters, updatedAt: new Date() }) } });
+          break;
+        }
+
+        case 'set_clip_opacity': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['STYLE'] });
+          const before = clipSnapshot(row);
+          const parameters = nextVisualParameters(row.parameters, { opacity: operation.opacity });
+          await tx.update(sequenceClips).set({ parameters, updatedAt: new Date() }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'SET_CLIP_OPACITY', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after: clipSnapshot({ ...row, parameters, updatedAt: new Date() }) } });
+          break;
+        }
+
         case 'set_av_link': {
           const rows: (typeof sequenceClips.$inferSelect)[] = [];
           for (const clipId of operation.clipIds) {
@@ -2017,7 +2074,7 @@ async function applyEditsInTransaction(
             id: copyId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId,
             assetVersionId: row.assetVersionId, nestedSequenceId: row.nestedSequenceId, sourceStreamId: row.sourceStreamId,
             sourceRange: mediaRangeSchema.parse(row.sourceRange), sequenceRange: copyRange, timeMapping: row.timeMapping,
-            avGroupId: newGroupId, parentClipId: row.id, createdAt: new Date(), updatedAt: new Date(),
+            avGroupId: newGroupId, parentClipId: row.id, parameters: row.parameters, createdAt: new Date(), updatedAt: new Date(),
           };
           await tx.insert(sequenceClips).values(copyRow);
           eventDrafts.push({ action: 'DUPLICATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: copyRow.id, patch: { ...operation, after: clipSnapshot(copyRow) } });

@@ -103,6 +103,7 @@ const toClip = (row: typeof sequenceClips.$inferSelect): Clip => clipSchema.pars
   timeMapping: row.timeMapping,
   avGroupId: row.avGroupId,
   parentClipId: row.parentClipId,
+  ...(row.parameters === null || row.parameters === undefined ? {} : { parameters: row.parameters }),
   createdAt: row.createdAt.toISOString(),
 });
 

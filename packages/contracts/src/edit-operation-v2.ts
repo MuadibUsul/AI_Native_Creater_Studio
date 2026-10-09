@@ -5,6 +5,9 @@ import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versioned
 import { clipTimeMappingSchema } from './composition.js';
 import {
   createTrackOperationSchema,
+  setClipCropOperationSchema,
+  setClipOpacityOperationSchema,
+  setClipTransformOperationSchema,
   deleteClipOperationSchema,
   deleteTrackOperationSchema,
   duplicateClipOperationSchema,
@@ -119,9 +122,6 @@ export const setAudioAutomationSourceOperationSchema = z.object({
 }).strict();
 
 const plannedSchemas = {
-  set_clip_transform: z.object({ op: z.literal('set_clip_transform'), ...clipId, transform: versionedParametersSchema }).strict(),
-  set_clip_crop: z.object({ op: z.literal('set_clip_crop'), ...clipId, crop: versionedParametersSchema }).strict(),
-  set_clip_opacity: z.object({ op: z.literal('set_clip_opacity'), ...clipId, opacity: z.number().min(0).max(1) }).strict(),
   add_effect: z.object({ op: z.literal('add_effect'), targetKind: z.enum(['CLIP', 'VISUAL_OBJECT', 'AUDIO_REGION', 'TRACK']), targetId: opaqueIdSchema, effectType: z.string().min(1), effectVersion: z.string().min(1), parameters: versionedParametersSchema }).strict(),
   update_effect: z.object({ op: z.literal('update_effect'), effectId: opaqueIdSchema, parameters: versionedParametersSchema.optional(), enabled: z.boolean().optional() }).strict().refine((value) => value.parameters !== undefined || value.enabled !== undefined, 'update_effect requires changes'),
   remove_effect: z.object({ op: z.literal('remove_effect'), effectId: opaqueIdSchema }).strict(),
@@ -149,9 +149,9 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   roll_clip: rollClipOperationSchema,
   ripple_clip: rippleClipOperationSchema,
   split_av_cut: splitAvCutOperationSchema,
-  set_clip_transform: plannedSchemas.set_clip_transform,
-  set_clip_crop: plannedSchemas.set_clip_crop,
-  set_clip_opacity: plannedSchemas.set_clip_opacity,
+  set_clip_transform: setClipTransformOperationSchema,
+  set_clip_crop: setClipCropOperationSchema,
+  set_clip_opacity: setClipOpacityOperationSchema,
   set_clip_speed: setClipSpeedSourceOperationSchema,
   add_effect: plannedSchemas.add_effect,
   update_effect: plannedSchemas.update_effect,
@@ -238,9 +238,10 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   roll_clip: native('roll_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
   ripple_clip: native('ripple_clip', ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
   split_av_cut: native('split_av_cut', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-03_NATIVE_INTEGRATION']),
-  set_clip_transform: planned('set_clip_transform', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
-  set_clip_crop: planned('set_clip_crop', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
-  set_clip_opacity: planned('set_clip_opacity', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
+  // N03-05：变换/裁切/透明度由规范原语直接承载（参数化修改，不重生成镜头）
+  set_clip_transform: native('set_clip_transform', ['CLIP'], ['CLIP'], ['CLIP'], ['N01-11_CONTRACT', 'N03-05_NATIVE_INTEGRATION']),
+  set_clip_crop: native('set_clip_crop', ['CLIP'], ['CLIP'], ['CLIP'], ['N01-11_CONTRACT', 'N03-05_NATIVE_INTEGRATION']),
+  set_clip_opacity: native('set_clip_opacity', ['CLIP'], ['CLIP'], ['CLIP'], ['N01-11_CONTRACT', 'N03-05_NATIVE_INTEGRATION']),
   set_clip_speed: alias('set_clip_speed', 'update_clip', ['CLIP'], ['CLIP'], ['CLIP'], { limitations: ['CONSTANT_LINEAR_REVERSE_ONLY'], plannedTask: 'N11-02' }),
   add_effect: planned('add_effect', 'EDIT', ['EFFECT_INSTANCE'], 'N03-05'),
   update_effect: planned('update_effect', 'EDIT', ['EFFECT_INSTANCE'], 'N03-05'),

@@ -11,6 +11,8 @@ import {
   mediaTimeSchema,
   objectLockKindSchema,
   trackSchema,
+  visualCropSchema,
+  visualTransformSchema,
   type EditOperation,
   type EditRequest,
   type ObjectLockDimension,
@@ -92,6 +94,10 @@ interface StoredPatch {
   restoreTrackId?: unknown;
   nonEmptyPolicy?: unknown;
   destinationTrackId?: unknown;
+  /** N03-05 变换参数 */
+  transform?: unknown;
+  crop?: unknown;
+  opacity?: unknown;
 }
 
 interface SceneMeta {
@@ -370,6 +376,12 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
       const before = clipSchema.parse(patch.before);
       return { op: 'set_av_link', linked: patch.linked === true, clipIds: [before.id] };
     }
+    case 'SET_CLIP_TRANSFORM':
+      return { op: 'set_clip_transform', clipId: String(patch.clipId ?? event.objectId ?? ''), transform: visualTransformSchema.parse(patch.transform) };
+    case 'SET_CLIP_CROP':
+      return { op: 'set_clip_crop', clipId: String(patch.clipId ?? event.objectId ?? ''), crop: visualCropSchema.parse(patch.crop) };
+    case 'SET_CLIP_OPACITY':
+      return { op: 'set_clip_opacity', clipId: String(patch.clipId ?? event.objectId ?? ''), opacity: Number(patch.opacity ?? 1) };
     case 'UPDATE_CLIP': {
       const after = clipSchema.parse(patch.after);
       return { op: 'update_clip', clipId: after.id, changes: {
@@ -536,6 +548,18 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
     case 'DUPLICATE_CLIP':
       // 逆操作：删除复制出来的片段（源二进制从未被触碰，无需回滚原件）。
       return [{ op: 'delete_clip', clipId: event.objectId ?? '' }];
+    case 'SET_CLIP_TRANSFORM': {
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'set_clip_transform', clipId: before.id, transform: (before.parameters ?? { transform: undefined }).transform ?? { position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotationDeg: 0, anchor: { x: 0.5, y: 0.5 } } }];
+    }
+    case 'SET_CLIP_CROP': {
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'set_clip_crop', clipId: before.id, crop: (before.parameters ?? { crop: undefined }).crop ?? { left: 0, top: 0, right: 0, bottom: 0 } }];
+    }
+    case 'SET_CLIP_OPACITY': {
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'set_clip_opacity', clipId: before.id, opacity: (before.parameters ?? { opacity: 1 }).opacity ?? 1 }];
+    }
     case 'CREATE_TRACK':
       // 逆操作：删除新建轨道（非空时由调用方先处理片段，事件粒度）。
       return [{ op: 'delete_track', trackId: event.objectId ?? '', nonEmptyPolicy: 'REJECT', destinationTrackId: null }];

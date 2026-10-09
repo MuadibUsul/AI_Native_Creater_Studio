@@ -263,7 +263,24 @@ export {
   createSequenceRequestSchema,
   createTrackRequestSchema,
   createClipRequestSchema,
+  visualParametersSchema,
 } from './composition.js';
+export {
+  DEFAULT_VISUAL_PARAMETERS,
+  VISUAL_KEYFRAME_PATHS,
+  VISUAL_PARAMETER_SCHEMA_VERSION,
+  hitTestVisualObject,
+  invertVisualPoint,
+  projectVisualPoint,
+  visualAnchorSchema,
+  visualCropSchema,
+  visualKeyframePathSchema,
+  visualOffsetSchema,
+  visualParametersSchema as visualParametersNamespaceSchema,
+  visualScaleSchema,
+  visualTransformSchema,
+} from './visual-transform.js';
+export type { VisualCrop, VisualKeyframePath, VisualParameters, VisualPoint, VisualTransform, VisualViewport } from './visual-transform.js';
 export {
   TIME_BINDING_BASES,
   VISUAL_OBJECT_KINDS,
@@ -478,11 +495,14 @@ export {
   trackChangesSchema,
   updateTrackOperationSchema,
   setAvLinkOperationSchema,
+  setClipTransformOperationSchema,
+  setClipCropOperationSchema,
+  setClipOpacityOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

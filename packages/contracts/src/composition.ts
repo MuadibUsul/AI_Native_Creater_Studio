@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { visualParametersSchema } from './visual-transform.js';
+export { visualParametersSchema };
 import { opaqueIdSchema } from './common/ids.js';
 import { frameRateSchema, mediaRangeSchema, mediaTimeSchema, rationalSchema } from './common/media-time.js';
 import { isoDateTimeSchema } from './common/time.js';
@@ -58,6 +60,8 @@ export const clipSchema = z.object({
   timeMapping: clipTimeMappingSchema,
   avGroupId: opaqueIdSchema.nullable().default(null),
   parentClipId: opaqueIdSchema.nullable().default(null),
+  /** N03-05：可编辑变换/裁切/透明度参数（缺省即旧语义：无位移、无缩放、无裁切、不透明）。 */
+  parameters: visualParametersSchema.optional(),
   createdAt: isoDateTimeSchema,
 }).superRefine((value, context) => {
   if ((value.assetVersionId === null) === (value.nestedSequenceId === null)) {

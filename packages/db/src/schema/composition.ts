@@ -67,6 +67,8 @@ export const sequenceClips = pgTable(
     sequenceRange: jsonb('sequence_range').notNull(),
     timeMapping: jsonb('time_mapping').notNull(),
     avGroupId: text('av_group_id'),
+    /** N03-05 可编辑变换与基础关键帧：片段参数命名空间（默认值保证旧片段语义不变） */
+    parameters: jsonb('parameters'),
     /** Domain validated parent-child relation; clip rows are otherwise append-only in N01-03. */
     parentClipId: text('parent_clip_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

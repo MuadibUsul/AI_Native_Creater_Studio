@@ -221,6 +221,10 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       }];
     case 'set_av_link':
       return operation.clipIds.map((clipId) => ({ objectKind: 'CLIP' as const, objectId: clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }));
+    case 'set_clip_transform':
+    case 'set_clip_crop':
+    case 'set_clip_opacity':
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['STYLE']), direct: true, via: null }];
     case 'split_av_cut':
       return [
         { objectKind: 'CLIP', objectId: operation.videoClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
@@ -418,6 +422,9 @@ export function validateEditOperationCandidate(input: {
       case 'roll_clip':
       case 'ripple_clip':
       case 'split_av_cut':
+      case 'set_clip_transform':
+      case 'set_clip_crop':
+      case 'set_clip_opacity':
       case 'create_track':
       case 'move_track':
       case 'delete_track':
