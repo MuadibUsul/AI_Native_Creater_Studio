@@ -540,6 +540,14 @@ export {
   scheduleMediaVisualAnalysisInTx,
 } from './media-visual-analysis.js';
 export {
+  MEDIA_AUDIO_ANALYSIS_CONFIG_HASH,
+  beginMediaAudioAnalysis,
+  completeMediaAudioAnalysis,
+  failMediaAudioAnalysis,
+  retryMediaAudioAnalysis,
+  scheduleMediaAudioAnalysisInTx,
+} from './media-audio-analysis.js';
+export {
   assertProjectVersionAssetRights,
   getAssetLifecycle,
   listAssetReferences,

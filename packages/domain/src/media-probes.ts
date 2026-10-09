@@ -6,6 +6,7 @@ import { scheduleMediaProxyInTx } from './media-proxies.js';
 import { scheduleMediaIndexInTx } from './media-index.js';
 import { scheduleMediaTranscriptInTx } from './media-transcripts.js';
 import { scheduleMediaVisualAnalysisInTx } from './media-visual-analysis.js';
+import { scheduleMediaAudioAnalysisInTx } from './media-audio-analysis.js';
 
 export async function beginAssetMediaProbe(
   deps: DomainDeps,
@@ -121,6 +122,13 @@ export async function completeAssetMediaProbe(
         sourceAsset: row.asset,
         sourceVersion: row.version,
         hasVideo: result.streams.some((stream) => stream.type === 'VIDEO'),
+      });
+      await scheduleMediaAudioAnalysisInTx(tx, {
+        workspaceId: input.workspaceId,
+        projectId: row.asset.projectId,
+        sourceAsset: row.asset,
+        sourceVersion: row.version,
+        hasAudio: result.streams.some((stream) => stream.type === 'AUDIO'),
       });
     }
     return { status, durationMs, width: video?.width ?? null, height: video?.height ?? null };

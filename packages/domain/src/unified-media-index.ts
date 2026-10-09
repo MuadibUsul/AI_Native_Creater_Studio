@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,
   MEDIA_INDEX_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
@@ -93,6 +94,7 @@ export async function listUnifiedMediaIndex(
   ]);
   const indexRun = indexRunRows.find((run) => run.processorVersion === MEDIA_INDEX_PROCESSOR_VERSION);
   const visualRun = indexRunRows.find((run) => run.processorVersion === MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION);
+  const audioRun = indexRunRows.find((run) => run.processorVersion === MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION);
   const transcriptRun = transcriptRunRows[0];
   const [indexEntries, transcriptVersionRows] = await Promise.all([
     indexRunRows.length === 0 ? Promise.resolve([]) : deps.db.select().from(mediaIndexEntries).where(and(
@@ -201,6 +203,7 @@ export async function listUnifiedMediaIndex(
   const legacyKinds = new Set<UnifiedMediaIndexKind>(['THUMBNAIL', 'WAVEFORM', 'QUALITY', 'SHOT_BOUNDARY']);
   const transcriptKinds = new Set<UnifiedMediaIndexKind>(['TRANSCRIPT_WORD', 'TRANSCRIPT_SEGMENT', 'SPEAKER_SEGMENT']);
   const visualKinds = new Set<UnifiedMediaIndexKind>(['OBJECT_TRACK', 'ACTION_EVENT', 'PERSON_TRACK', 'VISUAL_EVENT', 'MOTION_INTENSITY']);
+  const audioKinds = new Set<UnifiedMediaIndexKind>(['AUDIO_EVENT', 'MUSIC_BEAT']);
   const supportedLegacy = new Set((indexRun?.supportedKinds as string[] | undefined) ?? []);
   const capabilities = UNIFIED_MEDIA_INDEX_KINDS.map((kind): MediaIndexCapability => {
     const count = counts.get(kind) ?? 0;
@@ -222,6 +225,12 @@ export async function listUnifiedMediaIndex(
       const status = statusForRun(visualRun?.status, count);
       const firstRecord = records.find((record) => record.kind === kind);
       return { kind, supported: true, status, coveragePermille: visualRun?.coveragePermille ?? 0, recordCount: count, errorSummary: visualRun?.errorSummary ?? null, toolId: visualRun?.toolId ?? 'visual-analysis-adapter', toolVersion: visualRun?.toolVersion ?? MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, modelVersion: firstRecord?.modelVersion ?? null };
+    }
+    if (audioKinds.has(kind)) {
+      if (audioStream === undefined) return { kind, supported: false, status: 'UNSUPPORTED', coveragePermille: 0, recordCount: 0, errorSummary: null, toolId: null, toolVersion: null, modelVersion: null };
+      const status = statusForRun(audioRun?.status, count);
+      const firstRecord = records.find((record) => record.kind === kind);
+      return { kind, supported: true, status, coveragePermille: audioRun?.coveragePermille ?? 0, recordCount: count, errorSummary: audioRun?.errorSummary ?? null, toolId: audioRun?.toolId ?? 'audio-analysis-adapter', toolVersion: audioRun?.toolVersion ?? MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION, modelVersion: firstRecord?.modelVersion ?? null };
     }
     return { kind, supported: false, status: 'UNSUPPORTED', coveragePermille: 0, recordCount: 0, errorSummary: null, toolId: null, toolVersion: null, modelVersion: null };
   });

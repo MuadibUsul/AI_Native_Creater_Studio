@@ -98,13 +98,17 @@ export async function searchMediaSegments(deps: DomainDeps, input: { workspaceId
     const payloadLabels = Object.values(payload).flatMap((value) => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
     const label = ['OBJECT_TRACK', 'ACTION_EVENT', 'PERSON_TRACK', 'VISUAL_EVENT'].includes(row.entry.kind)
       ? String(payload['label'] ?? '视觉候选')
+      : row.entry.kind === 'AUDIO_EVENT'
+        ? String(payload['label'] ?? '音频事件')
+        : row.entry.kind === 'MUSIC_BEAT'
+          ? `${payload['downbeat'] === true ? '音乐重拍' : '音乐节拍'}${typeof payload['bpm'] === 'number' ? ` ${String(payload['bpm'])} BPM` : ''}`
       : row.entry.kind === 'MOTION_INTENSITY'
         ? `运动强度 ${String(payload['valuePermille'] ?? '')}`.trim()
         : row.entry.kind === 'SHOT' ? `镜头 ${String(row.entry.ordinal + 1)}` : row.entry.kind === 'QUALITY' ? String(payload['marker'] ?? '质量标记') : row.entry.kind === 'WAVEFORM' ? '音频波形' : `缩略图 ${String(row.entry.ordinal + 1)}`;
     const matchedTerms = matchConcept(request.q, [label, ...payloadLabels]);
     if (matchedTerms.length === 0) continue;
     const score = normalize(label) === normalize(request.q) ? 260 : normalize(label).includes(normalize(request.q)) ? 230 : 200;
-    results.push({ id: resultId('index', row.entry.id), assetId: row.asset.id, sourceAssetVersionId: row.run.sourceAssetVersionId, modality: row.entry.kind === 'WAVEFORM' || payload['marker'] === 'SILENCE' ? 'AUDIO' : 'VISUAL', evidence: row.entry.basis === 'MODEL_INFERRED' ? 'INFERENCE' : 'OBSERVATION', label, sourceStartPts: row.entry.sourceStartPts, sourceEndPts: row.entry.sourceEndPts, timeBase: { numerator: row.entry.timeBaseNumerator, denominator: row.entry.timeBaseDenominator }, matchedTerms, confidencePermille: row.entry.confidencePermille, contentTreatment: 'REFERENCE_DATA_ONLY', score });
+    results.push({ id: resultId('index', row.entry.id), assetId: row.asset.id, sourceAssetVersionId: row.run.sourceAssetVersionId, modality: ['WAVEFORM', 'AUDIO_EVENT', 'MUSIC_BEAT'].includes(row.entry.kind) || payload['marker'] === 'SILENCE' ? 'AUDIO' : 'VISUAL', evidence: row.entry.basis === 'MODEL_INFERRED' ? 'INFERENCE' : 'OBSERVATION', label, sourceStartPts: row.entry.sourceStartPts, sourceEndPts: row.entry.sourceEndPts, timeBase: { numerator: row.entry.timeBaseNumerator, denominator: row.entry.timeBaseDenominator }, matchedTerms, confidencePermille: row.entry.confidencePermille, contentTreatment: 'REFERENCE_DATA_ONLY', score });
   }
 
   results.sort((a, b) => {

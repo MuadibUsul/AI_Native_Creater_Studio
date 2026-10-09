@@ -10,6 +10,8 @@ export { createMediaTranscriptHandler } from './media-transcript-handler.js';
 export { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
 export { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
 export { createProcessMediaVisualAnalysisAdapter } from './visual-analysis-process.js';
+export { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';
+export { createProcessMediaAudioAnalysisAdapter } from './audio-analysis-process.js';
 export { createDomainDeps, workerHandlerTypes } from './domain.js';
 export { executeJob } from './runner.js';
 export { createHttpResultFetcher } from './fetcher.js';

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, type MediaVisualAnalysisAdapter, type SpeechRecognitionAdapter } from '@ancs/contracts';
+import { MEDIA_AUDIO_ANALYSIS_JOB_TYPE, MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION, MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, type MediaAudioAnalysisAdapter, type MediaVisualAnalysisAdapter, type SpeechRecognitionAdapter } from '@ancs/contracts';
 import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
 import { assets, assetVersions, createDb, jobs, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
@@ -91,6 +91,33 @@ async function executeVisual(adapter?: MediaVisualAnalysisAdapter) {
   const job = await claimJob(deps(), { workerId: 'vision', leaseSeconds: 120, types: [MEDIA_VISUAL_ANALYSIS_JOB_TYPE] });
   expect(job).not.toBeNull();
   const outcome = await executeJob(deps(), createDefaultRegistry({ mediaVisualAnalysisAdapter: adapter }), { workerId: 'vision', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
+  return { job: job!, outcome };
+}
+
+const audioAdapter: MediaAudioAnalysisAdapter = {
+  kind: 'n02-13-scripted-audio-test-seam',
+  async analyze() {
+    const timeBase = { numerator: 1, denominator: 48_000 };
+    const evidence = (start: string, end: string) => ({ sourceStartPts: start, sourceEndPts: end, timeBase, windowRef: `fixture-audio:${start}-${end}` });
+    return {
+      schemaVersion: '1.0' as const, processorVersion: MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION, adapter: 'scripted-test-only', modelVersion: 'fixture-audio-v1', durationMs: 4000,
+      audioEvents: [
+        { id: 'applause-1', eventType: 'APPLAUSE' as const, label: '拍手', channel: null, confidencePermille: 880, evidenceWindows: [evidence('12000', '36000')], sourceStartPts: '12000', sourceEndPts: '36000', timeBase, streamIndex: 1 },
+        { id: 'ambient-1', eventType: 'AMBIENT' as const, label: '室内环境声', channel: 0, confidencePermille: 650, evidenceWindows: [evidence('0', '12000')], sourceStartPts: '0', sourceEndPts: '12000', timeBase, streamIndex: 1 },
+        { id: 'music-1', eventType: 'MUSIC' as const, label: '音乐', channel: null, confidencePermille: 820, evidenceWindows: [evidence('48000', '192000')], sourceStartPts: '48000', sourceEndPts: '192000', timeBase, streamIndex: 1 },
+      ],
+      musicBeats: [
+        { id: 'beat-1', musicSegmentId: 'music-1', beatOrdinal: 0, downbeat: true, tempoBpm: 120, channel: null, confidencePermille: 800, evidenceWindows: [evidence('48000', '49000')], sourceStartPts: '48000', sourceEndPts: '49000', timeBase, streamIndex: 1 },
+        { id: 'beat-2', musicSegmentId: 'music-1', beatOrdinal: 1, downbeat: false, tempoBpm: 96, channel: null, confidencePermille: 760, evidenceWindows: [evidence('96000', '97000')], sourceStartPts: '96000', sourceEndPts: '97000', timeBase, streamIndex: 1 },
+      ],
+    };
+  },
+};
+
+async function executeAudio(adapter?: MediaAudioAnalysisAdapter) {
+  const job = await claimJob(deps(), { workerId: 'audio-analysis', leaseSeconds: 120, types: [MEDIA_AUDIO_ANALYSIS_JOB_TYPE] });
+  expect(job).not.toBeNull();
+  const outcome = await executeJob(deps(), createDefaultRegistry({ mediaAudioAnalysisAdapter: adapter }), { workerId: 'audio-analysis', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
   return { job: job!, outcome };
 }
 
@@ -254,5 +281,25 @@ describe('N02-12 visual action and track evidence', () => {
     expect(JSON.stringify(index.items)).not.toContain('张三');
     const found = await searchMediaSegments(deps(), { workspaceId: created.workspaceId, query: '举起手机' });
     expect(found.items[0]).toMatchObject({ assetId: created.assetId, modality: 'VISUAL', evidence: 'INFERENCE', label: '举起手机', sourceStartPts: '200', sourceEndPts: '800', contentTreatment: 'REFERENCE_DATA_ONLY' });
+  });
+});
+
+describe('N02-13 audio events, beats and audiovisual correlation', () => {
+  it('keeps audio stream PTS, correlates applause with visual evidence, and preserves changing tempo without modifying source audio', { timeout: 120_000 }, async () => {
+    const created = await uploadAndProbe();
+    const sourceBefore = await storage.probeObject(created.version.storageKey);
+    expect((await executeVisual(visualAdapter)).outcome).toBe('succeeded');
+    expect((await executeAudio(audioAdapter)).outcome).toBe('succeeded');
+    const index = await listUnifiedMediaIndex(deps(), { ...created, query: { sourceStartPts: '0', sourceEndPts: '192000', timeBaseNumerator: 1, timeBaseDenominator: 48000, limit: 100 } });
+    const applause = index.items.find((item) => item.kind === 'AUDIO_EVENT' && (item.payload as { eventType?: string }).eventType === 'APPLAUSE');
+    expect(applause).toMatchObject({ streamId: 'audio:1', sourceRange: { startPts: '12000', endPts: '36000', timeBase: { numerator: 1, denominator: 48000 } }, basis: 'MODEL_INFERRED', payload: { label: '拍手', relatedVisualRecordIds: expect.arrayContaining([expect.stringMatching(/^mie_/)]) }, evidenceRefs: expect.arrayContaining([expect.objectContaining({ type: 'AUDIO_WINDOW' }), expect.objectContaining({ type: 'RECORD' })]) });
+    expect(index.items.filter((item) => item.kind === 'MUSIC_BEAT').map((item) => (item.payload as { bpm: number }).bpm)).toEqual([120, 96]);
+    expect(index.capabilities.find((item) => item.kind === 'AUDIO_EVENT')).toMatchObject({ supported: true, status: 'READY', recordCount: 3 });
+    expect(index.capabilities.find((item) => item.kind === 'MUSIC_BEAT')).toMatchObject({ supported: true, status: 'READY', recordCount: 2 });
+    const found = await searchMediaSegments(deps(), { workspaceId: created.workspaceId, query: '拍手' });
+    expect(found.items[0]).toMatchObject({ assetId: created.assetId, modality: 'AUDIO', evidence: 'INFERENCE', label: '拍手', sourceStartPts: '12000', sourceEndPts: '36000', timeBase: { numerator: 1, denominator: 48000 }, contentTreatment: 'REFERENCE_DATA_ONLY' });
+    const graph = await getMediaAnalysisGraph(deps(), created);
+    expect(graph.stages.find((stage) => stage.stage === 'AUDIO')).toMatchObject({ status: 'READY', reusable: true });
+    expect(await storage.probeObject(created.version.storageKey)).toEqual(sourceBefore);
   });
 });

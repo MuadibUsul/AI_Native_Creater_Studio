@@ -6,7 +6,7 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MediaVisualAnalysisAdapter, MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
+import type { MediaAudioAnalysisAdapter, MediaVisualAnalysisAdapter, MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
@@ -16,6 +16,7 @@ import { createMediaProxyHandler } from './media-proxy-handler.js';
 import { createMediaIndexHandler } from './media-index-handler.js';
 import { createMediaTranscriptHandler } from './media-transcript-handler.js';
 import { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
+import { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -125,6 +126,8 @@ export interface DefaultRegistryOptions {
   speechRecognitionAdapter?: SpeechRecognitionAdapter;
   /** 源视频视觉分析适配器；未配置时仍形成可见失败，不编造检测结果。 */
   mediaVisualAnalysisAdapter?: MediaVisualAnalysisAdapter;
+  /** 源音频事件与节拍分析适配器；未配置时形成可见失败且不修改原音。 */
+  mediaAudioAnalysisAdapter?: MediaAudioAnalysisAdapter;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -147,5 +150,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   if (options.sourceMediaIndexer !== undefined) handlers.push(createMediaIndexHandler({ indexer: options.sourceMediaIndexer }));
   handlers.push(createMediaTranscriptHandler({ adapter: options.speechRecognitionAdapter }));
   handlers.push(createMediaVisualAnalysisHandler({ adapter: options.mediaVisualAnalysisAdapter }));
+  handlers.push(createMediaAudioAnalysisHandler({ adapter: options.mediaAudioAnalysisAdapter }));
   return new JobHandlerRegistry(handlers);
 }

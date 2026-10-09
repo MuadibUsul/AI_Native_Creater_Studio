@@ -3,6 +3,8 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  MEDIA_AUDIO_ANALYSIS_JOB_TYPE,
+  MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,
   MEDIA_ANALYSIS_STAGES,
   MEDIA_INDEX_ANALYSIS_CONFIG_HASH,
   MEDIA_INDEX_PROCESSOR_VERSION,
@@ -24,6 +26,7 @@ import { rebuildMediaIndex } from './media-index.js';
 import { rebuildMediaProxy } from './media-proxies.js';
 import { retryMediaTranscript } from './media-transcripts.js';
 import { MEDIA_VISUAL_ANALYSIS_CONFIG_HASH, retryMediaVisualAnalysis } from './media-visual-analysis.js';
+import { MEDIA_AUDIO_ANALYSIS_CONFIG_HASH, retryMediaAudioAnalysis } from './media-audio-analysis.js';
 
 const dependencies: Record<MediaAnalysisStageName, MediaAnalysisStageName[]> = {
   PROBE: [], PROXY: ['PROBE'], WAVEFORM: ['PROBE'], ASR: ['PROBE'], SHOT: ['PROBE'],
@@ -36,9 +39,10 @@ defaultConfig.SHOT = MEDIA_INDEX_ANALYSIS_CONFIG_HASH;
 defaultConfig.ASR = createHash('sha256').update(MEDIA_TRANSCRIPT_PROCESSOR_VERSION).digest('hex');
 defaultConfig.SAMPLING = MEDIA_VISUAL_ANALYSIS_CONFIG_HASH;
 defaultConfig.VISION = MEDIA_VISUAL_ANALYSIS_CONFIG_HASH;
+defaultConfig.AUDIO = MEDIA_AUDIO_ANALYSIS_CONFIG_HASH;
 
 const stableId = (versionId: string, stage: MediaAnalysisStageName): string => `mas_${createHash('sha256').update(`${versionId}\0${stage}`).digest('hex').slice(0, 24)}`;
-const stageForJob = (stage: MediaAnalysisStageName): string | null => stage === 'PROBE' ? 'ASSET_MEDIA_PROBE' : stage === 'PROXY' ? 'MEDIA_PROXY' : stage === 'WAVEFORM' || stage === 'SHOT' ? 'MEDIA_INDEX' : stage === 'ASR' ? 'MEDIA_TRANSCRIPT' : stage === 'SAMPLING' || stage === 'VISION' ? MEDIA_VISUAL_ANALYSIS_JOB_TYPE : null;
+const stageForJob = (stage: MediaAnalysisStageName): string | null => stage === 'PROBE' ? 'ASSET_MEDIA_PROBE' : stage === 'PROXY' ? 'MEDIA_PROXY' : stage === 'WAVEFORM' || stage === 'SHOT' ? 'MEDIA_INDEX' : stage === 'ASR' ? 'MEDIA_TRANSCRIPT' : stage === 'SAMPLING' || stage === 'VISION' ? MEDIA_VISUAL_ANALYSIS_JOB_TYPE : stage === 'AUDIO' ? MEDIA_AUDIO_ANALYSIS_JOB_TYPE : null;
 
 function jobStatus(status: string): MediaAnalysisStageStatus {
   if (status === 'QUEUED' || status === 'WAITING_DEPENDENCY') return 'QUEUED';
@@ -54,15 +58,16 @@ export async function getMediaAnalysisGraph(deps: DomainDeps, input: { workspace
     .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId), eq(assetVersions.workspaceId, input.workspaceId), isNull(assets.deletedAt))).limit(1);
   const source = sourceRows[0];
   if (!source) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset not found', 404);
-  const [derivativeRows, indexRows, visualRows, transcriptRows, existingRows, jobRows] = await Promise.all([
+  const [derivativeRows, indexRows, visualRows, audioRows, transcriptRows, existingRows, jobRows] = await Promise.all([
     deps.db.select().from(mediaDerivatives).where(and(eq(mediaDerivatives.workspaceId, input.workspaceId), eq(mediaDerivatives.sourceAssetVersionId, source.version.id), eq(mediaDerivatives.kind, 'PROXY'))).orderBy(desc(mediaDerivatives.updatedAt)).limit(1),
     deps.db.select().from(mediaIndexRuns).where(and(eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, source.version.id), eq(mediaIndexRuns.processorVersion, MEDIA_INDEX_PROCESSOR_VERSION))).orderBy(desc(mediaIndexRuns.updatedAt)).limit(1),
     deps.db.select().from(mediaIndexRuns).where(and(eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, source.version.id), eq(mediaIndexRuns.processorVersion, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION))).orderBy(desc(mediaIndexRuns.updatedAt)).limit(1),
+    deps.db.select().from(mediaIndexRuns).where(and(eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, source.version.id), eq(mediaIndexRuns.processorVersion, MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION))).orderBy(desc(mediaIndexRuns.updatedAt)).limit(1),
     deps.db.select().from(mediaTranscriptRuns).where(and(eq(mediaTranscriptRuns.workspaceId, input.workspaceId), eq(mediaTranscriptRuns.sourceAssetVersionId, source.version.id))).orderBy(desc(mediaTranscriptRuns.updatedAt)).limit(1),
     deps.db.select().from(mediaAnalysisStages).where(and(eq(mediaAnalysisStages.workspaceId, input.workspaceId), eq(mediaAnalysisStages.sourceAssetVersionId, source.version.id))),
     deps.db.select().from(jobs).where(eq(jobs.workspaceId, input.workspaceId)).orderBy(desc(jobs.createdAt)).limit(500),
   ]);
-  const derivative = derivativeRows[0]; const indexRun = indexRows[0]; const visualRun = visualRows[0]; const transcriptRun = transcriptRows[0];
+  const derivative = derivativeRows[0]; const indexRun = indexRows[0]; const visualRun = visualRows[0]; const audioRun = audioRows[0]; const transcriptRun = transcriptRows[0];
   const currentByStage = new Map(existingRows.map((row) => [row.stage, row]));
   const relevantJobs = jobRows.filter((job) => {
     const payload = job.input as Record<string, unknown>;
@@ -91,6 +96,9 @@ export async function getMediaAnalysisGraph(deps: DomainDeps, input: { workspace
     } else if (stage === 'SAMPLING' || stage === 'VISION') {
       status = visualRun === undefined ? 'NOT_REQUESTED' : visualRun.status === 'READY' ? 'READY' : visualRun.status === 'EMPTY' ? 'EMPTY' : visualRun.status === 'FAILED' ? 'FAILED' : visualRun.status === 'STALE' ? 'STALE' : visualRun.status === 'PARTIAL' ? 'PARTIAL' : visualRun.status === 'RUNNING' ? 'RUNNING' : 'QUEUED';
       coveragePermille = visualRun?.coveragePermille ?? 0; completedUnits = visualRun?.checkpointMs ?? 0; errorSummary = visualRun?.errorSummary ?? null;
+    } else if (stage === 'AUDIO') {
+      status = audioRun === undefined ? 'NOT_REQUESTED' : audioRun.status === 'READY' ? 'READY' : audioRun.status === 'EMPTY' ? 'EMPTY' : audioRun.status === 'FAILED' ? 'FAILED' : audioRun.status === 'STALE' ? 'STALE' : audioRun.status === 'PARTIAL' ? 'PARTIAL' : audioRun.status === 'RUNNING' ? 'RUNNING' : 'QUEUED';
+      coveragePermille = audioRun?.coveragePermille ?? 0; completedUnits = audioRun?.checkpointMs ?? 0; errorSummary = audioRun?.errorSummary ?? null;
     }
     if (job !== undefined && !['READY', 'EMPTY', 'FAILED', 'STALE', 'DISABLED', 'PARTIAL'].includes(status)) status = jobStatus(job.status);
     const fingerprint = createHash('sha256').update([source.version.checksumSha256 ?? source.version.id, stage, config, ...dependencies[stage].map((dependency) => currentByStage.get(dependency)?.detectorConfigHash ?? defaultConfig[dependency])].join('\0')).digest('hex');
@@ -132,6 +140,8 @@ export async function rebuildMediaAnalysisStage(deps: DomainDeps, input: { works
     await retryMediaTranscript(deps, input);
   } else if (stage === 'SAMPLING' || stage === 'VISION') {
     await retryMediaVisualAnalysis(deps, { ...input, analysisConfigHash: request.detectorConfigHash });
+  } else if (stage === 'AUDIO') {
+    await retryMediaAudioAnalysis(deps, { ...input, analysisConfigHash: request.detectorConfigHash });
   } else throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'analysis stage cannot be rebuilt directly', 409, { stage });
   return getMediaAnalysisGraph(deps, input);
 }

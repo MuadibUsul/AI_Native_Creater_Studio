@@ -187,6 +187,18 @@ export {
 } from './media-visual-analysis.js';
 export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter } from './media-visual-analysis.js';
 export {
+  MEDIA_AUDIO_ANALYSIS_JOB_TYPE,
+  MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,
+  MEDIA_AUDIO_EVENT_TYPES,
+  audioSourceAnchorSchema,
+  audioEvidenceWindowSchema,
+  generatedAudioEventSchema,
+  generatedMusicBeatSchema,
+  generatedMediaAudioAnalysisSchema,
+  mediaAudioAnalysisJobInputSchema,
+} from './media-audio-analysis.js';
+export type { GeneratedMediaAudioAnalysis, MediaAudioAnalysisJobInput, MediaAudioAnalysisAdapter } from './media-audio-analysis.js';
+export {
   MEDIA_TRANSCRIPT_JOB_TYPE,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_STATUSES,

@@ -48,8 +48,9 @@ const trackPayloadSchema = z.object({ label: z.string().min(1).max(200), trackId
 const personTrackPayloadSchema = trackPayloadSchema.extend({ identityState: z.literal('UNKNOWN').default('UNKNOWN') }).strict();
 const eventPayloadSchema = z.object({ label: z.string().min(1).max(200), subjectTrackId: z.string().min(1).max(120).nullable() }).strict();
 const motionPayloadSchema = z.object({ valuePermille: z.number().int().min(0).max(1000), method: z.string().min(1).max(160) }).strict();
-const audioEventPayloadSchema = z.object({ label: z.string().min(1).max(200), channel: z.number().int().nonnegative().nullable() }).strict();
-const beatPayloadSchema = z.object({ bpm: z.number().positive().nullable(), beatOrdinal: z.number().int().nonnegative().nullable(), downbeat: z.boolean() }).strict();
+const relatedVisualIdsSchema = z.array(z.string().min(1).max(160)).max(100);
+const audioEventPayloadSchema = z.object({ label: z.string().min(1).max(200), eventType: z.enum(['SILENCE', 'APPLAUSE', 'AMBIENT', 'MUSIC', 'OTHER', 'UNKNOWN']), channel: z.number().int().nonnegative().nullable(), relatedVisualRecordIds: relatedVisualIdsSchema }).strict();
+const beatPayloadSchema = z.object({ bpm: z.number().positive().nullable(), beatOrdinal: z.number().int().nonnegative(), downbeat: z.boolean(), musicSegmentId: z.string().min(1).max(120).nullable(), channel: z.number().int().nonnegative().nullable(), relatedVisualRecordIds: relatedVisualIdsSchema }).strict();
 const embeddingPayloadSchema = z.object({ embeddingRef: z.string().min(1).max(240), dimensions: z.number().int().positive(), model: z.string().min(1).max(160) }).strict();
 const markerPayloadSchema = z.object({ label: z.string().min(1).max(160) }).strict();
 
