@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { compareMediaTime, mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
+import { createTrackRequestSchema } from './composition.js';
 import {
   animationTargetKindSchema,
   audioChannelMappingSchema,
@@ -230,6 +231,85 @@ export const splitAvCutOperationSchema = z.object({
 );
 
 export type SplitAvCutOperation = z.infer<typeof splitAvCutOperationSchema>;
+
+/**
+ * N03-04 轨道生命周期与轨道控制（多轨、AV 链接与同步锁）。
+ * 轨道状态（muted/hidden/solo/locked/syncLocked）随版本快照与客户端投影对外可见。
+ */
+export const createTrackOperationSchema = z.object({
+  op: z.literal('create_track'),
+  sequenceId: opaqueIdSchema,
+  track: createTrackRequestSchema,
+  /** 精确复原（undo/redo）：按原 id 重建轨道，保持引用稳定。 */
+  restoreTrackId: opaqueIdSchema.optional(),
+}).strict();
+
+export type CreateTrackOperation = z.infer<typeof createTrackOperationSchema>;
+
+export const moveTrackOperationSchema = z.object({
+  op: z.literal('move_track'),
+  trackId: opaqueIdSchema,
+  position: z.number().int().nonnegative(),
+}).strict();
+
+export type MoveTrackOperation = z.infer<typeof moveTrackOperationSchema>;
+
+export const NON_EMPTY_TRACK_POLICIES = ['REJECT', 'MOVE_CLIPS'] as const;
+export const nonEmptyTrackPolicySchema = z.enum(NON_EMPTY_TRACK_POLICIES);
+
+export type NonEmptyTrackPolicy = z.infer<typeof nonEmptyTrackPolicySchema>;
+
+export const deleteTrackOperationSchema = z.object({
+  op: z.literal('delete_track'),
+  trackId: opaqueIdSchema,
+  nonEmptyPolicy: nonEmptyTrackPolicySchema,
+  destinationTrackId: opaqueIdSchema.nullable().default(null),
+}).strict().superRefine((value, context) => {
+  if ((value.nonEmptyPolicy === 'MOVE_CLIPS') !== (value.destinationTrackId !== null)) {
+    context.addIssue({ code: 'custom', path: ['destinationTrackId'], message: 'MOVE_CLIPS requires exactly one destination track' });
+  }
+});
+
+export type DeleteTrackOperation = z.infer<typeof deleteTrackOperationSchema>;
+
+export const trackChangesSchema = z.object({
+  name: z.string().min(1).max(200),
+  position: z.number().int().nonnegative(),
+  locked: z.boolean(),
+  muted: z.boolean(),
+  hidden: z.boolean(),
+  solo: z.boolean(),
+  syncLocked: z.boolean(),
+}).partial().strict().refine((value) => Object.keys(value).length > 0, 'update_track requires at least one change');
+
+/** 轨道控制：重命名／重排／静音／独奏／隐藏／锁定／同步锁（关闭一轨只改该轨自身状态）。 */
+export const updateTrackOperationSchema = z.object({
+  op: z.literal('update_track'),
+  trackId: opaqueIdSchema,
+  changes: trackChangesSchema,
+}).strict();
+
+export type UpdateTrackOperation = z.infer<typeof updateTrackOperationSchema>;
+
+/**
+ * N03-04 AV 链接：`linked=true` 把恰好两条片段（同一序列的视频+音频）绑成同一 `avGroupId`；
+ * `linked=false` 解链（清空给定片段的 `avGroupId`），解链后各自的编辑不再联动。
+ */
+export const setAvLinkOperationSchema = z.object({
+  op: z.literal('set_av_link'),
+  linked: z.boolean(),
+  clipIds: z.array(opaqueIdSchema).min(1).max(2),
+}).strict().superRefine((value, context) => {
+  if (value.linked && value.clipIds.length !== 2) {
+    context.addIssue({ code: 'custom', path: ['clipIds'], message: 'linking requires exactly two clips' });
+  }
+  if (value.linked && value.clipIds[0] === value.clipIds[1]) {
+    context.addIssue({ code: 'custom', path: ['clipIds'], message: 'linking requires two distinct clips' });
+  }
+});
+
+export type SetAvLinkOperation = z.infer<typeof setAvLinkOperationSchema>;
+
 
 
 export const updateAnimationOperationSchema = z.object({

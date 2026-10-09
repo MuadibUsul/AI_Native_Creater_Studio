@@ -470,11 +470,19 @@ export {
   AV_CUT_KINDS,
   avCutKindSchema,
   splitAvCutOperationSchema,
+  createTrackOperationSchema,
+  moveTrackOperationSchema,
+  NON_EMPTY_TRACK_POLICIES,
+  nonEmptyTrackPolicySchema,
+  deleteTrackOperationSchema,
+  trackChangesSchema,
+  updateTrackOperationSchema,
+  setAvLinkOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

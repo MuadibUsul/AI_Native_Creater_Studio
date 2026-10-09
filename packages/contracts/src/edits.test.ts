@@ -16,8 +16,8 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut）', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(30);
+  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut，N03-04 增补轨道控制与 AV 链接）', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(35);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
     expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
@@ -34,6 +34,11 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(EDIT_OPERATION_TYPES).toContain('roll_clip');
     expect(EDIT_OPERATION_TYPES).toContain('ripple_clip');
     expect(EDIT_OPERATION_TYPES).toContain('split_av_cut');
+    expect(EDIT_OPERATION_TYPES).toContain('create_track');
+    expect(EDIT_OPERATION_TYPES).toContain('move_track');
+    expect(EDIT_OPERATION_TYPES).toContain('delete_track');
+    expect(EDIT_OPERATION_TYPES).toContain('update_track');
+    expect(EDIT_OPERATION_TYPES).toContain('set_av_link');
     expect(EDIT_OPERATION_TYPES).toContain('update_animation');
     expect(EDIT_OPERATION_TYPES).toContain('update_audio_region');
   });
@@ -243,8 +248,40 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(accepts({ op: 'split_av_cut', videoClipId: 'clp_v', audioClipId: 'clp_a', at: mt('4000'), offset: mt('0'), kind: 'J' })).toBe(false);
   });
 
+  it('N03-04 轨道控制契约：位置/类型约束、非空轨策略成对、AV 链接恰两条', () => {
+    const mt = (ticks: string) => ({ ticks, timebase: { num: 1, den: 1_000 } });
+    const request = {
+      schemaVersion: '1.0' as const,
+      baseProjectRevision: 1,
+      expectedSceneRevisions: {},
+      idempotencyKey: 'idem_n03_04_contract',
+    };
+    const accepts = (operation: unknown) => editRequestSchema.safeParse({ ...request, operations: [operation] }).success;
+
+    expect(accepts({ op: 'create_track', sequenceId: 'seq_1', track: { kind: 'AUDIO', position: 1, name: 'A1', solo: true, syncLocked: true } })).toBe(true);
+    expect(accepts({ op: 'create_track', sequenceId: 'seq_1', track: { kind: 'AUDIO', position: -1, name: 'A1' } })).toBe(false);
+    expect(accepts({ op: 'move_track', trackId: 'trk_1', position: 0 })).toBe(true);
+    expect(accepts({ op: 'update_track', trackId: 'trk_1', changes: { muted: true, solo: false } })).toBe(true);
+    expect(accepts({ op: 'update_track', trackId: 'trk_1', changes: {} })).toBe(false); // 至少要有一项变更
+    // 非空轨策略与目标轨成对出现
+    expect(accepts({ op: 'delete_track', trackId: 'trk_1', nonEmptyPolicy: 'REJECT', destinationTrackId: null })).toBe(true);
+    expect(accepts({ op: 'delete_track', trackId: 'trk_1', nonEmptyPolicy: 'MOVE_CLIPS', destinationTrackId: 'trk_2' })).toBe(true);
+    expect(accepts({ op: 'delete_track', trackId: 'trk_1', nonEmptyPolicy: 'MOVE_CLIPS', destinationTrackId: null })).toBe(false);
+    expect(accepts({ op: 'delete_track', trackId: 'trk_1', nonEmptyPolicy: 'REJECT', destinationTrackId: 'trk_2' })).toBe(false);
+    // AV 链接：link 恰两条不同片段；unlink 允许 1–2 条
+    expect(accepts({ op: 'set_av_link', linked: true, clipIds: ['clp_1', 'clp_2'] })).toBe(true);
+    expect(accepts({ op: 'set_av_link', linked: true, clipIds: ['clp_1'] })).toBe(false);
+    expect(accepts({ op: 'set_av_link', linked: true, clipIds: ['clp_1', 'clp_1'] })).toBe(false);
+    expect(accepts({ op: 'set_av_link', linked: false, clipIds: ['clp_1'] })).toBe(true);
+    expect(accepts({ op: 'set_av_link', linked: false, clipIds: ['clp_1', 'clp_2'] })).toBe(true);
+    expect(accepts({ op: 'set_av_link', linked: false, clipIds: [] })).toBe(false);
+    // 轨道状态投影字段存在（预览/导出共用同一状态面）
+    expect(accepts({ op: 'update_track', trackId: 'trk_1', changes: { hidden: true, solo: true, syncLocked: true, name: 'V2' } })).toBe(true);
+    expect(mt('0')).toMatchObject({ ticks: '0' });
+  });
+
   it('N01-11 为 §13.5 的每个来源操作登记输入 schema 和原生／别名／待实现状态', () => {
-    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(38);
+    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(40);
     expect(Object.keys(EDIT_OPERATION_V2_REGISTRY).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     expect(Object.keys(EDIT_OPERATION_V2_INPUT_SCHEMAS).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     for (const operation of SOURCE_EDIT_OPERATION_TYPES) {
@@ -268,6 +305,10 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(EDIT_OPERATION_V2_REGISTRY.roll_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'roll_clip' });
     expect(EDIT_OPERATION_V2_REGISTRY.ripple_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'ripple_clip' });
     expect(EDIT_OPERATION_V2_REGISTRY.split_av_cut).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'split_av_cut' });
+    // N03-04 起轨道生命周期与轨道控制同样是规范操作本身
+    for (const operation of ['create_track', 'move_track', 'delete_track', 'update_track', 'set_av_link'] as const) {
+      expect(EDIT_OPERATION_V2_REGISTRY[operation]).toMatchObject({ resolution: 'NATIVE', canonicalOperation: operation });
+    }
     expect(EDIT_OPERATION_V2_REGISTRY.set_audio_gain).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_audio_region' });
     expect(EDIT_OPERATION_V2_REGISTRY.regenerate_region).toMatchObject({ resolution: 'PLANNED', category: 'ASYNC_COMMAND', costCategory: 'PROVIDER_ESTIMATE_REQUIRED' });
     for (const operation of ['create_preview_branch', 'commit_preview_branch', 'discard_preview_branch'] as const) {

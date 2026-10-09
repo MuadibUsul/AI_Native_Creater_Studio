@@ -207,6 +207,20 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
     case 'ripple_clip':
       // 涟漪是**唯一**会移动其他片段的操作：这里只声明主片段，其余被平移片段在执行器逐段落事件报告。
       return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null }];
+    case 'create_track':
+      return [{ objectKind: 'TRACK', objectId: operation.sequenceId, dimensions: uniqueDimensions(['POSITION']), direct: false, via: 'create_track' }];
+    case 'move_track':
+      return [{ objectKind: 'TRACK', objectId: operation.trackId, dimensions: uniqueDimensions(['POSITION']), direct: true, via: null }];
+    case 'delete_track':
+      return [{ objectKind: 'TRACK', objectId: operation.trackId, dimensions: uniqueDimensions(['POSITION', 'DURATION']), direct: true, via: null }];
+    case 'update_track':
+      return [{
+        objectKind: 'TRACK', objectId: operation.trackId,
+        dimensions: uniqueDimensions(operation.changes.position === undefined ? ['STYLE'] : ['STYLE', 'POSITION']),
+        direct: true, via: null,
+      }];
+    case 'set_av_link':
+      return operation.clipIds.map((clipId) => ({ objectKind: 'CLIP' as const, objectId: clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }));
     case 'split_av_cut':
       return [
         { objectKind: 'CLIP', objectId: operation.videoClipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
@@ -404,6 +418,11 @@ export function validateEditOperationCandidate(input: {
       case 'roll_clip':
       case 'ripple_clip':
       case 'split_av_cut':
+      case 'create_track':
+      case 'move_track':
+      case 'delete_track':
+      case 'update_track':
+      case 'set_av_link':
       case 'update_animation':
       case 'update_audio_region': break;
       case 'restore_scene': requireUnlocked(requireScene(operation.sceneId, operation), operation); break;

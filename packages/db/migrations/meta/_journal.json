@@ -533,6 +533,13 @@
       "when": 1791518955704,
       "tag": "0075_ordinary_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1791555965633,
+      "tag": "0076_chubby_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

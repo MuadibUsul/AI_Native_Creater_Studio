@@ -10,6 +10,7 @@ import {
   mediaRangeSchema,
   mediaTimeSchema,
   objectLockKindSchema,
+  trackSchema,
   type EditOperation,
   type EditRequest,
   type ObjectLockDimension,
@@ -81,6 +82,16 @@ interface StoredPatch {
   amount?: unknown;
   closeAcrossTracks?: unknown;
   createdVideoClipId?: unknown;
+  /** N03-04 轨道与 AV 链接 */
+  changes?: unknown;
+  clipIds?: unknown;
+  linked?: unknown;
+  position?: unknown;
+  track?: unknown;
+  sequenceId?: unknown;
+  restoreTrackId?: unknown;
+  nonEmptyPolicy?: unknown;
+  destinationTrackId?: unknown;
 }
 
 interface SceneMeta {
@@ -327,6 +338,38 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         ...(patch.createdVideoClipId === undefined ? {} : { createdVideoClipId: String(patch.createdVideoClipId) }),
         ...(patch.createdAudioClipId === undefined ? {} : { createdAudioClipId: String(patch.createdAudioClipId) }),
       };
+    case 'CREATE_TRACK':
+      return {
+        op: 'create_track',
+        sequenceId: String(patch.sequenceId ?? ''),
+        track: patch.track as { kind: 'VIDEO' | 'AUDIO' | 'GRAPHIC' | 'CAPTION'; position: number; name: string },
+        restoreTrackId: String(patch.restoreTrackId ?? event.objectId ?? ''),
+      };
+    case 'MOVE_TRACK':
+      return { op: 'move_track', trackId: String(patch.trackId ?? event.objectId ?? ''), position: Number(patch.position ?? 0) };
+    case 'DELETE_TRACK': {
+      const before = trackSchema.parse(patch.before);
+      return {
+        op: 'delete_track',
+        trackId: before.id,
+        nonEmptyPolicy: patch.nonEmptyPolicy === 'MOVE_CLIPS' ? 'MOVE_CLIPS' : 'REJECT',
+        destinationTrackId: patch.destinationTrackId == null ? null : String(patch.destinationTrackId),
+      };
+    }
+    case 'UPDATE_TRACK': {
+      const changes = (patch.changes ?? {}) as Record<string, unknown>;
+      const before = trackSchema.parse(patch.before);
+      const next: Record<string, unknown> = {};
+      for (const key of ['name', 'position', 'locked', 'muted', 'hidden', 'solo', 'syncLocked'] as const) {
+        const value = changes[key];
+        if (value !== undefined) next[key] = key === 'name' ? before.name : value;
+      }
+      return { op: 'update_track', trackId: String(patch.trackId ?? event.objectId ?? ''), changes: next as never };
+    }
+    case 'SET_AV_LINK': {
+      const before = clipSchema.parse(patch.before);
+      return { op: 'set_av_link', linked: patch.linked === true, clipIds: [before.id] };
+    }
     case 'UPDATE_CLIP': {
       const after = clipSchema.parse(patch.after);
       return { op: 'update_clip', clipId: after.id, changes: {
@@ -493,6 +536,37 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
     case 'DUPLICATE_CLIP':
       // 逆操作：删除复制出来的片段（源二进制从未被触碰，无需回滚原件）。
       return [{ op: 'delete_clip', clipId: event.objectId ?? '' }];
+    case 'CREATE_TRACK':
+      // 逆操作：删除新建轨道（非空时由调用方先处理片段，事件粒度）。
+      return [{ op: 'delete_track', trackId: event.objectId ?? '', nonEmptyPolicy: 'REJECT', destinationTrackId: null }];
+    case 'MOVE_TRACK': {
+      const before = trackSchema.parse(patch.before);
+      return [{ op: 'move_track', trackId: before.id, position: before.position }];
+    }
+    case 'DELETE_TRACK': {
+      // 逆操作：按原 id/原状态重建轨道（片段由各自的 UPDATE_CLIP 事件回到本轨）。
+      const before = trackSchema.parse(patch.before);
+      return [{
+        op: 'create_track',
+        sequenceId: before.sequenceId,
+        track: { kind: before.kind, position: before.position, name: before.name, locked: before.locked, muted: before.muted, hidden: before.hidden, solo: before.solo, syncLocked: before.syncLocked },
+        restoreTrackId: before.id,
+      }];
+    }
+    case 'UPDATE_TRACK': {
+      const before = trackSchema.parse(patch.before);
+      const changes = (patch.changes ?? {}) as Record<string, unknown>;
+      const restored: Record<string, unknown> = {};
+      for (const key of ['name', 'position', 'locked', 'muted', 'hidden', 'solo', 'syncLocked'] as const) {
+        if (changes[key] !== undefined) restored[key] = before[key];
+      }
+      return [{ op: 'update_track', trackId: before.id, changes: restored as never }];
+    }
+    case 'SET_AV_LINK': {
+      // 逆操作：恢复该片段原先的关联状态（含"解链后重新关联"）。
+      const before = clipSchema.parse(patch.before);
+      return [{ op: 'update_clip', clipId: before.id, changes: { avGroupId: before.avGroupId } }];
+    }
     case 'SLIP_CLIP': {
       const before = clipSchema.parse(patch.before);
       return [{ op: 'slip_clip', clipId: before.id, sourceRange: before.sourceRange }];

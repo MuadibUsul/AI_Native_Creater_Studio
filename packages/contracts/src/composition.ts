@@ -37,6 +37,10 @@ export const trackSchema = z.object({
   locked: z.boolean().default(false),
   muted: z.boolean().default(false),
   hidden: z.boolean().default(false),
+  /** N03-04：独奏（预览与导出按同一归一化规则处理） */
+  solo: z.boolean().default(false),
+  /** N03-04：同步锁（涟漪/插入等结构性操作联动本轨） */
+  syncLocked: z.boolean().default(false),
   createdAt: isoDateTimeSchema,
 });
 
@@ -75,6 +79,8 @@ export const createTrackRequestSchema = z.object({
   locked: z.boolean().optional(),
   muted: z.boolean().optional(),
   hidden: z.boolean().optional(),
+  solo: z.boolean().optional(),
+  syncLocked: z.boolean().optional(),
 }).strict();
 
 export const createClipRequestSchema = z.object({

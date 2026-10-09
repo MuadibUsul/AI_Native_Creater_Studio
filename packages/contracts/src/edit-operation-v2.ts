@@ -2,25 +2,30 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versionedParametersSchema } from './composition-objects.js';
-import { clipTimeMappingSchema, createTrackRequestSchema } from './composition.js';
+import { clipTimeMappingSchema } from './composition.js';
 import {
+  createTrackOperationSchema,
   deleteClipOperationSchema,
+  deleteTrackOperationSchema,
   duplicateClipOperationSchema,
   insertClipOperationSchema,
   moveClipOperationSchema,
+  moveTrackOperationSchema,
   replaceClipSourceOperationSchema,
   rippleClipOperationSchema,
   rollClipOperationSchema,
   slideClipOperationSchema,
+  setAvLinkOperationSchema,
   slipClipOperationSchema,
   splitAvCutOperationSchema,
   splitClipOperationSchema,
   trimClipOperationSchema,
+  updateTrackOperationSchema,
 } from './composition-edits.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperationType } from './edits.js';
 
 export const SOURCE_EDIT_OPERATION_TYPES = [
-  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'replace_clip_source', 'slip_clip', 'slide_clip', 'roll_clip', 'ripple_clip', 'split_av_cut',
+  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'replace_clip_source', 'slip_clip', 'slide_clip', 'roll_clip', 'ripple_clip', 'split_av_cut', 'update_track', 'set_av_link',
   'set_clip_transform', 'set_clip_crop', 'set_clip_opacity', 'set_clip_speed',
   'add_effect', 'update_effect', 'remove_effect',
   'add_keyframe', 'update_keyframe', 'remove_keyframe',
@@ -120,11 +125,6 @@ const plannedSchemas = {
   add_effect: z.object({ op: z.literal('add_effect'), targetKind: z.enum(['CLIP', 'VISUAL_OBJECT', 'AUDIO_REGION', 'TRACK']), targetId: opaqueIdSchema, effectType: z.string().min(1), effectVersion: z.string().min(1), parameters: versionedParametersSchema }).strict(),
   update_effect: z.object({ op: z.literal('update_effect'), effectId: opaqueIdSchema, parameters: versionedParametersSchema.optional(), enabled: z.boolean().optional() }).strict().refine((value) => value.parameters !== undefined || value.enabled !== undefined, 'update_effect requires changes'),
   remove_effect: z.object({ op: z.literal('remove_effect'), effectId: opaqueIdSchema }).strict(),
-  create_track: z.object({ op: z.literal('create_track'), sequenceId: opaqueIdSchema, track: createTrackRequestSchema }).strict(),
-  move_track: z.object({ op: z.literal('move_track'), trackId: opaqueIdSchema, position: z.number().int().nonnegative() }).strict(),
-  delete_track: z.object({ op: z.literal('delete_track'), trackId: opaqueIdSchema, nonEmptyPolicy: z.enum(['REJECT', 'MOVE_CLIPS']), destinationTrackId: opaqueIdSchema.nullable() }).strict().superRefine((value, context) => {
-    if ((value.nonEmptyPolicy === 'MOVE_CLIPS') !== (value.destinationTrackId !== null)) context.addIssue({ code: 'custom', path: ['destinationTrackId'], message: 'MOVE_CLIPS requires exactly one destination track' });
-  }),
   add_marker: z.object({ op: z.literal('add_marker'), markerId: opaqueIdSchema.optional(), timeBinding: timeBindingSchema, time: mediaTimeSchema, label: z.string().max(500) }).strict(),
   update_marker: z.object({ op: z.literal('update_marker'), markerId: opaqueIdSchema, timeBinding: timeBindingSchema.optional(), time: mediaTimeSchema.optional(), label: z.string().max(500).optional() }).strict().refine((value) => value.timeBinding !== undefined || value.time !== undefined || value.label !== undefined, 'update_marker requires changes'),
   remove_marker: z.object({ op: z.literal('remove_marker'), markerId: opaqueIdSchema }).strict(),
@@ -159,9 +159,11 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   add_keyframe: keyframeSourceOperationSchema,
   update_keyframe: keyframeSourceOperationSchema,
   remove_keyframe: keyframeSourceOperationSchema,
-  create_track: plannedSchemas.create_track,
-  move_track: plannedSchemas.move_track,
-  delete_track: plannedSchemas.delete_track,
+  create_track: createTrackOperationSchema,
+  move_track: moveTrackOperationSchema,
+  delete_track: deleteTrackOperationSchema,
+  update_track: updateTrackOperationSchema,
+  set_av_link: setAvLinkOperationSchema,
   set_audio_gain: setAudioGainSourceOperationSchema,
   set_audio_fade: setAudioFadeSourceOperationSchema,
   set_audio_pan: setAudioPanSourceOperationSchema,
@@ -246,9 +248,12 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   add_keyframe: alias('add_keyframe', 'update_animation', ['ANIMATION_BINDING', 'KEYFRAME'], ['ANIMATION_BINDING'], ['ANIMATION_BINDING'], { limitations: ['LINEAR_AND_HOLD_INTERPOLATION_ONLY'], plannedTask: 'N11-01' }),
   update_keyframe: alias('update_keyframe', 'update_animation', ['ANIMATION_BINDING', 'KEYFRAME'], ['ANIMATION_BINDING'], ['ANIMATION_BINDING'], { limitations: ['LINEAR_AND_HOLD_INTERPOLATION_ONLY'], plannedTask: 'N11-01' }),
   remove_keyframe: alias('remove_keyframe', 'update_animation', ['ANIMATION_BINDING', 'KEYFRAME'], ['ANIMATION_BINDING'], ['ANIMATION_BINDING'], { limitations: ['FINAL_KEYFRAME_REQUIRES_BINDING_REMOVAL'], plannedTask: 'N11-01' }),
-  create_track: planned('create_track', 'EDIT', ['SEQUENCE', 'TRACK'], 'N03-04'),
-  move_track: planned('move_track', 'EDIT', ['TRACK'], 'N03-04'),
-  delete_track: planned('delete_track', 'EDIT', ['TRACK'], 'N03-04'),
+  // N03-04：轨道生命周期与轨道控制由规范原语直接承载
+  create_track: native('create_track', ['SEQUENCE', 'TRACK'], ['SEQUENCE', 'TRACK'], ['TRACK', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
+  move_track: native('move_track', ['TRACK'], ['TRACK'], ['TRACK', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
+  delete_track: native('delete_track', ['TRACK', 'CLIP'], ['TRACK', 'CLIP'], ['TRACK', 'CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
+  update_track: native('update_track', ['TRACK'], ['TRACK'], ['TRACK'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
+  set_av_link: native('set_av_link', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
   set_audio_gain: alias('set_audio_gain', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
   set_audio_fade: alias('set_audio_fade', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
   set_audio_pan: alias('set_audio_pan', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),

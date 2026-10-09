@@ -81,6 +81,8 @@ function projectLegacyGraph(graph: SceneGraph, namespace: string, createdAt: str
     locked: false,
     muted: false,
     hidden: false,
+    solo: false,
+    syncLocked: false,
     createdAt,
   }));
   // workspaceId is replaced by the caller because SceneGraph intentionally has no workspace field.

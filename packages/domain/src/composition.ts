@@ -84,6 +84,8 @@ const toTrack = (row: typeof sequenceTracks.$inferSelect): Track => trackSchema.
   locked: row.locked,
   muted: row.muted,
   hidden: row.hidden,
+  solo: row.solo,
+  syncLocked: row.syncLocked,
   createdAt: row.createdAt.toISOString(),
 });
 
@@ -163,6 +165,8 @@ export async function createTrack(
     locked: request.locked ?? false,
     muted: request.muted ?? false,
     hidden: request.hidden ?? false,
+    solo: request.solo ?? false,
+    syncLocked: request.syncLocked ?? false,
     createdAt: now,
     updatedAt: now,
   });

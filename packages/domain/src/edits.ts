@@ -11,6 +11,7 @@ import {
   animationBindingSchema,
   audioRegionSchema,
   clipSchema,
+  trackSchema,
   compareMediaTime,
   legacyMillisecondsToMediaTime,
   mediaRangeSchema,
@@ -266,6 +267,10 @@ const clipSnapshot = (row: typeof sequenceClips.$inferSelect) => clipSchema.pars
   ...row,
   createdAt: row.createdAt.toISOString(),
 });
+const trackSnapshot = (row: typeof sequenceTracks.$inferSelect) => trackSchema.parse({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+});
 const animationSnapshot = (row: typeof compositionAnimationBindings.$inferSelect) => animationBindingSchema.parse({
   ...row,
   createdAt: row.createdAt.toISOString(),
@@ -307,6 +312,21 @@ async function loadEditableClip(
   if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip not found', 404);
   const track = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: row.trackId });
   return { row, track };
+}
+
+/** 按归属加载轨道（不因轨道自身 locked 标志阻断：轨道控制需要能解锁）。 */
+async function loadTrackOwned(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; trackId: string },
+): Promise<typeof sequenceTracks.$inferSelect> {
+  const rows = await tx.select().from(sequenceTracks).where(and(
+    eq(sequenceTracks.id, input.trackId),
+    eq(sequenceTracks.workspaceId, input.workspaceId),
+    eq(sequenceTracks.projectId, input.projectId),
+  )).limit(1);
+  const track = rows[0];
+  if (!track) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'track not found', 404);
+  return track;
 }
 
 async function loadTrack(
@@ -465,6 +485,22 @@ async function splitClipRow(
   };
   await tx.insert(sequenceClips).values(rightRow);
   eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: rightRow.id, patch: { op: 'insert_clip', clipId: rightRow.id, after: clipSnapshot(rightRow) } });
+}
+
+/** 轨道重排的两阶段写入：先整体偏移再落位，避免 (sequence_id, position) 唯一索引的瞬时冲突。 */
+async function commitTrackOrder(
+  tx: NodePgDatabase,
+  finalOrder: (typeof sequenceTracks.$inferSelect)[],
+  now: Date,
+): Promise<void> {
+  const moved = finalOrder.map((row, index) => ({ row, index })).filter(({ row, index }) => row.position !== index);
+  if (moved.length === 0) return;
+  for (const { row } of moved) {
+    await tx.update(sequenceTracks).set({ position: row.position + 10_000, updatedAt: now }).where(eq(sequenceTracks.id, row.id));
+  }
+  for (const { row, index } of moved) {
+    await tx.update(sequenceTracks).set({ position: index, updatedAt: now }).where(eq(sequenceTracks.id, row.id));
+  }
 }
 
 /** 目标轨上的重叠检查（半开区间；排除给定片段）。 */
@@ -1534,19 +1570,17 @@ async function applyEditsInTransaction(
           const shiftFrom = span.end;
           // 受影响轨道：DELETE 默认跨全序列全部轨道；TRIM_* 与 closeAcrossTracks=false 只在同轨收缝。
           const scopeAcrossTracks = operation.closeAcrossTracks;
-          if (!scopeAcrossTracks && operation.action === 'DELETE') {
-            // 用户显式要求"其他别动"：只在本轨收缝，且不动 AV 关联片段。
-            if (siblings.length > 0) {
-              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'single-track ripple delete would break AV sync; use closeAcrossTracks', 409, { reason: 'AV_SYNC_REQUIRES_CROSS_TRACK_RIPPLE' });
+          const allTracks = await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.sequenceId, row.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
+          ));
+          // 收缝范围：显式跨轨 = 全部轨道；否则 = 本轨 + 同步锁打开的轨道（N03-04 同步锁语义）。
+          const trackRows = scopeAcrossTracks ? allTracks : allTracks.filter((track) => track.id === row.trackId || track.syncLocked);
+          const scopedTrackIds = new Set(trackRows.map((track) => track.id));
+          for (const sibling of siblings) {
+            if (!scopedTrackIds.has(sibling.trackId)) {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'ripple scope would desync linked audio; enable sync lock or closeAcrossTracks', 409, { reason: 'AV_SYNC_REQUIRES_CROSS_TRACK_RIPPLE' });
             }
           }
-          const trackRows = scopeAcrossTracks
-            ? await tx.select().from(sequenceTracks).where(and(
-              eq(sequenceTracks.sequenceId, row.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
-            ))
-            : await tx.select().from(sequenceTracks).where(and(
-              eq(sequenceTracks.id, row.trackId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
-            ));
           const removedIds = new Set<string>([row.id, ...siblings.map((sibling) => sibling.id)]);
           // 主片段（及 AV 关联片段）先落删除/裁剪事件。
           const primaryBefore = clipSnapshot(row);
@@ -1667,6 +1701,169 @@ async function applyEditsInTransaction(
             leftAction: 'UPDATE_CLIP',
             createdId: operation.createdAudioClipId ?? `clp_${randomUUID()}`,
           }, eventDrafts);
+          break;
+        }
+
+        case 'create_track': {
+          const sequenceRows = await tx.select().from(projectSequences).where(and(
+            eq(projectSequences.id, operation.sequenceId),
+            eq(projectSequences.workspaceId, input.workspaceId),
+            eq(projectSequences.projectId, input.projectId),
+          )).limit(1);
+          if (!sequenceRows[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+          const now = new Date();
+          const existingTracks = await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.sequenceId, operation.sequenceId),
+            eq(sequenceTracks.workspaceId, input.workspaceId),
+            eq(sequenceTracks.projectId, input.projectId),
+          ));
+          // 目标位置被占用时把该位置及之后的轨道整体后移（两阶段写入避免唯一索引瞬时冲突）。
+          const shifted = existingTracks.filter((row) => row.position >= operation.track.position).sort((left, right) => left.position - right.position);
+          for (const existing of shifted) {
+            await tx.update(sequenceTracks).set({ position: existing.position + 10_000, updatedAt: now }).where(eq(sequenceTracks.id, existing.id));
+          }
+          const createdTrackId = operation.restoreTrackId ?? `trk_${randomUUID()}`;
+          const createdTrack = {
+            id: createdTrackId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: operation.sequenceId,
+            kind: operation.track.kind, position: operation.track.position, name: operation.track.name,
+            locked: operation.track.locked ?? false, muted: operation.track.muted ?? false, hidden: operation.track.hidden ?? false,
+            solo: operation.track.solo ?? false, syncLocked: operation.track.syncLocked ?? false,
+            createdAt: now, updatedAt: now,
+          };
+          await tx.insert(sequenceTracks).values(createdTrack);
+          for (const existing of shifted) {
+            const shiftedPosition = existing.position + 1;
+            await tx.update(sequenceTracks).set({ position: shiftedPosition, updatedAt: now }).where(eq(sequenceTracks.id, existing.id));
+            eventDrafts.push({ action: 'UPDATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: existing.id, patch: { op: 'update_track', trackId: existing.id, changes: { position: shiftedPosition }, before: trackSnapshot(existing), after: trackSnapshot({ ...existing, position: shiftedPosition, updatedAt: now }) } });
+          }
+          eventDrafts.push({ action: 'CREATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: createdTrackId, patch: { ...operation, after: trackSnapshot(createdTrack) } });
+          break;
+        }
+
+        case 'move_track': {
+          const target = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: operation.trackId });
+          const siblings = (await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.sequenceId, target.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
+          ))).filter((row) => row.id !== target.id).sort((left, right) => left.position - right.position);
+          const now = new Date();
+          const clamped = Math.min(operation.position, siblings.length);
+          const finalOrder = [...siblings];
+          finalOrder.splice(clamped, 0, target);
+          await commitTrackOrder(tx, finalOrder, now);
+          for (const [index, row] of finalOrder.entries()) {
+            if (row.position === index) continue;
+            eventDrafts.push({
+              action: row.id === target.id ? 'MOVE_TRACK' : 'UPDATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: row.id,
+              patch: { ...operation, trackId: row.id, changes: { position: index }, before: trackSnapshot(row), after: trackSnapshot({ ...row, position: index, updatedAt: now }) },
+            });
+          }
+          break;
+        }
+
+        case 'delete_track': {
+          const target = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: operation.trackId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'TRACK', objectId: target.id, dimensions: ['POSITION', 'DURATION'] });
+          const now = new Date();
+          const clips = await tx.select().from(sequenceClips).where(and(
+            eq(sequenceClips.trackId, target.id), eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId),
+          ));
+          if (clips.length > 0) {
+            if (operation.nonEmptyPolicy === 'REJECT') {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is not empty; choose MOVE_CLIPS or delete the clips first', 409, { reason: 'TRACK_NOT_EMPTY', clipCount: clips.length });
+            }
+            const destination = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: String(operation.destinationTrackId) });
+            if (destination.id === target.id || destination.kind !== target.kind) {
+              throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'destination track must differ and have the same kind', 422, { reason: 'TRACK_KIND_MISMATCH' });
+            }
+            for (const clip of clips) {
+              const beforeClip = clipSnapshot(clip);
+              await tx.update(sequenceClips).set({ trackId: destination.id, updatedAt: now }).where(eq(sequenceClips.id, clip.id));
+              eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'update_clip', clipId: clip.id, movedByTrackDelete: true, before: beforeClip, after: clipSnapshot({ ...clip, trackId: destination.id, updatedAt: now }) } });
+            }
+          }
+          const beforeTrackDelete = trackSnapshot(target);
+          await tx.delete(sequenceTracks).where(eq(sequenceTracks.id, target.id));
+          eventDrafts.push({ action: 'DELETE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: target.id, patch: { ...operation, before: beforeTrackDelete } });
+          const remaining = (await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.sequenceId, target.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
+          ))).sort((left, right) => left.position - right.position);
+          await commitTrackOrder(tx, remaining, now);
+          for (const [index, row] of remaining.entries()) {
+            if (row.position === index) continue;
+            eventDrafts.push({ action: 'UPDATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: row.id, patch: { op: 'update_track', trackId: row.id, changes: { position: index }, before: trackSnapshot(row), after: trackSnapshot({ ...row, position: index, updatedAt: now }) } });
+          }
+          break;
+        }
+
+        case 'update_track': {
+          const target = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: operation.trackId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'TRACK', objectId: target.id, dimensions: ['POSITION', 'STYLE'] });
+          const changes = operation.changes;
+          const now = new Date();
+          const beforeTrack = trackSnapshot(target);
+          // 轨道控制只改**这一条**轨道的状态：静音/独奏/隐藏/锁定/同步锁与该轨片段无关的其他轨道一律不动。
+          const next = {
+            ...target,
+            name: changes.name ?? target.name,
+            locked: changes.locked ?? target.locked,
+            muted: changes.muted ?? target.muted,
+            hidden: changes.hidden ?? target.hidden,
+            solo: changes.solo ?? target.solo,
+            syncLocked: changes.syncLocked ?? target.syncLocked,
+            updatedAt: now,
+          };
+          await tx.update(sequenceTracks).set({
+            name: next.name, locked: next.locked, muted: next.muted, hidden: next.hidden, solo: next.solo, syncLocked: next.syncLocked, updatedAt: now,
+          }).where(eq(sequenceTracks.id, target.id));
+          eventDrafts.push({ action: 'UPDATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: target.id, patch: { ...operation, before: beforeTrack, after: trackSnapshot(next) } });
+          if (changes.position !== undefined) {
+            const siblings = (await tx.select().from(sequenceTracks).where(and(
+              eq(sequenceTracks.sequenceId, target.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
+            ))).filter((row) => row.id !== target.id).sort((left, right) => left.position - right.position);
+            const clamped = Math.min(changes.position, siblings.length);
+            const finalOrder = [...siblings];
+            finalOrder.splice(clamped, 0, { ...next, position: clamped });
+            await commitTrackOrder(tx, finalOrder, now);
+          }
+          break;
+        }
+
+        case 'set_av_link': {
+          const rows: (typeof sequenceClips.$inferSelect)[] = [];
+          for (const clipId of operation.clipIds) {
+            const loaded = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId });
+            rows.push(loaded.row);
+          }
+          const now = new Date();
+          if (!operation.linked) {
+            // 解链：清空 avGroupId —— 其后视频的 trim/move/split 不再联动音轨。
+            for (const row of rows) {
+              if (row.avGroupId === null) continue;
+              const beforeClip = clipSnapshot(row);
+              await tx.update(sequenceClips).set({ avGroupId: null, updatedAt: now }).where(eq(sequenceClips.id, row.id));
+              eventDrafts.push({ action: 'SET_AV_LINK', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, clipId: row.id, before: beforeClip, after: clipSnapshot({ ...row, avGroupId: null, updatedAt: now }) } });
+            }
+            break;
+          }
+          if (rows.length !== 2) throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'linking requires exactly two clips', 422, { reason: 'AV_LINK_INVALID' });
+          const [left, right] = rows as [(typeof sequenceClips.$inferSelect), (typeof sequenceClips.$inferSelect)];
+          if (left.sequenceId !== right.sequenceId) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'linked clips must belong to the same sequence', 422, { reason: 'AV_LINK_INVALID' });
+          }
+          const leftTrack = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: left.trackId });
+          const rightTrack = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: right.trackId });
+          if (leftTrack.kind === rightTrack.kind) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'AV link requires one video clip and one audio clip', 422, { reason: 'AV_LINK_INVALID' });
+          }
+          if (compareFraction(rangeDuration(mediaRangeSchema.parse(left.sequenceRange)), rangeDuration(mediaRangeSchema.parse(right.sequenceRange))) !== 0) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'linked clips must have equal durations', 422, { reason: 'AV_LINK_DURATION_MISMATCH' });
+          }
+          const linkedGroupId = `avgp_${randomUUID()}`;
+          for (const row of rows) {
+            const beforeClip = clipSnapshot(row);
+            await tx.update(sequenceClips).set({ avGroupId: linkedGroupId, updatedAt: now }).where(eq(sequenceClips.id, row.id));
+            eventDrafts.push({ action: 'SET_AV_LINK', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, clipId: row.id, after: clipSnapshot({ ...row, avGroupId: linkedGroupId, updatedAt: now }), before: beforeClip } });
+          }
           break;
         }
 

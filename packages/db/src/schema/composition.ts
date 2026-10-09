@@ -38,6 +38,10 @@ export const sequenceTracks = pgTable(
     locked: boolean('locked').notNull().default(false),
     muted: boolean('muted').notNull().default(false),
     hidden: boolean('hidden').notNull().default(false),
+    /** N03-04 独奏（混音/预览一致：solo 归一化后仅播放被独奏的轨） */
+    solo: boolean('solo').notNull().default(false),
+    /** N03-04 同步锁：涟漪/插入等结构性操作会联动本轨（显式覆盖时不受限） */
+    syncLocked: boolean('sync_locked').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
