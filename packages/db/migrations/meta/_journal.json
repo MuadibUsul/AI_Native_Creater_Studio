@@ -512,6 +512,13 @@
       "when": 1791509359406,
       "tag": "0072_tricky_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1791511418954,
+      "tag": "0073_panoramic_excalibur",
+      "breakpoints": true
     }
   ]
 }

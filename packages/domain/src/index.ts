@@ -532,6 +532,14 @@ export { createMediaRangeTag, deleteMediaRangeTag, listMediaRangeTags, searchMed
 export { listUnifiedMediaIndex } from './unified-media-index.js';
 export { cancelMediaAnalysisStage, getMediaAnalysisGraph, rebuildMediaAnalysisStage } from './media-analysis.js';
 export {
+  MEDIA_VISUAL_ANALYSIS_CONFIG_HASH,
+  beginMediaVisualAnalysis,
+  completeMediaVisualAnalysis,
+  failMediaVisualAnalysis,
+  retryMediaVisualAnalysis,
+  scheduleMediaVisualAnalysisInTx,
+} from './media-visual-analysis.js';
+export {
   assertProjectVersionAssetRights,
   getAssetLifecycle,
   listAssetReferences,

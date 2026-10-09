@@ -287,6 +287,7 @@ describe('Quiet Frame asset flow', () => {
     await userEvent.type(await screen.findByLabelText('搜索素材片段'), '产品近景');
     await userEvent.click(screen.getByRole('button', { name: '搜索片段' }));
     expect(await screen.findByText('用户标记')).toBeTruthy();
+    expect(screen.getByText('00:01.500–00:02.800 · 内容仅作检索依据')).toBeTruthy();
     expect(screen.getByText('内容仅作检索依据', { exact: false })).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: '播放片段' }));
     const video = await screen.findByLabelText('预览视频 product.mp4') as HTMLVideoElement;

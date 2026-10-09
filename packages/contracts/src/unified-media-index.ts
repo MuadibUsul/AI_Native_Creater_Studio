@@ -43,7 +43,9 @@ const transcriptWordPayloadSchema = z.object({ text: z.string().min(1).max(500),
 const transcriptSegmentPayloadSchema = z.object({ text: z.string().min(1).max(10_000), speakerId: z.string().min(1).max(80).nullable(), language: z.string().min(2).max(35), reviewState: z.enum(['UNREVIEWED', 'CORRECTED']) }).strict();
 const speakerPayloadSchema = z.object({ speakerId: z.string().min(1).max(80), displayName: z.string().min(1).max(120).nullable(), identityState: z.enum(['UNKNOWN', 'INFERRED', 'USER_CONFIRMED']) }).strict();
 const ocrPayloadSchema = z.object({ text: z.string().min(1).max(10_000), region: z.array(z.number().min(0).max(1)).length(4).nullable(), language: z.string().min(2).max(35).nullable() }).strict();
-const trackPayloadSchema = z.object({ label: z.string().min(1).max(200), trackId: z.string().min(1).max(120), regionKeyframes: z.array(z.object({ pts: ptsSchema, box: z.array(z.number().min(0).max(1)).length(4) }).strict()).max(10_000) }).strict();
+const trackKeyframeSchema = z.object({ pts: ptsSchema, box: z.array(z.number().min(0).max(1)).length(4), state: z.enum(['VISIBLE', 'OCCLUDED', 'UNCERTAIN']).default('VISIBLE'), confidencePermille: z.number().int().min(0).max(1000).default(1000) }).strict();
+const trackPayloadSchema = z.object({ label: z.string().min(1).max(200), trackId: z.string().min(1).max(120), lifecycle: z.enum(['CONTINUOUS', 'OCCLUDED', 'LOST']).default('CONTINUOUS'), regionKeyframes: z.array(trackKeyframeSchema).max(10_000) }).strict();
+const personTrackPayloadSchema = trackPayloadSchema.extend({ identityState: z.literal('UNKNOWN').default('UNKNOWN') }).strict();
 const eventPayloadSchema = z.object({ label: z.string().min(1).max(200), subjectTrackId: z.string().min(1).max(120).nullable() }).strict();
 const motionPayloadSchema = z.object({ valuePermille: z.number().int().min(0).max(1000), method: z.string().min(1).max(160) }).strict();
 const audioEventPayloadSchema = z.object({ label: z.string().min(1).max(200), channel: z.number().int().nonnegative().nullable() }).strict();
@@ -82,7 +84,7 @@ export const mediaIndexRecordSchema = z.discriminatedUnion('kind', [
   record('THUMBNAIL', thumbnailPayloadSchema), record('WAVEFORM', waveformPayloadSchema), record('QUALITY', qualityPayloadSchema),
   record('TRANSCRIPT_WORD', transcriptWordPayloadSchema), record('TRANSCRIPT_SEGMENT', transcriptSegmentPayloadSchema), record('SPEAKER_SEGMENT', speakerPayloadSchema),
   record('SHOT_BOUNDARY', shotPayloadSchema), record('OCR_TEXT', ocrPayloadSchema), record('OBJECT_TRACK', trackPayloadSchema), record('ACTION_EVENT', eventPayloadSchema),
-  record('PERSON_TRACK', trackPayloadSchema), record('VISUAL_EVENT', eventPayloadSchema), record('MOTION_INTENSITY', motionPayloadSchema), record('AUDIO_EVENT', audioEventPayloadSchema),
+  record('PERSON_TRACK', personTrackPayloadSchema), record('VISUAL_EVENT', eventPayloadSchema), record('MOTION_INTENSITY', motionPayloadSchema), record('AUDIO_EVENT', audioEventPayloadSchema),
   record('MUSIC_BEAT', beatPayloadSchema), record('SEMANTIC_EMBEDDING', embeddingPayloadSchema), record('USER_MARKER', markerPayloadSchema),
 ]);
 

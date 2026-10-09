@@ -173,6 +173,20 @@ export {
 } from './media-analysis.js';
 export type { MediaAnalysisStageName, MediaAnalysisStageStatus, MediaAnalysisStage, MediaAnalysisGraph, RebuildMediaAnalysisStageRequest } from './media-analysis.js';
 export {
+  MEDIA_VISUAL_ANALYSIS_JOB_TYPE,
+  MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  visualSourceAnchorSchema,
+  visualEvidenceFrameSchema,
+  visualTrackKeyframeSchema,
+  generatedObjectTrackSchema,
+  generatedPersonTrackSchema,
+  generatedVisualEventSchema,
+  generatedMotionIntensitySchema,
+  generatedMediaVisualAnalysisSchema,
+  mediaVisualAnalysisJobInputSchema,
+} from './media-visual-analysis.js';
+export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter } from './media-visual-analysis.js';
+export {
   MEDIA_TRANSCRIPT_JOB_TYPE,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_STATUSES,

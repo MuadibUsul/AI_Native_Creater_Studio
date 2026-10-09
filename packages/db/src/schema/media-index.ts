@@ -73,7 +73,7 @@ export const mediaIndexEntries = pgTable(
   (table) => [
     uniqueIndex('media_index_entries_run_kind_ordinal_uq').on(table.runId, table.kind, table.ordinal),
     index('media_index_entries_workspace_run_kind_idx').on(table.workspaceId, table.runId, table.kind, table.ordinal),
-    check('media_index_entries_kind_ck', sql`${table.kind} in ('THUMBNAIL','WAVEFORM','SHOT','QUALITY')`),
+    check('media_index_entries_kind_ck', sql`${table.kind} in ('THUMBNAIL','WAVEFORM','SHOT','QUALITY','OBJECT_TRACK','ACTION_EVENT','PERSON_TRACK','VISUAL_EVENT','MOTION_INTENSITY')`),
     check('media_index_entries_ordinal_ck', sql`${table.ordinal} >= 0`),
     check('media_index_entries_pts_ck', sql`${table.sourceStartPts} ~ '^-?[0-9]+$' and ${table.sourceEndPts} ~ '^-?[0-9]+$'`),
     check('media_index_entries_time_base_ck', sql`${table.timeBaseNumerator} > 0 and ${table.timeBaseDenominator} > 0`),

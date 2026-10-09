@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, type SpeechRecognitionAdapter } from '@ancs/contracts';
+import { MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, type MediaVisualAnalysisAdapter, type SpeechRecognitionAdapter } from '@ancs/contracts';
 import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
 import { assets, assetVersions, createDb, jobs, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
@@ -67,6 +67,30 @@ async function executeTranscript(adapter?: SpeechRecognitionAdapter) {
   const job = await claimJob(deps(), { workerId: 'asr', leaseSeconds: 120, types: [MEDIA_TRANSCRIPT_JOB_TYPE] });
   expect(job).not.toBeNull();
   const outcome = await executeJob(deps(), createDefaultRegistry({ speechRecognitionAdapter: adapter }), { workerId: 'asr', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
+  return { job: job!, outcome };
+}
+
+const visualAdapter: MediaVisualAnalysisAdapter = {
+  kind: 'n02-12-scripted-visual-test-seam',
+  async analyze() {
+    const timeBase = { numerator: 1, denominator: 1000 };
+    const frame = (pts: string) => ({ pts, timeBase, frameRef: `fixture-frame:${pts}` });
+    const keyframe = (pts: string, state: 'VISIBLE' | 'OCCLUDED' | 'UNCERTAIN', confidencePermille: number) => ({ pts, box: [0.1, 0.1, 0.3, 0.6] as [number, number, number, number], state, confidencePermille });
+    return {
+      schemaVersion: '1.0' as const, processorVersion: MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, adapter: 'scripted-test-only', modelVersion: 'fixture-vision-v1', sampledFrameCount: 12, durationMs: 3000,
+      objectTracks: [{ id: 'phone-1', label: '手机', confidencePermille: 890, lifecycle: 'CONTINUOUS' as const, keyframes: [keyframe('200', 'VISIBLE', 900), keyframe('800', 'VISIBLE', 880)], evidenceFrames: [frame('200')], sourceStartPts: '100', sourceEndPts: '900', timeBase }],
+      personTracks: [{ id: 'person-1', label: 'person' as const, identityState: 'UNKNOWN' as const, confidencePermille: 760, lifecycle: 'OCCLUDED' as const, keyframes: [keyframe('100', 'VISIBLE', 830), keyframe('850', 'UNCERTAIN', 420)], evidenceFrames: [frame('100'), frame('850')], sourceStartPts: '100', sourceEndPts: '900', timeBase }],
+      actionEvents: [{ id: 'raise-phone-1', label: '举起手机', subjectTrackId: 'person-1', confidencePermille: 840, evidenceFrames: [frame('300')], sourceStartPts: '200', sourceEndPts: '800', timeBase }, { id: 'raise-hand-interference', label: '举手（非手机）', subjectTrackId: 'person-1', confidencePermille: 610, evidenceFrames: [frame('1300')], sourceStartPts: '1200', sourceEndPts: '1800', timeBase }],
+      visualEvents: [{ id: 'phone-visible', label: '手机进入画面', subjectTrackId: 'phone-1', confidencePermille: 870, evidenceFrames: [frame('200')], sourceStartPts: '100', sourceEndPts: '900', timeBase }],
+      motionIntensity: [{ id: 'motion-1', valuePermille: 670, method: 'fixture-optical-flow', evidenceFrames: [frame('500')], sourceStartPts: '100', sourceEndPts: '900', timeBase }],
+    };
+  },
+};
+
+async function executeVisual(adapter?: MediaVisualAnalysisAdapter) {
+  const job = await claimJob(deps(), { workerId: 'vision', leaseSeconds: 120, types: [MEDIA_VISUAL_ANALYSIS_JOB_TYPE] });
+  expect(job).not.toBeNull();
+  const outcome = await executeJob(deps(), createDefaultRegistry({ mediaVisualAnalysisAdapter: adapter }), { workerId: 'vision', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
   return { job: job!, outcome };
 }
 
@@ -191,7 +215,8 @@ describe('N02-11 progressive media analysis DAG', () => {
     expect(initial).toMatchObject({ playable: true, deterministicEditingReady: true });
     expect(initial.stages.find((stage) => stage.stage === 'PROBE')).toMatchObject({ status: 'READY', reusable: true });
     expect(initial.stages.find((stage) => stage.stage === 'ASR')).toMatchObject({ status: 'QUEUED' });
-    expect(initial.stages.find((stage) => stage.stage === 'VISION')).toMatchObject({ status: 'DISABLED' });
+    expect(initial.stages.find((stage) => stage.stage === 'VISION')).toMatchObject({ status: 'QUEUED' });
+    expect(initial.stages.find((stage) => stage.stage === 'OCR')).toMatchObject({ status: 'DISABLED' });
     await getMediaAnalysisGraph(deps(), created);
     expect(await handle.db.select().from(jobs).where(eq(jobs.workspaceId, created.workspaceId))).toHaveLength(jobsBeforeRead);
 
@@ -207,7 +232,7 @@ describe('N02-11 progressive media analysis DAG', () => {
 
     const crashed = await claimJob(deps(), { workerId: 'crashed-index', leaseSeconds: 1, types: [MEDIA_INDEX_JOB_TYPE] });
     expect(crashed).not.toBeNull();
-    await handle.db.update(mediaIndexRuns).set({ status: 'PARTIAL', coveragePermille: 500, checkpointMs: 1000 }).where(and(eq(mediaIndexRuns.workspaceId, created.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, created.version.id)));
+    await handle.db.update(mediaIndexRuns).set({ status: 'PARTIAL', coveragePermille: 500, checkpointMs: 1000 }).where(and(eq(mediaIndexRuns.workspaceId, created.workspaceId), eq(mediaIndexRuns.sourceAssetVersionId, created.version.id), eq(mediaIndexRuns.processorVersion, MEDIA_INDEX_PROCESSOR_VERSION)));
     const partial = await getMediaAnalysisGraph(deps(), created);
     expect(partial.stages.find((stage) => stage.stage === 'SHOT')).toMatchObject({ status: 'PARTIAL', coveragePermille: 500, checkpoint: { cursor: '1000', completedUnits: 1000 } });
     expect(await requeueExpiredLeases(deps(), { now: new Date(Date.now() + 10_000) })).toMatchObject({ requeued: 1 });
@@ -215,5 +240,19 @@ describe('N02-11 progressive media analysis DAG', () => {
     const recovered = await getMediaAnalysisGraph(deps(), created);
     expect(recovered.stages.find((stage) => stage.stage === 'SHOT')).toMatchObject({ status: 'READY', coveragePermille: 1000 });
     expect(recovered.stages.find((stage) => stage.stage === 'ASR')).toMatchObject({ status: 'CANCELLED' });
+  });
+});
+
+describe('N02-12 visual action and track evidence', () => {
+  it('indexes action candidates, anonymous occluded tracks and searchable source ranges without naming people', { timeout: 120_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect((await executeVisual(visualAdapter)).outcome).toBe('succeeded');
+    const index = await listUnifiedMediaIndex(deps(), { ...created, query: { sourceStartPts: '0', sourceEndPts: '2000', timeBaseNumerator: 1, timeBaseDenominator: 1000 } });
+    expect(index.capabilities.find((item) => item.kind === 'ACTION_EVENT')).toMatchObject({ supported: true, status: 'READY', recordCount: 2 });
+    expect(index.items.find((item) => item.kind === 'PERSON_TRACK')).toMatchObject({ payload: { label: 'person', identityState: 'UNKNOWN', lifecycle: 'OCCLUDED', regionKeyframes: expect.arrayContaining([expect.objectContaining({ state: 'UNCERTAIN' })]) } });
+    expect(index.items.find((item) => item.kind === 'ACTION_EVENT' && (item.payload as { label?: string }).label === '举起手机')).toMatchObject({ basis: 'MODEL_INFERRED', evidenceRefs: [expect.objectContaining({ type: 'FRAME' })] });
+    expect(JSON.stringify(index.items)).not.toContain('张三');
+    const found = await searchMediaSegments(deps(), { workspaceId: created.workspaceId, query: '举起手机' });
+    expect(found.items[0]).toMatchObject({ assetId: created.assetId, modality: 'VISUAL', evidence: 'INFERENCE', label: '举起手机', sourceStartPts: '200', sourceEndPts: '800', contentTreatment: 'REFERENCE_DATA_ONLY' });
   });
 });

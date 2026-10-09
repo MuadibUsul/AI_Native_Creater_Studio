@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts, type SourceMediaIndexer } from '@ancs/contracts';
+import { MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, mapProxyPtsToSourcePts, mapSourcePtsToProxyPts, type SourceMediaIndexer } from '@ancs/contracts';
 import { claimJob, confirmUpload, createAssetPlaybackUrl, createUploadIntent, getAsset, listAssets, listMediaIndex, rebuildMediaIndex, rebuildMediaProxy, searchMediaSegments, type DomainDeps } from '@ancs/domain';
 import {
   assetVersions,
@@ -191,7 +191,7 @@ describe('N02-02 media probe worker', () => {
     await executeProbe(created.workspaceId);
     expect(await handle.db.select().from(jobs).where(eq(jobs.type, MEDIA_INDEX_JOB_TYPE))).toHaveLength(1);
     expect(await executeIndex(created.workspaceId)).toBe('succeeded');
-    expect(await handle.db.select().from(mediaIndexRuns).where(eq(mediaIndexRuns.sourceAssetVersionId, created.versionId))).toHaveLength(1);
+    expect(await handle.db.select().from(mediaIndexRuns).where(and(eq(mediaIndexRuns.sourceAssetVersionId, created.versionId), eq(mediaIndexRuns.processorVersion, MEDIA_INDEX_PROCESSOR_VERSION)))).toHaveLength(1);
     const persistedEntries = await handle.db.select().from(mediaIndexEntries);
     expect(persistedEntries.some((entry) => entry.kind === 'THUMBNAIL' && entry.storageKey !== null)).toBe(true);
     expect(persistedEntries.some((entry) => entry.kind === 'WAVEFORM')).toBe(true);

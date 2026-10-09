@@ -230,7 +230,7 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(unified).toMatchObject({ sourceAssetVersionId: asset.currentVersionId, items: [{ id: tag.id, kind: 'USER_MARKER', basis: 'USER_SUPPLIED', payload: { label: '产品近景' } }] });
     expect(unified.capabilities).toHaveLength(17);
     const analysis = await owner.assets.analysisStages(workspaceId, asset.id);
-    expect(analysis).toMatchObject({ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, playable: true, stages: expect.arrayContaining([expect.objectContaining({ stage: 'VISION', status: 'DISABLED' })]) });
+    expect(analysis).toMatchObject({ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, playable: true, stages: expect.arrayContaining([expect.objectContaining({ stage: 'VISION', status: 'NOT_REQUESTED' }), expect.objectContaining({ stage: 'OCR', status: 'DISABLED' })]) });
     expect(analysis.stages).toHaveLength(11);
     expect(await owner.assets.searchSegments(workspaceId, { q: '产品近景' })).toMatchObject({ items: [{ assetId: asset.id, sourceAssetVersionId: asset.currentVersionId, evidence: 'USER_ASSERTED', contentTreatment: 'REFERENCE_DATA_ONLY' }] });
     const hiddenList = await stranger.assets.listRangeTags(workspaceId, asset.id).catch((error: unknown) => error);

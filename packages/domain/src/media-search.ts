@@ -92,14 +92,19 @@ export async function searchMediaSegments(deps: DomainDeps, input: { workspaceId
     .innerJoin(mediaIndexRuns, eq(mediaIndexRuns.id, mediaIndexEntries.runId))
     .innerJoin(assetVersions, eq(assetVersions.id, mediaIndexRuns.sourceAssetVersionId))
     .innerJoin(assets, and(eq(assets.id, assetVersions.assetId), eq(assets.currentVersionId, assetVersions.id)))
-    .where(and(eq(mediaIndexEntries.workspaceId, input.workspaceId), eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(assetVersions.workspaceId, input.workspaceId), eq(assets.workspaceId, input.workspaceId), isNull(assets.deletedAt))).limit(1000);
+    .where(and(eq(mediaIndexEntries.workspaceId, input.workspaceId), eq(mediaIndexEntries.lifecycleState, 'ACTIVE'), eq(mediaIndexRuns.workspaceId, input.workspaceId), eq(assetVersions.workspaceId, input.workspaceId), eq(assets.workspaceId, input.workspaceId), isNull(assets.deletedAt))).limit(1000);
   for (const row of indexRows) {
     const payload = row.entry.payload as Record<string, unknown>;
     const payloadLabels = Object.values(payload).flatMap((value) => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
-    const label = row.entry.kind === 'SHOT' ? `镜头 ${String(row.entry.ordinal + 1)}` : row.entry.kind === 'QUALITY' ? String(payload['marker'] ?? '质量标记') : row.entry.kind === 'WAVEFORM' ? '音频波形' : `缩略图 ${String(row.entry.ordinal + 1)}`;
+    const label = ['OBJECT_TRACK', 'ACTION_EVENT', 'PERSON_TRACK', 'VISUAL_EVENT'].includes(row.entry.kind)
+      ? String(payload['label'] ?? '视觉候选')
+      : row.entry.kind === 'MOTION_INTENSITY'
+        ? `运动强度 ${String(payload['valuePermille'] ?? '')}`.trim()
+        : row.entry.kind === 'SHOT' ? `镜头 ${String(row.entry.ordinal + 1)}` : row.entry.kind === 'QUALITY' ? String(payload['marker'] ?? '质量标记') : row.entry.kind === 'WAVEFORM' ? '音频波形' : `缩略图 ${String(row.entry.ordinal + 1)}`;
     const matchedTerms = matchConcept(request.q, [label, ...payloadLabels]);
     if (matchedTerms.length === 0) continue;
-    results.push({ id: resultId('index', row.entry.id), assetId: row.asset.id, sourceAssetVersionId: row.run.sourceAssetVersionId, modality: row.entry.kind === 'WAVEFORM' || payload['marker'] === 'SILENCE' ? 'AUDIO' : 'VISUAL', evidence: 'OBSERVATION', label, sourceStartPts: row.entry.sourceStartPts, sourceEndPts: row.entry.sourceEndPts, timeBase: { numerator: row.entry.timeBaseNumerator, denominator: row.entry.timeBaseDenominator }, matchedTerms, confidencePermille: row.entry.confidencePermille, contentTreatment: 'REFERENCE_DATA_ONLY', score: 200 });
+    const score = normalize(label) === normalize(request.q) ? 260 : normalize(label).includes(normalize(request.q)) ? 230 : 200;
+    results.push({ id: resultId('index', row.entry.id), assetId: row.asset.id, sourceAssetVersionId: row.run.sourceAssetVersionId, modality: row.entry.kind === 'WAVEFORM' || payload['marker'] === 'SILENCE' ? 'AUDIO' : 'VISUAL', evidence: row.entry.basis === 'MODEL_INFERRED' ? 'INFERENCE' : 'OBSERVATION', label, sourceStartPts: row.entry.sourceStartPts, sourceEndPts: row.entry.sourceEndPts, timeBase: { numerator: row.entry.timeBaseNumerator, denominator: row.entry.timeBaseDenominator }, matchedTerms, confidencePermille: row.entry.confidencePermille, contentTreatment: 'REFERENCE_DATA_ONLY', score });
   }
 
   results.sort((a, b) => {

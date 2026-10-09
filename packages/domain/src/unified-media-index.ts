@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
   MEDIA_INDEX_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
+  MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
   UNIFIED_MEDIA_INDEX_KINDS,
   mediaIndexRecordSchema,
   mediaTranscriptSnapshotSchema,
@@ -78,8 +79,7 @@ export async function listUnifiedMediaIndex(
     deps.db.select().from(mediaIndexRuns).where(and(
       eq(mediaIndexRuns.workspaceId, input.workspaceId),
       eq(mediaIndexRuns.sourceAssetVersionId, source.version.id),
-      eq(mediaIndexRuns.processorVersion, MEDIA_INDEX_PROCESSOR_VERSION),
-    )).limit(1),
+    )),
     deps.db.select().from(mediaTranscriptRuns).where(and(
       eq(mediaTranscriptRuns.workspaceId, input.workspaceId),
       eq(mediaTranscriptRuns.sourceAssetVersionId, source.version.id),
@@ -91,12 +91,14 @@ export async function listUnifiedMediaIndex(
       eq(mediaRangeTags.sourceAssetVersionId, source.version.id),
     )).orderBy(asc(mediaRangeTags.createdAt), asc(mediaRangeTags.id)),
   ]);
-  const indexRun = indexRunRows[0];
+  const indexRun = indexRunRows.find((run) => run.processorVersion === MEDIA_INDEX_PROCESSOR_VERSION);
+  const visualRun = indexRunRows.find((run) => run.processorVersion === MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION);
   const transcriptRun = transcriptRunRows[0];
   const [indexEntries, transcriptVersionRows] = await Promise.all([
-    indexRun === undefined ? Promise.resolve([]) : deps.db.select().from(mediaIndexEntries).where(and(
+    indexRunRows.length === 0 ? Promise.resolve([]) : deps.db.select().from(mediaIndexEntries).where(and(
       eq(mediaIndexEntries.workspaceId, input.workspaceId),
-      eq(mediaIndexEntries.runId, indexRun.id),
+      inArray(mediaIndexEntries.runId, indexRunRows.map((run) => run.id)),
+      eq(mediaIndexEntries.lifecycleState, 'ACTIVE'),
     )).orderBy(asc(mediaIndexEntries.kind), asc(mediaIndexEntries.ordinal), asc(mediaIndexEntries.id)),
     transcriptRun === undefined || transcriptRun.currentVersion < 1 ? Promise.resolve([]) : deps.db.select().from(mediaTranscriptVersions).where(and(
       eq(mediaTranscriptVersions.workspaceId, input.workspaceId),
@@ -113,7 +115,7 @@ export async function listUnifiedMediaIndex(
   const records: MediaIndexRecord[] = [];
 
   for (const entry of indexEntries) {
-    const kind = entry.kind === 'SHOT' ? 'SHOT_BOUNDARY' : entry.kind as 'THUMBNAIL' | 'WAVEFORM' | 'QUALITY';
+    const kind = entry.kind === 'SHOT' ? 'SHOT_BOUNDARY' : entry.kind as UnifiedMediaIndexKind;
     records.push(mediaIndexRecordSchema.parse({
       id: entry.id,
       workspaceId: input.workspaceId,
@@ -198,6 +200,7 @@ export async function listUnifiedMediaIndex(
   for (const record of records) counts.set(record.kind, (counts.get(record.kind) ?? 0) + 1);
   const legacyKinds = new Set<UnifiedMediaIndexKind>(['THUMBNAIL', 'WAVEFORM', 'QUALITY', 'SHOT_BOUNDARY']);
   const transcriptKinds = new Set<UnifiedMediaIndexKind>(['TRANSCRIPT_WORD', 'TRANSCRIPT_SEGMENT', 'SPEAKER_SEGMENT']);
+  const visualKinds = new Set<UnifiedMediaIndexKind>(['OBJECT_TRACK', 'ACTION_EVENT', 'PERSON_TRACK', 'VISUAL_EVENT', 'MOTION_INTENSITY']);
   const supportedLegacy = new Set((indexRun?.supportedKinds as string[] | undefined) ?? []);
   const capabilities = UNIFIED_MEDIA_INDEX_KINDS.map((kind): MediaIndexCapability => {
     const count = counts.get(kind) ?? 0;
@@ -213,6 +216,13 @@ export async function listUnifiedMediaIndex(
       const status = statusForRun(transcriptRun?.status, count);
       return { kind, supported: true, status, coveragePermille: status === 'READY' || status === 'EMPTY' ? 1000 : 0, recordCount: count, errorSummary: transcriptRun?.errorSummary ?? null, toolId: 'speech-recognition-adapter', toolVersion: MEDIA_TRANSCRIPT_PROCESSOR_VERSION, modelVersion: transcriptVersion?.model ?? null };
     }
+    if (visualKinds.has(kind)) {
+      const hasVideo = probe?.success === true && probe.data.streams.some((stream) => stream.type === 'VIDEO');
+      if (!hasVideo) return { kind, supported: false, status: 'UNSUPPORTED', coveragePermille: 0, recordCount: 0, errorSummary: null, toolId: null, toolVersion: null, modelVersion: null };
+      const status = statusForRun(visualRun?.status, count);
+      const firstRecord = records.find((record) => record.kind === kind);
+      return { kind, supported: true, status, coveragePermille: visualRun?.coveragePermille ?? 0, recordCount: count, errorSummary: visualRun?.errorSummary ?? null, toolId: visualRun?.toolId ?? 'visual-analysis-adapter', toolVersion: visualRun?.toolVersion ?? MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, modelVersion: firstRecord?.modelVersion ?? null };
+    }
     return { kind, supported: false, status: 'UNSUPPORTED', coveragePermille: 0, recordCount: 0, errorSummary: null, toolId: null, toolVersion: null, modelVersion: null };
   });
 
@@ -227,7 +237,7 @@ export async function listUnifiedMediaIndex(
   const page = filtered.slice(cursor, cursor + query.limit);
   return unifiedMediaIndexPageSchema.parse({
     sourceAssetVersionId: source.version.id,
-    indexVersion: Math.max(indexRun?.indexVersion ?? 1, transcriptVersion?.version ?? 1),
+    indexVersion: Math.max(...indexRunRows.map((run) => run.indexVersion), transcriptVersion?.version ?? 1),
     capabilities,
     items: page,
     nextCursor: cursor + query.limit < filtered.length ? String(cursor + query.limit) : null,
