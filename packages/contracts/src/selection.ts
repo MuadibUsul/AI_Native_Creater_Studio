@@ -196,7 +196,8 @@ export const orderedTargetRefSchema = z.object({
 
 export type OrderedTargetRef = z.infer<typeof orderedTargetRefSchema>;
 
-export const selectionResolutionStatusSchema = z.enum(['RESOLVED', 'PARTIAL', 'AMBIGUOUS', 'FAILED']);
+export const SELECTION_RESOLUTION_STATUSES = ['RESOLVED', 'PARTIAL', 'AMBIGUOUS', 'STALE', 'FAILED'] as const;
+export const selectionResolutionStatusSchema = z.enum(SELECTION_RESOLUTION_STATUSES);
 
 export const selectionRemapEntrySchema = z.object({
   fromRevision: z.number().int().nonnegative(),
@@ -219,6 +220,8 @@ export const selectionAnchorSchema = z.object({
   geometries: z.array(geometrySelectionSchema).max(64).default([]),
   orderedTargetRefs: z.array(orderedTargetRefSchema).max(64).default([]),
   temporalSelection: temporalSelectionSchema.nullable().default(null),
+  /** 发话时间（语音指代使用"说这句话时"的序列时间，而不是解析时刻） */
+  utteranceSequenceTime: mediaTimeSchema.nullable().default(null),
   trackScope: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('ALL') }).strict(),
     z.object({ kind: z.literal('TRACKS'), trackIds: z.array(opaqueIdSchema).min(1).max(64) }).strict(),
@@ -250,6 +253,11 @@ export const selectionAnchorSchema = z.object({
   }
   for (const issue of geometrySetIssues(value.geometries)) {
     context.addIssue({ code: 'custom', path: ['geometries'], message: issue });
+  }
+  // 身份必须来自对象 id/版本或显式的 PIXEL_REGION 引用：预览帧号/帧哈希只是定位，不能当身份或授权（§3.1）。
+  const hasTargetGeometry = value.geometries.some((geometry) => geometry.role === 'TARGET');
+  if (hasTargetGeometry && value.orderedTargetRefs.length === 0) {
+    context.addIssue({ code: 'custom', path: ['orderedTargetRefs'], message: 'TARGET 几何必须伴随对象引用（对象 id/版本或 PIXEL_REGION）——预览帧/帧哈希不能作为身份或授权' });
   }
 });
 
@@ -390,3 +398,123 @@ export function selectionFingerprintInput(
   };
   return JSON.stringify(payload);
 }
+
+/* ------------------------------------------------------------------ */
+/* 旧选择格式兼容（N04-09：旧请求可读、内部只解析一次、不丢有理时基）      */
+/* ------------------------------------------------------------------ */
+
+export const LEGACY_SELECTION_KINDS = ['SCENE', 'CLIP', 'CAPTION', 'MEDIA_RANGE', 'PIXEL_REGION'] as const;
+export const legacySelectionKindSchema = z.enum(LEGACY_SELECTION_KINDS);
+export type LegacySelectionKind = z.infer<typeof legacySelectionKindSchema>;
+
+/**
+ * 旧前端（分镜/场景制与 N02-15 的"带到编辑器"）此前各自携带 inline 选择：
+ * - 场景制：`{ sceneId, revision }`
+ * - 片段制：`{ clipId }`
+ * - 素材范围：`{ assetId, sourceRangeMs: [start, end] }`（毫秒，需转有理时基）
+ * 本适配器把它们**解析一次**成规范 SelectionAnchor；旧字段不再有第二份权威语义。
+ */
+export const legacySelectionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('SCENE'), sceneId: opaqueIdSchema, sceneRevision: z.number().int().nonnegative().optional() }).strict(),
+  z.object({ kind: z.literal('CLIP'), clipId: opaqueIdSchema }).strict(),
+  z.object({
+    kind: z.literal('CAPTION'), captionId: opaqueIdSchema,
+    /** 可选：发话时间（界面上用户说这句话时播放头所在的位置） */
+    utteranceSequenceTime: mediaTimeSchema.optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal('MEDIA_RANGE'), assetId: opaqueIdSchema,
+    sourceRangeMs: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict(),
+  }).strict(),
+  z.object({
+    kind: z.literal('PIXEL_REGION'), normalizedRect: z.object({ x: normalizedCoord, y: normalizedCoord, width: z.number().positive(), height: z.number().positive() }).strict(),
+    previewRevision: z.number().int().nonnegative(),
+  }).strict(),
+]);
+
+export type LegacySelection = z.infer<typeof legacySelectionSchema>;
+
+/**
+ * 旧格式 → 规范锚点。**时间一律走有理时基**（毫秒只作为入口，转换即丢毫秒表示）；
+ * 旧"场景"进入 `orderedTargetRefs`（targetKind CLIP 之外的 SCENE 语义用 targetRef + 证据标注），
+ * 不产生第二套选择状态。
+ */
+export function selectionAnchorFromLegacySelection(input: {
+  anchorId: string;
+  workspaceId: string;
+  projectId: string;
+  sequenceId: string;
+  revision?: number;
+  legacy: LegacySelection;
+  /** 发话时间（语音场景：指代使用对应发话时间，而不是解析时刻） */
+  utteranceSequenceTime?: z.infer<typeof mediaTimeSchema> | null;
+}): SelectionAnchor {
+  const legacy = legacySelectionSchema.parse(input.legacy);
+  const revision = input.revision ?? 0;
+  const utterance = input.utteranceSequenceTime ?? (legacy.kind === 'CAPTION' ? (legacy.utteranceSequenceTime ?? null) : null);
+  const space = (sequenceTime: z.infer<typeof mediaTimeSchema> | null): CoordinateSpaceReference => ({
+    kind: 'PREVIEW_FRAME', previewRevision: 0, viewport: { width: 1920, height: 1080 }, sequenceTime, sourcePts: null,
+  });
+
+  let geometries: GeometrySelection[] = [];
+  let targets: OrderedTargetRef[] = [];
+  let temporal: TemporalSelection | null = null;
+
+  switch (legacy.kind) {
+    case 'SCENE':
+      targets = [{ targetRef: legacy.sceneId, targetKind: 'PIXEL_REGION', label: 'A', assetVersionId: null }];
+      break;
+    case 'CLIP':
+      targets = [{ targetRef: legacy.clipId, targetKind: 'CLIP', label: 'A', assetVersionId: null }];
+      break;
+    case 'CAPTION':
+      targets = [{ targetRef: legacy.captionId, targetKind: 'CAPTION', label: 'A', assetVersionId: null }];
+      break;
+    case 'MEDIA_RANGE':
+      targets = [{ targetRef: legacy.assetId, targetKind: 'PIXEL_REGION', label: 'A', assetVersionId: null }];
+      temporal = { kind: 'RANGES', ranges: [mediaRangeSchema.parse({
+        start: legacyMillisecondsToMediaTimeCompat(legacy.sourceRangeMs.start),
+        end: legacyMillisecondsToMediaTimeCompat(legacy.sourceRangeMs.end),
+      })] };
+      break;
+    case 'PIXEL_REGION':
+      geometries = [geometrySelectionSchema.parse({
+        kind: 'RECT', role: 'TARGET', coordinateSpaceRef: { ...space(utterance), previewRevision: legacy.previewRevision },
+        rect: { x: legacy.normalizedRect.x, y: legacy.normalizedRect.y, width: legacy.normalizedRect.width, height: legacy.normalizedRect.height },
+        geometryRevision: 0,
+      })];
+      targets = [{ targetRef: `pxr_${legacy.previewRevision}`, targetKind: 'PIXEL_REGION', label: 'A', assetVersionId: null }];
+      break;
+  }
+
+  const draft = {
+    anchorId: input.anchorId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    sequenceId: input.sequenceId,
+    revision,
+    geometries,
+    orderedTargetRefs: targets,
+    temporalSelection: temporal,
+    utteranceSequenceTime: utterance,
+    fingerprintInput: '',
+  };
+  const placeholder = selectionAnchorSchema.parse({ ...draft, fingerprintInput: 'pending' });
+  const fingerprintInput = selectionFingerprintInput(placeholder);
+  return selectionAnchorSchema.parse({ ...placeholder, fingerprintInput });
+}
+
+/** 毫秒 → 有理时基（1/1000），保证"新请求不丢有理时基"。 */
+function legacyMillisecondsToMediaTimeCompat(milliseconds: number): { ticks: string; timebase: { num: number; den: number } } {
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 0) throw new RangeError('legacy milliseconds must be a nonnegative safe integer');
+  return { ticks: String(milliseconds), timebase: { num: 1, den: 1000 } };
+}
+
+/** 服务端存储的锚点记录：规范锚点 + 存储元数据（指纹、锚点修订号）。 */
+export const selectionAnchorRecordSchema = z.object({
+  anchor: selectionAnchorSchema,
+  fingerprint: z.string().length(64),
+  revision: z.number().int().positive(),
+}).strict();
+
+export type SelectionAnchorRecord = z.infer<typeof selectionAnchorRecordSchema>;

@@ -44,6 +44,8 @@ N03-08 已按范围 VERIFIED：多轨预览与真实合成由**同一份**工程
 
 N03-09 已按范围 VERIFIED：范围编辑的最小 AI 入口把「选中片段 + Brief + 允许操作清单 + 源证据」交给规划器，输出经契约、允许清单、源引用（不虚构素材）、对象锁与原声保护五道校验的可执行操作，越界请求逐条进 `outOfScope` 并说明原因；「去掉前面废话但保留原音」产出真实可执行裁剪（Apply 后片段 0–4s→0–3s、音频区域逐字段未变），计划阶段零写库、零 Provider 媒体调用（见 `docs/verification/N03-09.md`）。本项产出的结构化计划即增量设计（鼠标点线面 × 横向时间定位 × 流式语音）中 `IntentRevision` 的落点，差距映射见 `docs/design/mouse-voice-gap-map.md`；V03-01／V03-28／V03-29 的语音入口、私有试改与原子采用分别由 N05-01-s1…／N06-0x-s1… 承接，保持 `IN_PROGRESS`。
 
+N04-09 已按范围 VERIFIED：SelectionAnchor 成为**唯一**规范选择结构（AttentionSnapshot 的选择子结构，不新增第二份权威状态），持久化为 (workspace, project, anchorId, revision) 追加式修订日志（迁移 0079），指纹 = sha256(规范序列化)；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经 `selectionAnchorFromLegacySelection` **解析一次**，毫秒入口转 1/1000 有理时基（新请求不丢有理时基），字幕场景携带发话时间（指代使用对应发话时间）；越权（同工作区其他项目）永远 422、帧哈希不能当身份、跨租户 404；重映射把失效选择明确标成 FAILED/PARTIAL/AMBIGUOUS（附候选证据）/STALE 并记入 remapHistory。V04-15 的 AttentionSnapshot 本体（事件缓冲/时钟/轨迹最小保留）仍属 N04-05，锚点自动恢复属 N04-10，画布与时间带属 N04-02-s1／N04-04-s1，均保持 `IN_PROGRESS`（见 `docs/verification/N04-09.md`）。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

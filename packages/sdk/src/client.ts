@@ -39,6 +39,9 @@ import {
   directorApplyRequestSchema,
   createEditPlanRequestSchema,
   createRangeEditPlanRequestSchema,
+  selectionAnchorRecordSchema,
+  selectionAnchorSchema,
+  legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
   directorPlanSchema,
@@ -358,6 +361,9 @@ import {
   type RenderStatus,
   type EditPlan,
   type RangeEditPlan,
+  type SelectionAnchor,
+  type SelectionAnchorRecord,
+  type LegacySelection,
   type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
   type MasterNarration,
@@ -756,6 +762,27 @@ export interface AncsClient {
     undo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
     /** 重做最近一次撤销（LIFO；新编辑结束重做分支，§4.8） */
     redo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
+    /** N04-09：保存规范 SelectionAnchor（选择动作不改工程；可携带旧 inline 选择供兼容解析） */
+    saveSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      input: { anchor: SelectionAnchor; legacy?: LegacySelection },
+      options?: MutationOptions,
+    ): Promise<SelectionAnchorRecord>;
+    /** N04-09：读取锚点（跨租户 404） */
+    selectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+    ): Promise<SelectionAnchorRecord>;
+    /** N04-09：把锚点重解析到当前工程状态（消失/歧义/版本过期 → FAILED/PARTIAL/AMBIGUOUS/STALE） */
+    remapSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+      input: { reason: string },
+      options?: MutationOptions,
+    ): Promise<SelectionAnchorRecord>;
   };
   assets: {
     /** 上传意图：返回带作用域与 TTL 的直传 Signed URL（命中 workspace 哈希去重时为 deduped） */
@@ -2059,6 +2086,20 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       undo: (projectId, mutation) =>
         request('POST', `/api/v1/projects/${projectId}/undo`, editResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      saveSelectionAnchor: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors`, selectionAnchorRecordSchema, {
+          body: input,
+          bodySchema: z.object({ anchor: selectionAnchorSchema, legacy: legacySelectionSchema.optional() }).strict(),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      selectionAnchor: (workspaceId, projectId, anchorId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}`, selectionAnchorRecordSchema),
+      remapSelectionAnchor: (workspaceId, projectId, anchorId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/remap`, selectionAnchorRecordSchema, {
+          body: input,
+          bodySchema: z.object({ reason: z.string().min(1).max(200) }).strict(),
           idempotencyKey: mutation?.idempotencyKey,
         }),
       redo: (projectId, mutation) =>

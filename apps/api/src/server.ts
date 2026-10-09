@@ -9,6 +9,7 @@ import { registerAuth, type AuthDeps } from './plugins/auth.js';
 import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAiEditRoutes } from './routes/ai-edit.js';
+import { registerSelectionRoutes } from './routes/selection.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAppearanceRoutes } from './routes/appearance.js';
@@ -211,6 +212,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerVisualGrammarRoutes(instance, authDeps);
         registerDirectorRoutes(instance, authDeps);
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
+        registerSelectionRoutes(instance, authDeps);
         registerMixdownRoutes(instance, authDeps);
         registerNativeFallbackRoutes(instance, authDeps);
         registerRenderRoutes(instance, authDeps);

@@ -547,6 +547,13 @@
       "when": 1791558814701,
       "tag": "0077_striped_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791572969168,
+      "tag": "0079_silent_korg",
+      "breakpoints": true
     }
   ]
 }

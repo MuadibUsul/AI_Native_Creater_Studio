@@ -50,7 +50,12 @@ async function expectRejectedInSavepoint(db: DbHandle['db'], statement: () => Pr
 
 beforeAll(async () => {
   const url = resolveTestDatabaseUrl();
-  if (new URL(url).pathname !== '/ancs_quiet_frame_test_261007') throw new Error('N15-02 requires the exact isolated test database');
+  // 安全门（N15-02）：只允许**隔离测试库**，但不是某个固定名字——本地用 ancs_quiet_frame_test_*，
+  // CI 用 ancs_test；判据是"库名含 test"，绝不允许指向开发/生产库。
+  const databaseName = new URL(url).pathname.replace(/^\//, '');
+  if (!/test/i.test(databaseName)) {
+    throw new Error(`N15-02 只允许在隔离测试库上运行（当前库名 ${databaseName} 不含 test）`);
+  }
   handle = createDb(url);
   try { await handle.pool.query('select 1'); }
   catch (error) { await handle.close(); throw new Error(`无法连接 ${redactDatabaseUrl(url)}`, { cause: error }); }
