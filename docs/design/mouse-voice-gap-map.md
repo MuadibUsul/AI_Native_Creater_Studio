@@ -87,7 +87,7 @@
 
 | 子任务 | 归属既有任务 | 内容 | 最小证据 | 依赖 |
 |---|---|---|---|---|
-| N04-09-s1 | N04-09 | **统一契约**：`GeometrySelection`（点/线/矩形/多边形/笔刷 × 目标/路径/边界/起点终点/保护/排除）、`SelectionAnchor` 增量、`IntentRevision`；严格判别联合 + 合法性（自交/退化/越界） | 契约单测：合法/非法几何、用途必填、POINT 不得伪装成零长 RANGE、越权/陈旧选择被拒 | 无（本次首要） |
+| N04-09-s1 | N04-09 | **统一契约**：`GeometrySelection`（点/线/矩形/多边形/笔刷 × 目标/路径/边界/起点终点/保护/排除）、`SelectionAnchor` 增量、`IntentRevision`；严格判别联合 + 合法性（自交/退化/越界） | ✅ **契约层已完成（2026-10-10）**：`packages/contracts/src/selection.ts` + 8 项单测（见 `docs/verification/N04-09-s1.md`）；持久化与旧 Attention 兼容仍在 N04-09 主体 | 无 |
 | N04-05-s1 | N04-05 | `AttentionSnapshot`（含短时事件缓冲、发话时钟、`evidenceRefs`、`remapHistory`） | 事件缓冲窗口与重映射测试 | N04-09-s1 |
 | N04-02-s1 | N04-02 | 画布原生对象命中与点选/框选、覆盖层绘制、手势隔离 | 真实浏览器点选 + 高 DPI 截图对照 | N04-09-s1 |
 | N04-04-s1 | N04-04 | 时间点/连续/多区间、轨道与属性作用域、**播放头与时间选区分离** | 帧/源时间映射 + 多轨联合选择测试 | N04-09-s1 |
@@ -116,6 +116,12 @@
 - 既有 N 系列任务继续按账本推进（当前 N03 已 8/16）；本增量的子任务**挂在既有任务上**，不新建平行账本。
 - `N03-09`（范围编辑最小 AI 入口）与本增量天然衔接：它产出的"结构化操作 + 越界说明 + revision + 零媒体调用"计划，正是 `IntentRevision` 的落点。N03-09 完成后，`planRangeEdit` 应成为 `IntentRevision → 操作集` 的一条既有路径，而不是第二套协议。
 - 真实 Provider（流式 ASR/VAD、视觉跟踪）在拿到凭据前保持 `UNVERIFIED_CREDENTIALS_REQUIRED`；协议、状态机与本地确定性夹具可以先做并验证，但**不得**据此声称"真实语音/真实跟踪已通"。
+
+## 5.1 进度记录
+
+- **2026-10-10**：`N03-09`（范围编辑最小 AI 入口）已完成并推送（`7881bf9`）——它的"结构化操作 + 越界说明 + revision + 零媒体调用"计划是本增量 `IntentRevision` 的既有落点，后续接流式语音时**复用该路径**。
+- **2026-10-10**：`N04-09-s1` 契约层完成（`packages/contracts/src/selection.ts` + 8 项单测，见 `docs/verification/N04-09-s1.md`）：点线面几何 × 时间选择 × SelectionAnchor × IntentRevision 已统一；`SelectionAnchor` 持久化/兼容（N04-09 主体）、画布（N04-02）、时间带（N04-04）、流式会话（N05-01）尚未开始。
+- **基础设施**：CI 已安装 FFmpeg；真实媒体用例按套件定义从 unit 迁到 integration（`a76dc66`）。
 
 ## 6. 待用户裁决的最小问题
 
