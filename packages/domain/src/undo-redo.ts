@@ -9,6 +9,7 @@ import {
   clipSchema,
   mediaRangeSchema,
   mediaTimeSchema,
+  captionSpanSchema,
   objectLockKindSchema,
   trackSchema,
   visualCropSchema,
@@ -94,6 +95,16 @@ interface StoredPatch {
   restoreTrackId?: unknown;
   nonEmptyPolicy?: unknown;
   destinationTrackId?: unknown;
+  /** N03-07 字幕 */
+  atWordIndex?: unknown;
+  wordFrom?: unknown;
+  wordTo?: unknown;
+  mode?: unknown;
+  createdCaptionId?: unknown;
+  createdCaption?: unknown;
+  caption?: unknown;
+  restoreCaptionId?: unknown;
+  cutRange?: unknown;
   /** N03-06 crossfade */
   leftRegionId?: unknown;
   rightRegionId?: unknown;
@@ -387,6 +398,32 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         rightRegionId: String(patch.rightRegionId ?? ''),
         duration: mediaTimeSchema.parse(patch.duration),
       };
+    case 'UPDATE_CAPTION': {
+      const after = captionSpanSchema.parse(patch.after);
+      return { op: 'update_caption', captionId: after.id, changes: { text: after.text, style: after.style, sequenceRange: after.sequenceRange, words: after.words } };
+    }
+    case 'SPLIT_CAPTION': {
+      const after = captionSpanSchema.parse(patch.after);
+      return {
+        op: 'split_caption',
+        captionId: after.id,
+        atWordIndex: (patch.atWordIndex as number | undefined) ?? (after.words?.length ?? 1),
+        createdCaptionId: String(patch.createdCaptionId ?? ''),
+      };
+    }
+    case 'CUT_CAPTION_RANGE': {
+      const after = captionSpanSchema.parse(patch.after);
+      return {
+        op: 'cut_caption_range',
+        captionId: after.id,
+        wordFrom: Number(patch.wordFrom ?? 0),
+        wordTo: Number(patch.wordTo ?? 1),
+        mode: patch.mode === 'CUT_CONTENT' ? 'CUT_CONTENT' : 'CAPTION_ONLY',
+        closeAcrossTracks: patch.closeAcrossTracks !== false,
+      };
+    }
+    case 'DELETE_CAPTION':
+      return { op: 'delete_caption', captionId: event.objectId ?? '' };
     case 'SET_CLIP_TRANSFORM':
       return { op: 'set_clip_transform', clipId: String(patch.clipId ?? event.objectId ?? ''), transform: visualTransformSchema.parse(patch.transform) };
     case 'SET_CLIP_CROP':
@@ -559,6 +596,43 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
     case 'DUPLICATE_CLIP':
       // 逆操作：删除复制出来的片段（源二进制从未被触碰，无需回滚原件）。
       return [{ op: 'delete_clip', clipId: event.objectId ?? '' }];
+    case 'UPDATE_CAPTION': {
+      const before = captionSpanSchema.parse(patch.before);
+      return [{ op: 'update_caption', captionId: before.id, changes: { text: before.text, style: before.style, sequenceRange: before.sequenceRange, words: before.words } }];
+    }
+    case 'SPLIT_CAPTION': {
+      // 逆操作：左段恢复成切分前的整条；右段（同一次事件创建）按 id 删除。
+      const before = captionSpanSchema.parse(patch.before);
+      const createdCaptionId = String(patch.createdCaptionId ?? '');
+      return [
+        { op: 'update_caption', captionId: before.id, changes: { text: before.text, style: before.style, sequenceRange: before.sequenceRange, words: before.words } },
+        { op: 'delete_caption', captionId: createdCaptionId },
+      ];
+    }
+    case 'CUT_CAPTION_RANGE': {
+      const before = captionSpanSchema.parse(patch.before);
+      return [{ op: 'update_caption', captionId: before.id, changes: { text: before.text, style: before.style, sequenceRange: before.sequenceRange, words: before.words } } as never];
+    }
+    case 'DELETE_CAPTION': {
+      const before = captionSpanSchema.parse(patch.before);
+      return [{
+        op: 'create_caption',
+        sequenceId: before.sequenceId,
+        trackId: before.trackId,
+        timeBinding: before.timeBinding,
+        localRange: before.localRange,
+        sequenceRange: before.sequenceRange,
+        text: before.text,
+        languageTag: before.languageTag,
+        style: before.style,
+        words: before.words,
+        speechAnchorId: before.speechAnchorId,
+        restoreCaptionId: before.id,
+      }];
+    }
+    case 'CREATE_CAPTION':
+      // 逆操作：删除该事件创建的字幕（复原由 DELETE_CAPTION 的反向事件负责）
+      return [{ op: 'delete_caption', captionId: event.objectId ?? '' }];
     case 'APPLY_AUDIO_CROSSFADE': {
       // 逆操作：把该区域自己的淡入/淡出恢复到交叉前的值（另一侧由它自己的事件恢复）。
       const before = audioRegionSchema.parse(patch.before);

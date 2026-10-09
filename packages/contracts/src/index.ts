@@ -289,6 +289,16 @@ export {
   sampleEqualPowerCurve,
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
+export {
+  NEGATION_MARKERS,
+  captionTextFromWords,
+  containsDigits,
+  containsNegation,
+  preservationTokens,
+  removeWordRange,
+  splitWordsAt,
+} from './caption-text.js';
+export type { CaptionWord } from './caption-text.js';
 export type { VisualCrop, VisualKeyframePath, VisualParameters, VisualPoint, VisualTransform, VisualViewport } from './visual-transform.js';
 export {
   TIME_BINDING_BASES,
@@ -508,11 +518,17 @@ export {
   setClipCropOperationSchema,
   setClipOpacityOperationSchema,
   applyAudioCrossfadeOperationSchema,
+  splitCaptionOperationSchema,
+  CAPTION_CUT_MODES,
+  captionCutModeSchema,
+  cutCaptionRangeOperationSchema,
+  createCaptionOperationSchema,
+  deleteCaptionOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

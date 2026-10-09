@@ -5,6 +5,8 @@ import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versioned
 import { clipTimeMappingSchema } from './composition.js';
 import {
   applyAudioCrossfadeOperationSchema,
+  cutCaptionRangeOperationSchema,
+  splitCaptionOperationSchema,
   createTrackOperationSchema,
   setClipCropOperationSchema,
   setClipOpacityOperationSchema,
@@ -36,7 +38,7 @@ export const SOURCE_EDIT_OPERATION_TYPES = [
   'create_track', 'move_track', 'delete_track',
   'set_audio_gain', 'set_audio_fade', 'set_audio_pan', 'set_audio_automation', 'apply_audio_crossfade',
   'add_marker', 'update_marker', 'remove_marker',
-  'update_caption_segment', 'regenerate_region', 'replace_region',
+  'update_caption_segment', 'cut_caption_range', 'split_caption', 'regenerate_region', 'replace_region',
   'create_preview_branch', 'commit_preview_branch', 'discard_preview_branch',
 ] as const;
 
@@ -174,6 +176,8 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   update_marker: plannedSchemas.update_marker,
   remove_marker: plannedSchemas.remove_marker,
   update_caption_segment: plannedSchemas.update_caption_segment,
+  cut_caption_range: cutCaptionRangeOperationSchema,
+  split_caption: splitCaptionOperationSchema,
   regenerate_region: plannedSchemas.regenerate_region,
   replace_region: plannedSchemas.replace_region,
   create_preview_branch: plannedSchemas.create_preview_branch,
@@ -265,7 +269,10 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   add_marker: planned('add_marker', 'EDIT', ['MARKER'], 'N03-09'),
   update_marker: planned('update_marker', 'EDIT', ['MARKER'], 'N03-09'),
   remove_marker: planned('remove_marker', 'EDIT', ['MARKER'], 'N03-09'),
-  update_caption_segment: planned('update_caption_segment', 'EDIT', ['CAPTION_SEGMENT'], 'N03-07'),
+  // N03-07：字幕段落编辑落到规范 update_caption；转写驱动剪辑是规范操作本身
+  update_caption_segment: alias('update_caption_segment', 'update_caption', ['CAPTION_SEGMENT'], ['CAPTION'], ['CAPTION'], { limitations: ['TEXT_AND_RANGE_ONLY'], plannedTask: 'N11-13' }),
+  cut_caption_range: native('cut_caption_range', ['CAPTION_SEGMENT', 'CLIP', 'TRACK'], ['CAPTION', 'CLIP', 'TRACK'], ['CAPTION', 'CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-07_NATIVE_INTEGRATION']),
+  split_caption: native('split_caption', ['CAPTION_SEGMENT'], ['CAPTION'], ['CAPTION'], ['N01-11_CONTRACT', 'N03-07_NATIVE_INTEGRATION']),
   regenerate_region: planned('regenerate_region', 'ASYNC_COMMAND', ['REGION'], 'N08-09', 'PROVIDER_ESTIMATE_REQUIRED'),
   replace_region: planned('replace_region', 'EDIT', ['REGION'], 'N08-09'),
   create_preview_branch: planned('create_preview_branch', 'PREVIEW_COMMAND', ['PREVIEW_BRANCH'], 'N06-10'),

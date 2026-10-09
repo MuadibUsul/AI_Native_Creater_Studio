@@ -221,6 +221,17 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
       }];
     case 'set_av_link':
       return operation.clipIds.map((clipId) => ({ objectKind: 'CLIP' as const, objectId: clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }));
+    case 'create_caption':
+      // 新建字幕：受影响对象是它所在的字幕轨（时序沿用现有片段，不移动其他片段）
+      return [{ objectKind: 'TRACK', objectId: operation.trackId, dimensions: uniqueDimensions(['POSITION']), direct: false, via: 'create_caption' }];
+    case 'split_caption':
+    case 'delete_caption':
+    case 'cut_caption_range': {
+      const dimensions = operation.op === 'cut_caption_range' && operation.mode === 'CUT_CONTENT'
+        ? uniqueDimensions(['POSITION', 'DURATION'])
+        : uniqueDimensions(['STYLE']);
+      return [{ objectKind: 'CAPTION', objectId: operation.captionId, dimensions, direct: true, via: null }];
+    }
     case 'apply_audio_crossfade':
       return [
         { objectKind: 'AUDIO_REGION', objectId: operation.leftRegionId, dimensions: uniqueDimensions(['STYLE']), direct: true, via: null },
@@ -428,6 +439,10 @@ export function validateEditOperationCandidate(input: {
       case 'ripple_clip':
       case 'split_av_cut':
       case 'apply_audio_crossfade':
+      case 'create_caption':
+      case 'split_caption':
+      case 'delete_caption':
+      case 'cut_caption_range':
       case 'set_clip_transform':
       case 'set_clip_crop':
       case 'set_clip_opacity':

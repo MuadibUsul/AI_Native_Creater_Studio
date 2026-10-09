@@ -10,9 +10,14 @@ import {
   OBJECT_LOCK_DIMENSIONS,
   animationBindingSchema,
   audioRegionSchema,
+  captionSpanSchema,
+  timeBindingSchema,
+  captionTextFromWords,
+  captionWordTimingSchema,
   clipSchema,
   trackSchema,
   AUDIO_MIX_GUARD_REASONS,
+  splitWordsAt,
   visualCropSchema,
   visualParametersSchema,
   visualTransformSchema,
@@ -21,6 +26,7 @@ import {
   mediaRangeSchema,
   mediaTimeSchema,
   projectVersionSnapshotSchema,
+  removeWordRange,
   sourceMediaProbeResultSchema,
   versionConflictDetailsSchema,
   type EditOperation,
@@ -528,6 +534,37 @@ function nextVisualParameters(
     ...(change.crop === undefined ? {} : { crop: change.crop }),
     ...(change.opacity === undefined ? {} : { opacity: change.opacity }),
   });
+}
+
+type CaptionRowLike = typeof compositionCaptionSpans.$inferSelect;
+const captionSnapshot = (row: CaptionRowLike) => captionSpanSchema.parse({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+});
+
+/**
+ * N03-07：把字幕的局部（词条）时间映射到序列时间。
+ * 采用等速前向映射（local→sequence 线性），非等速映射的字幕不支持结构性改动（fail-closed）。
+ */
+function mapCaptionLocalToSequence(
+  row: CaptionRowLike,
+  localTime: { ticks: string; timebase: { num: number; den: number } },
+): { ticks: string; timebase: { num: number; den: number } } {
+  const localRange = mediaRangeSchema.parse(row.localRange);
+  const sequenceRange = mediaRangeSchema.parse(row.sequenceRange);
+  const localSpan = rangeDuration(localRange);
+  const sequenceSpan = rangeDuration(sequenceRange);
+  // 等速前向映射假设：局部跨度与序列跨度相等（同速 1:1），否则拒绝结构性改动。
+  if (compareFraction(localSpan, sequenceSpan) !== 0) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption time mapping must be 1:1 to cut content', 422, { reason: 'CAPTION_MAPPING_UNSUPPORTED', captionId: row.id });
+  }
+  const localStart = timeFraction(localRange.start);
+  const sequenceStart = timeFraction(sequenceRange.start);
+  const time = timeFraction(localTime);
+  const offset: Fraction = { num: time.num * localStart.den - localStart.num * time.den, den: time.den * localStart.den };
+  const seconds: Fraction = { num: sequenceStart.num * offset.den + offset.num * sequenceStart.den, den: sequenceStart.den * offset.den };
+  const timebase = sequenceRange.start.timebase;
+  return mediaTimeOf(exactTicks(seconds, timebase), timebase);
 }
 
 /** 轨道重排的两阶段写入：先整体偏移再落位，避免 (sequence_id, position) 唯一索引的瞬时冲突。 */
@@ -1835,6 +1872,288 @@ async function applyEditsInTransaction(
             if (row.position === index) continue;
             eventDrafts.push({ action: 'UPDATE_TRACK', sceneId: null, objectKind: 'TRACK', objectId: row.id, patch: { op: 'update_track', trackId: row.id, changes: { position: index }, before: trackSnapshot(row), after: trackSnapshot({ ...row, position: index, updatedAt: now }) } });
           }
+          break;
+        }
+
+        // N03-07：字幕编辑与转写驱动剪辑（改字幕**绝不**动原音，除非显式选择 CUT_CONTENT）
+        case 'create_caption': {
+          const captionTrack = await loadTrackOwned(tx, { workspaceId: input.workspaceId, projectId: input.projectId, trackId: operation.trackId });
+          if (captionTrack.sequenceId !== operation.sequenceId || captionTrack.kind !== 'CAPTION') {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption requires a CAPTION track in the same sequence', 422, { reason: 'CAPTION_TRACK_MISMATCH' });
+          }
+          const localRange = mediaRangeSchema.parse(operation.localRange);
+          const sequenceRange = mediaRangeSchema.parse(operation.sequenceRange);
+          const words = captionWordTimingSchema.array().parse(operation.words ?? []);
+          for (const word of words) {
+            const wordSpan = mediaRangeSchema.parse(word.range);
+            if (compareMediaTime(wordSpan.start, localRange.start) < 0 || compareMediaTime(wordSpan.end, localRange.end) > 0) {
+              throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption word range exceeds the local range', 422, { reason: 'CAPTION_WORD_OUT_OF_BOUNDS' });
+            }
+          }
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: operation.sequenceId });
+          const span = ticksInRange(sequenceRange, timebase);
+          if (span.start < 0n || span.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption range exceeds sequence duration', 422, { reason: 'CAPTION_OUTSIDE_SEQUENCE' });
+          }
+          const captionId = operation.restoreCaptionId ?? `cap_${randomUUID()}`;
+          const now = new Date();
+          const createdRow = {
+            id: captionId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: operation.sequenceId,
+            trackId: operation.trackId, timeBinding: timeBindingSchema.parse(operation.timeBinding), localRange,
+            sequenceRange, text: operation.text, languageTag: operation.languageTag, style: operation.style,
+            words, speechAnchorId: operation.speechAnchorId ?? null, createdAt: now, updatedAt: now,
+          };
+          await tx.insert(compositionCaptionSpans).values(createdRow);
+          eventDrafts.push({ action: 'CREATE_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: captionId, patch: { ...operation, after: captionSnapshot(createdRow) } });
+          break;
+        }
+
+        case 'update_caption': {
+          const rows = await tx.select().from(compositionCaptionSpans).where(and(
+            eq(compositionCaptionSpans.id, operation.captionId),
+            eq(compositionCaptionSpans.workspaceId, input.workspaceId),
+            eq(compositionCaptionSpans.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'caption not found', 404);
+          const before = captionSnapshot(row);
+          const changes = operation.changes as {
+            text?: unknown; style?: unknown; sequenceRange?: unknown; localRange?: unknown; timeBinding?: unknown; words?: unknown;
+          };
+          const nextText = typeof changes.text === 'string' ? changes.text : row.text;
+          if (nextText.trim() === '') {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption text must not be empty (delete the caption instead)', 422, { reason: 'CAPTION_TEXT_EMPTY' });
+          }
+          const nextSequenceRange = changes.sequenceRange === undefined ? mediaRangeSchema.parse(row.sequenceRange) : mediaRangeSchema.parse(changes.sequenceRange);
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          const candidate = ticksInRange(nextSequenceRange, timebase);
+          if (candidate.start < 0n || candidate.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'caption range exceeds sequence duration', 422, { reason: 'CAPTION_OUTSIDE_SEQUENCE' });
+          }
+          const nextRow = {
+            ...row,
+            text: nextText,
+            style: changes.style === undefined ? row.style : changes.style,
+            sequenceRange: nextSequenceRange,
+            localRange: changes.localRange === undefined ? row.localRange : changes.localRange,
+            timeBinding: changes.timeBinding === undefined ? row.timeBinding : changes.timeBinding,
+            words: changes.words === undefined ? row.words : changes.words,
+            updatedAt: new Date(),
+          };
+          await tx.update(compositionCaptionSpans).set({
+            text: nextRow.text, style: nextRow.style, sequenceRange: nextRow.sequenceRange,
+            localRange: nextRow.localRange, timeBinding: nextRow.timeBinding, words: nextRow.words, updatedAt: nextRow.updatedAt,
+          }).where(eq(compositionCaptionSpans.id, row.id));
+          eventDrafts.push({ action: 'UPDATE_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: row.id, patch: { ...operation, before, after: captionSnapshot(nextRow) } });
+          break;
+        }
+
+        case 'split_caption': {
+          const rows = await tx.select().from(compositionCaptionSpans).where(and(
+            eq(compositionCaptionSpans.id, operation.captionId),
+            eq(compositionCaptionSpans.workspaceId, input.workspaceId),
+            eq(compositionCaptionSpans.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'caption not found', 404);
+          const words = captionWordTimingSchema.array().parse(row.words);
+          if (operation.atWordIndex <= 0 || operation.atWordIndex >= words.length) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split index must fall strictly inside the words', 422, { reason: 'SPLIT_INDEX_OUTSIDE_WORDS' });
+          }
+          const { left, right } = splitWordsAt(words, operation.atWordIndex);
+          const boundary = mapCaptionLocalToSequence(row, left[left.length - 1]!.range.end);
+          const before = captionSnapshot(row);
+          const leftRange = mediaRangeSchema.parse({ start: mediaRangeSchema.parse(row.sequenceRange).start, end: boundary });
+          const rightRange = mediaRangeSchema.parse({ start: boundary, end: mediaRangeSchema.parse(row.sequenceRange).end });
+          const leftRow = { ...row, text: captionTextFromWords(left), words: left, sequenceRange: leftRange, updatedAt: new Date() };
+          await tx.update(compositionCaptionSpans).set({ text: leftRow.text, words: leftRow.words, sequenceRange: leftRange, updatedAt: leftRow.updatedAt }).where(eq(compositionCaptionSpans.id, row.id));
+          const rightId = operation.createdCaptionId ?? `cap_${randomUUID()}`;
+          const rightRow = { ...row, id: rightId, text: captionTextFromWords(right), words: right, sequenceRange: rightRange, createdAt: new Date(), updatedAt: new Date() };
+          await tx.insert(compositionCaptionSpans).values(rightRow);
+          eventDrafts.push({
+            action: 'SPLIT_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: row.id,
+            patch: { ...operation, createdCaptionId: rightId, before, after: captionSnapshot(leftRow), createdCaption: captionSnapshot(rightRow) },
+          });
+          break;
+        }
+
+        case 'cut_caption_range': {
+          const rows = await tx.select().from(compositionCaptionSpans).where(and(
+            eq(compositionCaptionSpans.id, operation.captionId),
+            eq(compositionCaptionSpans.workspaceId, input.workspaceId),
+            eq(compositionCaptionSpans.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'caption not found', 404);
+          const words = captionWordTimingSchema.array().parse(row.words);
+          if (operation.wordTo > words.length || operation.wordFrom >= operation.wordTo) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'cut range must be inside the words', 422, { reason: 'CUT_RANGE_OUTSIDE_WORDS' });
+          }
+          const removedWords = words.slice(operation.wordFrom, operation.wordTo);
+          const remaining = removeWordRange(words, operation.wordFrom, operation.wordTo);
+          const before = captionSnapshot(row);
+          // 删除转写必须明确：CAPTION_ONLY = 只改字幕文案（时间线分毫不动）；CUT_CONTENT = 连内容一起剪。
+          if (operation.mode === 'CAPTION_ONLY') {
+            const nextRow = { ...row, text: remaining.length === 0 ? row.text : captionTextFromWords(remaining), words: remaining, updatedAt: new Date() };
+            await tx.update(compositionCaptionSpans).set({ text: nextRow.text, words: nextRow.words, updatedAt: nextRow.updatedAt }).where(eq(compositionCaptionSpans.id, row.id));
+            eventDrafts.push({ action: 'CUT_CAPTION_RANGE', sceneId: null, objectKind: 'CAPTION', objectId: row.id, patch: { ...operation, mode: 'CAPTION_ONLY', before, after: captionSnapshot(nextRow) } });
+            break;
+          }
+          const cutRange = mediaRangeSchema.parse({
+            start: mapCaptionLocalToSequence(row, removedWords[0]!.range.start),
+            end: mapCaptionLocalToSequence(row, removedWords[removedWords.length - 1]!.range.end),
+          });
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          const cutSpan = ticksInRange(cutRange, timebase);
+          if (cutSpan.start < 0n || cutSpan.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'cut range exceeds sequence duration', 422, { reason: 'CUT_RANGE_OUTSIDE_SEQUENCE' });
+          }
+          const gapTicks = cutSpan.end - cutSpan.start;
+          if (gapTicks <= 0n) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'cut range must be non-empty', 422, { reason: 'CUT_RANGE_OUTSIDE_WORDS' });
+          }
+          // 目标字幕：删词 + 收缝（片段由下面的通用收缝逻辑处理）
+          const nextRow = { ...row, text: remaining.length === 0 ? row.text : captionTextFromWords(remaining), words: remaining, updatedAt: new Date() };
+          // ① 其他字幕：整体在切口之后 → 左移；被切口完全包含 → 拒绝（不静默删字幕）；与切口相交 → 裁剪 + 删词
+          const allCaptions = await tx.select().from(compositionCaptionSpans).where(and(
+            eq(compositionCaptionSpans.sequenceId, row.sequenceId),
+            eq(compositionCaptionSpans.workspaceId, input.workspaceId),
+            eq(compositionCaptionSpans.projectId, input.projectId),
+          ));
+          for (const candidateRow of allCaptions) {
+            if (candidateRow.id === row.id) continue;
+            const span = ticksInRange(candidateRow.sequenceRange, timebase);
+            if (span.start >= cutSpan.end) {
+              const shifted = mediaRangeSchema.parse({ start: mediaTimeOf(span.start - gapTicks, timebase), end: mediaTimeOf(span.end - gapTicks, timebase) });
+              const candidateBefore = captionSnapshot(candidateRow);
+              const candidateAfter = captionSnapshot({ ...candidateRow, sequenceRange: shifted, updatedAt: new Date() });
+              await tx.update(compositionCaptionSpans).set({ sequenceRange: shifted, updatedAt: new Date() }).where(eq(compositionCaptionSpans.id, candidateRow.id));
+              eventDrafts.push({ action: 'UPDATE_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: candidateRow.id, patch: { op: 'update_caption', captionId: candidateRow.id, ripple: true, before: candidateBefore, after: candidateAfter } });
+              continue;
+            }
+            const fullyInside = span.start >= cutSpan.start && span.end <= cutSpan.end;
+            if (fullyInside) {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'cut range fully contains another caption; split or move it first', 409, { reason: 'CUT_CONTAINS_OTHER_CAPTION', captionId: candidateRow.id });
+            }
+            const overlaps = span.start < cutSpan.end && span.end > cutSpan.start;
+            if (!overlaps) continue;
+            const candidateWords = captionWordTimingSchema.array().parse(candidateRow.words);
+            const keptWords = candidateWords.filter((word) => {
+              const mapped = mapCaptionLocalToSequence(candidateRow, word.range.start);
+              const mappedTicks = exactTicks(timeFraction(mapped), timebase);
+              return mappedTicks < cutSpan.start || mappedTicks >= cutSpan.end;
+            });
+            const trimmed = mediaRangeSchema.parse({
+              start: mediaTimeOf(span.start < cutSpan.start ? span.start : cutSpan.start - gapTicks, timebase),
+              end: mediaTimeOf(span.end > cutSpan.end ? span.end - gapTicks : span.end, timebase),
+            });
+            const candidateBefore = captionSnapshot(candidateRow);
+            const candidateAfter = captionSnapshot({
+              ...candidateRow,
+              text: keptWords.length === 0 ? candidateRow.text : captionTextFromWords(keptWords),
+              words: keptWords,
+              sequenceRange: trimmed,
+              updatedAt: new Date(),
+            });
+            await tx.update(compositionCaptionSpans).set({
+              text: candidateAfter.text, words: candidateAfter.words, sequenceRange: trimmed, updatedAt: new Date(),
+            }).where(eq(compositionCaptionSpans.id, candidateRow.id));
+            eventDrafts.push({ action: 'UPDATE_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: candidateRow.id, patch: { op: 'update_caption', captionId: candidateRow.id, ripple: true, trimmed: true, before: candidateBefore, after: candidateAfter } });
+          }
+          // ② 目标字幕写回（删词 + 时间轴随收缝左移的净效果）
+          const targetAfter = captionSnapshot({ ...nextRow, sequenceRange: mediaRangeSchema.parse({
+            start: mediaRangeSchema.parse(row.sequenceRange).start,
+            end: mediaTimeOf(ticksInRange(row.sequenceRange, timebase).end - gapTicks, timebase),
+          }) });
+          await tx.update(compositionCaptionSpans).set({ text: targetAfter.text, words: targetAfter.words, sequenceRange: targetAfter.sequenceRange, updatedAt: new Date() }).where(eq(compositionCaptionSpans.id, row.id));
+          eventDrafts.push({ action: 'CUT_CAPTION_RANGE', sceneId: null, objectKind: 'CAPTION', objectId: row.id, patch: { ...operation, mode: 'CUT_CONTENT', cutRange, gapTicks: gapTicks.toString(), before, after: targetAfter } });
+          // ③ 片段收缝：受影响轨道上起点晚于切口的片段整体左移（字幕跟随 ripple 且不越界）
+          const allTracks = await tx.select().from(sequenceTracks).where(and(
+            eq(sequenceTracks.sequenceId, row.sequenceId), eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId),
+          ));
+          const scopedTracks = operation.closeAcrossTracks ? allTracks : allTracks.filter((track) => track.kind === 'CAPTION' || track.syncLocked);
+          for (const track of scopedTracks) {
+            const trackClips = await tx.select().from(sequenceClips).where(and(
+              eq(sequenceClips.sequenceId, row.sequenceId), eq(sequenceClips.workspaceId, input.workspaceId),
+              eq(sequenceClips.projectId, input.projectId), eq(sequenceClips.trackId, track.id),
+            ));
+            for (const clip of trackClips) {
+              const clipSpan = ticksInRange(clip.sequenceRange, timebase);
+              if (clipSpan.end <= cutSpan.start) continue;
+              if (clipSpan.start >= cutSpan.end) {
+                const shifted = mediaRangeSchema.parse({ start: mediaTimeOf(clipSpan.start - gapTicks, timebase), end: mediaTimeOf(clipSpan.end - gapTicks, timebase) });
+                const clipBefore = clipSnapshot(clip);
+                const clipAfter = clipSnapshot({ ...clip, sequenceRange: shifted, updatedAt: new Date() });
+                await tx.update(sequenceClips).set({ sequenceRange: shifted, updatedAt: new Date() }).where(eq(sequenceClips.id, clip.id));
+                eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'update_clip', clipId: clip.id, ripple: true, before: clipBefore, after: clipAfter } });
+                continue;
+              }
+              // 切口与片段相交：把切口从片段里**剪掉**（1:1 前向映射假设，否则拒绝）
+              if (!identityForwardMapping(clip)) {
+                throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'cutting content requires a 1:1 forward clip mapping', 422, { reason: 'CUT_UNSUPPORTED_MAPPING', clipId: clip.id });
+              }
+              const sourceSpan = mediaRangeSchema.parse(clip.sourceRange);
+              const sourceTimebase = sourceSpan.start.timebase;
+              const sourceStartTicks = exactTicks(timeFraction(sourceSpan.start), sourceTimebase);
+              const sourceDelta = (sequenceTicks: bigint): bigint =>
+                exactTicks({ num: sequenceTicks * BigInt(timebase.num), den: BigInt(timebase.den) }, sourceTimebase);
+              const clipBefore = clipSnapshot(clip);
+              if (clipSpan.start >= cutSpan.start && clipSpan.end <= cutSpan.end) {
+                await tx.delete(sequenceClips).where(eq(sequenceClips.id, clip.id));
+                eventDrafts.push({ action: 'DELETE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'delete_clip', clipId: clip.id, cutByCaption: true, before: clipBefore } });
+                continue;
+              }
+              if (clipSpan.start < cutSpan.start && clipSpan.end <= cutSpan.end) {
+                // 尾部落在切口内 → 头部保留，出点裁到切点
+                const trimmedRange = mediaRangeSchema.parse({ start: mediaTimeOf(clipSpan.start, timebase), end: mediaTimeOf(cutSpan.start, timebase) });
+                const trimmedSource = mediaRangeSchema.parse({ start: sourceSpan.start, end: mediaTimeOf(sourceStartTicks + sourceDelta(cutSpan.start - clipSpan.start), sourceTimebase) });
+                const after = clipSnapshot({ ...clip, sequenceRange: trimmedRange, sourceRange: trimmedSource, updatedAt: new Date() });
+                await tx.update(sequenceClips).set({ sequenceRange: trimmedRange, sourceRange: trimmedSource, updatedAt: new Date() }).where(eq(sequenceClips.id, clip.id));
+                eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'update_clip', clipId: clip.id, cutByCaption: true, before: clipBefore, after } });
+                continue;
+              }
+              if (clipSpan.start >= cutSpan.start && clipSpan.end > cutSpan.end) {
+                // 头部落在切口内 → 尾部保留并左移收缝
+                const nextRange = mediaRangeSchema.parse({ start: mediaTimeOf(cutSpan.start, timebase), end: mediaTimeOf(clipSpan.end - gapTicks, timebase) });
+                const nextSource = mediaRangeSchema.parse({ start: mediaTimeOf(sourceStartTicks + sourceDelta(gapTicks), sourceTimebase), end: sourceSpan.end });
+                const after = clipSnapshot({ ...clip, sequenceRange: nextRange, sourceRange: nextSource, updatedAt: new Date() });
+                await tx.update(sequenceClips).set({ sequenceRange: nextRange, sourceRange: nextSource, updatedAt: new Date() }).where(eq(sequenceClips.id, clip.id));
+                eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'update_clip', clipId: clip.id, ripple: true, cutByCaption: true, before: clipBefore, after } });
+                continue;
+              }
+              // 切口落在片段内部 → 左段留原 id、右段重建并左移（源按切口切分，切换处内容连续）
+              const leftRange = mediaRangeSchema.parse({ start: mediaTimeOf(clipSpan.start, timebase), end: mediaTimeOf(cutSpan.start, timebase) });
+              const leftSource = mediaRangeSchema.parse({ start: sourceSpan.start, end: mediaTimeOf(sourceStartTicks + sourceDelta(cutSpan.start - clipSpan.start), sourceTimebase) });
+              const leftAfter = clipSnapshot({ ...clip, sequenceRange: leftRange, sourceRange: leftSource, updatedAt: new Date() });
+              await tx.update(sequenceClips).set({ sequenceRange: leftRange, sourceRange: leftSource, updatedAt: new Date() }).where(eq(sequenceClips.id, clip.id));
+              eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: clip.id, patch: { op: 'update_clip', clipId: clip.id, cutByCaption: true, before: clipBefore, after: leftAfter } });
+              const rightId = `clp_${randomUUID()}`;
+              const rightRange = mediaRangeSchema.parse({ start: mediaTimeOf(cutSpan.start, timebase), end: mediaTimeOf(clipSpan.end - gapTicks, timebase) });
+              const rightSource = mediaRangeSchema.parse({ start: mediaTimeOf(sourceStartTicks + sourceDelta(cutSpan.end - clipSpan.start), sourceTimebase), end: sourceSpan.end });
+              const rightRow = {
+                id: rightId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: clip.sequenceId, trackId: clip.trackId,
+                assetVersionId: clip.assetVersionId, nestedSequenceId: clip.nestedSequenceId, sourceStreamId: clip.sourceStreamId,
+                sourceRange: rightSource, sequenceRange: rightRange, timeMapping: clip.timeMapping, avGroupId: clip.avGroupId,
+                parentClipId: clip.id, parameters: clip.parameters, createdAt: new Date(), updatedAt: new Date(),
+              };
+              await tx.insert(sequenceClips).values(rightRow);
+              eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: rightId, patch: { op: 'insert_clip', clipId: rightId, cutByCaption: true, after: clipSnapshot(rightRow) } });
+            }
+          }
+          break;
+        }
+
+        case 'delete_caption': {
+          const rows = await tx.select().from(compositionCaptionSpans).where(and(
+            eq(compositionCaptionSpans.id, operation.captionId),
+            eq(compositionCaptionSpans.workspaceId, input.workspaceId),
+            eq(compositionCaptionSpans.projectId, input.projectId),
+          )).limit(1);
+          const row = rows[0];
+          if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'caption not found', 404);
+          const deletedBefore = captionSnapshot(row);
+          await tx.delete(compositionCaptionSpans).where(eq(compositionCaptionSpans.id, row.id));
+          eventDrafts.push({ action: 'DELETE_CAPTION', sceneId: null, objectKind: 'CAPTION', objectId: row.id, patch: { ...operation, before: deletedBefore } });
           break;
         }
 

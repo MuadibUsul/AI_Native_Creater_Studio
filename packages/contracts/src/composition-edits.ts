@@ -5,6 +5,7 @@ import { createTrackRequestSchema } from './composition.js';
 import { VISUAL_PARAMETER_SCHEMA_VERSION, visualCropSchema, visualTransformSchema } from './visual-transform.js';
 import {
   animationTargetKindSchema,
+  captionWordTimingSchema,
   audioChannelMappingSchema,
   keyframeSchema,
   timeBindingSchema,
@@ -389,3 +390,63 @@ export const applyAudioCrossfadeOperationSchema = z.object({
 }).strict().refine((value) => value.leftRegionId !== value.rightRegionId, 'crossfade requires two distinct regions');
 
 export type ApplyAudioCrossfadeOperation = z.infer<typeof applyAudioCrossfadeOperationSchema>;
+
+/** N03-07 断句：按词条边界把一个字幕拆成两条（两侧文字都按词条重建，不改保留词）。 */
+export const splitCaptionOperationSchema = z.object({
+  op: z.literal('split_caption'),
+  captionId: opaqueIdSchema,
+  atWordIndex: z.number().int().positive(),
+  createdCaptionId: opaqueIdSchema.optional(),
+}).strict();
+
+export type SplitCaptionOperation = z.infer<typeof splitCaptionOperationSchema>;
+
+/** N03-07 转写驱动剪辑：删一段转写必须明确是"只改字幕"还是"连内容一起剪"。 */
+export const CAPTION_CUT_MODES = ['CAPTION_ONLY', 'CUT_CONTENT'] as const;
+export const captionCutModeSchema = z.enum(CAPTION_CUT_MODES);
+
+export type CaptionCutMode = z.infer<typeof captionCutModeSchema>;
+
+export const cutCaptionRangeOperationSchema = z.object({
+  op: z.literal('cut_caption_range'),
+  captionId: opaqueIdSchema,
+  /** 词条区间（半开），[wordFrom, wordTo) */
+  wordFrom: z.number().int().nonnegative(),
+  wordTo: z.number().int().positive(),
+  mode: captionCutModeSchema,
+  /** CUT_CONTENT 时的收缝范围（默认跨全序列轨道，保持声画同步） */
+  closeAcrossTracks: z.boolean().default(true),
+}).strict().superRefine((value, context) => {
+  if (value.wordTo <= value.wordFrom) {
+    context.addIssue({ code: 'custom', path: ['wordTo'], message: 'cut range must be non-empty' });
+  }
+});
+
+export type CutCaptionRangeOperation = z.infer<typeof cutCaptionRangeOperationSchema>;
+
+/** N03-07 删除字幕条目（断句/剪辑的逆操作与显式删除共用）。 */
+export const deleteCaptionOperationSchema = z.object({
+  op: z.literal('delete_caption'),
+  captionId: opaqueIdSchema,
+}).strict();
+
+export type DeleteCaptionOperation = z.infer<typeof deleteCaptionOperationSchema>;
+
+/** N03-07 新建字幕条目（显式创建与 undo 复原共用；复原按原 id 重建）。 */
+export const createCaptionOperationSchema = z.object({
+  op: z.literal('create_caption'),
+  sequenceId: opaqueIdSchema,
+  trackId: opaqueIdSchema,
+  timeBinding: timeBindingSchema,
+  localRange: mediaRangeSchema,
+  sequenceRange: mediaRangeSchema,
+  text: z.string().min(1),
+  languageTag: z.string().min(2).max(35),
+  style: versionedParametersSchema,
+  words: z.array(captionWordTimingSchema).default([]),
+  speechAnchorId: opaqueIdSchema.nullable().default(null),
+  /** 精确复原：按原 id 重建，保持引用稳定 */
+  restoreCaptionId: opaqueIdSchema.optional(),
+}).strict();
+
+export type CreateCaptionOperation = z.infer<typeof createCaptionOperationSchema>;
