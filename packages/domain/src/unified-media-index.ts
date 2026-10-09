@@ -112,7 +112,7 @@ export async function listUnifiedMediaIndex(
   const probe = source.version.mediaProbe === null ? null : sourceMediaProbeResultSchema.safeParse(source.version.mediaProbe);
   const audioStream = probe?.success ? probe.data.streams.find((stream) => stream.type === 'AUDIO') : undefined;
   const transcriptVersion = transcriptVersionRows[0];
-  const transcript = transcriptVersion === undefined ? null : mediaTranscriptSnapshotSchema.parse(transcriptVersion.snapshot);
+  const transcript = transcriptVersion === undefined || transcriptRun?.status !== 'READY' ? null : mediaTranscriptSnapshotSchema.parse(transcriptVersion.snapshot);
   const privacyClass = source.asset.sensitivityClass === 'SENSITIVE' || source.asset.sensitivityClass === 'RESTRICTED' ? 'SENSITIVE' as const : 'WORKSPACE' as const;
   const records: MediaIndexRecord[] = [];
 

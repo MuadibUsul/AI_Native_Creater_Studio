@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -9,7 +9,20 @@ import {
   type Project,
   type RetentionClass,
 } from '@ancs/contracts';
-import { assetDerivationEdges, assetVersions, assets, idempotencyKeys, projectVersions, projects, scenes, uploadIntents } from '@ancs/db';
+import {
+  assetDerivationEdges,
+  assetVersions,
+  assets,
+  idempotencyKeys,
+  mediaAnalysisStages,
+  mediaIndexEntries,
+  mediaIndexRuns,
+  mediaTranscriptRuns,
+  projectVersions,
+  projects,
+  scenes,
+  uploadIntents,
+} from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { licenseMetadataSchema } from '@ancs/contracts';
 
@@ -158,17 +171,68 @@ export async function softDeleteAsset(
   const rows = await deps.db
     .select()
     .from(assets)
-    .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId), isNull(assets.deletedAt)))
+    .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId)))
     .limit(1);
   const row = rows[0];
   if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset not found', 404);
+  const now = input.now ?? new Date();
   const updated = await deps.db.transaction(async (tx) => {
-    await tx.update(assets).set({ deletedAt: input.now ?? new Date(), updatedAt: new Date() }).where(eq(assets.id, input.assetId));
-    await tx.update(assetVersions).set({ deletedAt: input.now ?? new Date() }).where(eq(assetVersions.assetId, input.assetId));
+    const versionRows = await tx.select({ id: assetVersions.id }).from(assetVersions).where(and(
+      eq(assetVersions.workspaceId, input.workspaceId),
+      eq(assetVersions.assetId, input.assetId),
+    ));
+    const versionIds = versionRows.map((version) => version.id);
+    if (row.deletedAt === null) {
+      await tx.update(assets).set({ deletedAt: now, updatedAt: now }).where(eq(assets.id, input.assetId));
+      await tx.update(assetVersions).set({ deletedAt: now }).where(eq(assetVersions.assetId, input.assetId));
+    }
+    if (versionIds.length > 0) {
+      const runRows = await tx.select({ id: mediaIndexRuns.id }).from(mediaIndexRuns).where(and(
+        eq(mediaIndexRuns.workspaceId, input.workspaceId),
+        inArray(mediaIndexRuns.sourceAssetVersionId, versionIds),
+      ));
+      const runIds = runRows.map((run) => run.id);
+      if (runIds.length > 0) {
+        await tx.update(mediaIndexEntries).set({ lifecycleState: 'DELETED' }).where(and(
+          eq(mediaIndexEntries.workspaceId, input.workspaceId),
+          inArray(mediaIndexEntries.runId, runIds),
+        ));
+        await tx.update(mediaIndexRuns).set({ status: 'STALE', errorSummary: '源资产已删除，派生索引已撤销。', updatedAt: now }).where(and(
+          eq(mediaIndexRuns.workspaceId, input.workspaceId),
+          inArray(mediaIndexRuns.id, runIds),
+        ));
+      }
+      await tx.update(mediaTranscriptRuns).set({ status: 'STALE', errorSummary: '源资产已删除，转写索引已撤销。', updatedAt: now }).where(and(
+        eq(mediaTranscriptRuns.workspaceId, input.workspaceId),
+        inArray(mediaTranscriptRuns.sourceAssetVersionId, versionIds),
+      ));
+      await tx.update(mediaAnalysisStages).set({ status: 'STALE', errorSummary: '源资产已删除，分析结果已撤销。', invalidatedAt: now, updatedAt: now }).where(and(
+        eq(mediaAnalysisStages.workspaceId, input.workspaceId),
+        inArray(mediaAnalysisStages.sourceAssetVersionId, versionIds),
+        notInArray(mediaAnalysisStages.status, ['DISABLED', 'NOT_REQUESTED']),
+      ));
+    }
     return tx.select().from(assets).where(eq(assets.id, input.assetId)).limit(1);
   });
   const next = updated[0];
   if (!next) throw new ApiFailure(ERROR_CODES.INTERNAL, 'asset soft delete failed', 500);
+
+  const derivedRows = await deps.db.select({ id: mediaIndexEntries.id, storageKey: mediaIndexEntries.storageKey })
+    .from(mediaIndexEntries)
+    .innerJoin(mediaIndexRuns, eq(mediaIndexRuns.id, mediaIndexEntries.runId))
+    .innerJoin(assetVersions, eq(assetVersions.id, mediaIndexRuns.sourceAssetVersionId))
+    .where(and(
+      eq(mediaIndexEntries.workspaceId, input.workspaceId),
+      eq(assetVersions.assetId, input.assetId),
+      isNotNull(mediaIndexEntries.storageKey),
+    ));
+  if (derivedRows.length > 0) {
+    const storage = requireStorage(deps);
+    for (const derived of derivedRows) {
+      if (derived.storageKey !== null) await storage.deleteObject(derived.storageKey);
+    }
+    await deps.db.update(mediaIndexEntries).set({ storageKey: null }).where(inArray(mediaIndexEntries.id, derivedRows.map((derived) => derived.id)));
+  }
   return toAssetDto(next);
 }
 

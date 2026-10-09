@@ -82,12 +82,16 @@ afterAll(async () => {
   await rm(rootDir, { recursive: true, force: true });
 });
 
-async function newSignedInClient(fetchImpl?: typeof fetch): Promise<AncsClient> {
+async function newSignedInIdentity(fetchImpl?: typeof fetch): Promise<{ client: AncsClient; email: string }> {
   const email = `assets-${randomUUID()}@test.local`;
   await createInternalUser(auth, { email, password: PASSWORD, name: '资产测试' });
   const client = createClient({ baseUrl, clientType: 'web', clientVersion: '0.1.0', fetchImpl });
   await client.auth.signIn({ email, password: PASSWORD });
-  return client;
+  return { client, email };
+}
+
+async function newSignedInClient(fetchImpl?: typeof fetch): Promise<AncsClient> {
+  return (await newSignedInIdentity(fetchImpl)).client;
 }
 
 async function makeWorkspace(client: AncsClient): Promise<string> {
@@ -389,5 +393,37 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(rebuildFailure).toMatchObject({ status: 404 });
     const listFailure = await stranger.assets.list(workspaceId).catch((error: unknown) => error);
     expect(listFailure).toMatchObject({ status: 404 });
+  });
+
+  it('撤销成员后旧索引 cursor 立即失效，响应禁止共享缓存，同内容不跨租户复用', async () => {
+    const owner = await newSignedInClient();
+    const cacheHeaders: string[] = [];
+    const memberIdentity = await newSignedInIdentity(async (input, init) => {
+      const response = await fetch(input, init);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/media-index-records')) cacheHeaders.push(response.headers.get('cache-control') ?? '');
+      return response;
+    });
+    const workspaceId = await makeWorkspace(owner);
+    const bytes = makePng(40, 40);
+    const ownerAsset = await owner.assets.upload(workspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'same-content.png', contentType: 'image/png', data: bytes,
+    });
+    const member = await owner.workspaces.members.add(workspaceId, { email: memberIdentity.email, role: 'EDITOR' });
+    const firstPage = await memberIdentity.client.assets.mediaIndexRecords(workspaceId, ownerAsset.id, { cursor: 0, limit: 1 });
+    expect(firstPage.sourceAssetVersionId).toBe(ownerAsset.currentVersionId);
+    expect(cacheHeaders).toContain('private, no-store');
+
+    const memberWorkspaceId = await makeWorkspace(memberIdentity.client);
+    const memberAsset = await memberIdentity.client.assets.upload(memberWorkspaceId, {
+      assetType: 'USER_UPLOAD', filename: 'same-content.png', contentType: 'image/png', data: bytes,
+    });
+    expect(memberAsset.id).not.toBe(ownerAsset.id);
+    expect(memberAsset.currentVersionId).not.toBe(ownerAsset.currentVersionId);
+    await owner.workspaces.members.remove(workspaceId, member.userId);
+    const revokedCursor = await memberIdentity.client.assets.mediaIndexRecords(workspaceId, ownerAsset.id, { cursor: 0, limit: 1 }).catch((error: unknown) => error);
+    expect(revokedCursor).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    const crossTenant = await owner.assets.mediaIndexRecords(memberWorkspaceId, memberAsset.id, { cursor: 0, limit: 1 }).catch((error: unknown) => error);
+    expect(crossTenant).toMatchObject({ status: 404, code: 'NOT_FOUND' });
   });
 });

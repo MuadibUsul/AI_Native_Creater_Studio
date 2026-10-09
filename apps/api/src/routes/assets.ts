@@ -144,8 +144,10 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         response: { 200: mediaSegmentSearchResponseSchema, ...ERROR_RESPONSES },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      reply.header('cache-control', 'private, no-store');
+      reply.header('vary', 'authorization, cookie');
       return searchMediaSegments(domain, { workspaceId: request.params.id, query: request.query.q, limit: request.query.limit });
     },
   );
@@ -257,8 +259,10 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
         response: { 200: unifiedMediaIndexPageSchema, ...ERROR_RESPONSES },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      reply.header('cache-control', 'private, no-store');
+      reply.header('vary', 'authorization, cookie');
       return listUnifiedMediaIndex(domain, {
         workspaceId: request.params.id,
         assetId: request.params.assetId,

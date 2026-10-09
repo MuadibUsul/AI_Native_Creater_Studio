@@ -229,6 +229,7 @@ describe('Quiet Frame asset flow', () => {
     await userEvent.click(screen.getByRole('button', { name: '保存校正' }));
     await waitFor(() => expect(correctTranscriptSegment).toHaveBeenCalledWith('ws_1', 'ast_transcript', { expectedVersion: 1, segmentId: 'mts_price', text: '价格是128元' }));
     expect(await screen.findByText('价格是128元')).toBeTruthy();
+    expect(region.textContent).toContain('人工覆盖 · 已确认');
     play.mockRestore();
   });
 

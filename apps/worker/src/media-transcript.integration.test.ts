@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { MEDIA_AUDIO_ANALYSIS_JOB_TYPE, MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION, MEDIA_INDEX_JOB_TYPE, MEDIA_INDEX_PROCESSOR_VERSION, MEDIA_PROBE_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, type MediaAudioAnalysisAdapter, type MediaVisualAnalysisAdapter, type SpeechRecognitionAdapter } from '@ancs/contracts';
-import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, retryMediaTranscript, searchMediaSegments, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
-import { assets, assetVersions, createDb, jobs, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
+import { cancelMediaAnalysisStage, claimJob, confirmUpload, correctTranscriptSegment, createMediaRangeTag, createUploadIntent, getMediaAnalysisGraph, getMediaTranscript, listUnifiedMediaIndex, rebuildMediaAnalysisStage, requeueExpiredLeases, restoreAsset, retryMediaTranscript, searchMediaSegments, softDeleteAsset, updateTranscriptTerminology, type DomainDeps } from '@ancs/domain';
+import { assets, assetVersions, createDb, jobs, mediaAnalysisStages, mediaIndexEntries, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createDefaultRegistry } from './handlers.js';
 import { executeJob } from './runner.js';
@@ -33,6 +33,19 @@ const successfulAdapter: SpeechRecognitionAdapter = {
         { id: 'mts_price', ordinal: 0, text: '价格是120元', speakerId: 'speaker-1', wordStartOrdinal: 0, wordEndOrdinal: 0, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '0', sourceEndPts: '1000', timeBase: { numerator: 1, denominator: 1000 } },
         { id: 'mts_delivery', ordinal: 1, text: '今天交付', speakerId: null, wordStartOrdinal: 1, wordEndOrdinal: 1, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } },
       ],
+    };
+  },
+};
+
+const regressedAdapter: SpeechRecognitionAdapter = {
+  kind: 'scripted-regressed-contract-fixture',
+  async transcribe(input) {
+    const result = await successfulAdapter.transcribe(input);
+    return {
+      ...result,
+      model: 'fixture-v2-regressed',
+      words: result.words.map((word) => word.ordinal === 0 ? { ...word, text: '价格是100元' } : { ...word, text: '明天交付' }),
+      segments: result.segments.map((segment) => segment.id === 'mts_price' ? { ...segment, text: '价格是100元' } : { ...segment, text: '明天交付' }),
     };
   },
 };
@@ -301,5 +314,51 @@ describe('N02-13 audio events, beats and audiovisual correlation', () => {
     const graph = await getMediaAnalysisGraph(deps(), created);
     expect(graph.stages.find((stage) => stage.stage === 'AUDIO')).toMatchObject({ status: 'READY', reusable: true });
     expect(await storage.probeObject(created.version.storageKey)).toEqual(sourceBefore);
+  });
+});
+
+describe('N02-14 correction overlay and deletion authorization sync', () => {
+  it('preserves a confirmed correction across reanalysis and tombstones every derived index before restore', { timeout: 180_000 }, async () => {
+    const created = await uploadAndProbe();
+    expect((await executeTranscript(successfulAdapter)).outcome).toBe('succeeded');
+    expect((await executeIndex()).outcome).toBe('succeeded');
+    const corrected = await correctTranscriptSegment(deps(), { ...created, userId: null, request: { expectedVersion: 1, segmentId: 'mts_price', text: '价格是128元' } });
+    expect(corrected.currentVersion).toMatchObject({ version: 2, source: 'CORRECTION' });
+
+    await handle.db.update(mediaTranscriptRuns).set({ status: 'STALE' }).where(and(
+      eq(mediaTranscriptRuns.workspaceId, created.workspaceId),
+      eq(mediaTranscriptRuns.sourceAssetVersionId, created.version.id),
+    ));
+    await retryMediaTranscript(deps(), created);
+    expect((await executeTranscript(regressedAdapter)).outcome).toBe('succeeded');
+    const preserved = await getMediaTranscript(deps(), created);
+    expect(preserved.currentVersion).toMatchObject({ version: 4, source: 'CORRECTION' });
+    expect(preserved.currentVersion?.segments[0]).toMatchObject({ text: '价格是128元', reviewState: 'CORRECTED' });
+    expect(preserved.currentVersion?.segments[1]).toMatchObject({ text: '明天交付', reviewState: 'UNREVIEWED' });
+    const versions = await handle.db.select().from(mediaTranscriptVersions).where(eq(mediaTranscriptVersions.runId, preserved.runId!));
+    expect(versions.find((version) => version.version === 3)).toMatchObject({ source: 'ASR', model: 'fixture-v2-regressed' });
+    const overlaid = await listUnifiedMediaIndex(deps(), { ...created, query: { kind: 'TRANSCRIPT_SEGMENT', limit: 100 } });
+    expect(overlaid.items.find((item) => (item.payload as { text?: string }).text === '价格是128元')).toMatchObject({ basis: 'USER_CONFIRMED', calibrationStatus: 'USER_CONFIRMED', correctionRecordId: preserved.currentVersion?.id });
+    expect(JSON.stringify(overlaid.items)).not.toContain('价格是100元');
+
+    const derivedBefore = await handle.db.select().from(mediaIndexEntries).where(eq(mediaIndexEntries.workspaceId, created.workspaceId));
+    const storedKeys = derivedBefore.flatMap((entry) => entry.storageKey === null ? [] : [entry.storageKey]);
+    expect(storedKeys.length).toBeGreaterThan(0);
+    await softDeleteAsset(deps(), created);
+    const derivedDeleted = await handle.db.select().from(mediaIndexEntries).where(eq(mediaIndexEntries.workspaceId, created.workspaceId));
+    expect(derivedDeleted.every((entry) => entry.lifecycleState === 'DELETED' && entry.storageKey === null)).toBe(true);
+    for (const key of storedKeys) expect((await storage.probeObject(key)).exists).toBe(false);
+    expect((await handle.db.select().from(mediaIndexRuns).where(eq(mediaIndexRuns.workspaceId, created.workspaceId))).every((run) => run.status === 'STALE')).toBe(true);
+    expect((await handle.db.select().from(mediaTranscriptRuns).where(eq(mediaTranscriptRuns.workspaceId, created.workspaceId))).every((run) => run.status === 'STALE')).toBe(true);
+    const deletedStages = await handle.db.select().from(mediaAnalysisStages).where(eq(mediaAnalysisStages.workspaceId, created.workspaceId));
+    expect(deletedStages.filter((stage) => stage.status !== 'DISABLED').every((stage) => stage.status === 'STALE')).toBe(true);
+    expect(deletedStages.filter((stage) => ['OCR', 'EMBEDDING'].includes(stage.stage)).every((stage) => stage.status === 'DISABLED')).toBe(true);
+    await expect(listUnifiedMediaIndex(deps(), created)).rejects.toMatchObject({ httpStatus: 404 });
+    expect((await searchMediaSegments(deps(), { workspaceId: created.workspaceId, query: '价格是128元' })).items).toEqual([]);
+
+    await restoreAsset(deps(), created);
+    const afterRestore = await listUnifiedMediaIndex(deps(), { ...created, query: { limit: 100 } });
+    expect(afterRestore.items).toEqual([]);
+    expect(afterRestore.capabilities.find((capability) => capability.kind === 'TRANSCRIPT_SEGMENT')).toMatchObject({ status: 'NOT_ANALYZED', recordCount: 0 });
   });
 });

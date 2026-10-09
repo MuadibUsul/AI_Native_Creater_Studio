@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -24,6 +24,51 @@ import { createJobInTx } from './jobs.js';
 
 type DomainTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];
 const stableId = (prefix: string, ...parts: string[]): string => `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 24)}`;
+
+function applyTranscriptOverlay(
+  base: ReturnType<typeof mediaTranscriptSnapshotSchema.parse>,
+  previous: ReturnType<typeof mediaTranscriptSnapshotSchema.parse>,
+  correctedSegmentIds: string[],
+  preserveTerminology: boolean,
+) {
+  const correctedIds = new Set(correctedSegmentIds);
+  const replacementByIndex = new Map<number, (typeof previous.segments)[number]>();
+  for (const corrected of previous.segments.filter((segment) => correctedIds.has(segment.id))) {
+    let index = base.segments.findIndex((candidate) => candidate.id === corrected.id);
+    if (index < 0) index = base.segments.findIndex((candidate) =>
+      candidate.sourceStartPts === corrected.sourceStartPts
+      && candidate.sourceEndPts === corrected.sourceEndPts
+      && candidate.timeBase.numerator === corrected.timeBase.numerator
+      && candidate.timeBase.denominator === corrected.timeBase.denominator,
+    );
+    if (index >= 0) replacementByIndex.set(index, corrected);
+  }
+  const replacedRanges = [...replacementByIndex.keys()].map((index) => {
+    const segment = base.segments[index]!;
+    return { start: segment.wordStartOrdinal, end: segment.wordEndOrdinal };
+  });
+  const replacementWords = [...replacementByIndex.entries()].map(([index, corrected]) => {
+    const target = base.segments[index]!;
+    return {
+      ordinal: target.wordStartOrdinal,
+      text: corrected.text,
+      speakerId: corrected.speakerId,
+      confidencePermille: null,
+      sourceStartPts: corrected.sourceStartPts,
+      sourceEndPts: corrected.sourceEndPts,
+      timeBase: corrected.timeBase,
+    };
+  });
+  return mediaTranscriptSnapshotSchema.parse({
+    ...base,
+    terminology: preserveTerminology ? previous.terminology : base.terminology,
+    segments: base.segments.map((segment, index) => {
+      const corrected = replacementByIndex.get(index);
+      return corrected === undefined ? segment : { ...corrected, ordinal: segment.ordinal, wordStartOrdinal: segment.wordStartOrdinal, wordEndOrdinal: segment.wordStartOrdinal };
+    }),
+    words: [...base.words.filter((word) => !replacedRanges.some((range) => word.ordinal >= range.start && word.ordinal <= range.end)), ...replacementWords].sort((left, right) => left.ordinal - right.ordinal),
+  });
+}
 
 export async function scheduleMediaTranscriptInTx(
   tx: DomainTx,
@@ -91,14 +136,45 @@ export async function completeMediaTranscript(deps: DomainDeps, input: { workspa
     if (!run) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'media transcript run not found', 404);
     if (run.sourceChecksumSha256 !== jobInput.sourceChecksumSha256) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'source checksum changed while transcribing', 409);
     if (run.status === 'READY' && run.currentVersion > 0) return { runId: run.id, version: run.currentVersion };
+    const history = run.currentVersion > 0
+      ? await tx.select().from(mediaTranscriptVersions).where(and(
+        eq(mediaTranscriptVersions.workspaceId, input.workspaceId),
+        eq(mediaTranscriptVersions.runId, run.id),
+      )).orderBy(asc(mediaTranscriptVersions.version))
+      : [];
+    const previous = history.find((candidate) => candidate.version === run.currentVersion);
     const version = run.currentVersion + 1;
     const snapshot = mediaTranscriptSnapshotSchema.parse({ language: result.language, speakers: result.speakers, words: result.words, segments: result.segments, terminology: result.terminology });
     await tx.insert(mediaTranscriptVersions).values({
       id: stableId('mtv', run.id, String(version)), workspaceId: input.workspaceId, runId: run.id, version,
       source: 'ASR', provider: result.provider, model: result.model, snapshot, affectedSegmentIds: snapshot.segments.map((segment) => segment.id),
     });
-    await tx.update(mediaTranscriptRuns).set({ status: 'READY', currentVersion: version, errorSummary: null, updatedAt: new Date() }).where(eq(mediaTranscriptRuns.id, run.id));
-    return { runId: run.id, version };
+    let currentVersion = version;
+    if (previous !== undefined && previous.source !== 'ASR') {
+      const latestAsrIndex = history.findLastIndex((candidate) => candidate.source === 'ASR');
+      const overlays = history.slice(latestAsrIndex + 1);
+      const correctedSegmentIds = [...new Set(overlays.filter((candidate) => candidate.source === 'CORRECTION').flatMap((candidate) =>
+        Array.isArray(candidate.affectedSegmentIds) ? candidate.affectedSegmentIds.filter((id): id is string => typeof id === 'string') : [],
+      ))];
+      const preserveTerminology = overlays.some((candidate) => candidate.source === 'TERMINOLOGY');
+      const previousSnapshot = mediaTranscriptSnapshotSchema.parse(previous.snapshot);
+      const overlaySnapshot = applyTranscriptOverlay(snapshot, previousSnapshot, correctedSegmentIds, preserveTerminology);
+      currentVersion += 1;
+      await tx.insert(mediaTranscriptVersions).values({
+        id: stableId('mtv', run.id, String(currentVersion)),
+        workspaceId: input.workspaceId,
+        runId: run.id,
+        version: currentVersion,
+        source: correctedSegmentIds.length > 0 ? 'CORRECTION' : 'TERMINOLOGY',
+        provider: result.provider,
+        model: result.model,
+        snapshot: overlaySnapshot,
+        affectedSegmentIds: correctedSegmentIds,
+        createdBy: previous.createdBy,
+      });
+    }
+    await tx.update(mediaTranscriptRuns).set({ status: 'READY', currentVersion, errorSummary: null, updatedAt: new Date() }).where(eq(mediaTranscriptRuns.id, run.id));
+    return { runId: run.id, version: currentVersion };
   });
 }
 
