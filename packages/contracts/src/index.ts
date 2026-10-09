@@ -456,11 +456,16 @@ export {
   clipInsertModeSchema,
   insertClipOperationSchema,
   deleteClipOperationSchema,
+  splitClipOperationSchema,
+  trimClipOperationSchema,
+  moveClipOperationSchema,
+  duplicateClipOperationSchema,
+  replaceClipSourceOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,

@@ -86,6 +86,72 @@ export const deleteClipOperationSchema = z.object({
 
 export type DeleteClipOperation = z.infer<typeof deleteClipOperationSchema>;
 
+/**
+ * N03-02 拆分原语：在序列时间 `at` 处把片段切成左右两段。
+ * 左段保留原 id（序列/源出点前移到 `at`），右段按 `createdClipId` 新建；
+ * AV 关联的音频片段按同样方式切分（`createdAudioClipId`）。
+ */
+export const splitClipOperationSchema = z.object({
+  op: z.literal('split_clip'),
+  clipId: opaqueIdSchema,
+  at: mediaTimeSchema,
+  createdClipId: opaqueIdSchema.optional(),
+  createdAudioClipId: opaqueIdSchema.optional(),
+}).strict();
+
+export type SplitClipOperation = z.infer<typeof splitClipOperationSchema>;
+
+/** N03-02 入出点裁剪：源范围与序列范围一并给出，必须保持 1:1 前向映射（时长相等）。 */
+export const trimClipOperationSchema = z.object({
+  op: z.literal('trim_clip'),
+  clipId: opaqueIdSchema,
+  sourceRange: mediaRangeSchema,
+  sequenceRange: mediaRangeSchema,
+}).strict();
+
+export type TrimClipOperation = z.infer<typeof trimClipOperationSchema>;
+
+/** N03-02 移动：改目标轨与／或改序列位置（至少其一）。 */
+export const moveClipOperationSchema = z.object({
+  op: z.literal('move_clip'),
+  clipId: opaqueIdSchema,
+  trackId: opaqueIdSchema.optional(),
+  sequenceRange: mediaRangeSchema.optional(),
+}).strict().refine(
+  (value) => value.trackId !== undefined || value.sequenceRange !== undefined,
+  'move_clip requires a destination track, a sequence range, or both',
+);
+
+export type MoveClipOperation = z.infer<typeof moveClipOperationSchema>;
+
+/** N03-02 复制：只复制时间线引用，**不复制源二进制**（同一 assetVersionId）。 */
+export const duplicateClipOperationSchema = z.object({
+  op: z.literal('duplicate_clip'),
+  clipId: opaqueIdSchema,
+  afterClipId: opaqueIdSchema.nullable().default(null),
+  createdClipId: opaqueIdSchema.optional(),
+  createdAudioClipId: opaqueIdSchema.optional(),
+}).strict();
+
+export type DuplicateClipOperation = z.infer<typeof duplicateClipOperationSchema>;
+
+/** N03-02 替换源：换用另一源版本／嵌套序列，保持片段序列区间（新源范围时长必须相等）。 */
+export const replaceClipSourceOperationSchema = z.object({
+  op: z.literal('replace_clip_source'),
+  clipId: opaqueIdSchema,
+  assetVersionId: opaqueIdSchema.nullable().default(null),
+  nestedSequenceId: opaqueIdSchema.nullable().default(null),
+  sourceStreamId: z.string().max(200).nullable().default(null),
+  sourceRange: mediaRangeSchema,
+  createdClipId: opaqueIdSchema.optional(),
+}).strict().superRefine((value, context) => {
+  if ((value.assetVersionId === null) === (value.nestedSequenceId === null)) {
+    context.addIssue({ code: 'custom', path: ['assetVersionId'], message: 'replace_clip_source requires exactly one assetVersionId or nestedSequenceId' });
+  }
+});
+
+export type ReplaceClipSourceOperation = z.infer<typeof replaceClipSourceOperationSchema>;
+
 export const updateAnimationOperationSchema = z.object({
   op: z.literal('update_animation'),
   animationId: opaqueIdSchema,

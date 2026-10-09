@@ -28,6 +28,8 @@ N02-15 已按范围 VERIFIED：Director、选区解析与参考分析经同一�
 
 N03-01 已按范围 VERIFIED：素材可直接落轨，`insert_clip` 覆盖 INSERT（涟漪右移 + 跨越插入点切分）／OVERWRITE（删除/裁切/内部切分，源范围同步对齐）／APPEND（轨尾落位）三种语义，`delete_clip` 与 `restoreClipId` 提供删除与精确复原；源含音频流时按 `avGroupId` 建关联音频片段；轨道锁经统一影响面门 409 `EDIT_IMPACT_LOCKED`、片段锁 409 `CLIP_LOCKED`，源缺校验和/越界/结果超序列时长均 fail-closed；**无 NarrativePlan 的纯素材工程**（`scenes`/`narrative_plans` 为 0 行）插入后取播放地址可读真实字节（见 `docs/verification/N03-01.md`）。V03-14 的 N03-01 已完成但 N03-02/03/07/10 与 N04-07 未完成，保持 `IN_PROGRESS`；V03-15 仍需 N03-03/04 与 N11/N12 相关任务，保持 `IN_PROGRESS`；V03-03 仍需 N03-08/N03-10 与生成侧任务，保持 `IN_PROGRESS`。
 
+N03-02 已按范围 VERIFIED：`split_clip`（切点必须在片段内部、右段带 `parentClipId` 子片段血缘、AV 关联片段同步切分、两段序列时长与源范围拼接守恒）、`trim_clip`（源/序列 1:1 时长、越界/时长不等/重叠 fail-closed、AV 同步裁剪）、`move_clip`（保持时长与轨类型、目标轨锁与重叠拒绝、`CLIP_LOCAL` 绑定音频区域随片段平移）、`duplicate_clip`（复制时间线引用而不复制二进制原件、AV 对一并复制）、`replace_clip_source`（新源时长必须匹配、缺校验和/越界拒绝、换源推进 revision 使既有渲染批准在 revision 维度过期）；v2 覆盖层 `move_clip`／`trim_clip` 由 COMPILED_ALIAS 提升为 NATIVE、`split_clip`／`duplicate_clip`／`delete_clip` 翻为 NATIVE 并新增来源操作 `replace_clip_source`（见 `docs/verification/N03-02.md`）。V03-14 的 N03-01/02 已完成但 N03-03/07/10 与 N04-07 未完成，保持 `IN_PROGRESS`；V03-10 仍需 N03-02 之外的 N01-03/08、N02-02/07、N13-05，保持 `IN_PROGRESS`；V03-16 仍需 N11-01 等，保持 `IN_PROGRESS`。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

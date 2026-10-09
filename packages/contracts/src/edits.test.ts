@@ -16,14 +16,19 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 20 类（N03-01 增补 insert_clip／delete_clip）', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(20);
+  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source）', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(25);
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
     expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
     expect(EDIT_OPERATION_TYPES).toContain('update_clip');
     expect(EDIT_OPERATION_TYPES).toContain('insert_clip');
     expect(EDIT_OPERATION_TYPES).toContain('delete_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('split_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('trim_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('move_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('duplicate_clip');
+    expect(EDIT_OPERATION_TYPES).toContain('replace_clip_source');
     expect(EDIT_OPERATION_TYPES).toContain('update_animation');
     expect(EDIT_OPERATION_TYPES).toContain('update_audio_region');
   });
@@ -171,8 +176,39 @@ describe('编辑协议契约（计划 §4.6）', () => {
     expect(accepts({ op: 'delete_clip', clipId: 'clp_1', mode: 'INSERT' })).toBe(false);
   });
 
+  it('N03-02 split／trim／move／duplicate／replace_clip_source 契约：必填项、源互斥与"至少一项变更"', () => {
+    const mt = (ticks: string) => ({ ticks, timebase: { num: 1, den: 1_000 } });
+    const range = (start: string, end: string) => ({ start: mt(start), end: mt(end) });
+    const request = {
+      schemaVersion: '1.0' as const,
+      baseProjectRevision: 1,
+      expectedSceneRevisions: {},
+      idempotencyKey: 'idem_n03_02_contract',
+    };
+    const accepts = (operation: unknown) => editRequestSchema.safeParse({ ...request, operations: [operation] }).success;
+
+    expect(accepts({ op: 'split_clip', clipId: 'clp_1', at: mt('2000') })).toBe(true);
+    expect(accepts({ op: 'split_clip', clipId: 'clp_1' })).toBe(false);
+
+    expect(accepts({ op: 'trim_clip', clipId: 'clp_1', sourceRange: range('1000', '4000'), sequenceRange: range('0', '3000') })).toBe(true);
+    expect(accepts({ op: 'trim_clip', clipId: 'clp_1', sourceRange: range('4000', '1000'), sequenceRange: range('0', '3000') })).toBe(false); // 空/反向区间
+
+    expect(accepts({ op: 'move_clip', clipId: 'clp_1', sequenceRange: range('0', '1000') })).toBe(true);
+    expect(accepts({ op: 'move_clip', clipId: 'clp_1', trackId: 'trk_2' })).toBe(true);
+    expect(accepts({ op: 'move_clip', clipId: 'clp_1' })).toBe(false); // 至少要给目标轨或目标区间
+
+    expect(accepts({ op: 'duplicate_clip', clipId: 'clp_1' })).toBe(true);
+    expect(accepts({ op: 'duplicate_clip', clipId: 'clp_1', afterClipId: null })).toBe(true);
+
+    expect(accepts({ op: 'replace_clip_source', clipId: 'clp_1', assetVersionId: 'av_2', sourceRange: range('0', '4000') })).toBe(true);
+    expect(accepts({ op: 'replace_clip_source', clipId: 'clp_1', nestedSequenceId: 'seq_2', sourceRange: range('0', '4000') })).toBe(true);
+    // 源互斥：恰好一个 assetVersionId／nestedSequenceId
+    expect(accepts({ op: 'replace_clip_source', clipId: 'clp_1', assetVersionId: 'av_2', nestedSequenceId: 'seq_2', sourceRange: range('0', '4000') })).toBe(false);
+    expect(accepts({ op: 'replace_clip_source', clipId: 'clp_1', sourceRange: range('0', '4000') })).toBe(false);
+  });
+
   it('N01-11 为 §13.5 的每个来源操作登记输入 schema 和原生／别名／待实现状态', () => {
-    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(33);
+    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(34);
     expect(Object.keys(EDIT_OPERATION_V2_REGISTRY).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     expect(Object.keys(EDIT_OPERATION_V2_INPUT_SCHEMAS).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     for (const operation of SOURCE_EDIT_OPERATION_TYPES) {
@@ -183,7 +219,14 @@ describe('编辑协议契约（计划 §4.6）', () => {
       if (definition.resolution === 'PLANNED') expect(definition.plannedTask).not.toBeNull();
       else expect(definition.canonicalOperation).not.toBeNull();
     }
-    expect(EDIT_OPERATION_V2_REGISTRY.move_clip).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_clip' });
+    // N03-02 起时间线原语是规范操作本身（不再是 update_clip 的别名）。
+    expect(EDIT_OPERATION_V2_REGISTRY.move_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'move_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.trim_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'trim_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.split_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'split_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.duplicate_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'duplicate_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.replace_clip_source).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'replace_clip_source' });
+    expect(EDIT_OPERATION_V2_REGISTRY.delete_clip).toMatchObject({ resolution: 'NATIVE', canonicalOperation: 'delete_clip' });
+    expect(EDIT_OPERATION_V2_REGISTRY.slip_clip).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_clip' });
     expect(EDIT_OPERATION_V2_REGISTRY.set_audio_gain).toMatchObject({ resolution: 'COMPILED_ALIAS', canonicalOperation: 'update_audio_region' });
     expect(EDIT_OPERATION_V2_REGISTRY.regenerate_region).toMatchObject({ resolution: 'PLANNED', category: 'ASYNC_COMMAND', costCategory: 'PROVIDER_ESTIMATE_REQUIRED' });
     for (const operation of ['create_preview_branch', 'commit_preview_branch', 'discard_preview_branch'] as const) {

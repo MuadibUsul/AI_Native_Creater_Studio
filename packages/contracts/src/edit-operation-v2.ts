@@ -3,11 +3,19 @@ import { opaqueIdSchema } from './common/ids.js';
 import { mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { animationTargetKindSchema, keyframeSchema, timeBindingSchema, versionedParametersSchema } from './composition-objects.js';
 import { clipTimeMappingSchema, createTrackRequestSchema } from './composition.js';
-import { insertClipOperationSchema } from './composition-edits.js';
+import {
+  deleteClipOperationSchema,
+  duplicateClipOperationSchema,
+  insertClipOperationSchema,
+  moveClipOperationSchema,
+  replaceClipSourceOperationSchema,
+  splitClipOperationSchema,
+  trimClipOperationSchema,
+} from './composition-edits.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperationType } from './edits.js';
 
 export const SOURCE_EDIT_OPERATION_TYPES = [
-  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'slip_clip',
+  'insert_clip', 'delete_clip', 'move_clip', 'trim_clip', 'split_clip', 'duplicate_clip', 'replace_clip_source', 'slip_clip',
   'set_clip_transform', 'set_clip_crop', 'set_clip_opacity', 'set_clip_speed',
   'add_effect', 'update_effect', 'remove_effect',
   'add_keyframe', 'update_keyframe', 'remove_keyframe',
@@ -70,13 +78,9 @@ const animationRef = {
   targetId: opaqueIdSchema,
 };
 
-export const moveClipSourceOperationSchema = z.object({
-  op: z.literal('move_clip'),
-  ...clipId,
-  trackId: opaqueIdSchema.optional(),
-  sequenceRange: mediaRangeSchema.optional(),
-}).strict().refine((value) => value.trackId !== undefined || value.sequenceRange !== undefined, 'move_clip requires trackId or sequenceRange');
-export const trimClipSourceOperationSchema = z.object({ op: z.literal('trim_clip'), ...clipId, sourceRange: mediaRangeSchema, sequenceRange: mediaRangeSchema }).strict();
+/** N03-02 起 move_clip／trim_clip 由规范原语直接承载，这里保留导出名指向同一 schema（不再另立一套形状）。 */
+export const moveClipSourceOperationSchema = moveClipOperationSchema;
+export const trimClipSourceOperationSchema = trimClipOperationSchema;
 export const slipClipSourceOperationSchema = z.object({ op: z.literal('slip_clip'), ...clipId, sourceRange: mediaRangeSchema }).strict();
 export const setClipSpeedSourceOperationSchema = z.object({
   op: z.literal('set_clip_speed'),
@@ -104,9 +108,6 @@ export const setAudioAutomationSourceOperationSchema = z.object({
 }).strict();
 
 const plannedSchemas = {
-  delete_clip: z.object({ op: z.literal('delete_clip'), ...clipId }).strict(),
-  split_clip: z.object({ op: z.literal('split_clip'), ...clipId, at: mediaTimeSchema }).strict(),
-  duplicate_clip: z.object({ op: z.literal('duplicate_clip'), ...clipId, afterClipId: opaqueIdSchema.nullable(), createdClipId: opaqueIdSchema.optional() }).strict(),
   set_clip_transform: z.object({ op: z.literal('set_clip_transform'), ...clipId, transform: versionedParametersSchema }).strict(),
   set_clip_crop: z.object({ op: z.literal('set_clip_crop'), ...clipId, crop: versionedParametersSchema }).strict(),
   set_clip_opacity: z.object({ op: z.literal('set_clip_opacity'), ...clipId, opacity: z.number().min(0).max(1) }).strict(),
@@ -131,11 +132,12 @@ const plannedSchemas = {
 
 export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperationType, z.ZodType>> = {
   insert_clip: insertClipOperationSchema,
-  delete_clip: plannedSchemas.delete_clip,
-  move_clip: moveClipSourceOperationSchema,
-  trim_clip: trimClipSourceOperationSchema,
-  split_clip: plannedSchemas.split_clip,
-  duplicate_clip: plannedSchemas.duplicate_clip,
+  delete_clip: deleteClipOperationSchema,
+  replace_clip_source: replaceClipSourceOperationSchema,
+  move_clip: moveClipOperationSchema,
+  trim_clip: trimClipOperationSchema,
+  split_clip: splitClipOperationSchema,
+  duplicate_clip: duplicateClipOperationSchema,
   slip_clip: slipClipSourceOperationSchema,
   set_clip_transform: plannedSchemas.set_clip_transform,
   set_clip_crop: plannedSchemas.set_clip_crop,
@@ -213,11 +215,12 @@ const planned = (
 
 export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType, EditOperationV2Registration>> = {
   insert_clip: native('insert_clip', ['SEQUENCE', 'TRACK', 'CLIP'], ['SEQUENCE', 'TRACK', 'CLIP'], ['CLIP', 'SEQUENCE'], ['N01-11_CONTRACT', 'N03-01_NATIVE_INTEGRATION']),
-  delete_clip: planned('delete_clip', 'EDIT', ['CLIP'], 'N03-02'),
-  move_clip: alias('move_clip', 'update_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP']),
-  trim_clip: alias('trim_clip', 'update_clip', ['CLIP'], ['CLIP'], ['CLIP']),
-  split_clip: planned('split_clip', 'EDIT', ['CLIP'], 'N03-02'),
-  duplicate_clip: planned('duplicate_clip', 'EDIT', ['CLIP'], 'N03-02'),
+  delete_clip: native('delete_clip', ['CLIP', 'TRACK'], ['CLIP'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-01_NATIVE_INTEGRATION', 'N03-02_NATIVE_INTEGRATION']),
+  move_clip: native('move_clip', ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'TRACK', 'SEQUENCE'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
+  trim_clip: native('trim_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
+  split_clip: native('split_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
+  duplicate_clip: native('duplicate_clip', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
+  replace_clip_source: native('replace_clip_source', ['CLIP', 'SEQUENCE'], ['CLIP', 'SEQUENCE'], ['CLIP'], ['N01-11_CONTRACT', 'N03-02_NATIVE_INTEGRATION']),
   slip_clip: alias('slip_clip', 'update_clip', ['CLIP'], ['CLIP'], ['CLIP']),
   set_clip_transform: planned('set_clip_transform', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),
   set_clip_crop: planned('set_clip_crop', 'EDIT', ['CLIP', 'EFFECT_INSTANCE'], 'N03-05'),

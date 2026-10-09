@@ -95,7 +95,8 @@ describe('N01-11 Edit Operation v2 compiler', () => {
     })));
     expect(compiled[1]).toEqual(compiled[0]);
     expect(compiled[2]).toEqual(compiled[0]);
-    expect(compiled[0]).toEqual([{ op: 'update_clip', clipId: f.clip.id, changes: { sequenceRange: range(2_000, 12_000) } }]);
+    // N03-02 起 move_clip 是规范操作本身（NATIVE），不再编译成 update_clip 别名。
+    expect(compiled[0]).toEqual([{ op: 'move_clip', clipId: f.clip.id, sequenceRange: range(2_000, 12_000) }]);
 
     const project = await getProject(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
     const request = {

@@ -277,6 +277,183 @@ const audioRegionSnapshot = (row: typeof compositionAudioRegions.$inferSelect) =
   createdAt: row.createdAt.toISOString(),
 });
 
+/** N03-02 共享工具：有理时间比较与片段编辑前置检查。 */
+const compareFraction = (left: Fraction, right: Fraction): number => {
+  const difference = left.num * right.den - right.num * left.den;
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+};
+const ticksInRange = (range: unknown, timebase: { num: number; den: number }): { start: bigint; end: bigint } => {
+  const parsed = mediaRangeSchema.parse(range);
+  return {
+    start: exactTicks(timeFraction(parsed.start), timebase),
+    end: exactTicks(timeFraction(parsed.end), timebase),
+  };
+};
+const identityForwardMapping = (row: typeof sequenceClips.$inferSelect): boolean => {
+  const mapping = row.timeMapping as { rate?: { num?: number; den?: number }; direction?: string };
+  return mapping?.direction === 'FORWARD' && (mapping?.rate?.num ?? 1) === 1 && (mapping?.rate?.den ?? 1) === 1;
+};
+
+async function loadEditableClip(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; clipId: string },
+): Promise<{ row: typeof sequenceClips.$inferSelect; track: typeof sequenceTracks.$inferSelect }> {
+  const rows = await tx.select().from(sequenceClips).where(and(
+    eq(sequenceClips.id, input.clipId),
+    eq(sequenceClips.workspaceId, input.workspaceId),
+    eq(sequenceClips.projectId, input.projectId),
+  )).limit(1);
+  const row = rows[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip not found', 404);
+  const track = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: row.trackId });
+  return { row, track };
+}
+
+async function loadTrack(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; sequenceId: string; trackId: string },
+): Promise<typeof sequenceTracks.$inferSelect> {
+  const rows = await tx.select().from(sequenceTracks).where(and(
+    eq(sequenceTracks.id, input.trackId),
+    eq(sequenceTracks.workspaceId, input.workspaceId),
+    eq(sequenceTracks.projectId, input.projectId),
+    eq(sequenceTracks.sequenceId, input.sequenceId),
+  )).limit(1);
+  const track = rows[0];
+  if (!track) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'track not found', 404);
+  if (track.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
+  return track;
+}
+
+async function loadSequenceTimebase(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; sequenceId: string },
+): Promise<{ durationTicks: bigint; timebase: { num: number; den: number } }> {
+  const rows = await tx.select({ duration: projectSequences.duration }).from(projectSequences).where(and(
+    eq(projectSequences.id, input.sequenceId), eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId),
+  )).limit(1);
+  const row = rows[0];
+  if (!row) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+  const duration = mediaTimeSchema.parse(row.duration);
+  return { durationTicks: exactTicks(timeFraction(duration), duration.timebase), timebase: duration.timebase };
+}
+
+/** 同 avGroupId 的关联片段（视频/音频对；不含自身）。 */
+async function avSiblingsOf(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; row: typeof sequenceClips.$inferSelect },
+): Promise<(typeof sequenceClips.$inferSelect)[]> {
+  if (input.row.avGroupId === null) return [];
+  const rows = await tx.select().from(sequenceClips).where(and(
+    eq(sequenceClips.sequenceId, input.row.sequenceId),
+    eq(sequenceClips.workspaceId, input.workspaceId),
+    eq(sequenceClips.projectId, input.projectId),
+    eq(sequenceClips.avGroupId, input.row.avGroupId),
+  ));
+  return rows.filter((candidate) => candidate.id !== input.row.id);
+}
+
+/** 绑定到该片段的音频区域（局部时钟同步的前置面）。 */
+async function clipBoundAudioRegions(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; sequenceId: string; clipId: string },
+): Promise<(typeof compositionAudioRegions.$inferSelect)[]> {
+  const rows = await tx.select().from(compositionAudioRegions).where(and(
+    eq(compositionAudioRegions.sequenceId, input.sequenceId),
+    eq(compositionAudioRegions.workspaceId, input.workspaceId),
+    eq(compositionAudioRegions.projectId, input.projectId),
+  ));
+  return rows.filter((row) => (row.timeBinding as { clipId?: string | null }).clipId === input.clipId);
+}
+
+/** 源侧边界（素材时长 / 嵌套序列时长）+ READY/校验和检查；N03-01 起共用同一判据。 */
+async function assertSourceRangeUsable(
+  tx: NodePgDatabase,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    assetVersionId: string | null;
+    nestedSequenceId: string | null;
+    range: ReturnType<typeof mediaRangeSchema.parse>;
+  },
+): Promise<void> {
+  if (input.assetVersionId !== null) {
+    const rows = await tx.select({
+      durationMs: assetVersions.durationMs, status: assetVersions.status, checksumSha256: assetVersions.checksumSha256,
+    }).from(assetVersions).where(and(eq(assetVersions.id, input.assetVersionId), eq(assetVersions.workspaceId, input.workspaceId))).limit(1);
+    const source = rows[0];
+    if (!source) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'asset version not found', 404);
+    if (source.status !== 'READY' || source.durationMs === null) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version is not ready with known duration', 409);
+    if (source.checksumSha256 === null) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'asset version has no immutable checksum', 409, { reason: 'SOURCE_CHECKSUM_MISSING' });
+    if (compareMediaTime(input.range.start, mediaTimeOf(0n, input.range.start.timebase)) < 0
+      || compareMediaTime(input.range.end, legacyMillisecondsToMediaTime(source.durationMs)) > 0) {
+      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds asset duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
+    }
+    return;
+  }
+  if (input.nestedSequenceId !== null) {
+    const rows = await tx.select({ duration: projectSequences.duration }).from(projectSequences).where(and(
+      eq(projectSequences.id, input.nestedSequenceId), eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId),
+    )).limit(1);
+    const nested = rows[0];
+    if (!nested) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'nested sequence not found', 404);
+    if (compareMediaTime(input.range.start, mediaTimeOf(0n, input.range.start.timebase)) < 0
+      || compareMediaTime(input.range.end, mediaTimeSchema.parse(nested.duration)) > 0) {
+      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
+    }
+    return;
+  }
+  throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source is missing', 422, { reason: 'SOURCE_MISSING' });
+}
+
+/** 目标对象上的显式对象锁（对象锁语义）：被锁维度命中即拒绝；与影响面门互为纵深防御。 */
+async function assertObjectLockAllows(
+  tx: NodePgDatabase,
+  input: { workspaceId: string; projectId: string; objectKind: ObjectLockKind; objectId: string; dimensions: ObjectLockDimension[] },
+): Promise<void> {
+  const rows = await tx.select({ dimensions: projectObjectLocks.dimensions }).from(projectObjectLocks).where(and(
+    eq(projectObjectLocks.workspaceId, input.workspaceId),
+    eq(projectObjectLocks.projectId, input.projectId),
+    eq(projectObjectLocks.objectKind, input.objectKind),
+    eq(projectObjectLocks.objectId, input.objectId),
+  )).limit(1);
+  const locked = (rows[0]?.dimensions ?? []) as string[];
+  if (locked.some((dimension) => input.dimensions.includes(dimension as ObjectLockDimension))) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'target object is locked for this change', 409, {
+      reason: 'EDIT_IMPACT_LOCKED',
+      objectKind: input.objectKind,
+      objectId: input.objectId,
+    });
+  }
+}
+
+/** 目标轨上的重叠检查（半开区间；排除给定片段）。 */
+async function assertNoTrackOverlap(
+  tx: NodePgDatabase,
+  input: {
+    workspaceId: string;
+    projectId: string;
+    sequenceId: string;
+    trackId: string;
+    timebase: { num: number; den: number };
+    candidate: { start: bigint; end: bigint };
+    excludeClipIds: string[];
+  },
+): Promise<void> {
+  const rows = await tx.select().from(sequenceClips).where(and(
+    eq(sequenceClips.sequenceId, input.sequenceId),
+    eq(sequenceClips.workspaceId, input.workspaceId),
+    eq(sequenceClips.projectId, input.projectId),
+    eq(sequenceClips.trackId, input.trackId),
+  ));
+  for (const row of rows) {
+    if (input.excludeClipIds.includes(row.id)) continue;
+    const span = ticksInRange(row.sequenceRange, input.timebase);
+    if (span.start >= input.candidate.end || span.end <= input.candidate.start) continue;
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'target range overlaps an existing clip', 409, { reason: 'CLIP_OVERLAP', clipId: row.id });
+  }
+}
+
 async function restoreNormalizedSnapshot(
   tx: NodePgDatabase,
   input: Pick<ProcessEditsInput, 'workspaceId' | 'projectId'>,
@@ -1048,6 +1225,296 @@ async function applyEditsInTransaction(
           const deletedBefore = clipSnapshot(row);
           await tx.delete(sequenceClips).where(eq(sequenceClips.id, row.id));
           eventDrafts.push({ action: 'DELETE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before: deletedBefore } });
+          break;
+        }
+
+        case 'split_clip': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['CONTENT', 'DURATION', 'POSITION'] });
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          const span = ticksInRange(row.sequenceRange, timebase);
+          const atTicks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.at)), timebase);
+          if (atTicks <= span.start || atTicks >= span.end) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split point must fall inside the clip', 422, { reason: 'SPLIT_POINT_OUTSIDE_CLIP' });
+          }
+          if (!identityForwardMapping(row)) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split requires a 1:1 forward clip mapping', 422, { reason: 'SPLIT_UNSUPPORTED_MAPPING' });
+          }
+          const leftDuration = atTicks - span.start;
+          const leftRange = mediaRangeSchema.parse({ start: mediaTimeOf(span.start, timebase), end: mediaTimeOf(atTicks, timebase) });
+          const rightRange = mediaRangeSchema.parse({ start: mediaTimeOf(atTicks, timebase), end: mediaTimeOf(span.end, timebase) });
+          if (rightRange.end !== undefined && span.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split exceeds sequence duration', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+          }
+          // 绑定到该片段的音频区域：局部时钟落在右段或跨越切点 → 需要区域级切分（N03-06），fail-closed 不静默改时钟。
+          for (const region of await clipBoundAudioRegions(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, clipId: row.id })) {
+            const localRange = mediaRangeSchema.parse(region.localRange);
+            const localSeconds = rangeDuration(localRange);
+            if (compareFraction(localSeconds, { num: leftDuration * BigInt(timebase.num), den: BigInt(timebase.den) }) > 0) {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region spans the split point', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
+            }
+          }
+          // 视频/音频对：同一 avGroupId 的关联片段按同一方式切分（保持声画同步）。
+          const splitTargets = [
+            { row, leftRange, rightRange, createdId: operation.createdClipId ?? `clp_${randomUUID()}` },
+            ...(await avSiblingsOf(tx, { workspaceId: input.workspaceId, projectId: input.projectId, row })).map((sibling) => {
+              if (!identityForwardMapping(sibling)) {
+                throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split requires a 1:1 forward clip mapping', 422, { reason: 'SPLIT_UNSUPPORTED_MAPPING', clipId: sibling.id });
+              }
+              const siblingSpan = ticksInRange(sibling.sequenceRange, timebase);
+              return {
+                row: sibling,
+                leftRange: mediaRangeSchema.parse({ start: mediaTimeOf(siblingSpan.start, timebase), end: mediaTimeOf(siblingSpan.start + leftDuration, timebase) }),
+                rightRange: mediaRangeSchema.parse({ start: mediaTimeOf(siblingSpan.start + leftDuration, timebase), end: mediaTimeOf(siblingSpan.end, timebase) }),
+                createdId: operation.createdAudioClipId ?? `clp_${randomUUID()}`,
+              };
+            }),
+          ];
+          for (const target of splitTargets) {
+            const before = clipSnapshot(target.row);
+            const sourceSpan = mediaRangeSchema.parse(target.row.sourceRange);
+            const sourceTimebase = sourceSpan.start.timebase;
+            const sourceStartTicks = exactTicks(timeFraction(sourceSpan.start), sourceTimebase);
+            const sourceLeftTicks = exactTicks({ num: leftDuration * BigInt(timebase.num), den: BigInt(timebase.den) }, sourceTimebase);
+            const leftSource = mediaRangeSchema.parse({ start: sourceSpan.start, end: mediaTimeOf(sourceStartTicks + sourceLeftTicks, sourceTimebase) });
+            const rightSource = mediaRangeSchema.parse({ start: mediaTimeOf(sourceStartTicks + sourceLeftTicks, sourceTimebase), end: sourceSpan.end });
+            const afterLeft = { ...target.row, sequenceRange: target.leftRange, sourceRange: leftSource, updatedAt: new Date() };
+            await tx.update(sequenceClips).set({ sequenceRange: target.leftRange, sourceRange: leftSource, updatedAt: new Date() }).where(eq(sequenceClips.id, target.row.id));
+            const leftAction = target.row.id === row.id ? 'SPLIT_CLIP' : 'UPDATE_CLIP';
+            eventDrafts.push({ action: leftAction, sceneId: null, objectKind: 'CLIP', objectId: target.row.id, patch: { ...operation, clipId: target.row.id, before, after: clipSnapshot(afterLeft) } });
+            const rightRow = {
+              id: target.createdId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: target.row.sequenceId, trackId: target.row.trackId,
+              assetVersionId: target.row.assetVersionId, nestedSequenceId: target.row.nestedSequenceId, sourceStreamId: target.row.sourceStreamId,
+              sourceRange: rightSource, sequenceRange: target.rightRange, timeMapping: target.row.timeMapping, avGroupId: target.row.avGroupId,
+              // 右段是原片段的子片段（血缘可追溯，N03-02 子片段语义）。
+              parentClipId: target.row.id, createdAt: new Date(), updatedAt: new Date(),
+            };
+            await tx.insert(sequenceClips).values(rightRow);
+            eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: rightRow.id, patch: { op: 'insert_clip', clipId: rightRow.id, after: clipSnapshot(rightRow) } });
+          }
+          break;
+        }
+
+        case 'trim_clip': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['CONTENT', 'DURATION', 'POSITION'] });
+          const sourceRange = mediaRangeSchema.parse(operation.sourceRange);
+          const sequenceRange = mediaRangeSchema.parse(operation.sequenceRange);
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          if (!identityForwardMapping(row)) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'trim requires a 1:1 forward clip mapping', 422, { reason: 'TRIM_UNSUPPORTED_MAPPING' });
+          }
+          if (compareFraction(rangeDuration(sourceRange), rangeDuration(sequenceRange)) !== 0) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'trim must keep source and sequence durations equal', 422, { reason: 'TRIM_RANGE_DURATION_MISMATCH' });
+          }
+          await assertSourceRangeUsable(tx, {
+            workspaceId: input.workspaceId, projectId: input.projectId, assetVersionId: row.assetVersionId, nestedSequenceId: row.nestedSequenceId, range: sourceRange,
+          });
+          const candidate = ticksInRange(sequenceRange, timebase);
+          if (candidate.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'trimmed range exceeds sequence duration', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+          }
+          const siblings = await avSiblingsOf(tx, { workspaceId: input.workspaceId, projectId: input.projectId, row });
+          await assertNoTrackOverlap(tx, {
+            workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: row.trackId, timebase,
+            candidate, excludeClipIds: [row.id, ...siblings.map((sibling) => sibling.id)],
+          });
+          const trimSeconds = rangeDuration(sequenceRange);
+          for (const region of await clipBoundAudioRegions(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, clipId: row.id })) {
+            const binding = region.timeBinding as { basis?: string };
+            const localRange = mediaRangeSchema.parse(region.localRange);
+            if (binding.basis === 'SOURCE' || compareFraction(rangeDuration(localRange), trimSeconds) > 0) {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region is invalidated by this trim', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
+            }
+          }
+          const before = clipSnapshot(row);
+          const after = clipSnapshot({ ...row, sourceRange, sequenceRange, updatedAt: new Date() });
+          await tx.update(sequenceClips).set({ sourceRange, sequenceRange, updatedAt: new Date() }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'TRIM_CLIP', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after } });
+          // AV 同步：关联片段保持同一序列区间，源入点按同样时长前移。
+          for (const sibling of siblings) {
+            const siblingBefore = clipSnapshot(sibling);
+            const siblingSource = mediaRangeSchema.parse(sibling.sourceRange);
+            const siblingTimebase = siblingSource.start.timebase;
+            const siblingStartTicks = exactTicks(timeFraction(siblingSource.start), siblingTimebase);
+            // 裁剪时长以秒分数表示，交 exactTicks 换算到关联片段的源时基（不要再乘一遍时基）。
+            const trimSourceTicks = exactTicks(trimSeconds, siblingTimebase);
+            const nextSibling = { ...sibling, sequenceRange, sourceRange: mediaRangeSchema.parse({
+              start: siblingSource.start, end: mediaTimeOf(siblingStartTicks + trimSourceTicks, siblingTimebase),
+            }), updatedAt: new Date() };
+            await tx.update(sequenceClips).set({ sequenceRange: nextSibling.sequenceRange, sourceRange: nextSibling.sourceRange, updatedAt: new Date() }).where(eq(sequenceClips.id, sibling.id));
+            eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: sibling.id, patch: { op: 'update_clip', clipId: sibling.id, before: siblingBefore, after: clipSnapshot(nextSibling) } });
+          }
+          break;
+        }
+
+        case 'move_clip': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          const targetTrackId = operation.trackId ?? row.trackId;
+          const targetTrack = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: targetTrackId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'TRACK', objectId: targetTrackId, dimensions: ['POSITION', 'DURATION'] });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['POSITION', 'TRACK'] });
+          const { track: currentTrack } = { track: await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: row.trackId }) };
+          if (currentTrack.kind !== targetTrack.kind) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'move_clip requires a track of the same kind', 422, { reason: 'TRACK_KIND_MISMATCH' });
+          }
+          const sequenceRange = operation.sequenceRange === undefined ? mediaRangeSchema.parse(row.sequenceRange) : mediaRangeSchema.parse(operation.sequenceRange);
+          const currentSpan = ticksInRange(row.sequenceRange, timebase);
+          const candidate = ticksInRange(sequenceRange, timebase);
+          if (candidate.end - candidate.start !== currentSpan.end - currentSpan.start) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'move_clip keeps duration; use trim_clip to change it', 422, { reason: 'MOVE_REQUIRES_EQUAL_DURATION' });
+          }
+          if (candidate.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'moved range exceeds sequence duration', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+          }
+          const siblings = await avSiblingsOf(tx, { workspaceId: input.workspaceId, projectId: input.projectId, row });
+          await assertNoTrackOverlap(tx, {
+            workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: targetTrackId, timebase,
+            candidate, excludeClipIds: [row.id, ...siblings.map((sibling) => sibling.id)],
+          });
+          const deltaTicks = candidate.start - currentSpan.start;
+          const before = clipSnapshot(row);
+          const after = clipSnapshot({ ...row, trackId: targetTrackId, sequenceRange, updatedAt: new Date() });
+          await tx.update(sequenceClips).set({ trackId: targetTrackId, sequenceRange, updatedAt: new Date() }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'MOVE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after } });
+          // 绑定到该片段的音频区域：CLIP_LOCAL 基随片段平移（局部时钟不变）；其它基需要重算时钟（N03-06）→ fail-closed。
+          for (const region of await clipBoundAudioRegions(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, clipId: row.id })) {
+            const binding = region.timeBinding as { basis?: string };
+            if (binding.basis !== 'CLIP_LOCAL') {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region has a non-local clock', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
+            }
+            const regionBefore = audioRegionSnapshot(region);
+            const regionRange = mediaRangeSchema.parse(region.sequenceRange);
+            const shifted = mediaRangeSchema.parse({
+              start: mediaTimeOf(exactTicks(timeFraction(regionRange.start), timebase) + deltaTicks, timebase),
+              end: mediaTimeOf(exactTicks(timeFraction(regionRange.end), timebase) + deltaTicks, timebase),
+            });
+            const regionAfter = audioRegionSnapshot({ ...region, sequenceRange: shifted, updatedAt: new Date() });
+            await tx.update(compositionAudioRegions).set({ sequenceRange: shifted, updatedAt: new Date() }).where(eq(compositionAudioRegions.id, region.id));
+            eventDrafts.push({ action: 'UPDATE_AUDIO_REGION', sceneId: null, objectKind: 'AUDIO_REGION', objectId: region.id, patch: { op: 'update_audio_region', audioRegionId: region.id, before: regionBefore, after: regionAfter } });
+          }
+          // AV 同步：关联片段按同一 delta 平移（跨轨移动时留在各自轨道上保持声画对齐）。
+          for (const sibling of siblings) {
+            const siblingBefore = clipSnapshot(sibling);
+            const siblingSpan = ticksInRange(sibling.sequenceRange, timebase);
+            const shifted = mediaRangeSchema.parse({
+              start: mediaTimeOf(siblingSpan.start + deltaTicks, timebase), end: mediaTimeOf(siblingSpan.end + deltaTicks, timebase),
+            });
+            const nextSibling = { ...sibling, sequenceRange: shifted, updatedAt: new Date() };
+            await tx.update(sequenceClips).set({ sequenceRange: shifted, updatedAt: new Date() }).where(eq(sequenceClips.id, sibling.id));
+            eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: sibling.id, patch: { op: 'update_clip', clipId: sibling.id, before: siblingBefore, after: clipSnapshot(nextSibling) } });
+          }
+          break;
+        }
+
+        case 'duplicate_clip': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['CONTENT', 'POSITION'] });
+          const { durationTicks, timebase } = await loadSequenceTimebase(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId });
+          const anchor = operation.afterClipId === null
+            ? row
+            : (await tx.select().from(sequenceClips).where(and(
+              eq(sequenceClips.id, operation.afterClipId), eq(sequenceClips.workspaceId, input.workspaceId),
+              eq(sequenceClips.projectId, input.projectId), eq(sequenceClips.sequenceId, row.sequenceId),
+            )).limit(1))[0];
+          if (anchor === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'anchor clip not found', 404);
+          const anchorSpan = ticksInRange(anchor.sequenceRange, timebase);
+          const siblingRows = await avSiblingsOf(tx, { workspaceId: input.workspaceId, projectId: input.projectId, row });
+          const trackId = anchor.trackId;
+          const anchorTrack = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId });
+          const ownTrack = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: row.trackId });
+          if (anchorTrack.kind !== ownTrack.kind) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'duplicate_clip requires an anchor on a track of the same kind', 422, { reason: 'TRACK_KIND_MISMATCH' });
+          }
+          const duration = ticksInRange(row.sequenceRange, timebase);
+          const length = duration.end - duration.start;
+          const candidate = { start: anchorSpan.end, end: anchorSpan.end + length };
+          if (candidate.end > durationTicks) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'duplicate exceeds sequence duration（扩展序列属 N03-04）', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+          }
+          await assertNoTrackOverlap(tx, {
+            workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId, timebase,
+            candidate, excludeClipIds: [row.id, ...siblingRows.map((sibling) => sibling.id)],
+          });
+          // 复制只新增时间线引用：源版本/二进制原件保持不变（不触碰 assets / asset_versions）。
+          const copyId = operation.createdClipId ?? `clp_${randomUUID()}`;
+          const newGroupId = row.avGroupId === null ? null : `avgp_${randomUUID()}`;
+          const copyRange = mediaRangeSchema.parse({ start: mediaTimeOf(candidate.start, timebase), end: mediaTimeOf(candidate.end, timebase) });
+          const copyRow = {
+            id: copyId, workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId,
+            assetVersionId: row.assetVersionId, nestedSequenceId: row.nestedSequenceId, sourceStreamId: row.sourceStreamId,
+            sourceRange: mediaRangeSchema.parse(row.sourceRange), sequenceRange: copyRange, timeMapping: row.timeMapping,
+            avGroupId: newGroupId, parentClipId: row.id, createdAt: new Date(), updatedAt: new Date(),
+          };
+          await tx.insert(sequenceClips).values(copyRow);
+          eventDrafts.push({ action: 'DUPLICATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: copyRow.id, patch: { ...operation, after: clipSnapshot(copyRow) } });
+          // AV 同步：关联的音频片段在同一位置复制一份，并组成新的关联对。
+          if (newGroupId !== null) {
+            for (const sibling of siblingRows) {
+              const siblingTrack = await loadTrack(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: sibling.trackId });
+              const siblingSpan = ticksInRange(sibling.sequenceRange, timebase);
+              const siblingCandidate = { start: anchorSpan.end, end: anchorSpan.end + (siblingSpan.end - siblingSpan.start) };
+              if (siblingCandidate.end > durationTicks) {
+                throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'duplicate exceeds sequence duration（扩展序列属 N03-04）', 422, { reason: 'SEQUENCE_RANGE_OUT_OF_BOUNDS' });
+              }
+              await assertNoTrackOverlap(tx, {
+                workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, trackId: siblingTrack.id, timebase,
+                candidate: siblingCandidate, excludeClipIds: [sibling.id],
+              });
+              const siblingCopy = {
+                ...copyRow, id: operation.createdAudioClipId ?? `clp_${randomUUID()}`, trackId: siblingTrack.id,
+                sourceRange: mediaRangeSchema.parse(sibling.sourceRange),
+                sequenceRange: mediaRangeSchema.parse({ start: mediaTimeOf(siblingCandidate.start, timebase), end: mediaTimeOf(siblingCandidate.end, timebase) }),
+              };
+              await tx.insert(sequenceClips).values(siblingCopy);
+              eventDrafts.push({ action: 'INSERT_CLIP', sceneId: null, objectKind: 'CLIP', objectId: siblingCopy.id, patch: { op: 'insert_clip', clipId: siblingCopy.id, after: clipSnapshot(siblingCopy) } });
+            }
+          }
+          break;
+        }
+
+        case 'replace_clip_source': {
+          const { row } = await loadEditableClip(tx, { workspaceId: input.workspaceId, projectId: input.projectId, clipId: operation.clipId });
+          await assertObjectLockAllows(tx, { workspaceId: input.workspaceId, projectId: input.projectId, objectKind: 'CLIP', objectId: row.id, dimensions: ['CONTENT', 'DURATION'] });
+          const sourceRange = mediaRangeSchema.parse(operation.sourceRange);
+          // 时长检查：替换源不得隐式改变片段在序列上的长度（改长度要用 trim_clip）。
+          if (compareFraction(rangeDuration(sourceRange), rangeDuration(mediaRangeSchema.parse(row.sequenceRange))) !== 0) {
+            throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'replacement source duration must match the clip duration', 422, { reason: 'SOURCE_DURATION_MISMATCH' });
+          }
+          await assertSourceRangeUsable(tx, {
+            workspaceId: input.workspaceId, projectId: input.projectId, assetVersionId: operation.assetVersionId,
+            nestedSequenceId: operation.nestedSequenceId, range: sourceRange,
+          });
+          // 源基音频区域：源时钟已变，需重算（N03-06）→ fail-closed。
+          for (const region of await clipBoundAudioRegions(tx, { workspaceId: input.workspaceId, projectId: input.projectId, sequenceId: row.sequenceId, clipId: row.id })) {
+            if ((region.timeBinding as { basis?: string }).basis === 'SOURCE') {
+              throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region follows the replaced source clock', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
+            }
+          }
+          const before = clipSnapshot(row);
+          const after = clipSnapshot({
+            ...row, assetVersionId: operation.assetVersionId, nestedSequenceId: operation.nestedSequenceId,
+            sourceStreamId: operation.sourceStreamId, sourceRange, updatedAt: new Date(),
+          });
+          await tx.update(sequenceClips).set({
+            assetVersionId: operation.assetVersionId, nestedSequenceId: operation.nestedSequenceId,
+            sourceStreamId: operation.sourceStreamId, sourceRange, updatedAt: new Date(),
+          }).where(eq(sequenceClips.id, row.id));
+          eventDrafts.push({ action: 'REPLACE_CLIP_SOURCE', sceneId: null, objectKind: 'CLIP', objectId: row.id, patch: { ...operation, before, after } });
+          // AV 同步：关联片段换用同一新源，保持声画一致。
+          for (const sibling of await avSiblingsOf(tx, { workspaceId: input.workspaceId, projectId: input.projectId, row })) {
+            const siblingBefore = clipSnapshot(sibling);
+            const siblingAfter = clipSnapshot({
+              ...sibling, assetVersionId: operation.assetVersionId, nestedSequenceId: operation.nestedSequenceId,
+              sourceStreamId: operation.sourceStreamId, sourceRange, updatedAt: new Date(),
+            });
+            await tx.update(sequenceClips).set({
+              assetVersionId: operation.assetVersionId, nestedSequenceId: operation.nestedSequenceId,
+              sourceStreamId: operation.sourceStreamId, sourceRange, updatedAt: new Date(),
+            }).where(eq(sequenceClips.id, sibling.id));
+            eventDrafts.push({ action: 'UPDATE_CLIP', sceneId: null, objectKind: 'CLIP', objectId: sibling.id, patch: { op: 'update_clip', clipId: sibling.id, before: siblingBefore, after: siblingAfter } });
+          }
           break;
         }
 

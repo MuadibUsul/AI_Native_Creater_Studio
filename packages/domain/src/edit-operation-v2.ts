@@ -9,14 +9,12 @@ import {
   editOperationV2EntrypointSchema,
   keyframeSchema,
   keyframeSourceOperationSchema,
-  moveClipSourceOperationSchema,
   setAudioAutomationSourceOperationSchema,
   setAudioFadeSourceOperationSchema,
   setAudioGainSourceOperationSchema,
   setAudioPanSourceOperationSchema,
   setClipSpeedSourceOperationSchema,
   slipClipSourceOperationSchema,
-  trimClipSourceOperationSchema,
   type EditOperation,
   type EditOperationV2Entrypoint,
   type EditRequest,
@@ -125,19 +123,6 @@ export async function compileEditOperationsV2(
 
     let operation: EditOperation | null = null;
     switch (definition.operation) {
-      case 'move_clip': {
-        const value = moveClipSourceOperationSchema.parse(raw);
-        operation = { op: 'update_clip', clipId: value.clipId, changes: {
-          ...(value.trackId === undefined ? {} : { trackId: value.trackId }),
-          ...(value.sequenceRange === undefined ? {} : { sequenceRange: value.sequenceRange }),
-        } };
-        break;
-      }
-      case 'trim_clip': {
-        const value = trimClipSourceOperationSchema.parse(raw);
-        operation = { op: 'update_clip', clipId: value.clipId, changes: { sourceRange: value.sourceRange, sequenceRange: value.sequenceRange } };
-        break;
-      }
       case 'slip_clip': {
         const value = slipClipSourceOperationSchema.parse(raw);
         operation = { op: 'update_clip', clipId: value.clipId, changes: { sourceRange: value.sourceRange } };

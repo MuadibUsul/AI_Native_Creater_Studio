@@ -174,6 +174,26 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
     case 'delete_clip': {
       return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: ['CONTENT', 'POSITION', 'DURATION'], direct: true, via: null }];
     }
+    // N03-02：拆分/裁剪/移动/复制/替换源的锁定与影响面（新增片段引用也计入受影响对象）
+    case 'split_clip':
+      return [
+        { objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION', 'POSITION']), direct: true, via: null },
+        { objectKind: 'CLIP', objectId: operation.createdClipId ?? operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'POSITION']), direct: false, via: 'split_clip' },
+      ];
+    case 'trim_clip':
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'POSITION', 'DURATION']), direct: true, via: null }];
+    case 'move_clip':
+      return [
+        { objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['POSITION', 'TRACK']), direct: true, via: null },
+        // 指定目标轨时，目标轨的时序同样受影响（锁定目标轨必须在这里被挡住）。
+        ...(operation.trackId === undefined
+          ? []
+          : [{ objectKind: 'TRACK' as const, objectId: operation.trackId, dimensions: uniqueDimensions(['POSITION', 'DURATION']), direct: true, via: null }]),
+      ];
+    case 'duplicate_clip':
+      return [{ objectKind: 'CLIP', objectId: operation.createdClipId ?? operation.clipId, dimensions: uniqueDimensions(['POSITION']), direct: false, via: 'duplicate_clip' }];
+    case 'replace_clip_source':
+      return [{ objectKind: 'CLIP', objectId: operation.clipId, dimensions: uniqueDimensions(['CONTENT', 'DURATION']), direct: true, via: null }];
     case 'update_animation': {
       const objectKind = operation.targetKind === 'VISUAL_OBJECT' ? 'VISUAL_OBJECT' : operation.targetKind === 'AUDIO_REGION' ? 'AUDIO_REGION' : null;
       return objectKind === null ? [] : [{ objectKind, objectId: operation.targetId, dimensions: ['STYLE'], direct: true, via: operation.animationId }];
@@ -356,6 +376,11 @@ export function validateEditOperationCandidate(input: {
       case 'insert_clip':
       case 'delete_clip':
       case 'update_clip':
+      case 'split_clip':
+      case 'trim_clip':
+      case 'move_clip':
+      case 'duplicate_clip':
+      case 'replace_clip_source':
       case 'update_animation':
       case 'update_audio_region': break;
       case 'restore_scene': requireUnlocked(requireScene(operation.sceneId, operation), operation); break;
