@@ -568,6 +568,13 @@
       "when": 1791598504473,
       "tag": "0081_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791600504473,
+      "tag": "0082_proposal_trials",
+      "breakpoints": true
     }
   ]
 }

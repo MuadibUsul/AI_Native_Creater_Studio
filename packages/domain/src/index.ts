@@ -415,6 +415,7 @@ export {
   adoptProposal,
   createProposalBranch,
   discardProposal,
+  invalidateProposalTrials,
   loadProposalForRead,
   previewProposal,
   supersedeProposals,

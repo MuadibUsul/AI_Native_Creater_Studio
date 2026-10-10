@@ -58,6 +58,8 @@ N05-01 部分交付（保持 `IN_PROGRESS`）：实时会话与短期凭证适�
 
 N06-01／N06-02 已按范围 VERIFIED：**私有候选分支 → 确定性试改 → 原子采用**（迁移 0081；N06-04 局部试片缓存与依赖失效未交付，N06-03 的 rebase 与 N06-06 的替代/取消/晚到隔离仍待做）。候选只存操作集与绑定（base revision／选择锚点指纹／意图修订／操作哈希），创建与试改**都不改确认版工程**；试改用真实执行器在事务内跑完再**无条件回滚**（同一操作集 → 同一结果，`projectUntouched` 是结构性保证，不是近似动画）；采用按幂等键、状态、操作哈希、选择指纹、base revision 逐项校验（版本过期/哈希不符/已丢弃/指纹变化分别 409）后经统一编辑协议**原子**执行，执行失败时候选保持 OPEN、零部分写入且不返回已采用；丢弃幂等、同意图旧候选标 SUPERSEDED（见 `docs/verification/N06-01.md`）。V04-10／V04-14 的候选 UI 呈现（ghost 预览与局部回放对照）属 N04-02-s1／N04-04-s1，保持 `IN_PROGRESS`。
 
+N06-04 已交付**局部试片缓存与依赖失效**的服务端部分（**整条需求仍 `IN_PROGRESS`**）：新增迁移 0082 `proposal_trials`（行身份 `(workspace, project, dependency_key)`，只存只读试片 JSON）；依赖键 = sha256(base revision + operationsHash + selectionFingerprint + intentRevisionId + **素材版本签名**)——任一依赖变化（含片段换源）即得到新键、自然失效，不返回陈旧试片；`previewProposal` 命中即返回（`cached=true`、不重复跑真执行器），未命中才跑并 upsert；`invalidateProposalTrials` 提供显式失效，采用/丢弃后清理该候选缓存行。缓存**不是第二份工程状态**：采用仍走统一编辑协议并做全部服务端重验（见 `docs/verification/N06-04.md`）。V03-31 仍因 N06-05/08/09 等待后续任务，保持 `IN_PROGRESS`。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

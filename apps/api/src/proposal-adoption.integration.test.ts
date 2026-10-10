@@ -9,8 +9,8 @@ import {
 } from '@ancs/contracts';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { assets, assetVersions, createDb, editEvents, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
-import { createClip, createProject, createSequence, createTrack } from '@ancs/domain';
+import { assets, assetVersions, createDb, editEvents, proposalTrials, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { createClip, createProject, createSequence, createTrack, invalidateProposalTrials } from '@ancs/domain';
 import { eq } from 'drizzle-orm';
 import { buildServer } from './server.js';
 
@@ -346,5 +346,104 @@ describe('N06-01／02／04 私有候选 → 确定性试改 → 原子采用（H
     );
     // 确认版未被改动
     expect(await revisionOf(client, fixture.projectId)).toBe(revisionBefore);
+  });
+});
+
+describe('N06-04 局部试片缓存与依赖失效（HTTP + SDK）', () => {
+  const cacheRows = (projectId: string) => handle.db.select().from(proposalTrials).where(eq(proposalTrials.projectId, projectId));
+  // 每次用不同 HTTP 幂等键，绕过 HTTP 响应幂等缓存，专门检验**服务端局部试片缓存**。
+  const preview = (client: AncsClient, fixture: Fixture, proposalId: string) =>
+    client.projects.previewProposal(fixture.workspaceId, fixture.projectId, proposalId, { idempotencyKey: `preview_${randomUUID()}` });
+
+  it('同一依赖重复试改命中缓存（cached=true），不重复跑执行器也不重复写缓存', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const clipId = await seedClip(fixture, version, [0, 6_000]);
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: await revisionOf(client, fixture.projectId),
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'trim_clip', clipId, sourceRange: range(1_000, 4_000), sequenceRange: range(0, 3_000) }],
+    });
+
+    const first = await preview(client, fixture, proposal.proposalId);
+    expect(first.cached).toBe(false);
+    expect(first.dependencyKey).toHaveLength(64);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(1);
+    const storedRow = (await cacheRows(fixture.projectId))[0]!;
+    expect(storedRow.dependencyKey).toBe(first.dependencyKey);
+    expect(storedRow.proposalId).toBe(proposal.proposalId);
+
+    const second = await preview(client, fixture, proposal.proposalId);
+    expect(second.cached).toBe(true);
+    expect(second.dependencyKey).toBe(first.dependencyKey);
+    expect(second.trialRevision).toBe(first.trialRevision);
+    expect(second.clipRanges).toEqual(first.clipRanges);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(1);
+
+    // 采纳同一操作集的不同候选也能复用同一依赖键的缓存（同一确定性结果）
+    const successor = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: await revisionOf(client, fixture.projectId),
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'trim_clip', clipId, sourceRange: range(1_000, 4_000), sequenceRange: range(0, 3_000) }],
+    });
+    const reused = await preview(client, fixture, successor.proposalId);
+    expect(reused.cached).toBe(true);
+    expect(reused.proposalId).toBe(successor.proposalId);
+  });
+
+  it('素材版本依赖变化 → 依赖键变化、自然失效并重新计算', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const clipId = await seedClip(fixture, version, [0, 5_000]);
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: await revisionOf(client, fixture.projectId),
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'set_clip_opacity', clipId, opacity: 0.5 }],
+    });
+    const before = await preview(client, fixture, proposal.proposalId);
+    expect(before.cached).toBe(false);
+
+    // 素材版本签名变化（片段换源），工程 revision 不变
+    const assetRow = (await handle.db.select().from(assets).where(eq(assets.workspaceId, fixture.workspaceId)).limit(1))[0]!;
+    const replacement = `av_${randomUUID()}`;
+    await handle.db.insert(assetVersions).values({
+      id: replacement, assetId: assetRow.id, workspaceId: fixture.workspaceId, versionNumber: 2,
+      storageKey: `n06/${replacement}.mp4`, mimeType: 'video/mp4', sizeBytes: 1024, checksumSha256: 'b'.repeat(64),
+      durationMs: 30_000, width: 1920, height: 1080, status: 'READY', mediaProbe: probeFixture(),
+    });
+    await handle.db.execute(`update sequence_clips set asset_version_id = '${replacement}' where id = '${clipId}'`);
+    const after = await preview(client, fixture, proposal.proposalId);
+    expect(after.cached).toBe(false);
+    expect(after.dependencyKey).not.toBe(before.dependencyKey);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(2);
+  });
+
+  it('显式失效与采用后清理：缓存不返回陈旧试片', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const clipId = await seedClip(fixture, version, [0, 4_000]);
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: await revisionOf(client, fixture.projectId),
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'set_clip_opacity', clipId, opacity: 0.25 }],
+    });
+    await preview(client, fixture, proposal.proposalId);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(1);
+
+    const removed = await invalidateProposalTrials({ db: handle.db }, { workspaceId: fixture.workspaceId, projectId: fixture.projectId });
+    expect(removed).toBe(1);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(0);
+
+    // 重新试改会重建缓存；采用后该候选的缓存行被清理
+    const rePreview = await preview(client, fixture, proposal.proposalId);
+    expect(rePreview.cached).toBe(false);
+    expect(await cacheRows(fixture.projectId)).toHaveLength(1);
+    await client.projects.adoptProposal(fixture.workspaceId, fixture.projectId, proposal.proposalId, {
+      expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `idem_cache_${randomUUID()}`,
+    });
+    expect(await cacheRows(fixture.projectId)).toHaveLength(0);
   });
 });

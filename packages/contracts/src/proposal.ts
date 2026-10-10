@@ -90,6 +90,10 @@ export const proposalTrialSchema = z.object({
   }).strict()).max(512),
   /** 结构性保证：试改未写入任何工程数据 */
   projectUntouched: z.literal(true),
+  /** N06-04：命中局部试片缓存时为 true（结果与首次计算完全一致；不重复跑执行器） */
+  cached: z.boolean().default(false),
+  /** N06-04：依赖键 = sha256(baseProjectRevision + operationsHash + selectionFingerprint + intentRevisionId + assetVersionSignature) */
+  dependencyKey: z.string().length(64).nullable().default(null),
 }).strict();
 
 export type ProposalTrial = z.infer<typeof proposalTrialSchema>;

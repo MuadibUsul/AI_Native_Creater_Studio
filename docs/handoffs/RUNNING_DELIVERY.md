@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N05-02 语音采集/能力协商/时间对齐；真实 VAD/ASR 待凭据）
+**最后更新：** 2026-10-10（N06-04 局部试片缓存与依赖失效；迁移 0082）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -25,6 +25,12 @@
 
 ## 二、本轮连续交付（按时间倒序追加）
 
+### 2026-10-10 · N06-04 局部试片缓存与依赖失效 — **IN_PROGRESS**
+- **内容：** 迁移 0082 `proposal_trials`（行身份 `(workspace, project, dependency_key)`）；依赖键 = sha256(base revision + operationsHash + selectionFingerprint + intentRevisionId + 素材版本签名)；`previewProposal` 命中缓存直接返回（`cached=true`，不跑执行器），未命中才跑真执行器并 upsert；`invalidateProposalTrials` 显式失效 + 采用/丢弃后清理。
+- **证据：** `docs/verification/N06-04.md`（3 项集成：缓存命中、素材版本依赖失效、显式/采用清理）· `docs/handoffs/N06-04.md`　**verify：** 14/14（详见运行日志）
+- **为何不是 VERIFIED：** UI 呈现/真实浏览器证据未做；缓存为单实例 DB 表，无跨实例 TTL/容量与自动失效调用。
+- **下一步：** N06-03（影响集/陈旧提案 rebase）→ N06-06（替代/取消/晚到隔离）→ 回主线 N03-10。
+
 ### 2026-10-10 · N05-02 语音采集、能力协商与时间对齐 — **IN_PROGRESS**
 - **内容：** `packages/contracts/src/voice-alignment.ts`：采集状态/约束、`VOICE_CLOCK` 采样、播放锚点、能力协商（请求未声明支持 → fail-closed）、音频↔单调↔序列映射；`alignVoiceUtterance` 精度如实标注（WORD_EXACT/AUDIO_RANGE/UTTERANCE_SNAPSHOT/UNAVAILABLE，不伪造逐词精确）；Web `useMicrophoneCapture` + `VoiceCaptureControl`（显式授权、可见监听/电平、卸载停止）。
 - **证据：** `docs/verification/N05-02.md`（领域 7 项 + jsdom 7 项）· `docs/handoffs/N05-02.md`　**verify：** 14/14（详见运行日志）
@@ -41,7 +47,7 @@
 - **内容：** `packages/contracts/src/attention.ts`：11 类共同注意力事件（含真实呈现帧 `PRESENTED_FRAME` 与语音时钟 `VOICE_CLOCK`）、本地单调时钟 + 会话 epoch、有界事件缓冲（默认 8s/512，epoch/单调时钟回退/seq 违反 fail-closed）、鼠标轨迹最小保留（最小距离去样 + 点数上限）、快照导出（缺词级时间时 `wordTimingAvailable=false`）。
 - **证据：** `docs/verification/N04-05.md`（9 项契约单测）· `docs/handoffs/N04-05.md`　**verify：** 14/14（详见本次运行日志）
 - **为何不是 VERIFIED：** `AttentionRecorder` 接线、真实语音时钟映射与服务端按发话时观看记录定位未做（属垂直切片/N05-02）。
-- **下一步：** （N04-10、N05-02 已完成 s1，见上方条目）N06-04 → N06-03 → N06-06 → 回主线 N03-10；真实语音链路待凭据后接入。
+- **下一步：** （N06-04 已完成服务端部分，见上方条目）N06-03 → N06-06 → 回主线 N03-10；真实语音链路待凭据后接入。
 
 ### 2026-10-10 · N04-02-s1／N04-04-s1 画布原生对象命中 + 横向时间带 — **IN_PROGRESS**（主任务 N04-02／N04-04 未完成）
 - **内容：** `packages/contracts/src/timeline-band.ts`（可视窗口→有理时基换算、播放头/时间选区分离、单击 POINT／拖动半开 RANGES、显式多区间不合并、帧吸附坍缩降级、区间上限 fail-closed）；`visual-picking.ts`（复用 `hitTestVisualObject`，zOrder→细粒度→输入顺序，隐藏/父隐藏排除，重叠轮换，投影四边形）；`selection.ts` 新增 `composeSelectionAnchor`（交互产物→规范锚点+指纹，选择不改工程）。Web 新增 `TimelineBand`、`CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线。
@@ -190,4 +196,5 @@ d7aacea  feat(n04-09) SelectionAnchor 归一/持久化/兼容/重映射 + CI 测
 - 改 `@ancs/sdk` 后要 `pnpm --filter @ancs/sdk build`（apps/api 的类型检查读 `src`、运行读 `dist`）。
 - 改账本的 python 脚本里不要混入直引号（会 SyntaxError 静默不落盘）；**写完必须 grep 复核计数与任务行**——本会话就出现过 N03-06 漏记、N06-04 误标两起，均已在后续提交修正。
 - 迁移文件改名后要同步 `meta/_journal.json` 的 tag 与 `idx`，并重建测试库（`drop database … create database …`）。
+- **`cd packages/db && pnpm run db:generate` 目前不可用**：既有 `migrations/meta/0080_snapshot.json` 与 `0081_snapshot.json` 的 `id`/`prevId` 相同（此前手工改迁移名时未同步快照）→ drizzle-kit 报 `are pointing to a parent snapshot … collision`。新迁移按仓库既有做法**手工编写 SQL + 同步 `meta/_journal.json`**；`runMigrations`（journal + SQL）与集成测试正常。修复快照属独立基础设施项。
 - 新增原语/契约后跑一次 `pnpm arch:check` 与 `pnpm lint`，R7 依赖规则与未使用导入是最常见的红灯。

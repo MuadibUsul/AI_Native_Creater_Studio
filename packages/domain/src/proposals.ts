@@ -15,7 +15,7 @@ import {
   type Proposal,
   type ProposalTrial,
 } from '@ancs/contracts';
-import { editEvents, projects, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
+import { editEvents, projects, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { processEdits } from './edits.js';
 
@@ -35,6 +35,78 @@ const canonicalOperations = (operations: readonly EditOperation[]): string =>
 
 const hashOperations = (operations: readonly EditOperation[]): string =>
   createHash('sha256').update(canonicalOperations(operations)).digest('hex');
+
+const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+/**
+ * N06-04：试片缓存依赖键。覆盖 base revision + 操作哈希 + 选择指纹 + 意图修订 + **素材版本签名**——
+ * 任一依赖变化（含片段换源）都会得到不同的键，从而自然失效，不返回陈旧试片。
+ */
+async function computeTrialDependencies(deps: DomainDeps, row: typeof proposals.$inferSelect): Promise<{ dependencyKey: string; assetVersionSignature: string }> {
+  const clips = await deps.db.select({ id: sequenceClips.id, assetVersionId: sequenceClips.assetVersionId }).from(sequenceClips).where(and(
+    eq(sequenceClips.workspaceId, row.workspaceId), eq(sequenceClips.projectId, row.projectId),
+  ));
+  const assetVersionSignature = sha256(clips.map((clip) => `${clip.id}:${clip.assetVersionId ?? 'null'}`).sort().join('|'));
+  const dependencyKey = sha256(JSON.stringify({
+    baseProjectRevision: row.baseProjectRevision,
+    operationsHash: row.operationsHash,
+    selectionFingerprint: row.selectionFingerprint ?? null,
+    intentRevisionId: row.intentRevisionId ?? null,
+    assetVersionSignature,
+  }));
+  return { dependencyKey, assetVersionSignature };
+}
+
+async function loadCachedTrial(deps: DomainDeps, row: typeof proposals.$inferSelect, dependencyKey: string): Promise<ProposalTrial | null> {
+  const rows = await deps.db.select().from(proposalTrials).where(and(
+    eq(proposalTrials.workspaceId, row.workspaceId),
+    eq(proposalTrials.projectId, row.projectId),
+    eq(proposalTrials.dependencyKey, dependencyKey),
+  )).limit(1);
+  const cached = rows[0];
+  if (!cached) return null;
+  return proposalTrialSchema.parse({ ...proposalTrialSchema.parse(cached.trial), proposalId: row.id, cached: true, dependencyKey });
+}
+
+async function storeTrial(deps: DomainDeps, row: typeof proposals.$inferSelect, input: { dependencyKey: string; assetVersionSignature: string; trial: ProposalTrial }): Promise<void> {
+  const stored = proposalTrialSchema.parse({ ...input.trial, proposalId: row.id, cached: false, dependencyKey: input.dependencyKey });
+  const now = new Date();
+  await deps.db.insert(proposalTrials).values({
+    dependencyKey: input.dependencyKey,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId,
+    proposalId: row.id,
+    baseProjectRevision: row.baseProjectRevision,
+    operationsHash: row.operationsHash,
+    selectionFingerprint: row.selectionFingerprint ?? null,
+    intentRevisionId: row.intentRevisionId ?? null,
+    assetVersionSignature: input.assetVersionSignature,
+    trial: stored,
+    createdAt: now,
+    updatedAt: now,
+  }).onConflictDoUpdate({
+    target: [proposalTrials.workspaceId, proposalTrials.projectId, proposalTrials.dependencyKey],
+    set: { proposalId: row.id, trial: stored, updatedAt: now },
+  });
+}
+
+/** N06-04：显式依赖失效（如素材版本变化后主动清理）。返回删除的缓存行数。 */
+export async function invalidateProposalTrials(deps: DomainDeps, input: { workspaceId: string; projectId: string; dependencyKey?: string }): Promise<number> {
+  const condition = input.dependencyKey === undefined
+    ? and(eq(proposalTrials.workspaceId, input.workspaceId), eq(proposalTrials.projectId, input.projectId))
+    : and(eq(proposalTrials.workspaceId, input.workspaceId), eq(proposalTrials.projectId, input.projectId), eq(proposalTrials.dependencyKey, input.dependencyKey));
+  const deleted = await deps.db.delete(proposalTrials).where(condition).returning({ dependencyKey: proposalTrials.dependencyKey });
+  return deleted.length;
+}
+
+/** 候选采用/丢弃后清理其缓存行（键失效为主，这里是容量与归属清理）。 */
+async function invalidateProposalTrialRows(deps: DomainDeps, row: typeof proposals.$inferSelect): Promise<void> {
+  await deps.db.delete(proposalTrials).where(and(
+    eq(proposalTrials.workspaceId, row.workspaceId),
+    eq(proposalTrials.projectId, row.projectId),
+    eq(proposalTrials.proposalId, row.id),
+  ));
+}
 
 const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSchema.parse({
   proposalId: row.id,
@@ -139,6 +211,11 @@ export async function previewProposal(deps: DomainDeps, input: {
       reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
     });
   }
+  // N06-04：先查局部试片缓存；依赖键一致则直接复用确定性结果（不重复跑执行器）。
+  const { dependencyKey, assetVersionSignature } = await computeTrialDependencies(deps, row);
+  const cachedTrial = await loadCachedTrial(deps, row, dependencyKey);
+  if (cachedTrial !== null) return cachedTrial;
+
   const operations = editOperationSchema.array().parse(row.operations);
   const eventsBefore = await deps.db.select({ seq: editEvents.seq }).from(editEvents).where(eq(editEvents.projectId, input.projectId));
   const maxSeqBefore = eventsBefore.reduce((max, event) => Math.max(max, event.seq), 0);
@@ -195,7 +272,8 @@ export async function previewProposal(deps: DomainDeps, input: {
     });
   } catch (error) {
     if (error instanceof RollbackSentinel) {
-      return error.trial;
+      await storeTrial(deps, row, { dependencyKey, assetVersionSignature, trial: error.trial });
+      return proposalTrialSchema.parse({ ...error.trial, proposalId: row.id, cached: false, dependencyKey });
     }
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed', 422, {
       reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
@@ -284,6 +362,7 @@ export async function adoptProposal(deps: DomainDeps, input: {
     committedAt: now,
     updatedAt: now,
   }).where(eq(proposals.id, row.id));
+  await invalidateProposalTrialRows(deps, row);
   const updated = await loadProposalRow(deps, input);
   return { proposal: toProposal(updated), projectRevision: result.response.project.revision };
 }
@@ -311,6 +390,7 @@ export async function discardProposal(deps: DomainDeps, input: {
   }
   const now = new Date();
   await deps.db.update(proposals).set({ status: 'DISCARDED', discardedAt: now, updatedAt: now }).where(eq(proposals.id, row.id));
+  await invalidateProposalTrialRows(deps, row);
   return toProposal(await loadProposalRow(deps, input));
 }
 
