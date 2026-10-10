@@ -178,6 +178,7 @@ baa715c  feat(n04-05) AttentionSnapshot 本体 + 有界事件缓冲 + 轨迹最�
 82cc785  feat(n04-10) 刷新/嵌套/时序变更后的锚点自动恢复
 f178a11  feat(n05-02) 语音采集、能力协商与时间对齐
 1683b74  feat(n06-04) 局部试片缓存与依赖失效（迁移 0082）
+f4f81f2  feat(n06-03) 影响集、陈旧提案与受控 rebase（迁移 0083）
 ```
 
 ---
@@ -190,22 +191,25 @@ f178a11  feat(n05-02) 语音采集、能力协商与时间对齐
 2. `N04-09`（+ `N04-09-s1` 契约）：SelectionAnchor 归一、持久化（迁移 0078）、旧格式兼容、重映射（FAILED/PARTIAL/AMBIGUOUS/STALE）。
 3. `N05-01`（部分交付，IN_PROGRESS）：实时会话与短期凭证适配 + 流式协议状态机（迁移 0080）。
 4. `N06-01`／`N06-02`：私有候选分支 → 确定性试改（真执行器事务内跑完回滚）→ 原子采用（迁移 0081）。
-5. 两次 CI 阻塞修复：verify 作业安装 FFmpeg + 真实媒体用例从 unit 归入 integration；隔离库安全门改为「库名含 test」。
-6. 新需求（鼠标点线面 × 横向时间定位 × 流式语音）扫描 + 差距映射：`docs/design/mouse-voice-gap-map.md`。
+5. `N06-03`：影响集、陈旧提案与受控 rebase（迁移 0083）—— 创建即记录读写集/写目标/素材签名；同对象同维度竞争 409；身份/素材变化要求重新审核；绝不以最新 revision 强覆盖。
+6. 两次 CI 阻塞修复：verify 作业安装 FFmpeg + 真实媒体用例从 unit 归入 integration；隔离库安全门改为「库名含 test」。
+7. 新需求（鼠标点线面 × 横向时间定位 × 流式语音）扫描 + 差距映射：`docs/design/mouse-voice-gap-map.md`。
 
-**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0081；`pnpm verify` 14/14（1151/1151）；账本 49/219（22.37%）。
+**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0083；`pnpm verify` 14/14（1228/1228）；账本 50/219（22.83%）。
 
 **下一步（严格按序，均来自 gap map 与账本）**：
 
-1. **N04-02-s1 / N04-04-s1**：画布原生对象命中与点选（复用 `hitTestVisualObject`）、横向时间带扩展为片段/轨道 + **播放头与时间选区分离**；保留既有 `apps/web/src/ui/LiteTimeline.tsx`，不重写。
-2. **N04-05（AttentionSnapshot 本体）／N04-10（锚点刷新后自动恢复）**。
+1. **N06-06（提案替代、取消与晚到结果隔离）**：提案 generation/替代与晚到隔离；与 N05-04 的取消代际衔接。
+2. **N06-05（采用、继续微调、拒绝与部分采用）**：UI/语音语义区分"方向对再改/采用/后面也这样"；部分采用检查依赖闭包。
 3. **N05-02 起的真实语音链路**（浏览器采集 + 真实 VAD/流式 ASR）：无凭据时只做协议与确定性夹具，保持 `UNVERIFIED_CREDENTIALS_REQUIRED`。
-4. **N06-04（局部试片缓存与依赖失效）**、**N06-03（影响集/陈旧提案 rebase）**、**N06-06（替代/取消/晚到隔离）**。
-5. 增量设计覆盖不到时回主线：**N03-10（G0 纯素材交付门）** → N03-11（PlaybackEngine）→ … → N16。
+4. 增量设计覆盖不到时回主线：**N03-10（G0 纯素材交付门）** → N03-11（PlaybackEngine）→ … → N16。
+5. **N04-02-s1／N04-04-s1／N04-05／N04-10／N05-02／N06-04** 的 UI 与真实浏览器证据收口（各自 verification 已写明缺口）。
 
 **恢复工作前先做三件事**：① `git log --oneline -5` 与 `git status` 确认与本文一致；② 读 `docs/design/mouse-voice-gap-map.md` 的「进度记录」；③ 跑一次 `pnpm verify` 确认基线（注意：**同时只能跑一份**）。
 
 **本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `/mnt/e`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind /home/ubuntu/ancs-nm /mnt/e/Codes/ANCS/node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
+
+**平台切换备注（2026-10-10 新增）**：若在 **Windows（Git Bash）** 下接手而 `node_modules` 里只有 Linux 原生二进制（`@rolldown/binding-linux-x64-gnu`、`lightningcss-linux-x64-gnu`），`vitest` 会以 `Cannot find native binding`／`@rolldown/binding-wasm32-wasi` 启动失败。修法是按当前平台重装依赖：`CI=true pnpm install --config.confirmModulesPurge=false`（会整目录重装并下载 win32 原生包；`pnpm-lock.yaml` 不变）。**不要**用放宽超时或改断言绕过。
 
 **推送凭据（本会话踩过）**：WSL 内 `git push` 无凭据（`fatal: could not read Username`）。本机 Windows 侧的 Git for Windows 已配置 `credential.helper=manager` 且缓存了 github.com 凭据，可用 Windows git 推送同一提交：
 `cd /e/Codes/ANCS && GIT_TERMINAL_PROMPT=0 "/mnt/c/Program Files/Git/cmd/git.exe" push origin codex/v04-foundation`（提交仍由 WSL git 创建，二者共享同一 `.git`）。
