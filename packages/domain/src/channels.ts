@@ -50,6 +50,11 @@ export interface DomainDeps {
   storage?: ObjectStorageAdapter;
   /** 上传意图/直传 URL 的 TTL 秒数（§26.1）；默认 15 分钟，测试可调小/构造过期 */
   uploadIntentTtlSeconds?: number;
+  /**
+   * 语音会话短期凭证的签名密钥（N05-01）。未配置时创建会话 fail-closed（501），
+   * **绝不**回退到 Provider 长期 Key。
+   */
+  voiceSessionSecret?: string;
   /** 保留策略配置（P02-05）：Trash 天数与幂等键 TTL；默认 30 天 / 24 小时 */
   retention?: RetentionConfig;
   /** 任务队列适配器（P03-01）：缺省为 DB 轮询（权威状态即队列）；Redis/BullMQ 见 providers/queue-bullmq */

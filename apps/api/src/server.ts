@@ -10,6 +10,7 @@ import { registerClientContext } from './plugins/client-context.js';
 import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAiEditRoutes } from './routes/ai-edit.js';
 import { registerSelectionRoutes } from './routes/selection.js';
+import { registerVoiceSessionRoutes } from './routes/voice-sessions.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAppearanceRoutes } from './routes/appearance.js';
@@ -112,6 +113,8 @@ export interface BuildServerOptions {
   media?: { stockSearch?: import('@ancs/contracts').AssetSearchProvider };
   /** 声音克隆（P10-02；未提供 → 提交/刷新/删除 501 fail-closed） */
   voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
+  /** N05-01 实时语音会话：短期凭证签名密钥（未配置 → 创建会话 501 fail-closed） */
+  voice?: { sessionSecret?: string };
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
@@ -213,6 +216,14 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerDirectorRoutes(instance, authDeps);
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerSelectionRoutes(instance, authDeps);
+        // N05-01：语音会话签名密钥来自环境（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
+        registerVoiceSessionRoutes(instance, authDeps, {
+          ...(options.voice?.sessionSecret !== undefined
+            ? { sessionSecret: options.voice.sessionSecret }
+            : process.env['ANCS_VOICE_SESSION_SECRET'] === undefined
+              ? {}
+              : { sessionSecret: process.env['ANCS_VOICE_SESSION_SECRET'] }),
+        });
         registerMixdownRoutes(instance, authDeps);
         registerNativeFallbackRoutes(instance, authDeps);
         registerRenderRoutes(instance, authDeps);

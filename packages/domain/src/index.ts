@@ -411,6 +411,19 @@ export {
 } from './media-proxies.js';
 export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV2 } from './edit-operation-v2.js';
 export { AUDIO_MIX_PLAN_VERSION, planClipAudioMix } from './audio-mix.js';
+export {
+  VOICE_ADAPTER_CAPABILITIES,
+  VOICE_SESSION_TTL_SECONDS,
+  appendVoiceEvent,
+  closeVoiceSession,
+  createVoiceSession,
+  getVoiceSession,
+  listSealedUtterances,
+  listVoiceTranscriptDraft,
+  resolveVoiceCapabilities,
+  revokeVoiceSession,
+  sealUtterance,
+} from './voice-session.js';
 export { SELECTION_ERROR_REASONS, assertNotFrameHashIdentity, getSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor } from './selection.js';
 export { RANGE_EDIT_PROMPT_VERSION, buildRangeEditPrompts, planRangeEdit } from './range-edit.js';
 export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, playbackSupports, playbackTimeOfFrame } from './playback.js';

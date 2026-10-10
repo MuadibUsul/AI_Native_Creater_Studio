@@ -46,6 +46,8 @@ N03-09 已按范围 VERIFIED：范围编辑的最小 AI 入口把「选中片段
 
 N04-09 已按范围 VERIFIED：SelectionAnchor 成为**唯一**规范选择结构（AttentionSnapshot 的选择子结构，不新增第二份权威状态），持久化为 (workspace, project, anchorId, revision) 追加式修订日志（迁移 0079），指纹 = sha256(规范序列化)；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经 `selectionAnchorFromLegacySelection` **解析一次**，毫秒入口转 1/1000 有理时基（新请求不丢有理时基），字幕场景携带发话时间（指代使用对应发话时间）；越权（同工作区其他项目）永远 422、帧哈希不能当身份、跨租户 404；重映射把失效选择明确标成 FAILED/PARTIAL/AMBIGUOUS（附候选证据）/STALE 并记入 remapHistory。V04-15 的 AttentionSnapshot 本体（事件缓冲/时钟/轨迹最小保留）仍属 N04-05，锚点自动恢复属 N04-10，画布与时间带属 N04-02-s1／N04-04-s1，均保持 `IN_PROGRESS`（见 `docs/verification/N04-09.md`）。
 
+N05-01 部分交付（保持 `IN_PROGRESS`）：实时会话与短期凭证适配已落地并可验证——会话返回**只发一次**的短期 HMAC 凭证（作用域 voice:stream/voice:tools、TTL 15 分钟），未配置签名密钥即 501 fail-closed，**长期 Provider Key 永不下发**；创建会话需 `project:write`（跨租户 404）；能力按传输方式显式声明（浏览器回退明确不承诺服务端 VAD/逐词时间戳/服务端工具）；流式事件信封带状态/代际/时钟/序号四道门，`partial` 只读（不写 edit_events、不动 revision）、改口产生新转写修订，`sealUtterance` 把最新修订封存为 IntentRevision（需绑定 SelectionAnchor）供范围编辑 AI 入口使用。**真实 WebRTC/sideband 传输与真实 VAD/流式 ASR 未接入**（V03-26/V03-49/V03-53 的 Provider 侧实现与浏览器采集），因此不计入完成（见 `docs/verification/N05-01.md`）。
+
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
 | 需求ID | 需求 | 规范位置 | 任务 | v0.4 验收状态 |

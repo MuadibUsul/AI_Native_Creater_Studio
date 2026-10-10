@@ -290,6 +290,42 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  VOICE_CAPABILITY_FLAGS,
+  VOICE_ERROR_REASONS,
+  VOICE_SESSION_STATUSES,
+  VOICE_STREAM_EVENT_KINDS,
+  VOICE_TRANSPORTS,
+  appendVoiceEventRequestSchema,
+  appendVoiceEventResponseSchema,
+  createVoiceSessionRequestSchema,
+  createVoiceSessionResponseSchema,
+  ephemeralCredentialSchema,
+  sealUtteranceRequestSchema,
+  sealUtteranceResponseSchema,
+  voiceCapabilitiesSchema,
+  voiceCapabilityFlagSchema,
+  voiceEventEnvelopeSchema,
+  voiceSessionSchema,
+  voiceSessionStatusSchema,
+  voiceStreamEventKindSchema,
+  voiceSupports,
+  voiceTranscriptRevisionSchema,
+  voiceTransportSchema,
+} from './voice-stream.js';
+export type {
+  EphemeralCredential,
+  SealUtteranceRequest,
+  VoiceCapabilities,
+  VoiceCapabilityFlag,
+  VoiceErrorReason,
+  VoiceEventEnvelope,
+  VoiceSession,
+  VoiceSessionStatus,
+  VoiceStreamEventKind,
+  VoiceTranscriptRevision,
+  VoiceTransport,
+} from './voice-stream.js';
+export {
   GEOMETRY_KINDS,
   GEOMETRY_ROLES,
   INTENT_REVISION_STATUSES,

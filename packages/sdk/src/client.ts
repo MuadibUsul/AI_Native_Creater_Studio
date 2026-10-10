@@ -41,6 +41,13 @@ import {
   createRangeEditPlanRequestSchema,
   selectionAnchorRecordSchema,
   selectionAnchorSchema,
+  appendVoiceEventRequestSchema,
+  appendVoiceEventResponseSchema,
+  createVoiceSessionRequestSchema,
+  createVoiceSessionResponseSchema,
+  sealUtteranceRequestSchema,
+  sealUtteranceResponseSchema,
+  voiceSessionSchema,
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
@@ -363,6 +370,12 @@ import {
   type RangeEditPlan,
   type SelectionAnchor,
   type SelectionAnchorRecord,
+  type VoiceSession,
+  type VoiceEventEnvelope,
+  type VoiceTranscriptRevision,
+  type EphemeralCredential,
+  type SealUtteranceRequest,
+  type IntentRevision,
   type LegacySelection,
   type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
@@ -775,6 +788,35 @@ export interface AncsClient {
       projectId: string,
       anchorId: string,
     ): Promise<SelectionAnchorRecord>;
+    /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
+    createVoiceSession(
+      workspaceId: string,
+      projectId: string,
+      input: { selectionAnchorId?: string | null; preferredTransport?: 'SERVER_RELAY' | 'PROVIDER_SIDEBAND' | 'BROWSER_SPEECH_FALLBACK' },
+      options?: MutationOptions,
+    ): Promise<{ session: VoiceSession; credential: EphemeralCredential }>;
+    /** N05-01：读取会话状态（过期顺目标记；跨租户 404） */
+    voiceSession(workspaceId: string, projectId: string, sessionId: string): Promise<VoiceSession>;
+    /** N05-01：追加流式事件（转写中/修订只写会话草稿，工程零变更） */
+    appendVoiceEvent(
+      workspaceId: string,
+      projectId: string,
+      sessionId: string,
+      event: VoiceEventEnvelope,
+      options?: MutationOptions,
+    ): Promise<{ accepted: true; transcript: VoiceTranscriptRevision | null; projectUntouched: true }>;
+    /** N05-01：封存话语为 IntentRevision（未解析指代不可封存） */
+    sealVoiceUtterance(
+      workspaceId: string,
+      projectId: string,
+      sessionId: string,
+      input: SealUtteranceRequest,
+      options?: MutationOptions,
+    ): Promise<{ intentRevision: IntentRevision; projectUntouched: true }>;
+    /** N05-01：结束采集（幂等） */
+    closeVoiceSession(workspaceId: string, projectId: string, sessionId: string, options?: MutationOptions): Promise<VoiceSession>;
+    /** N05-01：撤销会话（撤销后不得继续执行项目操作） */
+    revokeVoiceSession(workspaceId: string, projectId: string, sessionId: string, options?: MutationOptions): Promise<VoiceSession>;
     /** N04-09：把锚点重解析到当前工程状态（消失/歧义/版本过期 → FAILED/PARTIAL/AMBIGUOUS/STALE） */
     remapSelectionAnchor(
       workspaceId: string,
@@ -2096,6 +2138,24 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       selectionAnchor: (workspaceId, projectId, anchorId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}`, selectionAnchorRecordSchema),
+      createVoiceSession: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
+          body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      voiceSession: (workspaceId, projectId, sessionId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}`, voiceSessionSchema),
+      appendVoiceEvent: (workspaceId, projectId, sessionId, event, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/events`, appendVoiceEventResponseSchema, {
+          body: { event }, bodySchema: appendVoiceEventRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      sealVoiceUtterance: (workspaceId, projectId, sessionId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/seal`, sealUtteranceResponseSchema, {
+          body: input, bodySchema: sealUtteranceRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      closeVoiceSession: (workspaceId, projectId, sessionId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/close`, voiceSessionSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      revokeVoiceSession: (workspaceId, projectId, sessionId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/revoke`, voiceSessionSchema, { idempotencyKey: mutation?.idempotencyKey }),
       remapSelectionAnchor: (workspaceId, projectId, anchorId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/remap`, selectionAnchorRecordSchema, {
           body: input,
