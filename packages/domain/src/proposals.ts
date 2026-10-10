@@ -275,6 +275,115 @@ const toProposalArtifact = (row: typeof proposalArtifacts.$inferSelect): Proposa
   createdAt: row.createdAt.toISOString(),
 });
 
+/** N06-05：操作产生的对象 id 字段（用于依赖闭包）。 */
+const PRODUCED_ID_FIELDS = ['createdClipId', 'createdAudioClipId', 'createdVideoClipId', 'createdCaptionId', 'createdTailCaptionId'] as const;
+/** N06-05：操作消费的对象 id 字段（引用先前操作创建的对象时构成依赖）。 */
+const CONSUMED_ID_FIELDS = [
+  'clipId', 'leftClipId', 'rightClipId', 'videoClipId', 'audioClipId', 'captionId', 'afterClipId',
+  'trackId', 'sequenceId', 'destinationTrackId', 'audioRegionId', 'leftRegionId', 'rightRegionId',
+  'targetId', 'animationId', 'objectId',
+] as const;
+
+const readIdField = (operation: EditOperation, field: string): string | null => {
+  const value = (operation as unknown as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+interface PartialAdoptClosure {
+  /** 实际采用的操作下标（升序）= 用户选择 ∪ 依赖闭包 */
+  adopted: number[];
+  /** 是否因闭包扩大了作用范围 */
+  expanded: boolean;
+  effectiveWriteTargets: ProposalTargetRef[];
+}
+
+/**
+ * N06-05：**部分采用**的依赖闭包。
+ *
+ * 规则（保守，宁可扩大也不切断依赖）：
+ * 1. **引用闭包**：若采用的操作引用了本批中另一操作创建的对象（`createdClipId` 等），则创建操作必须一并采用；
+ * 2. **音画配对**：若采用的操作与批内另一操作作用在**同一 `avGroupId`** 的片段上，两者必须一并采用，
+ *    否则会出现"只改了画面那半边"的声画漂移；
+ * 3. 其余情况不扩张。执行层仍会做自己的守卫（如涟漪跨轨同步、锁），失败时整批回滚、零部分写入。
+ */
+async function computePartialAdoptClosure(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  operations: readonly EditOperation[];
+  selectedIndexes: readonly number[];
+}): Promise<PartialAdoptClosure> {
+  const total = input.operations.length;
+  const unique = [...new Set(input.selectedIndexes)].sort((left, right) => left - right);
+  if (unique.length === 0 || unique.some((index) => index < 0 || index >= total)) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'selected operation indexes are out of range', 422, {
+      reason: PROPOSAL_ERROR_REASONS.PARTIAL_SCOPE_INVALID, operations: total, selected: unique,
+    });
+  }
+  const selected = new Set<number>(unique);
+
+  // 1) 引用闭包：消费 → 生产
+  const producedBy = new Map<string, number[]>();
+  input.operations.forEach((operation, index) => {
+    for (const field of PRODUCED_ID_FIELDS) {
+      const id = readIdField(operation, field);
+      if (id !== null) producedBy.set(id, [...(producedBy.get(id) ?? []), index]);
+    }
+  });
+  const expandReferences = (): void => {
+    for (const index of [...selected]) {
+      for (const field of CONSUMED_ID_FIELDS) {
+        const id = readIdField(input.operations[index]!, field);
+        if (id === null) continue;
+        for (const producer of producedBy.get(id) ?? []) selected.add(producer);
+      }
+    }
+  };
+
+  // 2) 音画配对：批内**任一**被采用的操作触及的 avGroupId 上的其他操作必须同进
+  //    （必须对全部候选目标解析 avGroupId，否则选中的那侧找不到另一样本）。
+  const clipTargets = input.operations.flatMap((operation, index) =>
+    computeOperationTargetRefs(operation as unknown as Record<string, unknown>, { projectId: input.projectId })
+      .filter((target) => target.objectKind === 'CLIP')
+      .map((target) => ({ index, clipId: target.objectId })));
+  const allTargetClipIds = [...new Set(clipTargets.map((entry) => entry.clipId))];
+  const groupOf = new Map<string, string>();
+  if (allTargetClipIds.length > 0) {
+    const clipRows = await deps.db.select({ id: sequenceClips.id, avGroupId: sequenceClips.avGroupId }).from(sequenceClips).where(and(
+      eq(sequenceClips.workspaceId, input.workspaceId),
+      eq(sequenceClips.projectId, input.projectId),
+      inArray(sequenceClips.id, allTargetClipIds),
+    ));
+    for (const row of clipRows) if (row.avGroupId !== null) groupOf.set(row.id, row.avGroupId);
+  }
+  const expandAvPairs = (): void => {
+    const touchedGroups = new Set<string>();
+    for (const entry of clipTargets) {
+      if (!selected.has(entry.index)) continue;
+      const group = groupOf.get(entry.clipId);
+      if (group !== undefined) touchedGroups.add(group);
+    }
+    if (touchedGroups.size === 0) return;
+    for (const entry of clipTargets) {
+      if (selected.has(entry.index)) continue;
+      const group = groupOf.get(entry.clipId);
+      if (group !== undefined && touchedGroups.has(group)) selected.add(entry.index);
+    }
+  };
+
+  // 两条规则互相可能触发对方（AV 扩张可能引入新的引用依赖）→ 迭代到不动点。
+  for (let pass = 0; pass < total + 1; pass += 1) {
+    const sizeBefore = selected.size;
+    expandReferences();
+    expandAvPairs();
+    if (selected.size === sizeBefore) break;
+  }
+
+  const adopted = [...selected].sort((left, right) => left - right);
+  const effectiveWriteTargets = adopted.flatMap((index) =>
+    computeWriteTargets([input.operations[index]!], input.projectId).map((target) => ({ ...target, operationIndex: index })));
+  return { adopted, expanded: adopted.length !== unique.length, effectiveWriteTargets };
+}
+
 const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSchema.parse({  proposalId: row.id,
   workspaceId: row.workspaceId,
   projectId: row.projectId,
@@ -295,6 +404,7 @@ const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSch
   supersededByProposalId: row.supersededByProposalId ?? null,
   supersededAt: row.supersededAt === null ? null : row.supersededAt.toISOString(),
   cancelledAt: row.cancelledAt === null ? null : row.cancelledAt.toISOString(),
+  adoptedOperationIndexes: Array.isArray(row.adoptedOperationIndexes) ? (row.adoptedOperationIndexes as number[]) : [],
   createdAt: row.createdAt.toISOString(),
   committedAt: row.committedAt === null ? null : row.committedAt.toISOString(),
   discardedAt: row.discardedAt === null ? null : row.discardedAt.toISOString(),
@@ -640,32 +750,15 @@ export async function rebaseProposal(deps: DomainDeps, input: {
   };
 }
 
-/** 原子采用：绑定校验 → 统一编辑协议原子执行 → 候选标记 COMMITTED。 */
-export async function adoptProposal(deps: DomainDeps, input: {
+/** 采用类操作的共同前置校验（操作哈希 = 用户看过的就是这一份；锚点指纹；base revision）。 */
+async function assertAdoptPreconditions(deps: DomainDeps, input: {
+  row: typeof proposals.$inferSelect;
   workspaceId: string;
   projectId: string;
-  proposalId: string;
-  actorId?: string;
   expectedOperationsHash: string;
   expectedSelectionFingerprint: string | null;
-  idempotencyKey: string;
-}): Promise<{ proposal: Proposal; projectRevision: number }> {
-  const row = await loadProposalRow(deps, input);
-  // 幂等：同一幂等键重放返回同一结果（不产生第二次写入）
-  if (row.status === 'COMMITTED') {
-    if (row.adoptionIdempotencyKey === input.idempotencyKey) {
-      return { proposal: toProposal(row), projectRevision: row.committedRevision ?? row.baseProjectRevision };
-    }
-    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal has already been committed', 409, { reason: PROPOSAL_ERROR_REASONS.NOT_OPEN });
-  }
-  if (row.status === 'DISCARDED' || row.status === 'SUPERSEDED' || row.status === 'CANCELLED') {
-    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be adopted', 409, {
-      reason: row.status === 'SUPERSEDED'
-        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
-        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
-      status: row.status,
-    });
-  }
+}): Promise<void> {
+  const { row } = input;
   if (input.expectedOperationsHash !== row.operationsHash) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal operations changed since the user reviewed it', 409, {
       reason: PROPOSAL_ERROR_REASONS.HASH_MISMATCH, expected: input.expectedOperationsHash, actual: row.operationsHash,
@@ -696,6 +789,41 @@ export async function adoptProposal(deps: DomainDeps, input: {
       reason: PROPOSAL_ERROR_REASONS.STALE_BASE, currentRevision, baseProjectRevision: row.baseProjectRevision,
     });
   }
+}
+
+/** 原子采用：绑定校验 → 统一编辑协议原子执行 → 候选标记 COMMITTED。 */
+export async function adoptProposal(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  actorId?: string;
+  expectedOperationsHash: string;
+  expectedSelectionFingerprint: string | null;
+  idempotencyKey: string;
+}): Promise<{ proposal: Proposal; projectRevision: number }> {
+  const row = await loadProposalRow(deps, input);
+  // 幂等：同一幂等键重放返回同一结果（不产生第二次写入）
+  if (row.status === 'COMMITTED') {
+    if (row.adoptionIdempotencyKey === input.idempotencyKey) {
+      return { proposal: toProposal(row), projectRevision: row.committedRevision ?? row.baseProjectRevision };
+    }
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal has already been committed', 409, { reason: PROPOSAL_ERROR_REASONS.NOT_OPEN });
+  }
+  if (row.status === 'DISCARDED' || row.status === 'SUPERSEDED' || row.status === 'CANCELLED') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be adopted', 409, {
+      reason: row.status === 'SUPERSEDED'
+        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
+        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
+      status: row.status,
+    });
+  }
+  await assertAdoptPreconditions(deps, {
+    row,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    expectedOperationsHash: input.expectedOperationsHash,
+    expectedSelectionFingerprint: input.expectedSelectionFingerprint,
+  });
   const operations = editOperationSchema.array().parse(row.operations);
   const result = await processEdits(deps, {
     workspaceId: input.workspaceId,
@@ -720,6 +848,80 @@ export async function adoptProposal(deps: DomainDeps, input: {
   await invalidateProposalTrialRows(deps, row);
   const updated = await loadProposalRow(deps, input);
   return { proposal: toProposal(updated), projectRevision: result.response.project.revision };
+}
+
+/**
+ * N06-05：**部分采用** —— 只落地用户勾选的操作子集，但按**依赖闭包**扩张到合法采纳集
+ * （被引用对象的创建操作 + 同一 AV 组的另一侧），并如实回报实际作用范围。
+ *
+ * - 该候选随后为一次性交付：状态置 `PARTIALLY_ADOPTED`（未采用的操作**不能**再从本候选落地，
+ *   因为工程 revision 已推进；要再改须新建候选）——避免重复写入与声画漂移；
+ * - 闭包覆盖全部操作时等价于完整采用（状态 `COMMITTED`）；
+ * - 执行失败 → 统一编辑协议整批回滚、零部分写入、候选保持 OPEN。
+ */
+export async function adoptProposalPartial(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  actorId?: string;
+  selectedOperationIndexes: readonly number[];
+  expectedOperationsHash: string;
+  expectedSelectionFingerprint: string | null;
+  idempotencyKey: string;
+}): Promise<{ proposal: Proposal; projectRevision: number; adoptedOperationIndexes: number[]; remainingOperationIndexes: number[]; closureExpanded: boolean; effectiveWriteTargets: ProposalTargetRef[] }> {
+  const row = await loadProposalRow(deps, input);
+  if (row.status !== 'OPEN') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be adopted', 409, {
+      reason: row.status === 'SUPERSEDED'
+        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
+        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
+      status: row.status,
+    });
+  }
+  await assertAdoptPreconditions(deps, {
+    row,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    expectedOperationsHash: input.expectedOperationsHash,
+    expectedSelectionFingerprint: input.expectedSelectionFingerprint,
+  });
+  const operations = editOperationSchema.array().parse(row.operations);
+  const closure = await computePartialAdoptClosure(deps, {
+    workspaceId: input.workspaceId, projectId: input.projectId, operations, selectedIndexes: input.selectedOperationIndexes,
+  });
+  const adoptedOperations = closure.adopted.map((index) => operations[index]!);
+  const coversAll = closure.adopted.length === operations.length;
+  const result = await processEdits(deps, {
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    actor: { type: 'USER', id: input.actorId ?? 'proposal-partial-adopt' },
+    request: {
+      schemaVersion: '1.0',
+      baseProjectRevision: row.baseProjectRevision,
+      expectedSceneRevisions: {},
+      operations: adoptedOperations,
+      idempotencyKey: input.idempotencyKey,
+    },
+  });
+  const now = new Date();
+  await deps.db.update(proposals).set({
+    status: coversAll ? 'COMMITTED' : 'PARTIALLY_ADOPTED',
+    committedRevision: result.response.project.revision,
+    adoptionIdempotencyKey: coversAll ? input.idempotencyKey : null,
+    committedAt: coversAll ? now : null,
+    adoptedOperationIndexes: closure.adopted,
+    updatedAt: now,
+  }).where(eq(proposals.id, row.id));
+  await invalidateProposalTrialRows(deps, row);
+  const updated = await loadProposalRow(deps, input);
+  return {
+    proposal: toProposal(updated),
+    projectRevision: result.response.project.revision,
+    adoptedOperationIndexes: closure.adopted,
+    remainingOperationIndexes: operations.map((_, index) => index).filter((index) => !closure.adopted.includes(index)),
+    closureExpanded: closure.expanded,
+    effectiveWriteTargets: closure.effectiveWriteTargets,
+  };
 }
 
 /** 只读读取候选（GET 路径，不触发试改/采用）。 */

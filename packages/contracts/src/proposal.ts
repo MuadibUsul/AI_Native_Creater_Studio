@@ -16,7 +16,7 @@ import { objectLockDimensionSchema, objectLockKindSchema } from './object-locks.
  * - 晚到/过期候选只能被丢弃或取代，**不得**更新新候选。
  */
 
-export const PROPOSAL_STATUSES = ['OPEN', 'COMMITTED', 'DISCARDED', 'SUPERSEDED', 'CANCELLED'] as const;
+export const PROPOSAL_STATUSES = ['OPEN', 'COMMITTED', 'PARTIALLY_ADOPTED', 'DISCARDED', 'SUPERSEDED', 'CANCELLED'] as const;
 export const proposalStatusSchema = z.enum(PROPOSAL_STATUSES);
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>;
 
@@ -39,6 +39,8 @@ export const PROPOSAL_ERROR_REASONS = {
   CANCELLED: 'PROPOSAL_CANCELLED',
   /** N06-06：外部晚到产物与候选代际/状态不符 → 隔离（不自动绑定） */
   ARTIFACT_QUARANTINED: 'PROPOSAL_ARTIFACT_QUARANTINED',
+  /** N06-05：部分采用的选择集无法构成合法依赖闭包（会切断音画/引用依赖） */
+  PARTIAL_SCOPE_INVALID: 'PROPOSAL_PARTIAL_SCOPE_INVALID',
 } as const;
 
 export type ProposalErrorReason = (typeof PROPOSAL_ERROR_REASONS)[keyof typeof PROPOSAL_ERROR_REASONS];
@@ -161,6 +163,8 @@ export const proposalSchema = z.object({
   supersededByProposalId: opaqueIdSchema.nullable().default(null),
   supersededAt: isoDateTimeSchema.nullable().default(null),
   cancelledAt: isoDateTimeSchema.nullable().default(null),
+  /** N06-05：部分采用时实际落地的操作下标（完整采用则全部） */
+  adoptedOperationIndexes: z.array(z.number().int().min(0)).default([]),
   createdAt: isoDateTimeSchema,
   committedAt: isoDateTimeSchema.nullable().default(null),
   discardedAt: isoDateTimeSchema.nullable().default(null),
@@ -277,3 +281,33 @@ export const cancelProposalRequestSchema = z.object({
   reason: z.string().min(1).max(200).optional(),
 }).strict();
 export type CancelProposalRequest = z.infer<typeof cancelProposalRequestSchema>;
+
+/**
+ * N06-05：**部分采用** —— 只采用候选操作集的一个子集。
+ * 服务端会把它扩成满足依赖闭包的**实际采用集**（含被引用对象的创建操作、同一 AV 组的另一侧），
+ * 并把扩后的作用范围如实回报（`closureExpanded` + `adoptedOperationIndexes`）。
+ * 无法构成合法闭包时 fail-closed（409 `PROPOSAL_PARTIAL_SCOPE_INVALID`）。
+ */
+export const adoptProposalPartialRequestSchema = z.object({
+  /** 用户勾选要采用的操作下标（非空、去重、在范围内） */
+  selectedOperationIndexes: z.array(z.number().int().min(0)).min(1).max(256),
+  expectedOperationsHash: z.string().length(64),
+  expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
+  idempotencyKey: z.string().min(8).max(120),
+}).strict();
+export type AdoptProposalPartialRequest = z.infer<typeof adoptProposalPartialRequestSchema>;
+
+export const adoptProposalPartialResponseSchema = z.object({
+  proposal: proposalSchema,
+  projectRevision: revisionSchema,
+  adopted: z.literal(true),
+  /** 实际落地的操作下标（= 用户选择 ∪ 依赖闭包） */
+  adoptedOperationIndexes: z.array(z.number().int().min(0)),
+  /** 未被采用、仍留在候选里的操作下标（该候选为一次性交付，需新建候选才能再改） */
+  remainingOperationIndexes: z.array(z.number().int().min(0)),
+  /** 是否因依赖闭包而扩大了作用范围（用户必须在 UI 上看到这个差异） */
+  closureExpanded: z.boolean(),
+  /** 实际落地操作对应的具体写目标（作用范围明确可见） */
+  effectiveWriteTargets: z.array(proposalTargetRefSchema),
+}).strict();
+export type AdoptProposalPartialResponse = z.infer<typeof adoptProposalPartialResponseSchema>;

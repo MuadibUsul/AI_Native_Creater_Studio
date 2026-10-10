@@ -589,6 +589,13 @@
       "when": 1791604504473,
       "tag": "0084_proposal_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1791606504473,
+      "tag": "0085_proposal_partial_adoption",
+      "breakpoints": true
     }
   ]
 }

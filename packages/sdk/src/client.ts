@@ -53,6 +53,8 @@ import {
   proposalTrialSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   proposalImpactSchema,
   proposalArtifactSchema,
   rebaseProposalRequestSchema,
@@ -392,6 +394,8 @@ import {
   type ProposalTrial,
   type CreateProposalRequest,
   type AdoptProposalRequest,
+  type AdoptProposalPartialRequest,
+  type AdoptProposalPartialResponse,
   type ProposalImpact,
   type ProposalArtifact,
   type RebaseProposalRequest,
@@ -857,6 +861,14 @@ export interface AncsClient {
       input?: { reason?: string },
       options?: MutationOptions,
     ): Promise<Proposal>;
+    /** N06-05：部分采用（按依赖闭包扩张并如实回报作用范围） */
+    adoptProposalPartial(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: AdoptProposalPartialRequest,
+      options?: MutationOptions,
+    ): Promise<AdoptProposalPartialResponse>;
     /** N06-06：取消候选（标记 CANCELLED，保留已有结果） */
     cancelProposal(
       workspaceId: string,
@@ -2256,6 +2268,10 @@ export function createClient(options: ClientOptions): AncsClient {
       discardProposal: (workspaceId, projectId, proposalId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/discard`, proposalSchema, {
           body: input ?? {}, bodySchema: z.object({ reason: z.string().max(200).optional() }).strict(), idempotencyKey: mutation?.idempotencyKey,
+        }),
+      adoptProposalPartial: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/adopt-partial`, adoptProposalPartialResponseSchema, {
+          body: input, bodySchema: adoptProposalPartialRequestSchema, idempotencyKey: input.idempotencyKey ?? mutation?.idempotencyKey,
         }),
       cancelProposal: (workspaceId, projectId, proposalId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/cancel`, proposalSchema, {

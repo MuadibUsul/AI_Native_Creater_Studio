@@ -3,11 +3,12 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N06-06 提案替代、取消与晚到结果隔离；迁移 0084）
+**最后更新：** 2026-10-10（N06-05 采用/继续微调/拒绝/部分采用；迁移 0085）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0084（`proposals` 代际/取代列 + `proposal_artifacts` 隔离台账）
+**迁移：** 到 0085（`proposals` 增 `adopted_operation_indexes`）
+**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。当前组：**N06 收尾组**（N06-05 → N06-07 → N06-08）；已交付 N06-05，组末 verify 待补。
 
 ---
 
@@ -15,15 +16,21 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／06**、N15-01/02、N16-01/02 = **51/219（23.29%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 168 项 |
-| 本地 `pnpm verify` | **14/14，1233/1233**（2026-10-10 实测；Unit 480 / Web 188 / Motion 19 / Integration 501 / Security 24 / Render 6 / Golden 15） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06**、N15-01/02、N16-01/02 = **52/219（23.74%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 167 项 |
+| 本地 `pnpm verify` | **14/14，1233/1233**（2026-10-10 实测；Unit 480 / Web 188 / Motion 19 / Integration 501 / Security 24 / Render 6 / Golden 15）。**N06 收尾组的全量 verify 在组末统一重跑** |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · N06-05 采用、继续微调、拒绝与部分采用 — **VERIFIED**
+- **内容：** 迁移 0085 给 `proposals` 加 `adopted_operation_indexes`。契约新增 `packages/contracts/src/proposal-disposition.ts`（`resolveProposalDisposition` 纯函数：显式 UI 动作优先 → 拒绝 → 后面也这样 → 继续微调 → 采用；**沉默/无法识别 → 需确认，绝不据此采用**；多候选无唯一目标 → 需消歧）+ 9 项单测。Domain 新增 `computePartialAdoptClosure`（① 引用闭包：消费 `createdClipId` → 并入其创建操作；② 音画配对闭包：同一 `avGroupId` 的视频/音频操作必须同进；两条迭代到不动点）与 `adoptProposalPartial`；抽出 `assertAdoptPreconditions` 供采用/部分采用共用。响应如实回报 `adoptedOperationIndexes`/`remainingOperationIndexes`/`closureExpanded`/`effectiveWriteTargets`（作用范围明确可见）；越界选择 422 `PROPOSAL_PARTIAL_SCOPE_INVALID` 零写入；部分采用为一次性交付（`PARTIALLY_ADOPTED`，闭包覆盖全部则 `COMMITTED`）。HTTP `POST .../adopt-partial` + SDK。
+- **证据：** `docs/verification/N06-05.md`（处置 9 项单测 + 集成 5 项：音画配对闭包 / 引用闭包 / 闭包覆盖全部=COMMITTED 且不可重复采用 / 越界 422 零写入 / 哈希不符 409）· `docs/handoffs/N06-05.md`
+- **为何是 VERIFIED：** 实现内容与验收四条（"再慢一点"未提前采用、沉默不确认、多候选消歧、部分采用不切断音画依赖）全部是服务端/契约语义且均有真实库证据；本项**无用户可见 UI**（对比回放界面属 N06-08）。
+- **下一步（本组内）：** **N06-07**（已确认内容保护与回归指纹）→ N06-08（A/B 比较与版本恢复；依赖 N04-04 未完全就绪，开工前需评估）→ 组末全量 verify + 提交。
 
 ### 2026-10-10 · N06-06 提案替代、取消与晚到结果隔离 — **VERIFIED**
 - **内容：** 迁移 0084：`proposals` 增 `generation`/`superseded_by_proposal_id`/`superseded_at`/`cancelled_at`，**新增 `proposal_artifacts` 隔离台账**。候选带工程内单调递增 `generation`；创建时自动**取代**同谱系（`intentRevisionId` 优先，否则 `selectionAnchorId`）旧 OPEN 候选并记录取代者；`cancelProposal` 标 `CANCELLED` 但**保留**试片/产物结果（与丢弃语义不同），取消后采用/试改 409、回调不改 acceptedRevision；`submitProposalArtifact` 只在"候选仍 OPEN 且为谱系当前代际"才 `bound=true`，其余（`SUPERSEDED`/`CANCELLED`/`STALE_GENERATION`/`NOT_CURRENT`/`ALREADY_BOUND`）**隔离不自动绑定**；`runRetentionSweep` 新增第 7 步按保留期清理 `bound=false` 孤儿行、保留已绑定结果。HTTP `POST .../cancel`、`POST|GET .../artifacts` + SDK。
@@ -108,14 +115,21 @@
 ## 三、下一步（按优先级，来自 gap map §4；2026-10-10 更新）
 
 **已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）。
-**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）—— 见上方条目。
+**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）、**N06-05**（采用、继续微调、拒绝与部分采用）—— 见上方条目。
 
-1. **N06-05**（采用、继续微调、拒绝与部分采用）：UI/语音语义区分"方向对再改/采用/后面也这样"；部分采用检查依赖闭包（依赖 N06-02、N06-04 均已就绪）。
-2. **回主线 N03 收口**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 有硬依赖 N03-16**（G0 增量要求 baseline 播放同步验收），且纯素材渲染需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（现有 render 栈是 scene-graph + Master Narration，纯素材会被三道门挡住）；调研地图见下节「N03-10 现状」。
-3. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
-4. **已交付切片的 UI/浏览器证据收口**：N04-02-s1／N04-04-s1／N04-05／N04-10／N05-02／N06-04 各自 verification 已写明缺口。
-5. **基础设施可选**：修复 `db:generate` 的 0080/0081 快照冲突（见已知坑）。
-6. **并行工作（可选）**：多个候选已互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好（库名含 test，通过安全门）；**同一时刻仍只跑一份 `pnpm verify`**（它是全局门且共用构建产物）。
+**当前组（N06 收尾组）内顺序：**
+
+1. **N06-07**（已确认内容保护与回归指纹）：依赖 N06-03、N06-05 均已就绪。
+2. **N06-08**（A/B 比较、局部循环与版本恢复）：依赖 N06-04、N06-05 就绪，但 **N04-04 仅 s1 就绪**（未 VERIFIED）→ 开工前需评估"N04-04 未完成"是否已在 N06-04 文档中显式降级；若受阻则**跳过并记录依赖**，组末照常收口。
+3. **组末**：跑一次全量 `pnpm verify` → 提交推送 → 更新本文件与账本。
+
+**组后（主线）：**
+
+4. **回主线 N03 收口**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见本文件「N03-10 现状」）。
+5. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
+6. **已交付切片的 UI/浏览器证据收口**：N04-02-s1／N04-04-s1／N04-05／N04-10／N05-02／N06-04 各自 verification 已写明缺口。
+7. **基础设施可选**：修复 `db:generate` 的 0080/0081 快照冲突（见已知坑）。
+8. **并行工作（可选）**：互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好（库名含 test，通过安全门）；**同一时刻仍只跑一份 `pnpm verify`**（全局门，共用构建产物）。
 
 ### N03-10 现状（Explore 代理调研结论，2026-10-10）
 
@@ -211,10 +225,11 @@ ee0c83d  feat(n06-06) 提案替代、取消与晚到结果隔离（迁移 0084�
 4. `N06-01`／`N06-02`：私有候选分支 → 确定性试改（真执行器事务内跑完回滚）→ 原子采用（迁移 0081）。
 5. `N06-03`：影响集、陈旧提案与受控 rebase（迁移 0083）—— 创建即记录读写集/写目标/素材签名；同对象同维度竞争 409；身份/素材变化要求重新审核；绝不以最新 revision 强覆盖。
 6. `N06-06`：提案替代、取消与晚到结果隔离（迁移 0084）—— 候选代际 + 同谱系自动取代；取消保留结果；外部晚到产物隔离台账；隔离产物按保留期清理。
+7. `N06-05`：采用、继续微调、拒绝与部分采用（迁移 0085）—— 处置解析纯函数（沉默不确认、多候选消歧）；部分采用按依赖闭包扩张（引用闭包 + 音画配对闭包），作用范围如实回报。
 7. 两次 CI 阻塞修复：verify 作业安装 FFmpeg + 真实媒体用例从 unit 归入 integration；隔离库安全门改为「库名含 test」。
 8. 新需求（鼠标点线面 × 横向时间定位 × 流式语音）扫描 + 差距映射：`docs/design/mouse-voice-gap-map.md`。
 
-**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0084；`pnpm verify` 14/14；账本 51/219（23.29%）。
+**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0085；账本 52/219（23.74%）；`pnpm verify` 最近一次全量 14/14（1233/1233），**N06 收尾组的组末全量 verify 待跑**。
 
 **下一步（严格按序，均来自 gap map 与账本）**：
 

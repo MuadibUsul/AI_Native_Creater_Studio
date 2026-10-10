@@ -413,6 +413,7 @@ export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV
 export { AUDIO_MIX_PLAN_VERSION, planClipAudioMix } from './audio-mix.js';
 export {
   adoptProposal,
+  adoptProposalPartial,
   cancelProposal,
   computeProposalImpact,
   createProposalBranch,

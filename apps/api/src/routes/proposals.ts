@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   cancelProposalRequestSchema,
@@ -19,6 +21,7 @@ import {
 } from '@ancs/contracts';
 import {
   adoptProposal,
+  adoptProposalPartial,
   cancelProposal,
   computeProposalImpact,
   createProposalBranch,
@@ -180,6 +183,37 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
       });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/adopt-partial',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-05 部分采用：只落地所选操作子集，按依赖闭包扩张并如实回报作用范围',
+        params: proposalParamsSchema,
+        body: adoptProposalPartialRequestSchema,
+        response: { 200: adoptProposalPartialResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      const result = await adoptProposalPartial(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        actorId: context.userId, selectedOperationIndexes: request.body.selectedOperationIndexes,
+        expectedOperationsHash: request.body.expectedOperationsHash,
+        expectedSelectionFingerprint: request.body.expectedSelectionFingerprint, idempotencyKey: request.body.idempotencyKey,
+      });
+      return {
+        proposal: result.proposal,
+        projectRevision: result.projectRevision,
+        adopted: true as const,
+        adoptedOperationIndexes: result.adoptedOperationIndexes,
+        remainingOperationIndexes: result.remainingOperationIndexes,
+        closureExpanded: result.closureExpanded,
+        effectiveWriteTargets: result.effectiveWriteTargets,
+      };
     },
   );
 

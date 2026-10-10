@@ -43,6 +43,8 @@ export const proposals = pgTable(
     supersededByProposalId: text('superseded_by_proposal_id'),
     supersededAt: timestamp('superseded_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    /** N06-05：部分采用时实际落地的操作下标 */
+    adoptedOperationIndexes: jsonb('adopted_operation_indexes'),
     status: text('status').notNull(),
     committedRevision: integer('committed_revision'),
     /** 采用时使用的幂等键（同一键重放返回同一结果） */

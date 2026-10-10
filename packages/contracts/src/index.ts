@@ -296,6 +296,8 @@ export {
   PROPOSAL_ERROR_REASONS,
   PROPOSAL_REVIEW_BLOCK_REASONS,
   PROPOSAL_STATUSES,
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   cancelProposalRequestSchema,
@@ -316,6 +318,8 @@ export {
   submitProposalArtifactResponseSchema,
 } from './proposal.js';
 export type {
+  AdoptProposalPartialRequest,
+  AdoptProposalPartialResponse,
   AdoptProposalRequest,
   CancelProposalRequest,
   CreateProposalRequest,
@@ -335,6 +339,20 @@ export type {
   SubmitProposalArtifactRequest,
   SubmitProposalArtifactResponse,
 } from './proposal.js';
+export {
+  PROPOSAL_DISPOSITIONS,
+  PROPOSAL_DISPOSITION_REASONS,
+  proposalDispositionCandidateSchema,
+  proposalDispositionSchema,
+  resolveProposalDisposition,
+} from './proposal-disposition.js';
+export type {
+  ProposalDisposition,
+  ProposalDispositionCandidate,
+  ProposalDispositionReason,
+  ProposalDispositionResolution,
+  ResolveProposalDispositionInput,
+} from './proposal-disposition.js';
 export {
   computeOperationTargetRefs,
   isEditOperationName,
