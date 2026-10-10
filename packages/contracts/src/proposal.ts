@@ -279,6 +279,15 @@ export const submitProposalArtifactResponseSchema = z.object({
 }).strict();
 export type SubmitProposalArtifactResponse = z.infer<typeof submitProposalArtifactResponseSchema>;
 
+/** N06-04：局部试片缓存可观测性（运维/UI 诊断用）。 */
+export const proposalTrialCacheStatsSchema = z.object({
+  rows: z.number().int().min(0),
+  expired: z.number().int().min(0),
+  capacity: z.number().int().min(1),
+  ttlHours: z.number().int().min(1),
+}).strict();
+export type ProposalTrialCacheStats = z.infer<typeof proposalTrialCacheStatsSchema>;
+
 export const cancelProposalRequestSchema = z.object({
   reason: z.string().min(1).max(200).optional(),
 }).strict();

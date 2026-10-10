@@ -114,6 +114,8 @@ export interface ScopeGuardInput {
   durationDeltaMs: number;
   /** 是否存在等长替代方案（调用方/规划器判定） */
   equalLengthAlternativeAvailable: boolean;
+  /** 总时长变化是否可**确定**（false = 由操作负载无法确定 → 必须按"需解释"处理，不得当作等长放行） */
+  exact?: boolean;
 }
 
 export interface ScopeGuardResolution {
@@ -128,6 +130,12 @@ export interface ScopeGuardResolution {
 export function resolveScopeGuard(input: ScopeGuardInput): ScopeGuardResolution {
   if (!input.preservesEverythingElse) {
     return { verdict: 'SAFE', requiresExplanation: false, recommendEqualLength: false, reason: 'NO_ELSE_UNTOUCHED_CONSTRAINT' };
+  }
+  if (input.exact === false) {
+    return {
+      verdict: 'EXPLAIN_DURATION_CHANGE', requiresExplanation: true, recommendEqualLength: false,
+      reason: 'DURATION_CHANGE_UNKNOWN',
+    };
   }
   if (input.durationDeltaMs === 0) {
     return { verdict: 'SAFE', requiresExplanation: false, recommendEqualLength: false, reason: 'LENGTH_PRESERVED' };

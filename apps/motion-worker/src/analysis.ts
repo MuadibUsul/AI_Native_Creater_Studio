@@ -51,8 +51,11 @@ const FORBIDDEN_PATTERNS: { rule: string; re: RegExp }[] = [
   { rule: 'GLOBAL_THIS', re: /\bglobalThis\b/ },
   { rule: 'GLOBAL_ALIAS', re: /\b(global|self|window|top|parent|frames)\s*\./ },
   { rule: 'ROOT_ESCAPE', re: /\broot\s*\./ },
-  // 原型污染
-  { rule: 'PROTO_ACCESS', re: /__proto__|\bconstructor\s*\[|\['constructor'\]/ },
+  // 原型污染 / 宿主 realm 逃逸
+  // 只标记"取属性"形式（`x.constructor` / `x["constructor"]`），不误伤合法 `class { constructor() {} }`。
+  { rule: 'PROTO_ACCESS', re: /__proto__|\[\s*['"]constructor['"]\s*\]|[\w$)\]}\]]\s*\.\s*constructor\b/ },
+  { rule: 'REFLECT_ESCAPE', re: /\bReflect\s*\.\s*(construct|getPrototypeOf|apply)\b/ },
+  { rule: 'PROTO_SET', re: /\b(Object|Reflect)\s*\.\s*setPrototypeOf\b/ },
   { rule: 'DEFINE_PROPERTY_PROTO', re: /defineProperty\s*\(\s*(Object|Function)\.prototype/ },
 ];
 

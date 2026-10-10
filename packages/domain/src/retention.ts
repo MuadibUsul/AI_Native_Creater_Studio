@@ -21,6 +21,7 @@ import {
   projectVersions,
   projects,
   proposalArtifacts,
+  proposalTrials,
   scenes,
   uploadIntents,
 } from '@ancs/db';
@@ -47,6 +48,9 @@ export const TRASH_RETENTION_DAYS = 30;
 export const DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS = 24;
 /** N06-06：隔离产物（晚到/代际不符）的保留小时数；到期清理孤儿行 */
 export const DEFAULT_PROPOSAL_ARTIFACT_QUARANTINE_TTL_HOURS = 72;
+/** N06-04：局部试片缓存 TTL（小时）与每工程容量上限（超出按最旧淘汰）。 */
+export const DEFAULT_PROPOSAL_TRIAL_TTL_HOURS = 24;
+export const DEFAULT_PROPOSAL_TRIAL_MAX_PER_PROJECT = 50;
 
 export interface RetentionConfig {
   /** Trash 保留天数（默认 30，测试可调小为 0） */
@@ -55,6 +59,10 @@ export interface RetentionConfig {
   idempotencyKeyTtlHours?: number;
   /** N06-06：隔离产物保留小时数（默认 72，测试可调小为 0） */
   proposalArtifactQuarantineTtlHours?: number;
+  /** N06-04：试片缓存 TTL（小时，默认 24） */
+  proposalTrialTtlHours?: number;
+  /** N06-04：每工程试片缓存行数上限（默认 50，超出淘汰最旧） */
+  proposalTrialMaxPerProject?: number;
 }
 
 export interface RetentionSweepReport {
@@ -75,6 +83,8 @@ export interface RetentionSweepReport {
   proposalArtifactsPurged: number;
   /** N06-06：保留未清理的已绑定产物数（作为候选结果证据） */
   proposalArtifactsKeptBound: number;
+  /** N06-04：过期的局部试片缓存清理数 */
+  proposalTrialCachePurged: number;
   /** 幂等键 TTL 清理 */
   idempotencyKeysPurged: number;
   /** 实际删除的对象数（含孤儿对象） */
@@ -361,8 +371,10 @@ export async function runRetentionSweep(
   const trashDays = deps.retention?.trashRetentionDays ?? TRASH_RETENTION_DAYS;
   const idempotencyTtlHours = deps.retention?.idempotencyKeyTtlHours ?? DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS;
   const artifactQuarantineTtlHours = deps.retention?.proposalArtifactQuarantineTtlHours ?? DEFAULT_PROPOSAL_ARTIFACT_QUARANTINE_TTL_HOURS;
+  const proposalTrialTtlHours = deps.retention?.proposalTrialTtlHours ?? DEFAULT_PROPOSAL_TRIAL_TTL_HOURS;
   const trashCutoff = new Date(now.getTime() - trashDays * 24 * 60 * 60 * 1000);
   const artifactCutoff = new Date(now.getTime() - artifactQuarantineTtlHours * 60 * 60 * 1000);
+  const trialCutoff = new Date(now.getTime() - proposalTrialTtlHours * 60 * 60 * 1000);
 
   const report: RetentionSweepReport = {
     ranAt: now.toISOString(),
@@ -375,6 +387,7 @@ export async function runRetentionSweep(
     idempotencyKeysPurged: 0,
     proposalArtifactsPurged: 0,
     proposalArtifactsKeptBound: 0,
+    proposalTrialCachePurged: 0,
     objectsDeleted: 0,
     objectsKeptShared: 0,
     orphanObjectsDeleted: 0,
@@ -527,6 +540,9 @@ export async function runRetentionSweep(
     eq(proposalArtifacts.bound, false), lt(proposalArtifacts.createdAt, artifactCutoff),
   )).returning({ id: proposalArtifacts.id });
   report.proposalArtifactsPurged = purgedArtifacts.length;
+  // 8) N06-04 过期的局部试片缓存（依赖键失效为主，这里是容量与陈旧性清理）
+  const purgedTrials = await deps.db.delete(proposalTrials).where(lt(proposalTrials.createdAt, trialCutoff)).returning({ dependencyKey: proposalTrials.dependencyKey });
+  report.proposalTrialCachePurged = purgedTrials.length;
   const boundArtifacts = await deps.db.select({ id: proposalArtifacts.id }).from(proposalArtifacts).where(eq(proposalArtifacts.bound, true));
   report.proposalArtifactsKeptBound = boundArtifacts.length;
 

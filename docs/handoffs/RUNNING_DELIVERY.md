@@ -3,12 +3,12 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N06-07 已确认内容保护与回归指纹；迁移 0086）
+**最后更新：** 2026-10-10（第五组：N04-04 主体投影与时间选择→对象；第四组为 N06-04 收口）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0086（`content_protections`）
-**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。当前组：**N06 收尾组**（N06-05 → N06-07 → N06-08）；已交付 N06-05（VERIFIED）、N06-07（IN_PROGRESS），组末 verify 待补。
+**迁移：** 到 0086（`content_protections`）；**`db:generate` 已修复**（见第三节「基础设施」）
+**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。N06 收尾组已收口；**第二组（基础设施 + N06-07 收口）已完成**。
 
 ---
 
@@ -16,15 +16,58 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06**、N15-01/02、N16-01/02 = **52/219（23.74%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 167 项 |
-| 本地 `pnpm verify` | **14/14，1233/1233**（2026-10-10 实测；Unit 480 / Web 188 / Motion 19 / Integration 501 / Security 24 / Render 6 / Golden 15）。**N06 收尾组的全量 verify 在组末统一重跑** |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 165 项 |
+| 本地 `pnpm verify` | **14/14，1297/1297**（第五组组末实测；Unit 518 / Web 191 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · 第五组 · N04-04 主体（真实片段/轨道投影 + 时间选择→对象）— **IN_PROGRESS**
+- **内容：** 新增契约 `packages/contracts/src/timeline-projection.ts`：`projectSequenceToTimeline`（真实轨道/片段 → 车道与几何；有理时基换算；越界如实标 `clippedLeft/Right`；零宽不进 segments 但列入 `outsideViewportClipIds`；孤儿片段列入 `orphanClipIds` 不静默丢弃）、`clipsInTemporalSelection`（POINT 半开区间命中；RANGES 区分完整覆盖/部分相交，**不合并显式多区间**；支持轨道作用域）、`pointSelection`；Web 侧新增 `projectionToBandLanes` 适配器把权威投影喂给既有 `TimelineBand`（只做形状映射，几何只算一次）。
+- **证据：** `docs/verification/N04-04.md`（契约 9 项单测 + jsdom 3 项：真实片段渲染与投影可见集合一致 / 点击发 clipId / 窗外片段不渲染但仍在数据里）· `docs/handoffs/N04-04.md`
+- **为何不是 VERIFIED：** 逐帧步进 UI 与分数帧率用例、源/序列双时间码、说话句段与音乐 region 的语义指向、空间×时间在应用层的组装、真实浏览器高 DPI 目检（N04-01）均未做。
+- **下一步：** 见第三节。
+
+
+### 2026-10-10 · 第四组 · N06-04 收口 — **VERIFIED**
+- **内容：** `proposals.ts` 新增 `PROPOSAL_TRIAL_TTL_HOURS=24` / `PROPOSAL_TRIAL_MAX_PER_PROJECT=50`（可由 `deps.retention` 覆盖）；`loadCachedTrial` **忽略过期行**；`storeTrial` 写入后按最旧淘汰超出容量的行；新增 `proposalTrialCacheStats`；`runRetentionSweep` 新增第 8 步清理过期试片并计入 `proposalTrialCachePurged`；HTTP `GET .../proposal-trial-cache` + SDK。
+- **证据：** `docs/verification/N06-04.md`（集成 4 项：TTL 过期不复用 / 容量按最旧淘汰 / retention 清理 / 默认策略经 HTTP 暴露）· `docs/handoffs/N06-04.md`
+- **为何转 VERIFIED：** 原缺口（无 TTL/容量、无跨实例策略、无可观测）已补齐；**跨实例**由"依赖键 + TTL + 容量"共同保证，不依赖实例本地状态。已知限制：无命中率计数器、无主动预热。
+- **下一步：** 见第三节。
+
+
+### 2026-10-10 · 第三组 · 外部评审响应（P0 修复 + 逐条核实）
+- **背景：** 用户转来外部评审（`ANCS-改进建议.md`，基于说明快照、未读源码）。已**逐条核实**并只对"属实"项动手；完整结论见 `docs/decisions/0010-review-response-20261010.md`。
+- **已修（均有测试证据）：** ①**意图识别重写**（P0-4，属实并已复现：「特别好，就用这个」曾被判成**丢弃**）：去单字标记、加否定/惯用语护栏、采纳先于泛化微调、支持复合意图（一律要求确认）、补 `confidence`/`evidence`，8 条复现用例全绿；②**意图评测集** 102 用例 + 准确率/误采纳率指标，独立 `pnpm test:eval`（当前准确率 100%、误采纳 0%）；③**沙箱环境隔离**（P0-1）：`{...process.env}` → `sandboxEnv()` 白名单 + `cwd=os.tmpdir()`；④**词法门补漏**：补 `.constructor` 点号形式与 `Reflect.*`/`setPrototypeOf` 逃逸；⑤**凭据密钥生产强制**（P0-2）：生产缺 `ANCS_CREDENTIAL_KEYS` 即启动失败、非生产改 HKDF 派生并告警、env schema 与 `.env.example` 同步；⑥**FFmpeg 协议收敛**：10 处输入点加 `-protocol_whitelist file,pipe`，真实 ffmpeg 集成 7/7 通过；⑦**仓库卫生**：删 3 个已提交 `.tmp-*.py`、`.gitignore` 补 `.tmp-*`、14 个文件的本机绝对路径清为零命中、`AGENTS.md` 新增三条禁止规则。
+- **核实后判"不属实"（未改）：** `articleFetcher` 的 SSRF **已实现**（逐跳复检 + 私网/元数据拦截 + 5 MiB/15 s 上限），仅残留 DNS rebinding；签名 URL 已短时效 + 最小权限；无 `docs/ai-native-studio-v03-*` 分支；无 LICENSE 文件（`package.json` 为 `UNLICENSED`）。
+- **剩余项 / 需你决策：** 见 0010 第三、四节（历史密钥扫描与轮换、LICENSE、陈旧分支删除、供应商与预算、Web 域/CORS/CSRF、部署形态）。
+- **未按评审执行（我的判断）：** 转向单一楔子、冻结 P 系列、暂停商业化属**产品战略决策**；G0 的"FFmpeg 智能渲染"受 N03-16 与真实凭据阻塞，不宜提前声称完成。
+
+### 2026-10-10 · 第二组 · 基础设施：修复 `db:generate` 快照冲突
+- **问题：** `migrations/meta/0080_snapshot.json` 与 `0081_snapshot.json` 的 `id`/`prevId` 完全相同 → `drizzle-kit generate` 报 `are pointing to a parent snapshot … collision`，导致 0078—0086 的迁移全部只能手工编写 + 手改 journal（风险累积）。
+- **修复：** 删除冲突的两份快照；用一次性脚手架配置在与当前 schema 一致的临时目录生成快照，改写为新 `id`、`prevId` 指向 0077 快照（保持链一致），落位为 `0085_snapshot.json`（对应 journal 末条 idx 85），随后删除脚手架。
+- **验证：** `pnpm --filter @ancs/db run db:generate` → **`No schema changes, nothing to migrate`**（不再报冲突，也不再产出多余迁移）；`runMigrations`（journal + SQL）与全部集成测试不受影响。
+- **教训：** 手工改迁移名时必须同步 `meta` 快照，否则下一次 `generate` 就会撞车；快照只影响 `generate`，不影响运行时迁移。
+
+### 2026-10-10 · 第二组 · N06-07 收口（转 **VERIFIED**）
+- **内容：** `resolveScopeGuard` 增 `exact` 语义（总时长变化**不可确定**时一律要求解释，**不得当作等长放行**）；`createRangeEditPlanRequestSchema` 增 `preservesEverythingElse`；`packages/contracts/src/range-edit.ts` 新增纯函数 `estimateRangeEditDurationDeltaMs`（由操作负载确定性估算：INSERT/APPEND 变长、涟漪 TRIM_* 按收缝量变短、涟漪 DELETE 与 delete_clip 无法确定 → `exact=false`）与 `rangeEditPlanSchema.lengthGuard`；`planRangeEdit` 回带守卫判定，`requiresExplanation` 时附 rationale（**计划本身不执行、不改工程**）。
+- **证据：** `docs/verification/N06-07.md`（估算器 5 项单测 + 规划器端到端 1 项集成，新增 `range_edit_ripple` Mock 脚本）· `docs/handoffs/N06-07.md`　**verify：** 14/14（1265/1265）
+- **为何转 VERIFIED：** 两条实现内容（三轴指纹/范围外报告、总时长守卫）与两条验收负面路径均有真实库证据；保护范围仅 CLIP 属**已知限制**（显式 501，不静默放过），不影响验收。
+- **下一步：** 见第三节。
+
+### 2026-10-10 · N06 收尾组收口（N06-05 / N06-07 / N06-08）— 组末全量 verify 14/14（1259/1259）
+- **组内交付：** N06-05（`783ee0f`，VERIFIED）、N06-07（`aa9a52b`，IN_PROGRESS）、N06-08（本组末提交，IN_PROGRESS）。
+- **组末证据：** `pnpm verify` = **14/14 通过**，Unit 494 / Web 188 / Motion 19 / Integration **513** / Security 24 / Render 6 / Golden 15。
+
+### 2026-10-10 · N06-08 A/B 比较与差异标记 — **IN_PROGRESS**
+- **内容：** 契约 `packages/contracts/src/proposal-compare.ts` + Domain `compareProposal`：右侧 = 候选**试改后真实执行结果**（事务内跑完回滚），左侧 = 当前确认版或缺省的另一候选；差异按三轴标记（ADDED/REMOVED/CHANGED/UNCHANGED）；**片段数/时长不同时按内容锚点对齐**（素材版本 + 嵌套序列 + 源区间），无法唯一对齐的锚点如实进 `unmatchedAnchors`；**回带双方实际 `assetVersionId`**（证明对照真资产而非重新生成）；对照零写入。HTTP `POST .../proposals/:proposalId/compare` + SDK。
+- **证据：** `docs/verification/N06-08.md`（集成 3 项：与确认版对照并回带实际素材 / 片段数时长不同按锚点对齐 / 候选间 A/B 对照且不改工程）· `docs/handoffs/N06-08.md`
+- **为何不是 VERIFIED：** 播放器侧"同一画布切换前后 / 音频 AB / 局部循环回放"与 UI 未做；版本恢复复用 N01-08 补偿事件（已 VERIFIED，无新增）；**依赖 N04-04 仅 s1 就绪（显式降级）**。
+- **下一步（下一组）：** 见第三节「下一组计划」。
 
 ### 2026-10-10 · N06-07 已确认内容保护与回归指纹 — **IN_PROGRESS**
 - **内容：** 迁移 0086 `content_protections`（保护记录，非第二份作品状态）。契约新增 `packages/contracts/src/content-protection.ts`：三轴指纹（CONTENT 源区间/映射/参数/源流、POSITION 轨道与序列区间、ASSET 素材版本/嵌套序列）、`confirmedContentRecordSchema`、`regressionReportSchema`（含 `outOfScope` 范围外变化）、**`resolveScopeGuard`**（"其他别动 + 总时长改变 → 先解释 / 改等长方案"）。Domain：`clipDigestsOf`、`captureConfirmedContent`、`checkConfirmedContent`、`assertProtectedContentStable`；`runDeterministicTrial` 现在返回**试改后状态指纹**，采用/部分采用的可选 `protectionIds` 用它判定"受保护对象被改动但非本批显式目标"的**附带变化/意外移位** → 409 `CONFIRMED_CONTENT_REGRESSION` 且零写入。HTTP/SDK 4 端点。
@@ -120,22 +163,17 @@
 
 ## 三、下一步（按优先级，来自 gap map §4；2026-10-10 更新）
 
-**已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）。
-**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）、**N06-05**（采用、继续微调、拒绝与部分采用）—— 见上方条目。
+**已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）、N06-07（已确认内容保护与回归指纹）、N06-08（A/B 比较与差异标记）。
+**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）、**N06-05**（采用、继续微调、拒绝与部分采用）、**N06-07**（已确认内容保护与回归指纹，含总时长守卫接入规划器）—— 见上方条目。
 
-**当前组（N06 收尾组）内顺序：**
+**第二组已完成**（基础设施 `db:generate` 修复 + N06-07 收口；组末 verify 14/14、1265/1265）。**第三组计划：**
 
-1. **N06-07**（已确认内容保护与回归指纹）：依赖 N06-03、N06-05 均已就绪。
-2. **N06-08**（A/B 比较、局部循环与版本恢复）：依赖 N06-04、N06-05 就绪，但 **N04-04 仅 s1 就绪**（未 VERIFIED）→ 开工前需评估"N04-04 未完成"是否已在 N06-04 文档中显式降级；若受阻则**跳过并记录依赖**，组末照常收口。
-3. **组末**：跑一次全量 `pnpm verify` → 提交推送 → 更新本文件与账本。
-
-**组后（主线）：**
-
-4. **回主线 N03 收口**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见本文件「N03-10 现状」）。
-5. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
-6. **已交付切片的 UI/浏览器证据收口**：N04-02-s1／N04-04-s1／N04-05／N04-10／N05-02／N06-04 各自 verification 已写明缺口。
-7. **基础设施可选**：修复 `db:generate` 的 0080/0081 快照冲突（见已知坑）。
-8. **并行工作（可选）**：互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好（库名含 test，通过安全门）；**同一时刻仍只跑一份 `pnpm verify`**（全局门，共用构建产物）。
+1. **收口 N06-04 / N06-08 的缺口**：N06-04 跨实例试片缓存策略 + ghost 预览对接（N04-02-s1／N04-04-s1）；N06-08 播放器侧（切换前后/音频 AB/循环回放）。
+2. **N04 主线收口**：N04-04 主体（横向时间带的片段/轨道投影与时间选区）→ N04-01（真实画布与高 DPI 目检）→ N04-08（垂直切片真实验收）。
+3. **回主线 N03**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见本文件「N03-10 现状」）。
+4. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
+5. **已有 IN_PROGRESS 的 UI/浏览器证据收口**：N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1。
+6. **并行工作（可选）**：互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好；**同一时刻仍只跑一份 `pnpm verify`**。
 
 ### N03-10 现状（Explore 代理调研结论，2026-10-10）
 
@@ -153,7 +191,7 @@
 
 ```bash
 # 环境
-cd /e/Codes/ANCS                       # 分支 codex/v04-foundation
+cd .                       # 分支 codex/v04-foundation
 docker compose -f infra/docker-compose.dev.yml up -d   # ancs-dev-db / ancs-dev-redis
 export ANCS_TEST_DATABASE_URL='postgres://ancs:ancs@localhost:55432/ancs_quiet_frame_test_261007'  # 库名必须含 test
 
@@ -219,6 +257,12 @@ f4f81f2  feat(n06-03) 影响集、陈旧提案与受控 rebase（迁移 0083）
 ee0c83d  feat(n06-06) 提案替代、取消与晚到结果隔离（迁移 0084）
 783ee0f  feat(n06-05) 采用、继续微调、拒绝与部分采用（迁移 0085）
 aa9a52b  feat(n06-07) 已确认内容保护与回归指纹（迁移 0086）— IN_PROGRESS
+e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_PROGRESS
+3da0131  chore(db) + feat(n06-07) 修复 db:generate 快照冲突；N06-07 收口转 VERIFIED（第二组）
+65325d0  fix(review) 外部评审逐条核实与 P0 修复（意图识别/沙箱隔离/凭据密钥/FFmpeg 协议/仓库卫生）
+f9344d8  fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复评审响应引入的 unit 回归）
+f9b612b  feat(n06-04) 试片缓存收口（TTL/容量/保留清理/可观测）→ VERIFIED（第四组；组末 verify 14/14、1285/1285）
+305e5ad  feat(n04-04) 真实片段/轨道投影 + 时间选择→对象解析（第五组；组末 verify 14/14、1297/1297）
 ```
 
 ---
@@ -234,26 +278,28 @@ aa9a52b  feat(n06-07) 已确认内容保护与回归指纹（迁移 0086）— I
 5. `N06-03`：影响集、陈旧提案与受控 rebase（迁移 0083）—— 创建即记录读写集/写目标/素材签名；同对象同维度竞争 409；身份/素材变化要求重新审核；绝不以最新 revision 强覆盖。
 6. `N06-06`：提案替代、取消与晚到结果隔离（迁移 0084）—— 候选代际 + 同谱系自动取代；取消保留结果；外部晚到产物隔离台账；隔离产物按保留期清理。
 7. `N06-05`：采用、继续微调、拒绝与部分采用（迁移 0085）—— 处置解析纯函数（沉默不确认、多候选消歧）；部分采用按依赖闭包扩张（引用闭包 + 音画配对闭包），作用范围如实回报。
+8. `N06-07`：已确认内容保护与回归指纹（迁移 0086，IN_PROGRESS）—— 三轴指纹 + 回归报告 + 意外移位阻止自动采用（试改后状态比对）；范围守卫仅到契约层。
+9. `N06-08`：A/B 比较与差异标记（IN_PROGRESS）—— 对照载荷 + 内容锚点对齐 + 实际素材版本引用；播放器侧未做。
 7. 两次 CI 阻塞修复：verify 作业安装 FFmpeg + 真实媒体用例从 unit 归入 integration；隔离库安全门改为「库名含 test」。
 8. 新需求（鼠标点线面 × 横向时间定位 × 流式语音）扫描 + 差距映射：`docs/design/mouse-voice-gap-map.md`。
 
-**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0085；账本 52/219（23.74%）；`pnpm verify` 最近一次全量 14/14（1233/1233），**N06 收尾组的组末全量 verify 待跑**。
+**当前仓库状态**：分支 `codex/v04-foundation`，HEAD 见第五节末；**工作树干净**；迁移到 0086；账本 52/219（23.74%）；`pnpm verify` **14/14、1259/1259**（N06 收尾组组末实测）。
 
-**下一步（严格按序，均来自 gap map 与账本）**：
+**下一步（严格按序，见第三节「下一组计划」）**：
 
-1. **N06-05（采用、继续微调、拒绝与部分采用）**：UI/语音语义区分"方向对再改/采用/后面也这样"；部分采用检查依赖闭包。
-2. **回主线 N03 收口**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见第三节末「N03-10 现状」）。
-3. **N05-02 起的真实语音链路**（浏览器采集 + 真实 VAD/流式 ASR）：无凭据时只做协议与确定性夹具，保持 `UNVERIFIED_CREDENTIALS_REQUIRED`。
-4. **N04-02-s1／N04-04-s1／N04-05／N04-10／N05-02／N06-04** 的 UI 与真实浏览器证据收口（各自 verification 已写明缺口）。
+1. **N06-07 收口**（把 `resolveScopeGuard` 接入规划器）→ 可转 VERIFIED；**N06-04／N06-08 的 UI 与跨实例收口**。
+2. **N04 主线收口**：N04-04 主体 → N04-01 → N04-08。
+3. **回主线 N03 收口**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见第三节末「N03-10 现状」）。
+4. **真实语音链路**：待 ASR/VAD 凭据后接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
 
 **恢复工作前先做三件事**：① `git log --oneline -5` 与 `git status` 确认与本文一致；② 读 `docs/design/mouse-voice-gap-map.md` 的「进度记录」；③ 跑一次 `pnpm verify` 确认基线（注意：**同时只能跑一份**）。
 
-**本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `/mnt/e`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind /home/ubuntu/ancs-nm /mnt/e/Codes/ANCS/node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
+**本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `外挂盘`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind <Linux 盘上的 node_modules 副本> /mnt./node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
 
 **平台切换备注（2026-10-10 新增）**：若在 **Windows（Git Bash）** 下接手而 `node_modules` 里只有 Linux 原生二进制（`@rolldown/binding-linux-x64-gnu`、`lightningcss-linux-x64-gnu`），`vitest` 会以 `Cannot find native binding`／`@rolldown/binding-wasm32-wasi` 启动失败。修法是按当前平台重装依赖：`CI=true pnpm install --config.confirmModulesPurge=false`（会整目录重装并下载 win32 原生包；`pnpm-lock.yaml` 不变）。**不要**用放宽超时或改断言绕过。
 
 **推送凭据（本会话踩过）**：WSL 内 `git push` 无凭据（`fatal: could not read Username`）。本机 Windows 侧的 Git for Windows 已配置 `credential.helper=manager` 且缓存了 github.com 凭据，可用 Windows git 推送同一提交：
-`cd /e/Codes/ANCS && GIT_TERMINAL_PROMPT=0 "/mnt/c/Program Files/Git/cmd/git.exe" push origin codex/v04-foundation`（提交仍由 WSL git 创建，二者共享同一 `.git`）。
+`cd . && GIT_TERMINAL_PROMPT=0 "系统安装的 git" push origin codex/v04-foundation`（提交仍由 WSL git 创建，二者共享同一 `.git`）。
 
 **本会话新增的纪律/教训（都踩过，务必遵守）**：
 - **同一时刻只跑一份 verify/测试实例**（共用同一测试库会互相清理数据 → 大量假失败；若被中断，先 `pkill -f vitest` 再重跑）。

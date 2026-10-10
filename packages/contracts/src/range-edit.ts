@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { EDIT_OPERATION_TYPES, editOperationSchema } from './edits.js';
+import { mediaTimeToLegacyMilliseconds } from './common/media-time.js';
+import { scopeGuardVerdictSchema } from './content-protection.js';
+import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperation } from './edits.js';
 
 /**
  * N03-09 范围编辑指令的最小 AI 入口（V03-01／V03-04／V03-28／V03-29）。
@@ -58,6 +60,8 @@ export const createRangeEditPlanRequestSchema = z.object({
   allowedOperations: z.array(z.enum(EDIT_OPERATION_TYPES)).min(1),
   brief: rangeEditBriefSchema.optional(),
   languageTag: z.string().min(2).max(35).default('zh-CN'),
+  /** N06-07：用户声明"其他别动"（除本次范围外不得改变其他内容，尤其是总时长） */
+  preservesEverythingElse: z.boolean().optional(),
 }).strict();
 
 export type CreateRangeEditPlanRequest = z.infer<typeof createRangeEditPlanRequestSchema>;
@@ -90,6 +94,54 @@ export const rangeEditOutOfScopeSchema = z.object({
 
 export type RangeEditOutOfScope = z.infer<typeof rangeEditOutOfScopeSchema>;
 
+/**
+ * N06-07：范围编辑计划的总时长守卫。
+ * 由**操作负载**确定性估算总时长变化（`sources: OPERATION_PAYLOADS`）；估算不出（如涟漪 DELETE 需要
+ * 片段自身时长）时 `exact=false`，在"其他别动"下按**需解释**处理，不得当作等长放行。
+ */
+export const RANGE_EDIT_LENGTH_GUARD_SOURCES = ['OPERATION_PAYLOADS'] as const;
+export const rangeEditLengthGuardSchema = z.object({
+  preservesEverythingElse: z.boolean(),
+  estimatedDurationDeltaMs: z.number().int(),
+  /** 变化量是否可确定（false = 由负载无法确定） */
+  exact: z.boolean(),
+  verdict: scopeGuardVerdictSchema,
+  requiresExplanation: z.boolean(),
+  recommendEqualLength: z.boolean(),
+  reason: z.string().min(1).max(120),
+}).strict();
+export type RangeEditLengthGuard = z.infer<typeof rangeEditLengthGuardSchema>;
+
+/** 由操作负载估算总时长变化（纯函数）：INSERT/APPEND 变长、涟漪 TRIM_* 变短、其余为 0。 */
+export function estimateRangeEditDurationDeltaMs(operations: readonly EditOperation[]): { deltaMs: number; exact: boolean } {
+  let deltaMs = 0;
+  let exact = true;
+  for (const operation of operations) {
+    switch (operation.op) {
+      case 'insert_clip': {
+        if (operation.mode === 'OVERWRITE') break;
+        const range = operation.sourceRange;
+        deltaMs += mediaTimeToLegacyMilliseconds(range.end) - mediaTimeToLegacyMilliseconds(range.start);
+        break;
+      }
+      case 'ripple_clip': {
+        if (operation.action === 'DELETE') { exact = false; break; }
+        if (operation.amount === null) { exact = false; break; }
+        deltaMs -= mediaTimeToLegacyMilliseconds(operation.amount);
+        break;
+      }
+      case 'delete_clip': {
+        // 删除只在同轨留空隙；序列总时长是否变化取决于后续片段 → 无法由负载确定。
+        exact = false;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return { deltaMs, exact };
+}
+
 export const rangeEditPlanSchema = z.object({
   planVersion: z.literal(RANGE_EDIT_PLAN_VERSION),
   projectId: opaqueIdSchema,
@@ -103,6 +155,8 @@ export const rangeEditPlanSchema = z.object({
   evidence: z.array(rangeEditSourceEvidenceSchema),
   /** 原声是否被保留（无任何触碰音频源时钟的操作） */
   originalAudioPreserved: z.boolean(),
+  /** N06-07：总时长守卫（"其他别动"下变长必须先解释或改等长方案） */
+  lengthGuard: rangeEditLengthGuardSchema,
   /** 计划阶段的 Provider 媒体调用次数（恒为 0；生成式意图必须由用户显式发起） */
   providerMediaCalls: z.literal(0),
   policy: z.object({

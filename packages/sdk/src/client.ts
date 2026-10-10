@@ -51,6 +51,7 @@ import {
   createProposalRequestSchema,
   proposalSchema,
   proposalTrialSchema,
+  proposalTrialCacheStatsSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   adoptProposalPartialRequestSchema,
@@ -62,6 +63,8 @@ import {
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
   cancelProposalRequestSchema,
+  compareProposalRequestSchema,
+  compareReportSchema,
   captureConfirmedContentRequestSchema,
   confirmedContentRecordSchema,
   regressionReportSchema,
@@ -395,6 +398,7 @@ import {
   type EphemeralCredential,
   type Proposal,
   type ProposalTrial,
+  type ProposalTrialCacheStats,
   type CreateProposalRequest,
   type AdoptProposalRequest,
   type AdoptProposalPartialRequest,
@@ -406,6 +410,8 @@ import {
   type SubmitProposalArtifactRequest,
   type SubmitProposalArtifactResponse,
   type CancelProposalRequest,
+  type CompareProposalRequest,
+  type CompareReport,
   type CaptureConfirmedContentRequest,
   type ConfirmedContentRecord,
   type RegressionReport,
@@ -834,6 +840,8 @@ export interface AncsClient {
     ): Promise<Proposal>;
     /** N06-01：读取候选 */
     proposal(workspaceId: string, projectId: string, proposalId: string): Promise<Proposal>;
+    /** N06-04：试片缓存可观测性（行数/过期数/容量与 TTL 策略） */
+    proposalTrialCacheStats(workspaceId: string, projectId: string): Promise<ProposalTrialCacheStats>;
     /** N06-03：候选影响集（只读）：写目标 vs 干预改动的竞争 + 身份/源素材变化 */
     proposalImpact(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalImpact>;
     /** N06-03：受控 rebase（无竞争且身份/素材未变才推进 base revision；否则 409） */
@@ -891,6 +899,13 @@ export interface AncsClient {
       input: SubmitProposalArtifactRequest,
       options?: MutationOptions,
     ): Promise<SubmitProposalArtifactResponse>;
+    /** N06-08：A/B 对照（只读）：候选试改后真实结果 vs 当前确认版或另一候选 */
+    compareProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: CompareProposalRequest,
+    ): Promise<CompareReport>;
     /** N06-06：读取候选产物台账（含隔离行与理由） */
     proposalArtifacts(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalArtifact[]>;
     /** N06-07：采集已确认内容三轴指纹（缺省保护全部片段） */
@@ -2275,6 +2290,8 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       proposal: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}`, proposalSchema),
+      proposalTrialCacheStats: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposal-trial-cache`, proposalTrialCacheStatsSchema),
       proposalImpact: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/impact`, proposalImpactSchema),
       rebaseProposal: (workspaceId, projectId, proposalId, input, mutation) =>
@@ -2304,6 +2321,10 @@ export function createClient(options: ClientOptions): AncsClient {
       submitProposalArtifact: (workspaceId, projectId, proposalId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, submitProposalArtifactResponseSchema, {
           body: input, bodySchema: submitProposalArtifactRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      compareProposal: (workspaceId, projectId, proposalId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/compare`, compareReportSchema, {
+          body: input ?? {}, bodySchema: compareProposalRequestSchema,
         }),
       proposalArtifacts: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, z.array(proposalArtifactSchema)),

@@ -7,7 +7,7 @@
 
 ## 提示词正文（从下一行开始复制）
 
-你是 ANCS（Creator Video OS）项目的实施代理。仓库在 `E:\Codes\ANCS`，远端 `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`。当前工作分支 **`codex/v04-foundation`**（**不要**推 `main`）。
+你是 ANCS（Creator Video OS）项目的实施代理。仓库在 `仓库根目录`，远端 `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`。当前工作分支 **`codex/v04-foundation`**（**不要**推 `main`）。
 
 **你的目标**：按仓库内的权威文档，逐项推进 v0.4 的 N 系列任务；**每项任务都必须有真实证据**，宁可标 `IN_PROGRESS` 也绝不声称没跑过的测试通过。
 
@@ -24,7 +24,7 @@
 ### 第二步：核对真实状态（不要相信本提示词里的数字）
 
 ```bash
-cd /e/Codes/ANCS
+cd .
 git log --oneline -8
 git status --short          # 期望：干净
 docker compose -f infra/docker-compose.dev.yml up -d

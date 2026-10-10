@@ -8,6 +8,8 @@ import {
   adoptProposalResponseSchema,
   cancelProposalRequestSchema,
   captureConfirmedContentRequestSchema,
+  compareProposalRequestSchema,
+  compareReportSchema,
   confirmedContentRecordSchema,
   createProposalRequestSchema,
   errorEnvelopeSchema,
@@ -16,6 +18,7 @@ import {
   proposalArtifactSchema,
   proposalImpactSchema,
   proposalSchema,
+  proposalTrialCacheStatsSchema,
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
@@ -29,6 +32,7 @@ import {
   cancelProposal,
   captureConfirmedContent,
   checkConfirmedContent,
+  compareProposal,
   computeProposalImpact,
   createProposalBranch,
   discardProposal,
@@ -37,6 +41,7 @@ import {
   loadConfirmedContent,
   loadProposalForRead,
   previewProposal,
+  proposalTrialCacheStats,
   rebaseProposal,
   submitProposalArtifact,
   type DomainDeps,
@@ -285,8 +290,43 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
     },
   );
 
-  // ---- N06-07 已确认内容保护与回归指纹（工程作用域，非候选作用域） ----
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/compare',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-08 A/B 对照（只读）：候选试改后真实结果 vs 当前确认版或另一候选；时长不同按内容锚点对齐',
+        params: proposalParamsSchema,
+        body: compareProposalRequestSchema,
+        response: { 200: compareReportSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return compareProposal(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        request: request.body,
+      });
+    },
+  );
 
+  typed.get(
+    '/workspaces/:id/projects/:projectId/proposal-trial-cache',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-04 试片缓存可观测性（行数/过期数/容量与 TTL 策略）',
+        params: projectParamsSchema,
+        response: { 200: proposalTrialCacheStatsSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return proposalTrialCacheStats(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+    },
+  );
+
+  // ---- N06-07 已确认内容保护与回归指纹（工程作用域，非候选作用域） ----
   const protectionParamsSchema = projectParamsSchema.extend({ protectionId: opaqueIdSchema });
 
   typed.post(

@@ -6,7 +6,7 @@
 
 | 项目 | 核验结果 |
 |---|---|
-| 项目根目录 | `E:\Codes\ANCS` |
+| 项目根目录 | `仓库根目录` |
 | 原始 ZIP | `docs/ANCS_Quiet_Frame_Design_Package.zip`，9,575,868 字节；保留原件，未修改 |
 | ZIP SHA-256 | `a04a074c62f03dcb09f9aa94aa22f2861740a808e9872312501dd8871cb2ed4a` |
 | ZIP 完整性 | Python `zipfile.testzip()` 返回 `None`；33 个文件条目、总展开大小 9,962,387 字节；无目录穿越、绝对路径、符号链接或大小写重名路径 |

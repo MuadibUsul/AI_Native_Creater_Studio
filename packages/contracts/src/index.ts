@@ -311,6 +311,7 @@ export {
   proposalSchema,
   proposalStatusSchema,
   proposalTargetRefSchema,
+  proposalTrialCacheStatsSchema,
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
@@ -334,6 +335,7 @@ export type {
   ProposalStatus,
   ProposalTargetRef,
   ProposalTrial,
+  ProposalTrialCacheStats,
   RebaseProposalRequest,
   RebaseProposalResponse,
   SubmitProposalArtifactRequest,
@@ -374,6 +376,24 @@ export type {
   ScopeGuardResolution,
   ScopeGuardVerdict,
 } from './content-protection.js';
+export {
+  COMPARE_ALIGNMENT_MODES,
+  COMPARE_CHANGES,
+  COMPARE_ERROR_REASONS,
+  compareAlignmentSchema,
+  compareChangeSchema,
+  compareObjectDiffSchema,
+  compareProposalRequestSchema,
+  compareReportSchema,
+} from './proposal-compare.js';
+export type {
+  CompareAlignment,
+  CompareChange,
+  CompareErrorReason,
+  CompareObjectDiff,
+  CompareProposalRequest,
+  CompareReport,
+} from './proposal-compare.js';
 export type {
   ProposalDisposition,
   ProposalDispositionCandidate,
@@ -522,10 +542,13 @@ export type {
 export {
   RANGE_EDIT_AUDIO_CLOCK_OPERATIONS,
   RANGE_EDIT_ERROR_REASONS,
+  RANGE_EDIT_LENGTH_GUARD_SOURCES,
   RANGE_EDIT_OUT_OF_SCOPE_REASONS,
   RANGE_EDIT_PLAN_VERSION,
   createRangeEditPlanRequestSchema,
+  estimateRangeEditDurationDeltaMs,
   rangeEditBriefSchema,
+  rangeEditLengthGuardSchema,
   rangeEditOutOfScopeSchema,
   rangeEditPlanSchema,
   rangeEditSourceEvidenceSchema,
@@ -533,6 +556,7 @@ export {
 export type {
   CreateRangeEditPlanRequest,
   RangeEditErrorReason,
+  RangeEditLengthGuard,
   RangeEditOutOfScope,
   RangeEditOutOfScopeReason,
   RangeEditPlan,
@@ -587,6 +611,25 @@ export {
   xAtSequenceTime,
 } from './timeline-band.js';
 export type { TimelineViewport } from './timeline-band.js';
+export {
+  clipsInTemporalSelection,
+  pointSelection,
+  projectSequenceToTimeline,
+  temporalSelectionCoverageSchema,
+  timelineLaneSchema,
+  timelineLaneSegmentSchema,
+  timelineProjectionClipSchema,
+  timelineProjectionSchema,
+  timelineProjectionTrackSchema,
+} from './timeline-projection.js';
+export type {
+  TemporalSelectionCoverage,
+  TimelineLane,
+  TimelineLaneSegment,
+  TimelineProjection,
+  TimelineProjectionClip,
+  TimelineProjectionTrack,
+} from './timeline-projection.js';
 export {
   VISUAL_HIT_TARGET_KINDS,
   cycleVisualCandidate,

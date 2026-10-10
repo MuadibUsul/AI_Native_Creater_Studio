@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { encryptedSecretSchema } from '@ancs/contracts';
-import { LocalCredentialVault, parseCredentialKeys } from './index.js';
+import { LocalCredentialVault, createCredentialVaultFromEnv, parseCredentialKeys } from './index.js';
 
 /**
  * 本地凭据保险库（P03-04）：AES-256-GCM envelope encryption 的单元验证。
@@ -57,5 +57,17 @@ describe('LocalCredentialVault', () => {
     expect(() => parseCredentialKeys('vX:AAAA')).toThrow(/版本号非法/);
     const vault = new LocalCredentialVault({ keys: `v1:${key()}` });
     await expect(vault.encrypt('')).rejects.toThrow(/空 Secret/);
+  });
+
+  it('生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（不得从会话密钥派生）', () => {
+    // 生产 + 只有会话密钥 → fail-closed
+    expect(() => createCredentialVaultFromEnv({ NODE_ENV: 'production', BETTER_AUTH_SECRET: 'x'.repeat(32) }))
+      .toThrow(/生产环境必须显式配置 ANCS_CREDENTIAL_KEYS/);
+    // 生产 + 显式密钥 → 正常
+    expect(() => createCredentialVaultFromEnv({ NODE_ENV: 'production', ANCS_CREDENTIAL_KEYS: `v1:${key()}` })).not.toThrow();
+    // 非生产 + 无任何密钥 → 仍 fail-closed（不静默放行）
+    expect(() => createCredentialVaultFromEnv({ NODE_ENV: 'development' })).toThrow(/fail-closed/);
+    // 非生产 + 会话密钥 → 允许派生兜底
+    expect(() => createCredentialVaultFromEnv({ NODE_ENV: 'development', BETTER_AUTH_SECRET: 'y'.repeat(32) })).not.toThrow();
   });
 });

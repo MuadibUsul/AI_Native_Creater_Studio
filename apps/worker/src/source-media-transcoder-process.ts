@@ -148,7 +148,7 @@ export function createFfmpegMediaProxyTranscoder(options: FfmpegMediaProxyTransc
     async transcode(input) {
       const video = input.sourceProbe.streams.find((stream) => stream.type === 'VIDEO');
       const audio = input.sourceProbe.streams.find((stream) => stream.type === 'AUDIO');
-      const args = ['-nostdin', '-v', 'error', '-y', '-copyts', '-start_at_zero', '-i', input.sourcePath];
+      const args = ['-nostdin', '-v', 'error', '-y', '-copyts', '-start_at_zero', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath];
       if (input.profileKey === 'web-edit-video-720p-v1') {
         if (!video) throw new Error('视频代理 profile 未找到视频流');
         const dimensions = targetDimensions(video);
@@ -168,7 +168,7 @@ export function createFfmpegMediaProxyTranscoder(options: FfmpegMediaProxyTransc
       if (encoded.code !== 0) throw new Error('媒体代理转码失败');
       const inspected = await runProcess({
         executable: ffprobePath,
-        args: ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input.outputPath],
+        args: ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', '-protocol_whitelist', 'file,pipe', input.outputPath],
         timeoutMs,
         maxOutputBytes,
       });

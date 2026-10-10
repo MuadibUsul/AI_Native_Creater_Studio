@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import { analyzeMotionCode, type MotionAnalysisIssue } from './analysis.ts';
 
@@ -52,6 +53,25 @@ export const DEFAULT_SANDBOX_LIMITS: MotionSandboxLimits = { maxOldSpaceSizeMb: 
 
 const CHILD_SCRIPT = path.resolve(import.meta.dirname, 'sandbox-child.ts');
 
+/**
+ * 沙箱子进程的环境变量：**只放 Node 启动必需的少量白名单项**。
+ *
+ * 安全要点（2026-10 外部评审核实后修）：过去用 `{ ...process.env }` 会把 `DATABASE_URL`、
+ * `BETTER_AUTH_SECRET`、`PLATFORM_PROVIDER_KEYS`、`OBJECT_STORAGE_*` 等一并交给运行**未受信生成代码**的
+ * 子进程；一旦 vm 被逃逸（`node:vm` 不是安全边界）即可直接读到库连接串与密钥。
+ * 因此这里改为 allowlist；新增变量必须先确认它不会泄露凭据/连接信息。
+ */
+const SANDBOX_ENV_ALLOWLIST = ['PATH', 'Path', 'SystemRoot', 'windir', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL', 'HOME'] as const;
+
+export function sandboxEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { NODE_OPTIONS: '' };
+  for (const key of SANDBOX_ENV_ALLOWLIST) {
+    const value = source[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
 /** 运行沙箱（宿主侧入口；每次提交一个全新子进程——无跨提交状态）。 */
 export async function runMotionSandbox(input: MotionSandboxInput, limits: MotionSandboxLimits = DEFAULT_SANDBOX_LIMITS): Promise<MotionSandboxVerdict> {
   // 第一道门（宿主侧静态分析；子进程会再做一次——双保险）
@@ -69,7 +89,8 @@ export async function runMotionSandbox(input: MotionSandboxInput, limits: Motion
       CHILD_SCRIPT,
       submissionId,
     ],
-    { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NODE_OPTIONS: '' } },
+    // 显式 cwd（不继承宿主工作目录）+ 白名单 env（不继承宿主环境变量）
+    { stdio: ['pipe', 'pipe', 'pipe'], env: sandboxEnv(), cwd: os.tmpdir() },
   );
 
   return new Promise<MotionSandboxVerdict>((resolve) => {

@@ -85,6 +85,8 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     BETTER_AUTH_URL: 'https://api.example.com',
     NODE_ENV: 'production',
     ANCS_OPS_ENVIRONMENT: 'PRODUCTION',
+    // 生产必须显式配置凭据信封密钥（见 0010：不得与会话密钥共用一把）
+    ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, // secrets:check-ignore：测试专用假密钥（非真实凭据）
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -110,6 +112,13 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     expect(variables).toEqual(['ANCS_DEFAULT_PLAN', 'ANCS_OPS_ENVIRONMENT', 'ANCS_PAYMENTS_DRIVER', 'ANCS_STORAGE_DRIVER', 'BETTER_AUTH_URL']);
     expect(issues.find((issue) => issue.variable === 'ANCS_PAYMENTS_DRIVER')?.message).toContain('mock 无真实扣款能力');
     expect(issues.find((issue) => issue.variable === 'ANCS_DEFAULT_PLAN')?.message).toContain('必须为 FREE');
+  });
+
+  it('生产环境缺 ANCS_CREDENTIAL_KEYS → 跨字段显式报错（不得从会话密钥派生）', () => {
+    const result = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION' });
+    expect(result.ok).toBe(true);
+    const issues = crossCheckApiEnv(result.value as NonNullable<typeof result.value>);
+    expect(issues.map((issue) => issue.variable)).toContain('ANCS_CREDENTIAL_KEYS');
   });
 
   it('非法 ANCS_SAAS_MODE → 显式失败', () => {

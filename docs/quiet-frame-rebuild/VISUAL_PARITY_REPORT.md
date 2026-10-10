@@ -9,7 +9,7 @@
 ## 采集环境与运行结果
 
 - 参考：本机 4100 的只读原型；实际：本机 4000 的 production Next 服务。同一 Playwright Chromium 149.0.7827.55、`zh-CN`、上海时区、固定时刻 2026-10-07 12:00 +08:00、`reducedMotion=reduce`。桌面 1600×1000 / DPR 1.5；手机 390×844 / DPR 2。QF-18 两侧均启用深色主题。
-- `compare` 一次采集参考与实际，输出 `reference.png`、`actual.png`、`reference-fold.png`、`actual-fold.png`、`overlay.png`、`diff.png`、`metadata.json`。17 个主状态使用 `E:\Codes\ANCS\.artifacts\quiet-frame\<case>\final-261008-d\`；新增示例按钮后 QF-13 单独用 `final-261008-e` 复拍。18 个目录均包含上述 7 个文件。每个目录的元数据含参考 SHA、夹具 SHA、请求、错误、视口、主题和几何尺寸。
+- `compare` 一次采集参考与实际，输出 `reference.png`、`actual.png`、`reference-fold.png`、`actual-fold.png`、`overlay.png`、`diff.png`、`metadata.json`。17 个主状态使用 `.artifacts\quiet-frame\<case>\final-261008-d\`；新增示例按钮后 QF-13 单独用 `final-261008-e` 复拍。18 个目录均包含上述 7 个文件。每个目录的元数据含参考 SHA、夹具 SHA、请求、错误、视口、主题和几何尺寸。
 - 18/18 实际页面的 `horizontalOverflowPx = 0`，`pageErrors = 0`，夹具 `blocked = 0`、`unmatchedApi = 0`。QF-13 公共页对未登录的 `/auth/session` 与 `/workspaces` 探测返回两次 401，属于预期未认证边界；其它页面没有 HTTP 错误。部分私有页记录 `ERR_ABORTED` 的页面请求，保留原始证据以便复核。另拍 768px 导演页、390px 设置页和 Finance 展开页，均无水平溢出。
 - QF-14 的 AI 计划只有一次精确匹配的 `POST /api/v1/workspaces/ws_visual_fixture/projects/prj_visual_01/ai-edit/plan` 脚本化响应。夹具校验请求正文，其他写操作一律阻止；没有调用真实 Provider、数据库或正式写接口。页面也明确标注了该边界。
 - QF-11 另拍了设计包未单列原图的设置子页：`.artifacts/quiet-frame/11-settings/settings-budget-261007/` 和 `settings-workspace-261007/`；390px 设置页见 `settings-mobile-261008-a`。项目素材中的 Finance 展开态见 `.artifacts/quiet-frame/05-assets/finance-desktop-261008-a/` 与 `finance-mobile-261008-a/`，这是设计包没有对应原图的 `ADAPTED / NOT COMPARABLE` 状态。这五次实际页采集均无横向溢出、页面错误、被阻止或未匹配请求，也无写请求；未触发预算保存、Finance 创建或成员管理。

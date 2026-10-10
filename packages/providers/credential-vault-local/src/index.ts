@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
+import { hkdfSync, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { encryptedSecretSchema, type CredentialCipher, type EncryptedSecret } from '@ancs/contracts';
 
 /**
@@ -92,18 +92,33 @@ export class LocalCredentialVault implements CredentialCipher {
   }
 }
 
-/** API/Worker 共用的环境装配；显式密钥优先，否则从服务端主密钥做用途隔离派生。 */
+/**
+ * API/Worker 共用的环境装配。
+ *
+ * 密钥纪律（2026-10 外部评审核实后收紧）：
+ * - **生产环境必须显式配置 `ANCS_CREDENTIAL_KEYS`**：一个密钥泄露不应同时打穿会话、签名 URL 与供应商凭据；
+ *   缺失即启动失败（fail-closed），不再悄悄退回"从 `BETTER_AUTH_SECRET` 派生"。
+ * - 非生产环境允许派生兜底（本地开发便利），但会打印一次告警，且**轮换会话密钥会使既有密文不可解密**。
+ * - 派生用 HKDF（比裸 HMAC 更规范），并把用途标签作为 info 做域分离。
+ */
 export function createCredentialVaultFromEnv(env: NodeJS.ProcessEnv = process.env): LocalCredentialVault {
   const configured = env['ANCS_CREDENTIAL_KEYS'] ?? '';
-  const baseSecret = env['BETTER_AUTH_SECRET'];
-  const keys =
-    configured.trim() !== ''
-      ? configured
-      : baseSecret !== undefined && baseSecret.length >= 16
-        ? `v1:${createHmac('sha256', baseSecret).update('credential-vault-v1').digest('base64')}`
-        : '';
-  if (keys === '') {
-    throw new Error('启动失败：ANCS_CREDENTIAL_KEYS（或 BETTER_AUTH_SECRET 派生）未配置——凭据保险库 fail-closed');
+  const isProduction = env['NODE_ENV'] === 'production';
+  if (configured.trim() !== '') return new LocalCredentialVault({ keys: configured });
+
+  if (isProduction) {
+    throw new Error(
+      '启动失败：生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（不得从会话密钥派生）——凭据保险库 fail-closed',
+    );
   }
-  return new LocalCredentialVault({ keys });
+  const baseSecret = env['BETTER_AUTH_SECRET'];
+  if (baseSecret === undefined || baseSecret.length < 16) {
+    throw new Error('启动失败：ANCS_CREDENTIAL_KEYS（或非生产环境下的 BETTER_AUTH_SECRET 派生）未配置——凭据保险库 fail-closed');
+  }
+  console.warn(
+    '[credential-vault] 未配置 ANCS_CREDENTIAL_KEYS，当前从 BETTER_AUTH_SECRET 派生（仅限非生产）。'
+    + '生产环境请显式配置；且轮换 BETTER_AUTH_SECRET 会导致已存凭据无法解密。',
+  );
+  const derived = hkdfSync('sha256', baseSecret, 'ancs-credential-vault', 'credential-vault-v1', 32);
+  return new LocalCredentialVault({ keys: `v1:${Buffer.from(derived).toString('base64')}` });
 }

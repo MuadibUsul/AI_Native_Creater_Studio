@@ -150,10 +150,11 @@ async function seedClip(fixture: Fixture, sequenceMs: [number, number]): Promise
 
 const ALLOWED = ['trim_clip', 'split_clip', 'ripple_clip', 'delete_clip', 'move_clip', 'update_caption'] as const;
 
-async function plan(client: AncsClient, fixture: Fixture, prompt: string, selectedClipIds: string[], allowedOperations: readonly string[] = ALLOWED) {
+async function plan(client: AncsClient, fixture: Fixture, prompt: string, selectedClipIds: string[], allowedOperations: readonly string[] = ALLOWED, preservesEverythingElse = false) {
   return client.narrative.rangeEditPlan(fixture.workspaceId, fixture.projectId, {
     prompt, sequenceId: fixture.sequenceId, selectedClipIds: [...selectedClipIds],
     allowedOperations: [...allowedOperations] as never, languageTag: 'zh-CN',
+    preservesEverythingElse,
     brief: { objective: '去掉冗余开场，保留原声', audience: '观众', notes: '' },
   });
 }
@@ -247,5 +248,39 @@ describe('N03-09 范围编辑的最小 AI 入口（HTTP + SDK + Mock LLM）', ()
     expect((mismatch as AncsApiError).details['reason']).toBe(RANGE_EDIT_ERROR_REASONS.INVALID_SELECTION);
 
     // 规划器不可用时的 fail-closed 语义由 domain 层保证（见 packages/domain/src/range-edit.ts）；此处仅确认选择校验先于规划器调用
+  });
+
+  it('N06-07 总时长守卫：「其他别动」下变长的计划必须先解释或改等长方案', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const seeded = await seedClip(fixture, [0, 4_000]);
+
+    // 未声明"其他别动" → 不受时长约束
+    llm.scriptNext('range_edit_ripple');
+    const free = await plan(client, fixture, '去掉尾部 1 秒并收缝', [seeded.clipId]);
+    expect(free.lengthGuard.preservesEverythingElse).toBe(false);
+    expect(free.lengthGuard.verdict).toBe('SAFE');
+    expect(free.lengthGuard.requiresExplanation).toBe(false);
+    // 估算如实反映"缩短"（涟漪去尾 1s）
+    expect(free.lengthGuard.estimatedDurationDeltaMs).toBe(-1_000);
+    expect(free.lengthGuard.exact).toBe(true);
+
+    // 声明"其他别动"且变短、但存在等长替代（同为涟漪）→ 建议改等长方案且必须先解释
+    llm.scriptNext('range_edit_ripple');
+    const guarded = await plan(client, fixture, '去掉尾部 1 秒并收缝', [seeded.clipId], ALLOWED, true);
+    expect(guarded.lengthGuard.preservesEverythingElse).toBe(true);
+    expect(guarded.lengthGuard.verdict).toBe('EQUAL_LENGTH_PLAN_RECOMMENDED');
+    expect(guarded.lengthGuard.requiresExplanation).toBe(true);
+    expect(guarded.lengthGuard.recommendEqualLength).toBe(true);
+    // 计划本身不改工程（守卫只做判定与提示）
+    expect(guarded.providerMediaCalls).toBe(0);
+    expect(guarded.rationale.some((item) => item.includes('总时长守卫'))).toBe(true);
+
+    // 等长的计划在"其他别动"下直接放行
+    llm.scriptNext('range_edit_trim');
+    const even = await plan(client, fixture, '去掉前面废话但保留原音', [seeded.clipId], ALLOWED, true);
+    expect(even.lengthGuard.verdict).toBe('SAFE');
+    expect(even.lengthGuard.requiresExplanation).toBe(false);
+    expect(even.lengthGuard.estimatedDurationDeltaMs).toBe(0);
   });
 });
