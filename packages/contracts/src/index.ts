@@ -367,6 +367,7 @@ export {
   SELECTION_RESOLUTION_STATUSES,
   legacySelectionKindSchema,
   legacySelectionSchema,
+  composeSelectionAnchor,
   selectionAnchorFromLegacySelection,
   selectionAnchorRecordSchema,
   selectionAnchorSchema,
@@ -452,6 +453,30 @@ export {
 } from './caption-text.js';
 export type { CaptionWord } from './caption-text.js';
 export type { VisualCrop, VisualKeyframePath, VisualParameters, VisualPoint, VisualTransform, VisualViewport } from './visual-transform.js';
+export {
+  MAX_TIMELINE_RANGES,
+  TIMELINE_DRAG_POINT_THRESHOLD_PX,
+  addTemporalRange,
+  describeTemporalSelection,
+  sequenceTimeAtX,
+  temporalSelectionEquals,
+  temporalSelectionFromDrag,
+  temporalSelectionRanges,
+  timelineViewportSchema,
+  xAtSequenceTime,
+} from './timeline-band.js';
+export type { TimelineViewport } from './timeline-band.js';
+export {
+  VISUAL_HIT_TARGET_KINDS,
+  cycleVisualCandidate,
+  localPointFor,
+  pickVisualObjects,
+  projectVisualQuad,
+  topmostVisualObject,
+  visualHitTargetKindSchema,
+  visualHitTargetSchema,
+} from './visual-picking.js';
+export type { VisualHitTarget, VisualHitTargetKind } from './visual-picking.js';
 export {
   TIME_BINDING_BASES,
   VISUAL_OBJECT_KINDS,

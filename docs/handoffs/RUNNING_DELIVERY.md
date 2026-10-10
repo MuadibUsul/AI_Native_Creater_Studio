@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N04-09 主体 + 持续交付文档建立）
+**最后更新：** 2026-10-10（N04-02-s1／N04-04-s1 画布命中 + 横向时间带）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -24,6 +24,12 @@
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · N04-02-s1／N04-04-s1 画布原生对象命中 + 横向时间带 — **IN_PROGRESS**（主任务 N04-02／N04-04 未完成）
+- **内容：** `packages/contracts/src/timeline-band.ts`（可视窗口→有理时基换算、播放头/时间选区分离、单击 POINT／拖动半开 RANGES、显式多区间不合并、帧吸附坍缩降级、区间上限 fail-closed）；`visual-picking.ts`（复用 `hitTestVisualObject`，zOrder→细粒度→输入顺序，隐藏/父隐藏排除，重叠轮换，投影四边形）；`selection.ts` 新增 `composeSelectionAnchor`（交互产物→规范锚点+指纹，选择不改工程）。Web 新增 `TimelineBand`、`CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线。
+- **证据：** `docs/verification/N04-02-s1.md`、`docs/verification/N04-04-s1.md`（契约 18 项 + jsdom 11 项 + 全量 verify）· `docs/handoffs/N04-02-s1.md`、`docs/handoffs/N04-04-s1.md`　**verify：** 14/14（**1180/1180**：Unit 454 / Web 181 / Motion 19 / Integration 481 / Security 24 / Render 6 / Golden 15）
+- **为何不是 VERIFIED：** 真实浏览器/高 DPI 目检、v2 片段/轨道投影、锚点持久化/恢复（N04-10）未做；在真实画布与真实时长接线前不宣称 UI 验收。
+- **下一步：** N04-05（AttentionSnapshot 本体）／N04-10（锚点自动恢复）→ N05-02 起真实语音链路（待凭据）→ N06-04/N06-03/N06-06 → 回主线 N03-10。
 
 ### 2026-10-10 · N06-01／N06-02 私有候选分支 → 确定性试改 → 原子采用 — **VERIFIED**（N06-04 未交付）
 - **内容：** 迁移 0081 `proposals`；候选只存操作集与绑定（不改工程）；**试改 = 真实执行器在事务内跑完再无条件回滚**（同一操作集同一结果，`projectUntouched` 结构性保证）；采用按幂等键/状态/操作哈希/选择指纹/base revision 逐项校验后经统一编辑协议**原子**执行（失败保持 OPEN、零部分写入）；丢弃幂等、旧候选 SUPERSEDED；HTTP 五端点 + SDK。
@@ -155,6 +161,8 @@ d7aacea  feat(n04-09) SelectionAnchor 归一/持久化/兼容/重映射 + CI 测
 5. 增量设计覆盖不到时回主线：**N03-10（G0 纯素材交付门）** → N03-11（PlaybackEngine）→ … → N16。
 
 **恢复工作前先做三件事**：① `git log --oneline -5` 与 `git status` 确认与本文一致；② 读 `docs/design/mouse-voice-gap-map.md` 的「进度记录」；③ 跑一次 `pnpm verify` 确认基线（注意：**同时只能跑一份**）。
+
+**本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `/mnt/e`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind /home/ubuntu/ancs-nm /mnt/e/Codes/ANCS/node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
 
 **本会话新增的纪律/教训（都踩过，务必遵守）**：
 - **同一时刻只跑一份 verify/测试实例**（共用同一测试库会互相清理数据 → 大量假失败；若被中断，先 `pkill -f vitest` 再重跑）。

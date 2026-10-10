@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { SceneGraph } from '@ancs/contracts';
 import type { EditOperation } from '@ancs/contracts';
+import { legacyMillisecondsToMediaTime, type FrameRate, type MediaTime, type TemporalSelection, type TimelineViewport } from '@ancs/contracts';
 import { getComponent } from '@ancs/scene-components';
+import { TimelineBand, type TimelineBandLane } from './TimelineBand';
 import ui from './Monochrome.module.css';
 
 /**
@@ -31,13 +33,50 @@ export interface LiteTimelineProps {
   assets?: { id: string; assetType: string }[];
   pending?: boolean;
   error?: { kind: string; message: string; code: string | null } | null;
+  /** N04-04-s1：横向时间带（播放头 + 独立时间选区）；不提供则不渲染，保持既有行为。 */
+  band?: {
+    viewport: TimelineViewport;
+    playhead?: MediaTime | null;
+    selection?: TemporalSelection | null;
+    frameRate?: FrameRate;
+    onPlayheadChange?: (time: MediaTime) => void;
+    onSelectionChange?: (selection: TemporalSelection | null) => void;
+  };
 }
 
 const MEDIA_TYPES = new Set(['IMAGE_FULL', 'REAL_BROLL', 'HOST_FULL', 'HOST_SIDE']);
 
-export function LiteTimeline({ graph, onEdit, assets = [], pending = false, error = null }: LiteTimelineProps) {
+export function LiteTimeline({ graph, onEdit, assets = [], pending = false, error = null, band }: LiteTimelineProps) {
   const [splitAt, setSplitAt] = useState<Record<string, string>>({});
   const scenes = [...graph.scenes].sort((left, right) => left.position - right.position);
+
+  /** N04-04-s1：把既有场景/字幕数据投影为时间带轨道块（v2 片段/轨道接入后由父层传入 band）。 */
+  const bandLanes = useMemo<TimelineBandLane[]>(() => {
+    const lanes: TimelineBandLane[] = [];
+    const videoClips = scenes
+      .filter((scene) => scene.durationMs > 0)
+      .map((scene) => ({
+        id: scene.id,
+        label: scene.sceneType,
+        range: {
+          start: legacyMillisecondsToMediaTime(scene.startMs),
+          end: legacyMillisecondsToMediaTime(scene.startMs + scene.durationMs),
+        },
+      }));
+    if (videoClips.length > 0) lanes.push({ id: 'video', label: '视频', kind: 'VIDEO', clips: videoClips });
+    const captionClips = graph.captions
+      .filter((caption) => caption.durationMs > 0)
+      .map((caption) => ({
+        id: caption.id,
+        label: caption.text.slice(0, 20),
+        range: {
+          start: legacyMillisecondsToMediaTime(caption.startMs),
+          end: legacyMillisecondsToMediaTime(caption.startMs + caption.durationMs),
+        },
+      }));
+    if (captionClips.length > 0) lanes.push({ id: 'captions', label: '字幕', kind: 'CAPTION', clips: captionClips });
+    return lanes;
+  }, [scenes, graph.captions]);
   const expected = (sceneId: string): Record<string, number> => {
     const scene = graph.scenes.find((candidate) => candidate.id === sceneId);
     return scene === undefined ? {} : { [scene.id]: scene.revision };
@@ -71,6 +110,19 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
           共 {scenes.length} 场景 · 所有操作经编辑协议回写（含 revision 条件与幂等键）
         </span>
       </div>
+
+      {band !== undefined ? (
+        <TimelineBand
+          viewport={band.viewport}
+          playhead={band.playhead ?? null}
+          selection={band.selection ?? null}
+          lanes={bandLanes}
+          {...(band.frameRate !== undefined ? { frameRate: band.frameRate } : {})}
+          {...(band.onPlayheadChange !== undefined ? { onPlayheadChange: band.onPlayheadChange } : {})}
+          {...(band.onSelectionChange !== undefined ? { onSelectionChange: band.onSelectionChange } : {})}
+          disabled={pending}
+        />
+      ) : null}
 
       {error !== null ? (
         <p data-testid="timeline-error" role="alert" className={`text-xs ${ui['notice']}`}>

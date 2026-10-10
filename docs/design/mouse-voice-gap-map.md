@@ -119,6 +119,13 @@
 
 ## 5.1 进度记录
 
+- **2026-10-10**：`N04-02-s1`（画布原生对象命中）与 `N04-04-s1`（横向时间带）子任务**首批交付**（均 `IN_PROGRESS`，不计入主任务完成）：
+  - `packages/contracts/src/timeline-band.ts`：可视窗口→有理时基换算（非浮点毫秒权威）、播放头/时间选区分离、单击 POINT / 拖动半开 RANGES、显式多区间不合并、帧吸附坍缩降级、区间上限 fail-closed；
+  - `packages/contracts/src/visual-picking.ts`：复用 `hitTestVisualObject`，zOrder→细粒度→输入顺序，隐藏/父隐藏排除，重叠轮换，投影四边形；
+  - `packages/contracts/src/selection.ts` 新增 `composeSelectionAnchor`（交互产物→规范锚点+指纹，选择不改工程）；
+  - Web 新增 `TimelineBand` / `CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线；
+  - 证据：契约 18 项、jsdom 11 项、`pnpm verify` 14/14（1180/1180）；**真实浏览器/高 DPI 目检、v2 片段轨道投影与锚点持久化/恢复未做**（待 N04-01/N04-10）。
+
 - **2026-10-10**：`N03-09`（范围编辑最小 AI 入口）已完成并推送（`7881bf9`）——它的"结构化操作 + 越界说明 + revision + 零媒体调用"计划是本增量 `IntentRevision` 的既有落点，后续接流式语音时**复用该路径**。
 - **2026-10-10**：`N04-09-s1` 契约层完成（`packages/contracts/src/selection.ts` + 8 项单测，见 `docs/verification/N04-09-s1.md`）：点线面几何 × 时间选择 × SelectionAnchor × IntentRevision 已统一；`SelectionAnchor` 持久化/兼容（N04-09 主体）、画布（N04-02）、时间带（N04-04）、流式会话（N05-01）尚未开始。
 - **基础设施**：CI 已安装 FFmpeg；真实媒体用例按套件定义从 unit 迁到 integration（`a76dc66`）。

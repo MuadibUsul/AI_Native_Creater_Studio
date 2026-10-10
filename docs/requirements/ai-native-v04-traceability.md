@@ -46,6 +46,8 @@ N03-09 已按范围 VERIFIED：范围编辑的最小 AI 入口把「选中片段
 
 N04-09 已按范围 VERIFIED：SelectionAnchor 成为**唯一**规范选择结构（AttentionSnapshot 的选择子结构，不新增第二份权威状态），持久化为 (workspace, project, anchorId, revision) 追加式修订日志（迁移 0079），指纹 = sha256(规范序列化)；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经 `selectionAnchorFromLegacySelection` **解析一次**，毫秒入口转 1/1000 有理时基（新请求不丢有理时基），字幕场景携带发话时间（指代使用对应发话时间）；越权（同工作区其他项目）永远 422、帧哈希不能当身份、跨租户 404；重映射把失效选择明确标成 FAILED/PARTIAL/AMBIGUOUS（附候选证据）/STALE 并记入 remapHistory。V04-15 的 AttentionSnapshot 本体（事件缓冲/时钟/轨迹最小保留）仍属 N04-05，锚点自动恢复属 N04-10，画布与时间带属 N04-02-s1／N04-04-s1，均保持 `IN_PROGRESS`（见 `docs/verification/N04-09.md`）。
 
+N04-02-s1／N04-04-s1 已按子任务范围交付（**整条 N04 仍 `IN_PROGRESS`**）：`timeline-band.ts` 提供可视窗口→有理时基换算（非浮点毫秒权威）、播放头与时间选区分离、单击 POINT／拖动半开 RANGES、显式多区间不合并、帧吸附与区间上限 fail-closed；`visual-picking.ts` 复用 `hitTestVisualObject` 做 zOrder→细粒度→输入顺序命中、隐藏/父隐藏排除与重叠轮换；`composeSelectionAnchor` 把交互产物组装为规范 `SelectionAnchor`（不新建第二套状态）；Web 新增 `TimelineBand`/`CanvasInteractionLayer` 并在 `LiteTimeline`（保留、扩展）与 `WorkflowDirector` 内可选接线。真实浏览器/高 DPI 目检、v2 片段轨道投影与锚点持久化/恢复仍待（N04-01/N04-10 等，见 `docs/verification/N04-02-s1.md`、`docs/verification/N04-04-s1.md`）。V03-17 与 V03-25 的交互侧因此获得可复用实现，但整条需求仍需其余任务，保持 `IN_PROGRESS`。
+
 N05-01 部分交付（保持 `IN_PROGRESS`）：实时会话与短期凭证适配已落地并可验证——会话返回**只发一次**的短期 HMAC 凭证（作用域 voice:stream/voice:tools、TTL 15 分钟），未配置签名密钥即 501 fail-closed，**长期 Provider Key 永不下发**；创建会话需 `project:write`（跨租户 404）；能力按传输方式显式声明（浏览器回退明确不承诺服务端 VAD/逐词时间戳/服务端工具）；流式事件信封带状态/代际/时钟/序号四道门，`partial` 只读（不写 edit_events、不动 revision）、改口产生新转写修订，`sealUtterance` 把最新修订封存为 IntentRevision（需绑定 SelectionAnchor）供范围编辑 AI 入口使用。**真实 WebRTC/sideband 传输与真实 VAD/流式 ASR 未接入**（V03-26/V03-49/V03-53 的 Provider 侧实现与浏览器采集），因此不计入完成（见 `docs/verification/N05-01.md`）。
 
 N06-01／N06-02 已按范围 VERIFIED：**私有候选分支 → 确定性试改 → 原子采用**（迁移 0081；N06-04 局部试片缓存与依赖失效未交付，N06-03 的 rebase 与 N06-06 的替代/取消/晚到隔离仍待做）。候选只存操作集与绑定（base revision／选择锚点指纹／意图修订／操作哈希），创建与试改**都不改确认版工程**；试改用真实执行器在事务内跑完再**无条件回滚**（同一操作集 → 同一结果，`projectUntouched` 是结构性保证，不是近似动画）；采用按幂等键、状态、操作哈希、选择指纹、base revision 逐项校验（版本过期/哈希不符/已丢弃/指纹变化分别 409）后经统一编辑协议**原子**执行，执行失败时候选保持 OPEN、零部分写入且不返回已采用；丢弃幂等、同意图旧候选标 SUPERSEDED（见 `docs/verification/N06-01.md`）。V04-10／V04-14 的候选 UI 呈现（ghost 预览与局部回放对照）属 N04-02-s1／N04-04-s1，保持 `IN_PROGRESS`。
@@ -84,7 +86,7 @@ N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片�
 | V03-28 | Brief、模糊诉求澄清、创作诊断与必要提问 | §9 | N02-06, N03-09, N04-06, N05-06, N07-01, N07-02, N07-06, N07-08, N11-06 | IN_PROGRESS |
 | V03-29 | 结构化工具和编辑操作；后端权限与预算校验 | §9、§13 | N01-06, N03-09, N06-02, N07-03, N07-04 | IN_PROGRESS |
 | V03-30 | 持久化试改、候选分支、采用／拒绝和部分采用 | §10 | N06-01, N06-02, N06-05, N06-09 | TODO |
-| V03-31 | 局部样版、上下文回放、循环、对比与持续微调 | §10、§15 | N04-04, N06-04, N06-05, N06-08, N06-09, N09-01 | TODO |
+| V03-31 | 局部样版、上下文回放、循环、对比与持续微调 | §10、§15 | N04-04, N06-04, N06-05, N06-08, N06-09, N09-01 | IN_PROGRESS |
 | V03-32 | 已确认内容保护；内容／时位锁及间接影响检查 | §10、§13 | N01-07, N03-03, N03-10, N06-02, N06-03, N06-07, N06-09, N09-02, N10-07 | IN_PROGRESS |
 | V03-33 | 撤销恢复、revision冲突、幂等、并发与回调防覆盖 | §10、§13 | N01-07, N01-08, N02-08, N03-10, N05-04, N05-05, N06-01, N06-03, N06-06, N06-07, N06-08, N06-09, N06-11, N09-07, N13-04, N14-05 | IN_PROGRESS |
 | V03-34 | 长期／项目／局部笔记，确认来源、纠错与删除 | §11 | N05-05, N06-05, N07-05, N07-06, N07-07, N07-08 | TODO |

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
+import { mediaRangeSchema, mediaTimeSchema, type MediaTime } from './common/media-time.js';
 
 /**
  * 增量设计（鼠标点线面 × 横向时间定位 × 流式语音）第一批契约：
@@ -508,6 +508,53 @@ export function selectionAnchorFromLegacySelection(input: {
 function legacyMillisecondsToMediaTimeCompat(milliseconds: number): { ticks: string; timebase: { num: number; den: number } } {
   if (!Number.isSafeInteger(milliseconds) || milliseconds < 0) throw new RangeError('legacy milliseconds must be a nonnegative safe integer');
   return { ticks: String(milliseconds), timebase: { num: 1, den: 1000 } };
+}
+
+/**
+ * 由交互层（画布点选 N04-02-s1 / 横向时间带 N04-04-s1）产出的部分字段组装**规范选择锚点**，
+ * 并计算指纹；只做结构归一 + 指纹，不写库、不改工程。交互层因此不需要维护第二份选择状态。
+ */
+export function composeSelectionAnchor(input: {
+  anchorId: string;
+  workspaceId: string;
+  projectId: string;
+  sequenceId: string;
+  revision?: number;
+  geometries?: GeometrySelection[];
+  orderedTargetRefs?: OrderedTargetRef[];
+  temporalSelection?: TemporalSelection | null;
+  utteranceSequenceTime?: MediaTime | null;
+  trackScope?: SelectionAnchor['trackScope'];
+  propertyScope?: string[];
+  regionMode?: SelectionRegionMode;
+  timeBindingPolicy?: SelectionTimeBindingPolicy;
+  trackingRef?: string | null;
+  resolutionStatus?: SelectionAnchor['resolutionStatus'];
+  evidenceRefs?: string[];
+  remapHistory?: SelectionAnchor['remapHistory'];
+}): SelectionAnchor {
+  const draft = selectionAnchorSchema.parse({
+    anchorId: input.anchorId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    sequenceId: input.sequenceId,
+    revision: input.revision ?? 0,
+    geometries: input.geometries ?? [],
+    orderedTargetRefs: input.orderedTargetRefs ?? [],
+    temporalSelection: input.temporalSelection ?? null,
+    utteranceSequenceTime: input.utteranceSequenceTime ?? null,
+    ...(input.trackScope !== undefined ? { trackScope: input.trackScope } : {}),
+    propertyScope: input.propertyScope ?? [],
+    ...(input.regionMode !== undefined ? { regionMode: input.regionMode } : {}),
+    ...(input.timeBindingPolicy !== undefined ? { timeBindingPolicy: input.timeBindingPolicy } : {}),
+    trackingRef: input.trackingRef ?? null,
+    ...(input.resolutionStatus !== undefined ? { resolutionStatus: input.resolutionStatus } : {}),
+    evidenceRefs: input.evidenceRefs ?? [],
+    remapHistory: input.remapHistory ?? [],
+    fingerprintInput: 'pending',
+  });
+  const fingerprintInput = selectionFingerprintInput(draft);
+  return selectionAnchorSchema.parse({ ...draft, fingerprintInput });
 }
 
 /** 服务端存储的锚点记录：规范锚点 + 存储元数据（指纹、锚点修订号）。 */
