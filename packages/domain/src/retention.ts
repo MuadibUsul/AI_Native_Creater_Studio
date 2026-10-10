@@ -20,6 +20,7 @@ import {
   mediaTranscriptRuns,
   projectVersions,
   projects,
+  proposalArtifacts,
   scenes,
   uploadIntents,
 } from '@ancs/db';
@@ -44,12 +45,16 @@ import { licenseMetadataSchema } from '@ancs/contracts';
 
 export const TRASH_RETENTION_DAYS = 30;
 export const DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS = 24;
+/** N06-06：隔离产物（晚到/代际不符）的保留小时数；到期清理孤儿行 */
+export const DEFAULT_PROPOSAL_ARTIFACT_QUARANTINE_TTL_HOURS = 72;
 
 export interface RetentionConfig {
   /** Trash 保留天数（默认 30，测试可调小为 0） */
   trashRetentionDays?: number;
   /** 幂等键保留小时数（默认 24） */
   idempotencyKeyTtlHours?: number;
+  /** N06-06：隔离产物保留小时数（默认 72，测试可调小为 0） */
+  proposalArtifactQuarantineTtlHours?: number;
 }
 
 export interface RetentionSweepReport {
@@ -66,6 +71,10 @@ export interface RetentionSweepReport {
   assetsSkippedByReference: number;
   /** 上传意图过期处理（PENDING → EXPIRED；未完成版本 → FAILED） */
   uploadIntentsExpired: number;
+  /** N06-06：过期的**隔离**产物清理（bound=false 的孤儿行；bound=true 的已接受结果保留） */
+  proposalArtifactsPurged: number;
+  /** N06-06：保留未清理的已绑定产物数（作为候选结果证据） */
+  proposalArtifactsKeptBound: number;
   /** 幂等键 TTL 清理 */
   idempotencyKeysPurged: number;
   /** 实际删除的对象数（含孤儿对象） */
@@ -351,7 +360,9 @@ export async function runRetentionSweep(
   const limit = options.limit ?? 100;
   const trashDays = deps.retention?.trashRetentionDays ?? TRASH_RETENTION_DAYS;
   const idempotencyTtlHours = deps.retention?.idempotencyKeyTtlHours ?? DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS;
+  const artifactQuarantineTtlHours = deps.retention?.proposalArtifactQuarantineTtlHours ?? DEFAULT_PROPOSAL_ARTIFACT_QUARANTINE_TTL_HOURS;
   const trashCutoff = new Date(now.getTime() - trashDays * 24 * 60 * 60 * 1000);
+  const artifactCutoff = new Date(now.getTime() - artifactQuarantineTtlHours * 60 * 60 * 1000);
 
   const report: RetentionSweepReport = {
     ranAt: now.toISOString(),
@@ -362,6 +373,8 @@ export async function runRetentionSweep(
     assetsSkippedByReference: 0,
     uploadIntentsExpired: 0,
     idempotencyKeysPurged: 0,
+    proposalArtifactsPurged: 0,
+    proposalArtifactsKeptBound: 0,
     objectsDeleted: 0,
     objectsKeptShared: 0,
     orphanObjectsDeleted: 0,
@@ -508,6 +521,14 @@ export async function runRetentionSweep(
     }
     if (outcome === 'skipped') report.assetsSkippedByReference += 1;
   }
+
+  // 7) N06-06 隔离产物：`bound=false` 的孤儿行按保留期清理；`bound=true`（已接受结果）保留。
+  const purgedArtifacts = await deps.db.delete(proposalArtifacts).where(and(
+    eq(proposalArtifacts.bound, false), lt(proposalArtifacts.createdAt, artifactCutoff),
+  )).returning({ id: proposalArtifacts.id });
+  report.proposalArtifactsPurged = purgedArtifacts.length;
+  const boundArtifacts = await deps.db.select({ id: proposalArtifacts.id }).from(proposalArtifacts).where(eq(proposalArtifacts.bound, true));
+  report.proposalArtifactsKeptBound = boundArtifacts.length;
 
   return report;
 }

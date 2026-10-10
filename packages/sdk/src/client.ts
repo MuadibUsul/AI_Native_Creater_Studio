@@ -53,9 +53,18 @@ import {
   proposalTrialSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   proposalImpactSchema,
+  proposalArtifactSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
+  cancelProposalRequestSchema,
+  captureConfirmedContentRequestSchema,
+  confirmedContentRecordSchema,
+  regressionReportSchema,
   recoverSelectionAnchorRequestSchema,
   selectionRecoveryResultSchema,
   legacySelectionSchema,
@@ -388,9 +397,18 @@ import {
   type ProposalTrial,
   type CreateProposalRequest,
   type AdoptProposalRequest,
+  type AdoptProposalPartialRequest,
+  type AdoptProposalPartialResponse,
   type ProposalImpact,
+  type ProposalArtifact,
   type RebaseProposalRequest,
   type RebaseProposalResponse,
+  type SubmitProposalArtifactRequest,
+  type SubmitProposalArtifactResponse,
+  type CancelProposalRequest,
+  type CaptureConfirmedContentRequest,
+  type ConfirmedContentRecord,
+  type RegressionReport,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
@@ -849,6 +867,50 @@ export interface AncsClient {
       input?: { reason?: string },
       options?: MutationOptions,
     ): Promise<Proposal>;
+    /** N06-05：部分采用（按依赖闭包扩张并如实回报作用范围） */
+    adoptProposalPartial(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: AdoptProposalPartialRequest,
+      options?: MutationOptions,
+    ): Promise<AdoptProposalPartialResponse>;
+    /** N06-06：取消候选（标记 CANCELLED，保留已有结果） */
+    cancelProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: CancelProposalRequest,
+      options?: MutationOptions,
+    ): Promise<Proposal>;
+    /** N06-06：提交外部晚到产物（仅当前代际且 OPEN 才绑定，否则隔离） */
+    submitProposalArtifact(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: SubmitProposalArtifactRequest,
+      options?: MutationOptions,
+    ): Promise<SubmitProposalArtifactResponse>;
+    /** N06-06：读取候选产物台账（含隔离行与理由） */
+    proposalArtifacts(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalArtifact[]>;
+    /** N06-07：采集已确认内容三轴指纹（缺省保护全部片段） */
+    captureConfirmedContent(
+      workspaceId: string,
+      projectId: string,
+      input: CaptureConfirmedContentRequest,
+      options?: MutationOptions,
+    ): Promise<ConfirmedContentRecord>;
+    /** N06-07：列出工程内保护记录 */
+    confirmedContents(workspaceId: string, projectId: string): Promise<ConfirmedContentRecord[]>;
+    /** N06-07：读取单条保护记录 */
+    confirmedContent(workspaceId: string, projectId: string, protectionId: string): Promise<ConfirmedContentRecord>;
+    /** N06-07：回归核对（只读）——受保护内容是否仍引用相同资产与参数 */
+    checkConfirmedContent(
+      workspaceId: string,
+      projectId: string,
+      protectionId: string,
+      input?: { explicitTargets?: { objectKind: string; objectId: string }[] },
+    ): Promise<RegressionReport>;
     /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
     createVoiceSession(
       workspaceId: string,
@@ -2230,6 +2292,35 @@ export function createClient(options: ClientOptions): AncsClient {
       discardProposal: (workspaceId, projectId, proposalId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/discard`, proposalSchema, {
           body: input ?? {}, bodySchema: z.object({ reason: z.string().max(200).optional() }).strict(), idempotencyKey: mutation?.idempotencyKey,
+        }),
+      adoptProposalPartial: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/adopt-partial`, adoptProposalPartialResponseSchema, {
+          body: input, bodySchema: adoptProposalPartialRequestSchema, idempotencyKey: input.idempotencyKey ?? mutation?.idempotencyKey,
+        }),
+      cancelProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/cancel`, proposalSchema, {
+          body: input ?? {}, bodySchema: cancelProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      submitProposalArtifact: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, submitProposalArtifactResponseSchema, {
+          body: input, bodySchema: submitProposalArtifactRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      proposalArtifacts: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, z.array(proposalArtifactSchema)),
+      captureConfirmedContent: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections`, confirmedContentRecordSchema, {
+          body: input, bodySchema: captureConfirmedContentRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      confirmedContents: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections`, z.array(confirmedContentRecordSchema)),
+      confirmedContent: (workspaceId, projectId, protectionId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections/${protectionId}`, confirmedContentRecordSchema),
+      checkConfirmedContent: (workspaceId, projectId, protectionId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections/${protectionId}/check`, regressionReportSchema, {
+          body: input ?? {},
+          bodySchema: z.object({
+            explicitTargets: z.array(z.object({ objectKind: z.string(), objectId: z.string() }).strict()).optional(),
+          }).strict(),
         }),
       createVoiceSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {

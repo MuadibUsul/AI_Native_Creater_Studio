@@ -2,37 +2,57 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import {
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  cancelProposalRequestSchema,
+  captureConfirmedContentRequestSchema,
+  confirmedContentRecordSchema,
   createProposalRequestSchema,
   errorEnvelopeSchema,
+  objectLockKindSchema,
   opaqueIdSchema,
+  proposalArtifactSchema,
   proposalImpactSchema,
   proposalSchema,
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  regressionReportSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
 } from '@ancs/contracts';
 import {
   adoptProposal,
+  adoptProposalPartial,
+  cancelProposal,
+  captureConfirmedContent,
+  checkConfirmedContent,
   computeProposalImpact,
   createProposalBranch,
   discardProposal,
+  listConfirmedContents,
+  listProposalArtifacts,
+  loadConfirmedContent,
   loadProposalForRead,
   previewProposal,
   rebaseProposal,
+  submitProposalArtifact,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
- * N06-01／N06-02／N06-03／N06-04 私有候选路由。
+ * N06-01／N06-02／N06-03／N06-04／N06-06 私有候选路由。
  *
- * - 创建候选：不改工程（只存操作集与绑定，并记录读写集/写目标）；
+ * - 创建候选：不改工程（只存操作集与绑定，并记录读写集/写目标；同时取代同谱系旧候选）；
  * - 影响集：候选写目标 vs base revision 之后干预改动的竞争（只读）；
  * - rebase：无竞争且身份/素材未变时受控推进 base revision（仍经真实执行器验证）；否则 fail-closed；
  * - 试改：在事务内跑真实执行器再回滚（确定性、零落地）；
- * - 采用：绑定校验（base revision／操作哈希／锚点指纹）→ 统一编辑协议原子执行；失败即失败，不显示"已采用"。
+ * - 采用：绑定校验（base revision／操作哈希／锚点指纹）→ 统一编辑协议原子执行；失败即失败，不显示"已采用"；
+ * - 取消：标记 CANCELLED 但**保留已有结果**（N06-06）；
+ * - 产物：外部晚到产物按代际/状态判定，非当前一律**隔离**不自动绑定（N06-06）。
  */
 
 const projectParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
@@ -149,6 +169,7 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         actorId: context.userId, expectedOperationsHash: request.body.expectedOperationsHash,
         expectedSelectionFingerprint: request.body.expectedSelectionFingerprint, idempotencyKey: request.body.idempotencyKey,
+        protectionIds: request.body.protectionIds,
       });
       return { proposal: adopted.proposal, projectRevision: adopted.projectRevision, adopted: true as const };
     },
@@ -170,6 +191,175 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
       return discardProposal(domain, {
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/adopt-partial',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-05 部分采用：只落地所选操作子集，按依赖闭包扩张并如实回报作用范围',
+        params: proposalParamsSchema,
+        body: adoptProposalPartialRequestSchema,
+        response: { 200: adoptProposalPartialResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      const result = await adoptProposalPartial(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        actorId: context.userId, selectedOperationIndexes: request.body.selectedOperationIndexes,
+        expectedOperationsHash: request.body.expectedOperationsHash,
+        expectedSelectionFingerprint: request.body.expectedSelectionFingerprint, idempotencyKey: request.body.idempotencyKey,
+        protectionIds: request.body.protectionIds,
+      });
+      return {
+        proposal: result.proposal,
+        projectRevision: result.projectRevision,
+        adopted: true as const,
+        adoptedOperationIndexes: result.adoptedOperationIndexes,
+        remainingOperationIndexes: result.remainingOperationIndexes,
+        closureExpanded: result.closureExpanded,
+        effectiveWriteTargets: result.effectiveWriteTargets,
+      };
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/cancel',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 取消候选（标记 CANCELLED，保留已有试片/产物结果；采用被拒）',
+        params: proposalParamsSchema,
+        body: cancelProposalRequestSchema,
+        response: { 200: proposalSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return cancelProposal(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/artifacts',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 提交外部晚到产物：仅当前代际且 OPEN 才绑定，否则隔离（不自动绑定）',
+        params: proposalParamsSchema,
+        body: submitProposalArtifactRequestSchema,
+        response: { 200: submitProposalArtifactResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return submitProposalArtifact(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        request: request.body,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/artifacts',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 读取候选产物台账（含隔离行与理由）',
+        params: proposalParamsSchema,
+        response: { 200: z.array(proposalArtifactSchema), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listProposalArtifacts(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+      });
+    },
+  );
+
+  // ---- N06-07 已确认内容保护与回归指纹（工程作用域，非候选作用域） ----
+
+  const protectionParamsSchema = projectParamsSchema.extend({ protectionId: opaqueIdSchema });
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/content-protections',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 采集已确认内容的三轴指纹（内容/时位/资产；缺省保护全部片段）',
+        params: projectParamsSchema,
+        body: captureConfirmedContentRequestSchema,
+        response: { 200: confirmedContentRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      return captureConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, actorId: context.userId, request: request.body,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/content-protections',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 列出工程内已确认内容保护记录',
+        params: projectParamsSchema,
+        response: { 200: z.array(confirmedContentRecordSchema), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listConfirmedContents(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/content-protections/:protectionId',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 读取保护记录',
+        params: protectionParamsSchema,
+        response: { 200: confirmedContentRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return loadConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, protectionId: request.params.protectionId,
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/content-protections/:protectionId/check',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 回归核对（只读）：受保护内容是否仍引用相同资产与参数；报告范围外变化',
+        params: protectionParamsSchema,
+        body: z.object({
+          explicitTargets: z.array(z.object({ objectKind: objectLockKindSchema, objectId: opaqueIdSchema }).strict()).max(512).optional(),
+        }).strict(),
+        response: { 200: regressionReportSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return checkConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, protectionId: request.params.protectionId,
+        ...(request.body.explicitTargets === undefined ? {} : { explicitTargets: request.body.explicitTargets }),
       });
     },
   );

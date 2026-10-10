@@ -292,12 +292,18 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  PROPOSAL_ARTIFACT_BINDING_REASONS,
   PROPOSAL_ERROR_REASONS,
   PROPOSAL_REVIEW_BLOCK_REASONS,
   PROPOSAL_STATUSES,
+  adoptProposalPartialRequestSchema,
+  adoptProposalPartialResponseSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  cancelProposalRequestSchema,
   createProposalRequestSchema,
+  proposalArtifactBindingReasonSchema,
+  proposalArtifactSchema,
   proposalImpactConflictSchema,
   proposalImpactSchema,
   proposalInterveningChangeSchema,
@@ -308,11 +314,18 @@ export {
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
 } from './proposal.js';
 export type {
+  AdoptProposalPartialRequest,
+  AdoptProposalPartialResponse,
   AdoptProposalRequest,
+  CancelProposalRequest,
   CreateProposalRequest,
   Proposal,
+  ProposalArtifact,
+  ProposalArtifactBindingReason,
   ProposalErrorReason,
   ProposalImpact,
   ProposalImpactConflict,
@@ -323,7 +336,51 @@ export type {
   ProposalTrial,
   RebaseProposalRequest,
   RebaseProposalResponse,
+  SubmitProposalArtifactRequest,
+  SubmitProposalArtifactResponse,
 } from './proposal.js';
+export {
+  PROPOSAL_DISPOSITIONS,
+  PROPOSAL_DISPOSITION_REASONS,
+  proposalDispositionCandidateSchema,
+  proposalDispositionSchema,
+  resolveProposalDisposition,
+} from './proposal-disposition.js';
+export {
+  CONFIRMED_CONTENT_AXES,
+  PROTECTION_ERROR_REASONS,
+  REGRESSION_STATUSES,
+  SCOPE_GUARD_VERDICTS,
+  captureConfirmedContentRequestSchema,
+  confirmedContentAxisSchema,
+  confirmedContentObjectSchema,
+  confirmedContentRecordSchema,
+  regressionDiffSchema,
+  regressionReportSchema,
+  regressionStatusSchema,
+  resolveScopeGuard,
+  scopeGuardVerdictSchema,
+} from './content-protection.js';
+export type {
+  CaptureConfirmedContentRequest,
+  ConfirmedContentAxis,
+  ConfirmedContentObject,
+  ConfirmedContentRecord,
+  ProtectionErrorReason,
+  RegressionDiff,
+  RegressionReport,
+  RegressionStatus,
+  ScopeGuardInput,
+  ScopeGuardResolution,
+  ScopeGuardVerdict,
+} from './content-protection.js';
+export type {
+  ProposalDisposition,
+  ProposalDispositionCandidate,
+  ProposalDispositionReason,
+  ProposalDispositionResolution,
+  ResolveProposalDispositionInput,
+} from './proposal-disposition.js';
 export {
   computeOperationTargetRefs,
   isEditOperationName,

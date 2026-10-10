@@ -16,7 +16,7 @@ import { objectLockDimensionSchema, objectLockKindSchema } from './object-locks.
  * - 晚到/过期候选只能被丢弃或取代，**不得**更新新候选。
  */
 
-export const PROPOSAL_STATUSES = ['OPEN', 'COMMITTED', 'DISCARDED', 'SUPERSEDED'] as const;
+export const PROPOSAL_STATUSES = ['OPEN', 'COMMITTED', 'PARTIALLY_ADOPTED', 'DISCARDED', 'SUPERSEDED', 'CANCELLED'] as const;
 export const proposalStatusSchema = z.enum(PROPOSAL_STATUSES);
 export type ProposalStatus = z.infer<typeof proposalStatusSchema>;
 
@@ -33,6 +33,14 @@ export const PROPOSAL_ERROR_REASONS = {
   REBASE_CONFLICT: 'PROPOSAL_REBASE_CONFLICT',
   /** N06-03：身份（锚点指纹）或源素材绑定变化 → 必须以最新状态**重新审核**，不得静默 rebase */
   REVIEW_REQUIRED: 'PROPOSAL_REVIEW_REQUIRED',
+  /** N06-06：候选已被更新的候选取代（不是当前代际） */
+  NOT_CURRENT: 'PROPOSAL_NOT_CURRENT',
+  /** N06-06：候选已取消 */
+  CANCELLED: 'PROPOSAL_CANCELLED',
+  /** N06-06：外部晚到产物与候选代际/状态不符 → 隔离（不自动绑定） */
+  ARTIFACT_QUARANTINED: 'PROPOSAL_ARTIFACT_QUARANTINED',
+  /** N06-05：部分采用的选择集无法构成合法依赖闭包（会切断音画/引用依赖） */
+  PARTIAL_SCOPE_INVALID: 'PROPOSAL_PARTIAL_SCOPE_INVALID',
 } as const;
 
 export type ProposalErrorReason = (typeof PROPOSAL_ERROR_REASONS)[keyof typeof PROPOSAL_ERROR_REASONS];
@@ -146,6 +154,17 @@ export const proposalSchema = z.object({
   /** N06-03：rebase 次数与最近一次 rebase 的来源 revision */
   rebaseCount: z.number().int().min(0).default(0),
   rebasedFromRevision: revisionSchema.nullable().default(null),
+  /**
+   * N06-06：候选代际（同一工程内单调递增）。新指令产生的新候选代际更大；
+   * 晚到的外部产物携带代际，只有**当前代际且仍 OPEN** 的候选才能绑定。
+   */
+  generation: z.number().int().min(1).default(1),
+  /** N06-06：取代本候选的新候选（被取代时写入） */
+  supersededByProposalId: opaqueIdSchema.nullable().default(null),
+  supersededAt: isoDateTimeSchema.nullable().default(null),
+  cancelledAt: isoDateTimeSchema.nullable().default(null),
+  /** N06-05：部分采用时实际落地的操作下标（完整采用则全部） */
+  adoptedOperationIndexes: z.array(z.number().int().min(0)).default([]),
   createdAt: isoDateTimeSchema,
   committedAt: isoDateTimeSchema.nullable().default(null),
   discardedAt: isoDateTimeSchema.nullable().default(null),
@@ -192,6 +211,8 @@ export const adoptProposalRequestSchema = z.object({
   expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
   /** 幂等键：重放返回同一结果，不产生第二次写入 */
   idempotencyKey: z.string().min(8).max(120),
+  /** N06-07：要执行的已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds: z.array(opaqueIdSchema).max(32).optional(),
 }).strict();
 
 export type AdoptProposalRequest = z.infer<typeof adoptProposalRequestSchema>;
@@ -212,3 +233,85 @@ export const rebaseProposalResponseSchema = z.object({
   rebased: z.boolean(),
 }).strict();
 export type RebaseProposalResponse = z.infer<typeof rebaseProposalResponseSchema>;
+
+/**
+ * N06-06：晚到产物绑定原因。
+ * - `BOUND`：候选仍 OPEN 且为当前代际 → 绑定；
+ * - 其余原因均**隔离**（写入隔离台账，不自动绑定到候选/工程）。
+ */
+export const PROPOSAL_ARTIFACT_BINDING_REASONS = ['BOUND', 'NOT_OPEN', 'SUPERSEDED', 'CANCELLED', 'STALE_GENERATION', 'NOT_CURRENT', 'ALREADY_BOUND'] as const;
+export const proposalArtifactBindingReasonSchema = z.enum(PROPOSAL_ARTIFACT_BINDING_REASONS);
+export type ProposalArtifactBindingReason = z.infer<typeof proposalArtifactBindingReasonSchema>;
+
+/**
+ * 外部晚到产物（如外部渲染/分析结果）的**隔离台账**行。它不是第二份作品状态：
+ * 只有 `bound=true` 才表示该产物被当前候选接受；其余一律隔离并按保留策略清理。
+ */
+export const proposalArtifactSchema = z.object({
+  artifactId: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  proposalId: opaqueIdSchema.nullable().default(null),
+  /** 产物声称所属的候选代际 */
+  generation: z.number().int().min(1),
+  /** 候选当前代际（便于对照判定 `NOT_CURRENT`） */
+  currentGeneration: z.number().int().min(1).nullable().default(null),
+  kind: z.string().min(1).max(64),
+  reference: z.string().min(1).max(512),
+  bound: z.boolean(),
+  bindingReason: proposalArtifactBindingReasonSchema,
+  createdAt: isoDateTimeSchema,
+}).strict();
+export type ProposalArtifact = z.infer<typeof proposalArtifactSchema>;
+
+export const submitProposalArtifactRequestSchema = z.object({
+  kind: z.string().min(1).max(64),
+  reference: z.string().min(1).max(512),
+  /** 产物所属代际（外部任务绑定；与候选当前代际不符则隔离） */
+  generation: z.number().int().min(1),
+}).strict();
+export type SubmitProposalArtifactRequest = z.infer<typeof submitProposalArtifactRequestSchema>;
+
+export const submitProposalArtifactResponseSchema = z.object({
+  artifact: proposalArtifactSchema,
+  /** 是否真正绑定（隔离时为 false，且不改变候选/工程） */
+  bound: z.boolean(),
+}).strict();
+export type SubmitProposalArtifactResponse = z.infer<typeof submitProposalArtifactResponseSchema>;
+
+export const cancelProposalRequestSchema = z.object({
+  reason: z.string().min(1).max(200).optional(),
+}).strict();
+export type CancelProposalRequest = z.infer<typeof cancelProposalRequestSchema>;
+
+/**
+ * N06-05：**部分采用** —— 只采用候选操作集的一个子集。
+ * 服务端会把它扩成满足依赖闭包的**实际采用集**（含被引用对象的创建操作、同一 AV 组的另一侧），
+ * 并把扩后的作用范围如实回报（`closureExpanded` + `adoptedOperationIndexes`）。
+ * 无法构成合法闭包时 fail-closed（409 `PROPOSAL_PARTIAL_SCOPE_INVALID`）。
+ */
+export const adoptProposalPartialRequestSchema = z.object({
+  /** 用户勾选要采用的操作下标（非空、去重、在范围内） */
+  selectedOperationIndexes: z.array(z.number().int().min(0)).min(1).max(256),
+  expectedOperationsHash: z.string().length(64),
+  expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
+  idempotencyKey: z.string().min(8).max(120),
+  /** N06-07：要执行的已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds: z.array(opaqueIdSchema).max(32).optional(),
+}).strict();
+export type AdoptProposalPartialRequest = z.infer<typeof adoptProposalPartialRequestSchema>;
+
+export const adoptProposalPartialResponseSchema = z.object({
+  proposal: proposalSchema,
+  projectRevision: revisionSchema,
+  adopted: z.literal(true),
+  /** 实际落地的操作下标（= 用户选择 ∪ 依赖闭包） */
+  adoptedOperationIndexes: z.array(z.number().int().min(0)),
+  /** 未被采用、仍留在候选里的操作下标（该候选为一次性交付，需新建候选才能再改） */
+  remainingOperationIndexes: z.array(z.number().int().min(0)),
+  /** 是否因依赖闭包而扩大了作用范围（用户必须在 UI 上看到这个差异） */
+  closureExpanded: z.boolean(),
+  /** 实际落地操作对应的具体写目标（作用范围明确可见） */
+  effectiveWriteTargets: z.array(proposalTargetRefSchema),
+}).strict();
+export type AdoptProposalPartialResponse = z.infer<typeof adoptProposalPartialResponseSchema>;
