@@ -374,6 +374,24 @@ export type {
   ScopeGuardResolution,
   ScopeGuardVerdict,
 } from './content-protection.js';
+export {
+  COMPARE_ALIGNMENT_MODES,
+  COMPARE_CHANGES,
+  COMPARE_ERROR_REASONS,
+  compareAlignmentSchema,
+  compareChangeSchema,
+  compareObjectDiffSchema,
+  compareProposalRequestSchema,
+  compareReportSchema,
+} from './proposal-compare.js';
+export type {
+  CompareAlignment,
+  CompareChange,
+  CompareErrorReason,
+  CompareObjectDiff,
+  CompareProposalRequest,
+  CompareReport,
+} from './proposal-compare.js';
 export type {
   ProposalDisposition,
   ProposalDispositionCandidate,

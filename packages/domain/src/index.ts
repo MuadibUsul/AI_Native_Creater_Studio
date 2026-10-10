@@ -426,6 +426,7 @@ export {
   submitProposalArtifact,
   supersedeProposals,
 } from './proposals.js';
+export { compareProposal } from './proposal-compare.js';
 export {
   assertProtectedContentStable,
   captureConfirmedContent,

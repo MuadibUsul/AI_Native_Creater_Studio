@@ -62,6 +62,8 @@ import {
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
   cancelProposalRequestSchema,
+  compareProposalRequestSchema,
+  compareReportSchema,
   captureConfirmedContentRequestSchema,
   confirmedContentRecordSchema,
   regressionReportSchema,
@@ -406,6 +408,8 @@ import {
   type SubmitProposalArtifactRequest,
   type SubmitProposalArtifactResponse,
   type CancelProposalRequest,
+  type CompareProposalRequest,
+  type CompareReport,
   type CaptureConfirmedContentRequest,
   type ConfirmedContentRecord,
   type RegressionReport,
@@ -891,6 +895,13 @@ export interface AncsClient {
       input: SubmitProposalArtifactRequest,
       options?: MutationOptions,
     ): Promise<SubmitProposalArtifactResponse>;
+    /** N06-08：A/B 对照（只读）：候选试改后真实结果 vs 当前确认版或另一候选 */
+    compareProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: CompareProposalRequest,
+    ): Promise<CompareReport>;
     /** N06-06：读取候选产物台账（含隔离行与理由） */
     proposalArtifacts(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalArtifact[]>;
     /** N06-07：采集已确认内容三轴指纹（缺省保护全部片段） */
@@ -2304,6 +2315,10 @@ export function createClient(options: ClientOptions): AncsClient {
       submitProposalArtifact: (workspaceId, projectId, proposalId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, submitProposalArtifactResponseSchema, {
           body: input, bodySchema: submitProposalArtifactRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      compareProposal: (workspaceId, projectId, proposalId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/compare`, compareReportSchema, {
+          body: input ?? {}, bodySchema: compareProposalRequestSchema,
         }),
       proposalArtifacts: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, z.array(proposalArtifactSchema)),
