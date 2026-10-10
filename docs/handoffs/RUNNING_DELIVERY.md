@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第十一组：N03-13 统一媒体时钟与音画同步调度逻辑层）
+**最后更新：** 2026-10-11（第十二组：播放链路浏览器接线 + 真机清单）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,24 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 164 项 |
-| 本地 `pnpm verify` | **14/14，1369/1369**（第十一组组末实测；Unit 584 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1382/1382**（第十二组组末实测；Unit 584 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十二组 · 播放链路**浏览器接线**（N03-12 适配器 + N03-13 接线面）
+- **内容：**
+  - `apps/web/src/playback/media-element-backend.ts`：`PlaybackBackendPort` 的真实实现（只依赖窄接口 `MediaElementLike`）——**presented 时间只取元素实际位置**、URL 失效**有限次刷新且保持播放位置**、范围外 seek 明确拒绝、`dispose` 幂等；
+  - `apps/web/src/playback/PlaybackSurface.tsx`：把引擎 + 端口 + 统一时钟串起来的最小播放面；显示状态、序列时间与**实际呈现时间**、超容差的**同步修正提示**、**未授权/无音轨的明确提示**、协商后的能力表（未支持的不出现）；
+  - `vitest.config.ts`：web 项目补收 `*.test.ts`（此前纯 TS 的浏览器侧测试会被**静默跳过** —— 这是个会制造"假绿"的坑，已修）。
+- **证据：** `apps/web/src/playback/media-element-backend.test.tsx`（7 项）+ `PlaybackSurface.test.tsx`（6 项）；`docs/verification/N03-12.md`、`N03-13.md` 增补"接线"节。
+- **交给你：** `docs/handoffs/PLAYBACK-DEVICE-CHECKLIST.md` —— 真机检查表（无素材也能测一半；有 proxy 后测漂移/连续 seek/后台恢复/URL 过期/冷热首帧）。
+- **状态不变：** N03-12／N03-13 仍 `IN_PROGRESS`——**逻辑与接线都已交付**，余下是**真机证据**与（N03-12）真实媒体上的 Range/分段实测。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-11 · 第十一组 · N03-13 统一媒体时钟与音画同步调度 — **IN_PROGRESS**
 - **内容：** 新增 `packages/contracts/src/media-clock.ts` —— 统一媒体时钟（有音轨→AUDIO_CONTEXT，无音轨→**同接口虚拟时钟**）；`seekMediaClock` **递增 epoch** + `isScheduledAudioCurrent`（**只有当前代际的已调度音频可播** → 连续 seek 后旧音频不出声）；`suspendMediaClock`（**冻结**，后台 60s 不推进）/`resumeMediaClock`（**重锚到恢复时刻**，不快进、挂起期间音频时间不计入序列）；`setMediaClockRate`（切换瞬间序列时间**连续**）；`resolveMediaClockPlan`（**未授权 → 明确提示 + 只静音播画面**，不静默无声）；`decideMediaClockSync`（±40ms **容差内不修正**／带内按比例微调速率并限幅 ±5%／超 250ms 才 RESEEK）；`gainDbAt`（淡入淡出包络）；`isClockInsideRange`（半开边界）。

@@ -88,7 +88,8 @@ export default defineConfig({
         test: {
           name: 'web',
           environment: 'jsdom',
-          include: ['apps/web/src/**/*.test.tsx'],
+          // 同时收 .test.ts：否则纯 TS 的浏览器侧测试会被**静默跳过**（看似通过实则没跑）
+          include: ['apps/web/src/**/*.test.tsx', 'apps/web/src/**/*.test.ts'],
           exclude: ['**/node_modules/**'],
           alias: workspaceAliases,
           setupFiles: ['./apps/web/src/test-setup.ts'],
