@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第八组：评审 P1 安全收口——DNS rebinding + 文档解析上限；N03-16 因 N03-11→12→13 全 TODO 推迟）
+**最后更新：** 2026-10-11（第九组：N03-11 PlaybackEngine 转 VERIFIED，G0 链头已通）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -16,15 +16,24 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1329/1329**（第八组组末实测；Unit 544 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 164 项 |
+| 本地 `pnpm verify` | **14/14，1343/1343**（第九组组末实测；Unit 558 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第九组 · N03-11 PlaybackEngine 契约与统一播放快照 — **VERIFIED**
+- **内容：** 新增 `packages/contracts/src/playback-engine.ts`：状态机（IDLE/LOADING/READY/PLAYING/PAUSED/DISPOSED）、命令 7 类、**效果** 7 类、事件 4 类、结果 3 类；纯函数 `dispatchPlayback` / `applyPlaybackResult`（**唯一**产生"实际呈现时间"的入口）；能力协商（未声明一律不支持、未知值丢弃）；`getPlaybackCapabilities` / `getPlaybackClock` / `presentedDriftMs`；**后端端口** `PlaybackBackendPort` + `runPlaybackEffect`（异常转 FAILED 不抛出）。引擎只持有 N03-08 的 `PlaybackSnapshot`（带 documentRevision），**不维护第二套编辑状态**。
+- **证据：** `docs/verification/N03-11.md`（14 项单测：状态机 10 + 假后端会话 3 + 访问器 1）· `docs/handoffs/N03-11.md`
+- **验收对照：** 切换后端不改工程 ✅；事件带 requestId/revision/**实际 presented 时间**（请求只产生效果，呈现只能由后端回灌）✅；未声明能力不得展示为支持 ✅；dispose 幂等 ✅。
+- **为何是 VERIFIED：** 四条验收/负面路径全部有测试证据，且引擎 API 完整；**具体后端适配器**（Remotion 预览/HTMLMediaElement/MSE）按任务分工属 **N03-12**。
+- **G0 链现状：** `N03-11 ✅ → N03-12（TODO）→ N03-13（TODO）→ N03-16 → N03-10`。
+- **下一步：** N03-12（标准 proxy 与 HTML 媒体／MSE 回退路径）。
+
 
 ### 2026-10-11 · 第八组 · 评审 P1 安全收口（N03-16 因依赖未就绪而推迟）
 - **为何改做这个：** N03-16（G0 基础播放同步）的依赖链 `N03-11 → N03-12 → N03-13` **全为 TODO**（即 G0 线前面有 3 个任务，不止一个）→ 按纪律记录阻塞、改做依赖就绪且可完整验证的项。

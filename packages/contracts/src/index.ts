@@ -2477,3 +2477,37 @@ export {
   setUserAppearancePreferenceRequestSchema,
 } from './appearance.js';
 export type { AppearanceMode, UserAppearancePreference, SetUserAppearancePreferenceRequest } from './appearance.js';
+
+// N03-11 PlaybackEngine（播放权威状态机与后端端口）
+export {
+  PLAYBACK_COMMAND_KINDS,
+  PLAYBACK_ENGINE_ERROR_REASONS,
+  PLAYBACK_ENGINE_STATES,
+  applyPlaybackResult,
+  createPlaybackEngineState,
+  dispatchPlayback,
+  getPlaybackCapabilities,
+  getPlaybackClock,
+  isCapabilitySupported,
+  negotiatePlaybackCapabilities,
+  playbackCommandSchema,
+  playbackEffectSchema,
+  playbackEngineErrorReasonSchema,
+  playbackEngineEventSchema,
+  playbackEngineStateSchema,
+  playbackEngineStatusSchema,
+  playbackRange,
+  playbackResultSchema,
+  presentedDriftMs,
+  runPlaybackEffect,
+} from './playback-engine.js';
+export type {
+  PlaybackCommand,
+  PlaybackEffect,
+  PlaybackEngineErrorReason,
+  PlaybackEngineEvent,
+  PlaybackEngineState,
+  PlaybackBackendPort,
+  PlaybackEngineStatus,
+  PlaybackResult,
+} from './playback-engine.js';
