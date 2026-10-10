@@ -2511,3 +2511,34 @@ export type {
   PlaybackEngineStatus,
   PlaybackResult,
 } from './playback-engine.js';
+
+// N03-12 播放源选路与韧性（选路/精度如实/URL 刷新不重置选区/有界分段缓存）
+export {
+  PLAYBACK_SEGMENT_CACHE_LIMITS,
+  PLAYBACK_SOURCE_LIMITATIONS,
+  PLAYBACK_SOURCE_MODES,
+  applyUrlRefresh,
+  createSegmentCacheState,
+  findCachedSegment,
+  mediaTimeToMs,
+  planSegmentFetch,
+  playbackEnvironmentSchema,
+  playbackSourceLimitationSchema,
+  playbackSourceModeSchema,
+  playbackSourcePlanSchema,
+  playbackSourceStateSchema,
+  playbackSourceUrlSchema,
+  segmentCacheStateSchema,
+  selectPlaybackSource,
+  touchSegmentCache,
+  urlsNeedingRefresh,
+} from './playback-source.js';
+export type {
+  PlaybackEnvironment,
+  PlaybackSourceLimitation,
+  PlaybackSourceMode,
+  PlaybackSourcePlan,
+  PlaybackSourceState,
+  PlaybackSourceUrl,
+  SegmentCacheState,
+} from './playback-source.js';

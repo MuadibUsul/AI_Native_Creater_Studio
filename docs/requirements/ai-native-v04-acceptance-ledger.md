@@ -98,7 +98,7 @@
 | N03-09 | 范围编辑指令的最小AI入口 | N03-08, N02-06 | VERIFIED | [`验证`](../verification/N03-09.md) · [`交接`](../handoffs/N03-09.md) |
 | N03-10 | G0纯素材交付门 | N03-09, N01-08, N02-09, N03-16 | TODO | — |
 | N03-11 | PlaybackEngine契约与统一播放快照 | N01-09, N02-03, N01-11 | VERIFIED（状态机/事件/能力协商/后端端口 + 假后端会话证据；具体后端适配属 N03-12） | [`验证`](../verification/N03-11.md) · [`交接`](../handoffs/N03-11.md) |
-| N03-12 | 标准proxy与HTML媒体／MSE回退路径 | N03-11, N02-03 | TODO | — |
+| N03-12 | 标准proxy与HTML媒体／MSE回退路径 | N03-11, N02-03 | IN_PROGRESS（策略层已交付：选路/精度如实/URL刷新不重置选区/有界缓存与预取；浏览器适配器与冷热首帧实测未做） | [`验证`](../verification/N03-12.md) · [`交接`](../handoffs/N03-12.md) |
 | N03-13 | WebAudio主时钟与音画同步调度 | N03-12, N03-06 | TODO | — |
 | N03-14 | WebCodecs加速、可选WASM与帧资源预算 | N03-12 | TODO | — |
 | N03-15 | GPU合成与交互缓存生命周期 | N03-14, N03-05 | TODO | — |

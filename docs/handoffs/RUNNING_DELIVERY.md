@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第九组：N03-11 PlaybackEngine 转 VERIFIED，G0 链头已通）
+**最后更新：** 2026-10-11（第十组：N03-12 播放源选路与韧性策略层）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,21 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 164 项 |
-| 本地 `pnpm verify` | **14/14，1343/1343**（第九组组末实测；Unit 558 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1356/1356**（第十组组末实测；Unit 571 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十组 · N03-12 播放源选路与韧性（策略层）— **IN_PROGRESS**
+- **内容：** proxy 画像/PTS 映射（N02 已交付，未重造）之上补齐**播放侧策略**：新增 `packages/contracts/src/playback-source.ts` —— `selectPlaybackSource`（按**实测**能力选 HTMLMediaElement／MSE／局部预渲染；**精度如实**：无 WebCodecs 时只能 `KEYFRAME_APPROXIMATE` 且给 `limitations`；`requireFrameAccurate` 达不到则 `playable=false`）、`applyUrlRefresh`（**只换 URL**，时钟/选区逐字段不变）/`urlsNeedingRefresh`、有界分段缓存（条目数+字节双上限 LRU）/`planSegmentFetch`（当前段 + **有界**预取，返回 `cacheHit` 以区分冷/热）。
+- **证据：** `docs/verification/N03-12.md`（13 项单测，逐条覆盖四条验收）· `docs/handoffs/N03-12.md`
+- **为何不是 VERIFIED：** **浏览器适配器未写**（HTMLMediaElement/MSE 的 `PlaybackBackendPort`、真实 Range 请求、分段拉流、错误恢复、预取调度、URL 过期刷新接线）；冷/热首帧**实测**属 N03-16。
+- **G0 链现状：** `N03-11 ✅ → N03-12（策略层✅／适配器未写）→ N03-13（TODO）→ N03-16 → N03-10`。
+- **下一步：** N03-13（WebAudio 主时钟与音画同步调度）。
+
 
 ### 2026-10-11 · 第九组 · N03-11 PlaybackEngine 契约与统一播放快照 — **VERIFIED**
 - **内容：** 新增 `packages/contracts/src/playback-engine.ts`：状态机（IDLE/LOADING/READY/PLAYING/PAUSED/DISPOSED）、命令 7 类、**效果** 7 类、事件 4 类、结果 3 类；纯函数 `dispatchPlayback` / `applyPlaybackResult`（**唯一**产生"实际呈现时间"的入口）；能力协商（未声明一律不支持、未知值丢弃）；`getPlaybackCapabilities` / `getPlaybackClock` / `presentedDriftMs`；**后端端口** `PlaybackBackendPort` + `runPlaybackEffect`（异常转 FAILED 不抛出）。引擎只持有 N03-08 的 `PlaybackSnapshot`（带 documentRevision），**不维护第二套编辑状态**。
