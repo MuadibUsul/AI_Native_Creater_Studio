@@ -119,6 +119,21 @@
 
 ## 5.1 进度记录
 
+- **2026-10-10**：`N04-02-s1`（画布原生对象命中）与 `N04-04-s1`（横向时间带）子任务**首批交付**（均 `IN_PROGRESS`，不计入主任务完成）：
+  - `packages/contracts/src/timeline-band.ts`：可视窗口→有理时基换算（非浮点毫秒权威）、播放头/时间选区分离、单击 POINT / 拖动半开 RANGES、显式多区间不合并、帧吸附坍缩降级、区间上限 fail-closed；
+  - `packages/contracts/src/visual-picking.ts`：复用 `hitTestVisualObject`，zOrder→细粒度→输入顺序，隐藏/父隐藏排除，重叠轮换，投影四边形；
+  - `packages/contracts/src/selection.ts` 新增 `composeSelectionAnchor`（交互产物→规范锚点+指纹，选择不改工程）；
+  - Web 新增 `TimelineBand` / `CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线；
+  - 证据：契约 18 项、jsdom 11 项、`pnpm verify` 14/14（1180/1180）；**真实浏览器/高 DPI 目检、v2 片段轨道投影与锚点持久化/恢复未做**（待 N04-01/N04-10）。
+
+- **2026-10-10**：`N06-04`（局部试片缓存与依赖失效）服务端交付（`IN_PROGRESS`）：迁移 0082 `proposal_trials`；依赖键 = sha256(base revision + operationsHash + selectionFingerprint + intentRevisionId + 素材版本签名)；`previewProposal` 命中即返回 `cached=true` 不重复跑执行器；`invalidateProposalTrials` 显式失效 + 采用/丢弃清理。证据：`docs/verification/N06-04.md`（3 项集成）、`docs/handoffs/N06-04.md`；UI 呈现/跨实例策略未做。另注：`db:generate` 因既有 0080/0081 快照冲突不可用，新迁移手工编写并同步 journal（已记入 RUNNING_DELIVERY 已知坑）。
+
+- **2026-10-10**：`N05-02`（语音采集、转写与时间对齐）协议与服务层交付（`IN_PROGRESS`）：`voice-alignment.ts` 覆盖采集状态/可见开关、`VOICE_CLOCK` 采样与播放锚点、能力协商（未声明支持 → fail-closed）、音频↔单调↔序列映射；`alignVoiceUtterance` 精度如实标注（无词级时间退到发话快照/UNAVAILABLE）；Web `useMicrophoneCapture` + `VoiceCaptureControl`（显式授权、可见监听/电平、卸载停止）。证据：`docs/verification/N05-02.md`（领域 7 + jsdom 7）、`docs/handoffs/N05-02.md`；**真实 VAD/流式 ASR 未接**（`UNVERIFIED_CREDENTIALS_REQUIRED`），回放路径见 verification。
+
+- **2026-10-10**：`N04-10`（刷新/嵌套/时序变更后的锚点自动恢复）服务端语义交付（`IN_PROGRESS`）：目标引用新增可选恢复基线（不参与指纹、兼容旧锚点）；`recoverSelectionAnchor` 提供刷新幂等（无实质变化不追加修订）、`expectedRevision` + 主键冲突两层并发保护（409）、`FOLLOW_OBJECT` 位移跟随与 `FOLLOW_SOURCE` 源映射重投影（失败标 STALE）、嵌套父序列缺失标 PARTIAL；新增 `addMediaTime`/`subtractMediaTime` 与 HTTP/SDK 恢复端点。证据：`docs/verification/N04-10.md`（4 项集成）、`docs/handoffs/N04-10.md`；UI 呈现与真实浏览器证据待 N04-01/N04-08。
+
+- **2026-10-10**：`N04-05`（AttentionSnapshot 本体）权威契约 + 有界缓冲交付（`IN_PROGRESS`）：`packages/contracts/src/attention.ts` 覆盖本地单调时钟 + 会话 epoch、11 类共同注意力事件（含 `PRESENTED_FRAME` 真实呈现帧与 `VOICE_CLOCK` 语音时钟）、有界事件缓冲（默认 8s/512，epoch/单调时钟回退/seq 违反 fail-closed）、鼠标轨迹最小保留（最小距离去样 + 点数上限）与快照导出（缺词级时间时 `wordTimingAvailable=false`）。证据：`docs/verification/N04-05.md`（9 项）、`docs/handoffs/N04-05.md`；`AttentionRecorder` 接线、真实语音时钟映射与服务端按发话时观看记录定位未做（属 N05-02/垂直切片）。
+
 - **2026-10-10**：`N03-09`（范围编辑最小 AI 入口）已完成并推送（`7881bf9`）——它的"结构化操作 + 越界说明 + revision + 零媒体调用"计划是本增量 `IntentRevision` 的既有落点，后续接流式语音时**复用该路径**。
 - **2026-10-10**：`N04-09-s1` 契约层完成（`packages/contracts/src/selection.ts` + 8 项单测，见 `docs/verification/N04-09-s1.md`）：点线面几何 × 时间选择 × SelectionAnchor × IntentRevision 已统一；`SelectionAnchor` 持久化/兼容（N04-09 主体）、画布（N04-02）、时间带（N04-04）、流式会话（N05-01）尚未开始。
 - **基础设施**：CI 已安装 FFmpeg；真实媒体用例按套件定义从 unit 迁到 integration（`a76dc66`）。

@@ -46,7 +46,19 @@ N03-09 已按范围 VERIFIED：范围编辑的最小 AI 入口把「选中片段
 
 N04-09 已按范围 VERIFIED：SelectionAnchor 成为**唯一**规范选择结构（AttentionSnapshot 的选择子结构，不新增第二份权威状态），持久化为 (workspace, project, anchorId, revision) 追加式修订日志（迁移 0079），指纹 = sha256(规范序列化)；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经 `selectionAnchorFromLegacySelection` **解析一次**，毫秒入口转 1/1000 有理时基（新请求不丢有理时基），字幕场景携带发话时间（指代使用对应发话时间）；越权（同工作区其他项目）永远 422、帧哈希不能当身份、跨租户 404；重映射把失效选择明确标成 FAILED/PARTIAL/AMBIGUOUS（附候选证据）/STALE 并记入 remapHistory。V04-15 的 AttentionSnapshot 本体（事件缓冲/时钟/轨迹最小保留）仍属 N04-05，锚点自动恢复属 N04-10，画布与时间带属 N04-02-s1／N04-04-s1，均保持 `IN_PROGRESS`（见 `docs/verification/N04-09.md`）。
 
+N04-02-s1／N04-04-s1 已按子任务范围交付（**整条 N04 仍 `IN_PROGRESS`**）：`timeline-band.ts` 提供可视窗口→有理时基换算（非浮点毫秒权威）、播放头与时间选区分离、单击 POINT／拖动半开 RANGES、显式多区间不合并、帧吸附与区间上限 fail-closed；`visual-picking.ts` 复用 `hitTestVisualObject` 做 zOrder→细粒度→输入顺序命中、隐藏/父隐藏排除与重叠轮换；`composeSelectionAnchor` 把交互产物组装为规范 `SelectionAnchor`（不新建第二套状态）；Web 新增 `TimelineBand`/`CanvasInteractionLayer` 并在 `LiteTimeline`（保留、扩展）与 `WorkflowDirector` 内可选接线。真实浏览器/高 DPI 目检、v2 片段轨道投影与锚点持久化/恢复仍待（N04-01/N04-10 等，见 `docs/verification/N04-02-s1.md`、`docs/verification/N04-04-s1.md`）。V03-17 与 V03-25 的交互侧因此获得可复用实现，但整条需求仍需其余任务，保持 `IN_PROGRESS`。
+
+N04-05 已交付 AttentionSnapshot 的权威契约与有界缓冲（**整条需求仍 `IN_PROGRESS`**）：`attention.ts` 覆盖本地单调时钟 + 会话 epoch、11 类共同注意力事件（真实呈现帧 `PRESENTED_FRAME` 与语音时钟 `VOICE_CLOCK`）、有界事件缓冲（窗口 + 上限，epoch/单调时钟回退/seq 违反 fail-closed）与鼠标轨迹最小保留；录音器接线、真实语音时钟映射与服务端按发话时观看记录定位仍待 N05-02 等（见 `docs/verification/N04-05.md`）。V04-15（SelectionAnchor 与 AttentionSnapshot 兼容合并）因此进入 `IN_PROGRESS`。
+
+N04-10 已交付锚点自动恢复的服务端语义（**整条需求仍 `IN_PROGRESS`**）：目标引用新增可选恢复基线（不参与指纹、兼容旧锚点）；`recoverSelectionAnchor` 实现刷新幂等（无实质变化不追加修订）、`expectedRevision` + 主键冲突两层并发保护（409）、`FOLLOW_OBJECT` 位移跟随与 `FOLLOW_SOURCE` 源映射重投影（映射失败标 STALE）、嵌套父序列缺失标 PARTIAL；新增 `addMediaTime`/`subtractMediaTime`；HTTP 与 SDK 恢复入口齐备。UI 呈现与真实浏览器刷新恢复证据待 N04-01/N04-08（见 `docs/verification/N04-10.md`）。
+
+N05-02 已交付采集/对齐的协议与服务层（**整条需求仍 `IN_PROGRESS`**）：`voice-alignment.ts` 提供采集状态与可见开关、`VOICE_CLOCK` 采样与播放锚点、能力协商（请求未声明支持 → 501 fail-closed）与音频↔单调↔序列映射；`alignVoiceUtterance` 精度如实标注（无词级时间退到发话快照或 UNAVAILABLE，不伪造逐词精确）；Web 新增 `useMicrophoneCapture` 与 `VoiceCaptureControl`（显式授权、可见监听/电平、卸载即停止音轨）。**真实 VAD/流式 ASR Provider 未接入**，保持 `UNVERIFIED_CREDENTIALS_REQUIRED`；V03-26 因 N05-01/N05-02 的可验证部分进入 `IN_PROGRESS`，重连/去重仍属 N05-05（见 `docs/verification/N05-02.md`）。
+
 N05-01 部分交付（保持 `IN_PROGRESS`）：实时会话与短期凭证适配已落地并可验证——会话返回**只发一次**的短期 HMAC 凭证（作用域 voice:stream/voice:tools、TTL 15 分钟），未配置签名密钥即 501 fail-closed，**长期 Provider Key 永不下发**；创建会话需 `project:write`（跨租户 404）；能力按传输方式显式声明（浏览器回退明确不承诺服务端 VAD/逐词时间戳/服务端工具）；流式事件信封带状态/代际/时钟/序号四道门，`partial` 只读（不写 edit_events、不动 revision）、改口产生新转写修订，`sealUtterance` 把最新修订封存为 IntentRevision（需绑定 SelectionAnchor）供范围编辑 AI 入口使用。**真实 WebRTC/sideband 传输与真实 VAD/流式 ASR 未接入**（V03-26/V03-49/V03-53 的 Provider 侧实现与浏览器采集），因此不计入完成（见 `docs/verification/N05-01.md`）。
+
+N06-01／N06-02 已按范围 VERIFIED：**私有候选分支 → 确定性试改 → 原子采用**（迁移 0081；N06-04 局部试片缓存与依赖失效未交付，N06-03 的 rebase 与 N06-06 的替代/取消/晚到隔离仍待做）。候选只存操作集与绑定（base revision／选择锚点指纹／意图修订／操作哈希），创建与试改**都不改确认版工程**；试改用真实执行器在事务内跑完再**无条件回滚**（同一操作集 → 同一结果，`projectUntouched` 是结构性保证，不是近似动画）；采用按幂等键、状态、操作哈希、选择指纹、base revision 逐项校验（版本过期/哈希不符/已丢弃/指纹变化分别 409）后经统一编辑协议**原子**执行，执行失败时候选保持 OPEN、零部分写入且不返回已采用；丢弃幂等、同意图旧候选标 SUPERSEDED（见 `docs/verification/N06-01.md`）。V04-10／V04-14 的候选 UI 呈现（ghost 预览与局部回放对照）属 N04-02-s1／N04-04-s1，保持 `IN_PROGRESS`。
+
+N06-04 已交付**局部试片缓存与依赖失效**的服务端部分（**整条需求仍 `IN_PROGRESS`**）：新增迁移 0082 `proposal_trials`（行身份 `(workspace, project, dependency_key)`，只存只读试片 JSON）；依赖键 = sha256(base revision + operationsHash + selectionFingerprint + intentRevisionId + **素材版本签名**)——任一依赖变化（含片段换源）即得到新键、自然失效，不返回陈旧试片；`previewProposal` 命中即返回（`cached=true`、不重复跑真执行器），未命中才跑并 upsert；`invalidateProposalTrials` 提供显式失效，采用/丢弃后清理该候选缓存行。缓存**不是第二份工程状态**：采用仍走统一编辑协议并做全部服务端重验（见 `docs/verification/N06-04.md`）。V03-31 仍因 N06-05/08/09 等待后续任务，保持 `IN_PROGRESS`。
 
 N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片段重放人工纠错，删除/恢复同步统一索引、派生对象与客户端缓存，成员撤销后旧 cursor 和跨租户读取均为 404（见 `docs/verification/N02-14.md`）。V04-08 仍需 N13-11 的 GPU/缓存隔离回归，更新为 `IN_PROGRESS`；V03-53 仍有其余权限与生产隔离任务，继续为 `IN_PROGRESS`。
 
@@ -77,12 +89,12 @@ N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片�
 | V03-23 | 转写剪辑、字幕、字体、断句、双语与导出 | §5、§6 | N01-04, N02-05, N03-07, N04-04, N09-04, N11-09 | IN_PROGRESS |
 | V03-24 | 事实／分析／虚构区分、来源与真实图表数据 | §5、§9、§14、§19 | N00-04, N02-05, N02-07, N03-07, N07-02, N08-06, N09-05, N11-04, N14-02 | IN_PROGRESS |
 | V03-25 | 悬浮点击框选与语音时间精确绑定、共同注意力 | §7 | N02-04, N04-02, N04-03, N04-04, N04-05, N04-06, N04-08, N05-02, N05-08, N07-06, N13-08, N14-04 | IN_PROGRESS |
-| V03-26 | 实时语音、文字等价、权限、会话与重连 | §8 | N04-05, N05-01, N05-02, N05-03, N05-05, N05-06, N05-07, N05-08, N09-08, N14-04 | TODO |
+| V03-26 | 实时语音、文字等价、权限、会话与重连 | §8 | N04-05, N05-01, N05-02, N05-03, N05-05, N05-06, N05-07, N05-08, N09-08, N14-04 | IN_PROGRESS |
 | V03-27 | 打断说话、取消提案、取消外部任务分别处理 | §8、§10 | N05-03, N05-04, N05-08, N06-06, N13-04 | TODO |
 | V03-28 | Brief、模糊诉求澄清、创作诊断与必要提问 | §9 | N02-06, N03-09, N04-06, N05-06, N07-01, N07-02, N07-06, N07-08, N11-06 | IN_PROGRESS |
 | V03-29 | 结构化工具和编辑操作；后端权限与预算校验 | §9、§13 | N01-06, N03-09, N06-02, N07-03, N07-04 | IN_PROGRESS |
 | V03-30 | 持久化试改、候选分支、采用／拒绝和部分采用 | §10 | N06-01, N06-02, N06-05, N06-09 | TODO |
-| V03-31 | 局部样版、上下文回放、循环、对比与持续微调 | §10、§15 | N04-04, N06-04, N06-05, N06-08, N06-09, N09-01 | TODO |
+| V03-31 | 局部样版、上下文回放、循环、对比与持续微调 | §10、§15 | N04-04, N06-04, N06-05, N06-08, N06-09, N09-01 | IN_PROGRESS |
 | V03-32 | 已确认内容保护；内容／时位锁及间接影响检查 | §10、§13 | N01-07, N03-03, N03-10, N06-02, N06-03, N06-07, N06-09, N09-02, N10-07 | IN_PROGRESS |
 | V03-33 | 撤销恢复、revision冲突、幂等、并发与回调防覆盖 | §10、§13 | N01-07, N01-08, N02-08, N03-10, N05-04, N05-05, N06-01, N06-03, N06-06, N06-07, N06-08, N06-09, N06-11, N09-07, N13-04, N14-05 | IN_PROGRESS |
 | V03-34 | 长期／项目／局部笔记，确认来源、纠错与删除 | §11 | N05-05, N06-05, N07-05, N07-06, N07-07, N07-08 | TODO |
@@ -134,7 +146,7 @@ N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片�
 | V04-12 | WebAudio与项目统一播放时钟 | §15.8 | N03-13, N03-16 | TODO |
 | V04-13 | GPU合成、缓存与设备丢失回退 | §15.9 | N03-15, N12-08, N13-11 | TODO |
 | V04-14 | 共享RenderPlan与FFmpeg＋Remotion混合终渲染 | §15.10—15.11 | N03-08, N03-11, N03-16, N09-08, N09-09, N09-10, N09-11 | TODO |
-| V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | TODO |
+| V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | IN_PROGRESS |
 | V04-16 | Smart Timeline、Inspector与命令入口渐进显露 | §4.5 | N04-11, N07-11 | TODO |
 | V04-17 | 版本化Agent Tool Registry与能力授权 | §9.5 | N01-11, N07-04, N07-09, N07-10, N10-12, N14-07, N14-08 | IN_PROGRESS |
 | V04-18 | 持久会话Agent与五工具最小闭环 | §9.6、§21.4 | N07-08, N07-10, N07-11, N07-13 | TODO |

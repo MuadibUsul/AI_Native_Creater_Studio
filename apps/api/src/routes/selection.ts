@@ -1,8 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { errorEnvelopeSchema, legacySelectionSchema, opaqueIdSchema, selectionAnchorRecordSchema, selectionAnchorSchema } from '@ancs/contracts';
-import { getSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor, type DomainDeps } from '@ancs/domain';
+import {
+  errorEnvelopeSchema,
+  legacySelectionSchema,
+  opaqueIdSchema,
+  recoverSelectionAnchorRequestSchema,
+  selectionAnchorRecordSchema,
+  selectionAnchorSchema,
+  selectionRecoveryResultSchema,
+} from '@ancs/contracts';
+import { getSelectionAnchor, recoverSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -15,7 +23,7 @@ import type { AuthDeps } from '../plugins/auth.js';
 
 const projectParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
 const anchorParamsSchema = projectParamsSchema.extend({ anchorId: opaqueIdSchema });
-const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 422: errorEnvelopeSchema };
+const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
 
 const saveAnchorBodySchema = z.object({
   anchor: selectionAnchorSchema,
@@ -86,6 +94,30 @@ export function registerSelectionRoutes(app: FastifyInstance, deps: AuthDeps): v
       return remapSelectionAnchor(domain, {
         workspaceId: request.params.id, projectId: request.params.projectId,
         anchorId: request.params.anchorId, reason: request.body.reason,
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/selection-anchors/:anchorId/recover',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '自动恢复锚点（刷新/时序变更）；期望修订不符 → 409；无变化时不追加修订',
+        params: anchorParamsSchema,
+        body: recoverSelectionAnchorRequestSchema,
+        response: { 200: selectionRecoveryResultSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return recoverSelectionAnchor(domain, {
+        workspaceId: request.params.id,
+        projectId: request.params.projectId,
+        anchorId: request.params.anchorId,
+        trigger: request.body.trigger,
+        ...(request.body.expectedRevision === undefined ? {} : { expectedRevision: request.body.expectedRevision }),
+        ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
       });
     },
   );

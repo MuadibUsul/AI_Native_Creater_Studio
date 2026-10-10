@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ASPECT_RATIO_SIZES, type AspectRatio, type DirectorPlan, type EditPlan, type Scene, type SceneGraph } from '@ancs/contracts';
+import { ASPECT_RATIO_SIZES, legacyMillisecondsToMediaTime, type AspectRatio, type DirectorPlan, type EditPlan, type MediaTime, type Scene, type SceneGraph, type TemporalSelection } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError, isVersionConflict } from '@/lib/errors';
 import { queryKeys, useNarrative, useSceneGraph, useWorkspace } from '@/lib/queries';
@@ -86,6 +86,9 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
   const [directorPreview, setDirectorPreview] = useState<DirectorPlan | null>(null);
   const [mediaSelection, setMediaSelection] = useState<{ assetId: string; label: string; sourceStartPts: string; sourceEndPts: string; timeBase: { numerator: number; denominator: number } } | null>(null);
   const [editTarget, setEditTarget] = useState<{ sceneId: string; title: string } | null>(null);
+  // N04-04-s1：横向时间带的播放头与时间选区（选择动作不改工程；持久化为 SelectionAnchor 属 N04-10）
+  const [bandPlayhead, setBandPlayhead] = useState<MediaTime | null>(null);
+  const [bandSelection, setBandSelection] = useState<TemporalSelection | null>(null);
   const aiTrigger = useRef<HTMLElement | null>(null);
   const closeAi = (force = false) => {
     if (!force && applyEditPlan.isPending) return;
@@ -285,7 +288,7 @@ export function WorkflowDirector({ initialSceneId }: { initialSceneId?: string }
         <div className="suggestions">{['缩短当前旁白', '把重点放到画面中央', '增加一点停顿'].map((prompt) => <button key={prompt} type="button" disabled={!canEdit || planEdit.isPending} onClick={(event) => submitEditPlan(prompt, event.currentTarget)}>{prompt}</button>)}</div>
         <div className="timeline-head row between"><button type="button" className="btn ghost small" aria-expanded={showTimeline} onClick={() => setShowTimeline((value) => !value)}>{showTimeline ? '收起轻时间线' : '展开轻时间线'}</button><span className="sample-note">按分镜编辑 · 修改可能受预算与锁定限制</span></div>
         <div className="timeline-strip">{scenes.map((scene, index) => <button key={scene.id} type="button" className={'timeline-clip' + (scene.id === selected.id ? ' active' : '')} onClick={() => setSelectedSceneId(scene.id)}>{String(index + 1).padStart(2, '0')} · {sceneTitle(scene)}</button>)}</div>
-        {showTimeline ? <div className="qf-timeline-detail"><div className="row between qf-timeline-assets"><span className="small muted">项目素材 · {replaceableAssets.length} 项可替换</span><button type="button" className="textbtn small" onClick={() => void projectAssets.refetch()}>刷新素材</button></div>{projectAssets.isPending ? <p className="small muted" role="status">正在加载可替换素材…</p> : projectAssets.isError ? <p className="qf-error" role="alert">项目素材读取失败：{describeError(projectAssets.error).message}</p> : null}<LiteTimeline graph={graph.data} assets={replaceableAssets} pending={!canEdit || timelineEdit.isPending} onEdit={(request) => timelineEdit.mutate(request)} error={timelineError === null ? null : { kind: timelineError.kind, message: timelineError.message, code: timelineError.code }} /></div> : null}
+        {showTimeline ? <div className="qf-timeline-detail"><div className="row between qf-timeline-assets"><span className="small muted">项目素材 · {replaceableAssets.length} 项可替换</span><button type="button" className="textbtn small" onClick={() => void projectAssets.refetch()}>刷新素材</button></div>{projectAssets.isPending ? <p className="small muted" role="status">正在加载可替换素材…</p> : projectAssets.isError ? <p className="qf-error" role="alert">项目素材读取失败：{describeError(projectAssets.error).message}</p> : null}<LiteTimeline graph={graph.data} assets={replaceableAssets} pending={!canEdit || timelineEdit.isPending} onEdit={(request) => timelineEdit.mutate(request)} error={timelineError === null ? null : { kind: timelineError.kind, message: timelineError.message, code: timelineError.code }} band={{ viewport: { start: legacyMillisecondsToMediaTime(0), end: legacyMillisecondsToMediaTime(Math.max(1, graph.data.timeline.durationMs)), widthPx: 640 }, playhead: bandPlayhead, selection: bandSelection, onPlayheadChange: setBandPlayhead, onSelectionChange: setBandSelection }} /></div> : null}
         {timelineError !== null && !showTimeline ? <p role="alert" className="qf-error">{timelineError.message}</p> : null}
       </section>
       <aside className={'inspector' + (showInspector ? ' qf-inspector-open' : '')} aria-label="当前场景设置">

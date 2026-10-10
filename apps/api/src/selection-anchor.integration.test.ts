@@ -149,6 +149,31 @@ function anchor(fixture: Fixture, input: { anchorId?: string; clipIds: string[];
   };
 }
 
+function anchorWithBindingBaseline(fixture: Fixture, input: {
+  clipId: string;
+  assetVersionId: string;
+  policy: SelectionAnchor['timeBindingPolicy'];
+  baselineSequence: [number, number];
+  baselineSource: [number, number];
+  temporal: [number, number];
+  sequenceId?: string;
+}): SelectionAnchor {
+  const base = anchor(fixture, { clipIds: [input.clipId], assetVersionIds: [input.assetVersionId], sequenceMs: input.temporal[0] });
+  return {
+    ...base,
+    ...(input.sequenceId === undefined ? {} : { sequenceId: input.sequenceId }),
+    temporalSelection: { kind: 'RANGES', ranges: [range(...input.temporal)] },
+    timeBindingPolicy: input.policy,
+    orderedTargetRefs: base.orderedTargetRefs.map((target) => ({
+      ...target,
+      bindingBaseline: { sequenceRange: range(...input.baselineSequence), sourceRange: range(...input.baselineSource) },
+    })),
+  };
+}
+
+const jsonRange = (startMs: number, endMs: number): string =>
+  JSON.stringify({ start: { ticks: String(startMs), timebase: { num: 1, den: 1000 } }, end: { ticks: String(endMs), timebase: { num: 1, den: 1000 } } });
+
 async function expectApiFailure(promise: Promise<unknown>, expected: { status: number; reason?: string }): Promise<AncsApiError> {
   const caught = await promise.then(() => null, (error: unknown) => error);
   expect(caught).toBeInstanceOf(AncsApiError);
@@ -303,5 +328,106 @@ describe('N04-09 SelectionAnchor 归一与旧 Attention 兼容（HTTP + SDK）',
     const stale = await client.projects.remapSelectionAnchor(fixture.workspaceId, fixture.projectId, versioned.anchor.anchorId, { reason: '工程刷新' });
     expect(stale.anchor.resolutionStatus).toBe('STALE');
     expect(stale.anchor.remapHistory.at(-1)!.reason).toContain('版本过期');
+  });
+});
+
+describe('N04-10 刷新/嵌套/时序变更后的锚点自动恢复（HTTP + SDK）', () => {
+  it('FOLLOW_OBJECT：片段移动后时间选择按位移跟随，且刷新幂等不重复追加修订', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = await seedAsset(fixture);
+    const clipId = await seedClip(fixture, version, [4_000, 8_000]);
+    const saved = await client.projects.saveSelectionAnchor(fixture.workspaceId, fixture.projectId, {
+      anchor: anchorWithBindingBaseline(fixture, {
+        clipId, assetVersionId: version, policy: 'FOLLOW_OBJECT',
+        baselineSequence: [4_000, 8_000], baselineSource: [0, 4_000], temporal: [4_500, 5_500],
+      }),
+    });
+    expect(saved.anchor.timeBindingPolicy).toBe('FOLLOW_OBJECT');
+
+    // 片段在序列上右移 2000ms（源内容不变）
+    await handle.db.execute(`update sequence_clips set sequence_range = '${jsonRange(6_000, 10_000)}'::jsonb where id = '${clipId}'`);
+    const recovered = await client.projects.recoverSelectionAnchor(fixture.workspaceId, fixture.projectId, saved.anchor.anchorId, {
+      trigger: 'TIMING_CHANGE', expectedRevision: saved.revision,
+    });
+    expect(recovered.changed).toBe(true);
+    expect(recovered.previousRevision).toBe(1);
+    expect(recovered.record.revision).toBe(2);
+    const selection = recovered.record.anchor.temporalSelection as { kind: 'RANGES'; ranges: MediaRange[] };
+    expect(mediaTimeToLegacyMilliseconds(selection.ranges[0]!.start)).toBe(6_500);
+    expect(mediaTimeToLegacyMilliseconds(selection.ranges[0]!.end)).toBe(7_500);
+    expect(recovered.record.anchor.remapHistory.at(-1)!.reason).toContain('时序重投影');
+
+    // 刷新幂等：工程未再变化 → 不追加新修订，返回当前修订
+    const again = await client.projects.recoverSelectionAnchor(fixture.workspaceId, fixture.projectId, saved.anchor.anchorId, { trigger: 'REFRESH' });
+    expect(again.changed).toBe(false);
+    expect(again.record.revision).toBe(2);
+  });
+
+  it('FOLLOW_SOURCE：片段修边后时间选择经源映射重投影到新序列区间', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = await seedAsset(fixture);
+    const clipId = await seedClip(fixture, version, [4_000, 8_000]);
+    const saved = await client.projects.saveSelectionAnchor(fixture.workspaceId, fixture.projectId, {
+      anchor: anchorWithBindingBaseline(fixture, {
+        clipId, assetVersionId: version, policy: 'FOLLOW_SOURCE',
+        baselineSequence: [4_000, 8_000], baselineSource: [0, 4_000], temporal: [5_000, 7_000],
+      }),
+    });
+    // 修掉源头部 1000ms：source [1000,4000] ↔ sequence [4000,7000]
+    await handle.db.execute(`update sequence_clips set source_range = '${jsonRange(1_000, 4_000)}'::jsonb, sequence_range = '${jsonRange(4_000, 7_000)}'::jsonb where id = '${clipId}'`);
+    const recovered = await client.projects.recoverSelectionAnchor(fixture.workspaceId, fixture.projectId, saved.anchor.anchorId, { trigger: 'TIMING_CHANGE' });
+    expect(recovered.changed).toBe(true);
+    const selection = recovered.record.anchor.temporalSelection as { kind: 'RANGES'; ranges: MediaRange[] };
+    // 旧 [5000,7000] 对应源 [1000,3000]；新映射 = [4000,6000]
+    expect(mediaTimeToLegacyMilliseconds(selection.ranges[0]!.start)).toBe(4_000);
+    expect(mediaTimeToLegacyMilliseconds(selection.ranges[0]!.end)).toBe(6_000);
+  });
+
+  it('并发保护：期望修订与当前最新不符 → 409 SELECTION_CONCURRENT_UPDATE（不覆盖新状态）', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = await seedAsset(fixture);
+    const clipId = await seedClip(fixture, version, [0, 2_000]);
+    const saved = await client.projects.saveSelectionAnchor(fixture.workspaceId, fixture.projectId, {
+      anchor: anchor(fixture, { clipIds: [clipId], assetVersionIds: [version], sequenceMs: 1_000 }),
+    });
+    await expectApiFailure(
+      client.projects.recoverSelectionAnchor(fixture.workspaceId, fixture.projectId, saved.anchor.anchorId, {
+        trigger: 'REFRESH', expectedRevision: saved.revision + 3,
+      }),
+      { status: 409, reason: 'SELECTION_CONCURRENT_UPDATE' },
+    );
+  });
+
+  it('嵌套失效：父序列缺失时恢复为 PARTIAL 并写明原因（不静默当作有效）', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const nested = await createSequence({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId,
+      input: { name: '嵌套序列', frameRate: { num: 30, den: 1 }, duration: mt(30_000) },
+    });
+    await handle.db.execute(`update project_sequences set parent_sequence_id = 'seq_missing_parent' where id = '${nested.id}'`);
+    const nestedTrack = await createTrack({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: nested.id,
+      input: { kind: 'VIDEO', position: 0, name: 'V1' },
+    });
+    const version = await seedAsset(fixture);
+    const clip = await createClip({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: nested.id,
+      input: {
+        trackId: nestedTrack.id, assetVersionId: version,
+        sourceRange: range(0, 2_000), sequenceRange: range(0, 2_000),
+        timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true },
+      },
+    });
+    const saved = await client.projects.saveSelectionAnchor(fixture.workspaceId, fixture.projectId, {
+      anchor: { ...anchor(fixture, { clipIds: [clip.id], assetVersionIds: [version], sequenceMs: 1_000 }), sequenceId: nested.id },
+    });
+    const recovered = await client.projects.recoverSelectionAnchor(fixture.workspaceId, fixture.projectId, saved.anchor.anchorId, { trigger: 'NESTING_CHANGE' });
+    expect(recovered.changed).toBe(true);
+    expect(recovered.record.anchor.resolutionStatus).toBe('PARTIAL');
+    expect(recovered.record.anchor.remapHistory.at(-1)!.reason).toContain('父序列缺失');
   });
 });

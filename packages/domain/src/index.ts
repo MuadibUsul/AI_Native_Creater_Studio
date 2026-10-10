@@ -412,6 +412,17 @@ export {
 export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV2 } from './edit-operation-v2.js';
 export { AUDIO_MIX_PLAN_VERSION, planClipAudioMix } from './audio-mix.js';
 export {
+  adoptProposal,
+  computeProposalImpact,
+  createProposalBranch,
+  discardProposal,
+  invalidateProposalTrials,
+  loadProposalForRead,
+  previewProposal,
+  rebaseProposal,
+  supersedeProposals,
+} from './proposals.js';
+export {
   VOICE_ADAPTER_CAPABILITIES,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,
@@ -424,7 +435,9 @@ export {
   revokeVoiceSession,
   sealUtterance,
 } from './voice-session.js';
-export { SELECTION_ERROR_REASONS, assertNotFrameHashIdentity, getSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor } from './selection.js';
+export { alignVoiceUtterance, negotiateVoiceSessionCapabilities } from './voice-alignment.js';
+export type { AlignVoiceUtteranceInput } from './voice-alignment.js';
+export { SELECTION_ERROR_REASONS, assertNotFrameHashIdentity, getSelectionAnchor, recoverSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor } from './selection.js';
 export { RANGE_EDIT_PROMPT_VERSION, buildRangeEditPrompts, planRangeEdit } from './range-edit.js';
 export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, playbackSupports, playbackTimeOfFrame } from './playback.js';
 export type { ServerSynthesisPlan } from './playback.js';

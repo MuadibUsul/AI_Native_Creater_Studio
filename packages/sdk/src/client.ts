@@ -48,6 +48,16 @@ import {
   sealUtteranceRequestSchema,
   sealUtteranceResponseSchema,
   voiceSessionSchema,
+  createProposalRequestSchema,
+  proposalSchema,
+  proposalTrialSchema,
+  adoptProposalRequestSchema,
+  adoptProposalResponseSchema,
+  proposalImpactSchema,
+  rebaseProposalRequestSchema,
+  rebaseProposalResponseSchema,
+  recoverSelectionAnchorRequestSchema,
+  selectionRecoveryResultSchema,
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
@@ -374,9 +384,18 @@ import {
   type VoiceEventEnvelope,
   type VoiceTranscriptRevision,
   type EphemeralCredential,
+  type Proposal,
+  type ProposalTrial,
+  type CreateProposalRequest,
+  type AdoptProposalRequest,
+  type ProposalImpact,
+  type RebaseProposalRequest,
+  type RebaseProposalResponse,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
+  type RecoverSelectionAnchorRequest,
+  type SelectionRecoveryResult,
   type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
   type MasterNarration,
@@ -788,6 +807,48 @@ export interface AncsClient {
       projectId: string,
       anchorId: string,
     ): Promise<SelectionAnchorRecord>;
+    /** N06-01：创建私有候选（不改工程） */
+    createProposal(
+      workspaceId: string,
+      projectId: string,
+      input: CreateProposalRequest,
+      options?: MutationOptions,
+    ): Promise<Proposal>;
+    /** N06-01：读取候选 */
+    proposal(workspaceId: string, projectId: string, proposalId: string): Promise<Proposal>;
+    /** N06-03：候选影响集（只读）：写目标 vs 干预改动的竞争 + 身份/源素材变化 */
+    proposalImpact(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalImpact>;
+    /** N06-03：受控 rebase（无竞争且身份/素材未变才推进 base revision；否则 409） */
+    rebaseProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: RebaseProposalRequest,
+      options?: MutationOptions,
+    ): Promise<RebaseProposalResponse>;
+    /** N06-02：确定性私有试改（事务内真跑后回滚；工程零变更） */
+    previewProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      options?: MutationOptions,
+    ): Promise<ProposalTrial>;
+    /** N06-04：原子采用（绑定校验 + 幂等键重放） */
+    adoptProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: AdoptProposalRequest,
+      options?: MutationOptions,
+    ): Promise<{ proposal: Proposal; projectRevision: number; adopted: true }>;
+    /** N06-04：丢弃候选 */
+    discardProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: { reason?: string },
+      options?: MutationOptions,
+    ): Promise<Proposal>;
     /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
     createVoiceSession(
       workspaceId: string,
@@ -825,6 +886,14 @@ export interface AncsClient {
       input: { reason: string },
       options?: MutationOptions,
     ): Promise<SelectionAnchorRecord>;
+    /** N04-10：自动恢复锚点（刷新/时序变更）；期望修订不符 → 409；无变化时不追加修订 */
+    recoverSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+      input: RecoverSelectionAnchorRequest,
+      options?: MutationOptions,
+    ): Promise<SelectionRecoveryResult>;
   };
   assets: {
     /** 上传意图：返回带作用域与 TTL 的直传 Signed URL（命中 workspace 哈希去重时为 deduped） */
@@ -2138,6 +2207,30 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       selectionAnchor: (workspaceId, projectId, anchorId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}`, selectionAnchorRecordSchema),
+      createProposal: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals`, proposalSchema, {
+          body: input, bodySchema: createProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      proposal: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}`, proposalSchema),
+      proposalImpact: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/impact`, proposalImpactSchema),
+      rebaseProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/rebase`, rebaseProposalResponseSchema, {
+          body: input, bodySchema: rebaseProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      previewProposal: (workspaceId, projectId, proposalId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/preview`, proposalTrialSchema, {
+          body: {}, bodySchema: z.object({}).strict(), idempotencyKey: mutation?.idempotencyKey ?? `preview_${proposalId}`,
+        }),
+      adoptProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/adopt`, adoptProposalResponseSchema, {
+          body: input, bodySchema: adoptProposalRequestSchema, idempotencyKey: input.idempotencyKey ?? mutation?.idempotencyKey,
+        }),
+      discardProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/discard`, proposalSchema, {
+          body: input ?? {}, bodySchema: z.object({ reason: z.string().max(200).optional() }).strict(), idempotencyKey: mutation?.idempotencyKey,
+        }),
       createVoiceSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
           body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,
@@ -2160,6 +2253,12 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/remap`, selectionAnchorRecordSchema, {
           body: input,
           bodySchema: z.object({ reason: z.string().min(1).max(200) }).strict(),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      recoverSelectionAnchor: (workspaceId, projectId, anchorId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/recover`, selectionRecoveryResultSchema, {
+          body: input,
+          bodySchema: recoverSelectionAnchorRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
       redo: (projectId, mutation) =>

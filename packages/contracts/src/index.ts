@@ -30,6 +30,8 @@ export {
   mediaRangeDuration,
   sourcePtsToSequenceTime,
   sequenceTimeToSourcePts,
+  addMediaTime,
+  subtractMediaTime,
 } from './common/media-time.js';
 export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
@@ -290,6 +292,47 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  PROPOSAL_ERROR_REASONS,
+  PROPOSAL_REVIEW_BLOCK_REASONS,
+  PROPOSAL_STATUSES,
+  adoptProposalRequestSchema,
+  adoptProposalResponseSchema,
+  createProposalRequestSchema,
+  proposalImpactConflictSchema,
+  proposalImpactSchema,
+  proposalInterveningChangeSchema,
+  proposalReviewBlockReasonSchema,
+  proposalSchema,
+  proposalStatusSchema,
+  proposalTargetRefSchema,
+  proposalTrialSchema,
+  rebaseProposalRequestSchema,
+  rebaseProposalResponseSchema,
+} from './proposal.js';
+export type {
+  AdoptProposalRequest,
+  CreateProposalRequest,
+  Proposal,
+  ProposalErrorReason,
+  ProposalImpact,
+  ProposalImpactConflict,
+  ProposalInterveningChange,
+  ProposalReviewBlockReason,
+  ProposalStatus,
+  ProposalTargetRef,
+  ProposalTrial,
+  RebaseProposalRequest,
+  RebaseProposalResponse,
+} from './proposal.js';
+export {
+  computeOperationTargetRefs,
+  isEditOperationName,
+  isObjectLockKind,
+  operationTargetRefs,
+  targetRefsIntersect,
+} from './edit-impact.js';
+export type { EditTargetRef } from './edit-impact.js';
+export {
   VOICE_CAPABILITY_FLAGS,
   VOICE_ERROR_REASONS,
   VOICE_SESSION_STATUSES,
@@ -326,6 +369,36 @@ export type {
   VoiceTransport,
 } from './voice-stream.js';
 export {
+  VOICE_ALIGNMENT_ACCURACIES,
+  VOICE_CAPTURE_STATES,
+  alignVoiceAudioRange,
+  alignmentDriftMs,
+  mapAudioTimeToMonotonicMs,
+  mapMonotonicToSequenceTime,
+  negotiateVoiceCapabilities,
+  voiceAlignmentAccuracySchema,
+  voiceCaptureConstraintsSchema,
+  voiceCaptureStateSchema,
+  voiceCaptureStatusSchema,
+  voiceClockSampleSchema,
+  voiceNegotiationRequestSchema,
+  voiceNegotiationResultSchema,
+  voicePlaybackAnchorSchema,
+  voiceTranscriptAlignmentSchema,
+} from './voice-alignment.js';
+export type {
+  VoiceAlignmentAccuracy,
+  VoiceCaptureConstraints,
+  VoiceCaptureState,
+  VoiceCaptureStatus,
+  VoiceClockSample,
+  VoiceNegotiationInput,
+  VoiceNegotiationRequest,
+  VoiceNegotiationResult,
+  VoicePlaybackAnchor,
+  VoiceTranscriptAlignment,
+} from './voice-alignment.js';
+export {
   GEOMETRY_KINDS,
   GEOMETRY_ROLES,
   INTENT_REVISION_STATUSES,
@@ -349,6 +422,12 @@ export {
   SELECTION_RESOLUTION_STATUSES,
   legacySelectionKindSchema,
   legacySelectionSchema,
+  composeSelectionAnchor,
+  recoverSelectionAnchorRequestSchema,
+  SELECTION_RECOVERY_TRIGGERS,
+  selectionRecoveryResultSchema,
+  selectionRecoveryTriggerSchema,
+  targetBindingBaselineSchema,
   selectionAnchorFromLegacySelection,
   selectionAnchorRecordSchema,
   selectionAnchorSchema,
@@ -377,6 +456,10 @@ export type {
   SelectionTimeBindingPolicy,
   LegacySelection,
   LegacySelectionKind,
+  RecoverSelectionAnchorRequest,
+  SelectionRecoveryResult,
+  SelectionRecoveryTrigger,
+  TargetBindingBaseline,
   TemporalSelection,
 } from './selection.js';
 export {
@@ -434,6 +517,49 @@ export {
 } from './caption-text.js';
 export type { CaptionWord } from './caption-text.js';
 export type { VisualCrop, VisualKeyframePath, VisualParameters, VisualPoint, VisualTransform, VisualViewport } from './visual-transform.js';
+export {
+  MAX_TIMELINE_RANGES,
+  TIMELINE_DRAG_POINT_THRESHOLD_PX,
+  addTemporalRange,
+  describeTemporalSelection,
+  sequenceTimeAtX,
+  temporalSelectionEquals,
+  temporalSelectionFromDrag,
+  temporalSelectionRanges,
+  timelineViewportSchema,
+  xAtSequenceTime,
+} from './timeline-band.js';
+export type { TimelineViewport } from './timeline-band.js';
+export {
+  VISUAL_HIT_TARGET_KINDS,
+  cycleVisualCandidate,
+  localPointFor,
+  pickVisualObjects,
+  projectVisualQuad,
+  topmostVisualObject,
+  visualHitTargetKindSchema,
+  visualHitTargetSchema,
+} from './visual-picking.js';
+export type { VisualHitTarget, VisualHitTargetKind } from './visual-picking.js';
+export {
+  ATTENTION_BUFFER_DEFAULT_WINDOW_MS,
+  ATTENTION_BUFFER_MAX_EVENTS,
+  ATTENTION_PLAYBACK_STATES,
+  ATTENTION_PRODUCERS,
+  ATTENTION_TRAJECTORY_MAX_POINTS,
+  ATTENTION_TRAJECTORY_MIN_DISTANCE,
+  appendAttentionEvent,
+  attentionEventSchema,
+  attentionPointSchema,
+  attentionProducerSchema,
+  attentionSnapshot,
+  attentionSnapshotSchema,
+  attentionViewportSchema,
+  createAttentionBuffer,
+  decimatePointerTrajectory,
+  pruneAttentionBuffer,
+} from './attention.js';
+export type { AttentionBuffer, AttentionEvent, AttentionEventKind, AttentionProducer, AttentionSnapshot } from './attention.js';
 export {
   TIME_BINDING_BASES,
   VISUAL_OBJECT_KINDS,
