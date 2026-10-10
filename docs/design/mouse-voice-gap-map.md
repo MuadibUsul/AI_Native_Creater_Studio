@@ -126,6 +126,8 @@
   - Web 新增 `TimelineBand` / `CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线；
   - 证据：契约 18 项、jsdom 11 项、`pnpm verify` 14/14（1180/1180）；**真实浏览器/高 DPI 目检、v2 片段轨道投影与锚点持久化/恢复未做**（待 N04-01/N04-10）。
 
+- **2026-10-10**：`N04-10`（刷新/嵌套/时序变更后的锚点自动恢复）服务端语义交付（`IN_PROGRESS`）：目标引用新增可选恢复基线（不参与指纹、兼容旧锚点）；`recoverSelectionAnchor` 提供刷新幂等（无实质变化不追加修订）、`expectedRevision` + 主键冲突两层并发保护（409）、`FOLLOW_OBJECT` 位移跟随与 `FOLLOW_SOURCE` 源映射重投影（失败标 STALE）、嵌套父序列缺失标 PARTIAL；新增 `addMediaTime`/`subtractMediaTime` 与 HTTP/SDK 恢复端点。证据：`docs/verification/N04-10.md`（4 项集成）、`docs/handoffs/N04-10.md`；UI 呈现与真实浏览器证据待 N04-01/N04-08。
+
 - **2026-10-10**：`N04-05`（AttentionSnapshot 本体）权威契约 + 有界缓冲交付（`IN_PROGRESS`）：`packages/contracts/src/attention.ts` 覆盖本地单调时钟 + 会话 epoch、11 类共同注意力事件（含 `PRESENTED_FRAME` 真实呈现帧与 `VOICE_CLOCK` 语音时钟）、有界事件缓冲（默认 8s/512，epoch/单调时钟回退/seq 违反 fail-closed）、鼠标轨迹最小保留（最小距离去样 + 点数上限）与快照导出（缺词级时间时 `wordTimingAvailable=false`）。证据：`docs/verification/N04-05.md`（9 项）、`docs/handoffs/N04-05.md`；`AttentionRecorder` 接线、真实语音时钟映射与服务端按发话时观看记录定位未做（属 N05-02/垂直切片）。
 
 - **2026-10-10**：`N03-09`（范围编辑最小 AI 入口）已完成并推送（`7881bf9`）——它的"结构化操作 + 越界说明 + revision + 零媒体调用"计划是本增量 `IntentRevision` 的既有落点，后续接流式语音时**复用该路径**。

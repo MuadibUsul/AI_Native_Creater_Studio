@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  addMediaTime,
   compareMediaTime,
   frameIndexToMediaTime,
   frameRateSchema,
@@ -22,6 +23,7 @@ import {
   sampleIndexToMediaTime,
   sequenceTimeToSourcePts,
   sourcePtsToSequenceTime,
+  subtractMediaTime,
   type FrameRate,
   type MediaTime,
 } from './media-time.js';
@@ -165,5 +167,16 @@ describe('v0.4 MediaTime contract', () => {
     expect(() => legacyMillisecondsToMediaTime(-1)).toThrow(RangeError);
     expect(() => legacyFpsToFrameRate(29.97)).toThrow();
     expect(() => rescaleMediaTime({ ticks: '9223372036854775807', timebase: { num: 1, den: 1 } }, msBase, 'nearest')).toThrow(RangeError);
+  });
+});
+
+describe('media-time 线性和（N04-10 时序重投影）', () => {
+  it('相加/相减结果落在纳秒有理时基，且可跨时基比较', () => {
+    const sum = addMediaTime(legacyMillisecondsToMediaTime(1_000), legacyMillisecondsToMediaTime(500));
+    expect(sum.timebase).toEqual({ num: 1, den: 1_000_000_000 });
+    expect(compareMediaTime(sum, legacyMillisecondsToMediaTime(1_500))).toBe(0);
+    const diff = subtractMediaTime(legacyMillisecondsToMediaTime(1_000), legacyMillisecondsToMediaTime(2_500));
+    expect(compareMediaTime(diff, { ticks: '-1500', timebase: { num: 1, den: 1000 } })).toBe(0);
+    expect(compareMediaTime(subtractMediaTime(legacyMillisecondsToMediaTime(2_000), legacyMillisecondsToMediaTime(2_000)), { ticks: '0', timebase: { num: 1, den: 1 } })).toBe(0);
   });
 });

@@ -53,6 +53,8 @@ import {
   proposalTrialSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  recoverSelectionAnchorRequestSchema,
+  selectionRecoveryResultSchema,
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
@@ -386,6 +388,8 @@ import {
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
+  type RecoverSelectionAnchorRequest,
+  type SelectionRecoveryResult,
   type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
   type MasterNarration,
@@ -866,6 +870,14 @@ export interface AncsClient {
       input: { reason: string },
       options?: MutationOptions,
     ): Promise<SelectionAnchorRecord>;
+    /** N04-10：自动恢复锚点（刷新/时序变更）；期望修订不符 → 409；无变化时不追加修订 */
+    recoverSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+      input: RecoverSelectionAnchorRequest,
+      options?: MutationOptions,
+    ): Promise<SelectionRecoveryResult>;
   };
   assets: {
     /** 上传意图：返回带作用域与 TTL 的直传 Signed URL（命中 workspace 哈希去重时为 deduped） */
@@ -2219,6 +2231,12 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/remap`, selectionAnchorRecordSchema, {
           body: input,
           bodySchema: z.object({ reason: z.string().min(1).max(200) }).strict(),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      recoverSelectionAnchor: (workspaceId, projectId, anchorId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/recover`, selectionRecoveryResultSchema, {
+          body: input,
+          bodySchema: recoverSelectionAnchorRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
       redo: (projectId, mutation) =>

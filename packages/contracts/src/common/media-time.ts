@@ -241,3 +241,29 @@ export function sequenceTimeToSourcePts(
 ): MediaTime {
   return mapRangeBoundary(time, sequenceRange, sourceRange, rounding);
 }
+
+/** 精确有理时基（纳秒）——线性和的结果不落在浮点毫秒上。 */
+const NANOSECOND_TIME_BASE: Rational = { num: 1, den: 1_000_000_000 };
+
+function linearCombine(left: MediaTime, right: MediaTime, subtractRight: boolean, rounding: MediaRounding): MediaTime {
+  const a = mediaTimeSchema.parse(left);
+  const b = mediaTimeSchema.parse(right);
+  const aNum = BigInt(a.ticks) * BigInt(a.timebase.num);
+  const aDen = BigInt(a.timebase.den);
+  const bNum = BigInt(b.ticks) * BigInt(b.timebase.num);
+  const bDen = BigInt(b.timebase.den);
+  const combined = subtractRight ? aNum * bDen - bNum * aDen : aNum * bDen + bNum * aDen;
+  const numerator = combined * BigInt(NANOSECOND_TIME_BASE.den);
+  const denominator = aDen * bDen;
+  return checkedTime(divideRounded(numerator, denominator, rounding), NANOSECOND_TIME_BASE);
+}
+
+/** 有理时间相加（结果落在纳秒时基）；用于“跟随对象/跟随源”的时移重投影。 */
+export function addMediaTime(left: MediaTime, right: MediaTime, rounding: MediaRounding = 'nearest'): MediaTime {
+  return linearCombine(left, right, false, rounding);
+}
+
+/** 有理时间相减（结果落在纳秒时基）。 */
+export function subtractMediaTime(left: MediaTime, right: MediaTime, rounding: MediaRounding = 'nearest'): MediaTime {
+  return linearCombine(left, right, true, rounding);
+}

@@ -184,6 +184,17 @@ export const temporalSelectionSchema = z.discriminatedUnion('kind', [
 
 export type TemporalSelection = z.infer<typeof temporalSelectionSchema>;
 
+/**
+ * N04-10：目标绑定的恢复基线（保存锚点时目标的序列/源区间）。
+ * 用于刷新/时序变更后按 `timeBindingPolicy` 重投影；**不参与选择指纹**（不影响既有指纹），缺省即不自动跟随。
+ */
+export const targetBindingBaselineSchema = z.object({
+  sequenceRange: mediaRangeSchema.nullable().default(null),
+  sourceRange: mediaRangeSchema.nullable().default(null),
+}).strict();
+
+export type TargetBindingBaseline = z.infer<typeof targetBindingBaselineSchema>;
+
 export const orderedTargetRefSchema = z.object({
   /** 目标引用（对象 id / 片段 id / 轨道 id 等，由 targetKind 解释） */
   targetRef: opaqueIdSchema,
@@ -192,6 +203,8 @@ export const orderedTargetRefSchema = z.object({
   label: z.string().min(1).max(8),
   /** 该目标绑定的版本（可见即可选的版本语义） */
   assetVersionId: opaqueIdSchema.nullable().default(null),
+  /** 恢复基线（N04-10；可选/可空、不参与指纹） */
+  bindingBaseline: targetBindingBaselineSchema.nullish(),
 }).strict();
 
 export type OrderedTargetRef = z.infer<typeof orderedTargetRefSchema>;
@@ -565,3 +578,29 @@ export const selectionAnchorRecordSchema = z.object({
 }).strict();
 
 export type SelectionAnchorRecord = z.infer<typeof selectionAnchorRecordSchema>;
+
+/* ------------------------------------------------------------------ */
+/* N04-10：刷新/时序变更后的锚点自动恢复                                   */
+/* ------------------------------------------------------------------ */
+
+export const SELECTION_RECOVERY_TRIGGERS = ['REFRESH', 'TIMING_CHANGE', 'NESTING_CHANGE', 'MANUAL'] as const;
+export const selectionRecoveryTriggerSchema = z.enum(SELECTION_RECOVERY_TRIGGERS);
+export type SelectionRecoveryTrigger = z.infer<typeof selectionRecoveryTriggerSchema>;
+
+export const recoverSelectionAnchorRequestSchema = z.object({
+  trigger: selectionRecoveryTriggerSchema,
+  /** 乐观并发：必须与当前最新修订一致，否则 409（旧回调/双请求不得覆盖新状态） */
+  expectedRevision: z.number().int().positive().optional(),
+  reason: z.string().min(1).max(200).optional(),
+}).strict();
+export type RecoverSelectionAnchorRequest = z.infer<typeof recoverSelectionAnchorRequestSchema>;
+
+/** 恢复结果：`changed=false` 表示当前状态已与工程一致，未追加新修订（刷新幂等）。 */
+export const selectionRecoveryResultSchema = z.object({
+  record: selectionAnchorRecordSchema,
+  changed: z.boolean(),
+  previousStatus: selectionResolutionStatusSchema,
+  previousRevision: z.number().int().nonnegative(),
+  trigger: selectionRecoveryTriggerSchema,
+}).strict();
+export type SelectionRecoveryResult = z.infer<typeof selectionRecoveryResultSchema>;

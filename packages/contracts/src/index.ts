@@ -30,6 +30,8 @@ export {
   mediaRangeDuration,
   sourcePtsToSequenceTime,
   sequenceTimeToSourcePts,
+  addMediaTime,
+  subtractMediaTime,
 } from './common/media-time.js';
 export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
@@ -368,6 +370,11 @@ export {
   legacySelectionKindSchema,
   legacySelectionSchema,
   composeSelectionAnchor,
+  recoverSelectionAnchorRequestSchema,
+  SELECTION_RECOVERY_TRIGGERS,
+  selectionRecoveryResultSchema,
+  selectionRecoveryTriggerSchema,
+  targetBindingBaselineSchema,
   selectionAnchorFromLegacySelection,
   selectionAnchorRecordSchema,
   selectionAnchorSchema,
@@ -396,6 +403,10 @@ export type {
   SelectionTimeBindingPolicy,
   LegacySelection,
   LegacySelectionKind,
+  RecoverSelectionAnchorRequest,
+  SelectionRecoveryResult,
+  SelectionRecoveryTrigger,
+  TargetBindingBaseline,
   TemporalSelection,
 } from './selection.js';
 export {
