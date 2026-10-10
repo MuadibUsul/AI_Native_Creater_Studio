@@ -91,7 +91,7 @@ V03-01—68保持原ID；V04-01—26是上传方案增量，V04-27—51是运营
 | V04-12 | WebAudio与项目统一播放时钟 | §15.8 | N03-13, N03-16 | TODO |
 | V04-13 | GPU合成、缓存与设备丢失回退 | §15.9 | N03-15, N12-08, N13-11 | TODO |
 | V04-14 | 共享RenderPlan与FFmpeg＋Remotion混合终渲染 | §15.10—15.11 | N03-08, N03-11, N03-16, N09-08, N09-09, N09-10, N09-11 | TODO |
-| V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | TODO |
+| V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | IN_PROGRESS |
 | V04-16 | Smart Timeline、Inspector与命令入口渐进显露 | §4.5 | N04-11, N07-11 | TODO |
 | V04-17 | 版本化Agent Tool Registry与能力授权 | §9.5 | N01-11, N07-04, N07-09, N07-10, N10-12, N14-07, N14-08 | TODO |
 | V04-18 | 持久会话Agent与五工具最小闭环 | §9.6、§21.4 | N07-08, N07-10, N07-11, N07-13 | TODO |

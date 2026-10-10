@@ -478,6 +478,25 @@ export {
 } from './visual-picking.js';
 export type { VisualHitTarget, VisualHitTargetKind } from './visual-picking.js';
 export {
+  ATTENTION_BUFFER_DEFAULT_WINDOW_MS,
+  ATTENTION_BUFFER_MAX_EVENTS,
+  ATTENTION_PLAYBACK_STATES,
+  ATTENTION_PRODUCERS,
+  ATTENTION_TRAJECTORY_MAX_POINTS,
+  ATTENTION_TRAJECTORY_MIN_DISTANCE,
+  appendAttentionEvent,
+  attentionEventSchema,
+  attentionPointSchema,
+  attentionProducerSchema,
+  attentionSnapshot,
+  attentionSnapshotSchema,
+  attentionViewportSchema,
+  createAttentionBuffer,
+  decimatePointerTrajectory,
+  pruneAttentionBuffer,
+} from './attention.js';
+export type { AttentionBuffer, AttentionEvent, AttentionEventKind, AttentionProducer, AttentionSnapshot } from './attention.js';
+export {
   TIME_BINDING_BASES,
   VISUAL_OBJECT_KINDS,
   EFFECT_TARGET_KINDS,
