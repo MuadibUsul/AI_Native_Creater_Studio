@@ -253,7 +253,8 @@ aa9a52b  feat(n06-07) 已确认内容保护与回归指纹（迁移 0086）— I
 e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_PROGRESS
 3da0131  chore(db) + feat(n06-07) 修复 db:generate 快照冲突；N06-07 收口转 VERIFIED（第二组）
 65325d0  fix(review) 外部评审逐条核实与 P0 修复（意图识别/沙箱隔离/凭据密钥/FFmpeg 协议/仓库卫生）
-后续     fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复上一条引入的 unit 回归）— 组末 verify 14/14、1281/1281
+f9344d8  fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复评审响应引入的 unit 回归）
+f9b612b  feat(n06-04) 试片缓存收口（TTL/容量/保留清理/可观测）→ VERIFIED（第四组；组末 verify 14/14、1285/1285）
 ```
 
 ---
