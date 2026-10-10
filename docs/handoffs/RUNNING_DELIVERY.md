@@ -7,7 +7,7 @@
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0079（`selection_anchors`）
+**迁移：** 到 0082（`proposal_trials`）
 
 ---
 
@@ -93,13 +93,15 @@
 
 ---
 
-## 三、下一步（按优先级，来自 gap map §4）
+## 三、下一步（按优先级，来自 gap map §4；2026-10-10 更新）
 
-1. **N05-01-s1 流式语音会话骨架**（增量设计的关键路径）：浏览器侧持续采集 + 服务端会话 + 转写修订事件；`IntentRevision` 未 `SEALED` 前只允许只读准备/可撤销预备；把 `range-edit` 计划路径接到 `IntentRevision`，不新建第二套协议。缺真实 ASR/VAD 凭据时用确定性本地夹具**只验证协议与状态机**，保持 `UNVERIFIED_CREDENTIALS_REQUIRED` 并写清回放路径。
-2. **N04-02-s1 / N04-04-s1 画布与横向时间带**：保留 `apps/web/src/ui/LiteTimeline.tsx`（场景制）并扩展为片段/轨道 + 播放头 + **独立时间选区**；画布原生对象命中（用 N03-05 的 `hitTestVisualObject`）；两者可并行、互不共享文件。
-3. **N06-01-s1 / N06-02-s1 / N06-04-s1**：私有候选（把 v2 注册表里 `create_preview_branch` 等 PLANNED 落成实现）→ 确定性试改 → 原子采用（绑定 `baseProjectRevision + intentRevision + selectionFingerprint + operationsHash + assetVersionRefs + proposalRevision` 后服务端重验）。
-4. **N04-05（AttentionSnapshot 本体）与 N04-10（锚点自动恢复）**；**N05-03-s1/N05-04-s1**（改口/打断/三类取消/晚到隔离）。
-5. **增量设计未覆盖时回主线**：下一项 **N03-10 G0 纯素材交付门** → N03-11 PlaybackEngine → … → N16。
+**已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）。
+
+1. **N06-03**（影响集、陈旧提案与 rebase）：把当前“陈旧直接 409”升级为可 rebase/影响集说明；复用 N01-07 影响集与 N06-04 依赖键。
+2. **N06-06**（替代、取消与晚到结果隔离）：提案 generation/替代与晚到隔离；与 N05-04 的取消代际衔接。
+3. **回主线 N03-10**（G0 纯素材交付门）→ N03-11 PlaybackEngine → … → N16。
+4. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
+5. **基础设施可选**：修复 `db:generate` 的 0080/0081 快照冲突（见已知坑）。
 
 ---
 
@@ -159,6 +161,16 @@ ec20a44  feat(n04-09-s1) 点线面 × 时间 × 意图统一契约
 969fe13  test(n04-09-s1) 修正集合级校验用例类型
 d7aacea  feat(n04-09) SelectionAnchor 归一/持久化/兼容/重映射 + CI 测试库守卫修正
          （同批新增 docs/handoffs/RUNNING_DELIVERY.md 本文件）
+dea4496  docs: 记录 N04-09 的 verify 结果与并发验证陷阱
+da45f2c  feat(n05-01) 实时会话与短期凭证适配（含流式协议状态机）
+7592147  feat(n06-01/n06-02) 私有候选分支 → 确定性试改 → 原子采用
+7bdd31f  docs: 补记 N06 切片 verify 实测与会话切换交接段
+238ef90  docs: 新增新会话启动提示词
+9dae282  feat(n04-02-s1/n04-04-s1) 画布原生对象命中 + 横向时间带
+baa715c  feat(n04-05) AttentionSnapshot 本体 + 有界事件缓冲 + 轨迹最小保留
+82cc785  feat(n04-10) 刷新/嵌套/时序变更后的锚点自动恢复
+f178a11  feat(n05-02) 语音采集、能力协商与时间对齐
+1683b74  feat(n06-04) 局部试片缓存与依赖失效（迁移 0082）
 ```
 
 ---
