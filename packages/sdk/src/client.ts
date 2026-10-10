@@ -39,6 +39,16 @@ import {
   directorApplyRequestSchema,
   createEditPlanRequestSchema,
   createRangeEditPlanRequestSchema,
+  selectionAnchorRecordSchema,
+  selectionAnchorSchema,
+  appendVoiceEventRequestSchema,
+  appendVoiceEventResponseSchema,
+  createVoiceSessionRequestSchema,
+  createVoiceSessionResponseSchema,
+  sealUtteranceRequestSchema,
+  sealUtteranceResponseSchema,
+  voiceSessionSchema,
+  legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
   directorPlanSchema,
@@ -358,6 +368,15 @@ import {
   type RenderStatus,
   type EditPlan,
   type RangeEditPlan,
+  type SelectionAnchor,
+  type SelectionAnchorRecord,
+  type VoiceSession,
+  type VoiceEventEnvelope,
+  type VoiceTranscriptRevision,
+  type EphemeralCredential,
+  type SealUtteranceRequest,
+  type IntentRevision,
+  type LegacySelection,
   type CreateRangeEditPlanRequest,
   type DirectorPolicyInput,
   type MasterNarration,
@@ -756,6 +775,56 @@ export interface AncsClient {
     undo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
     /** 重做最近一次撤销（LIFO；新编辑结束重做分支，§4.8） */
     redo(projectId: string, options?: MutationOptions): Promise<EditResponse>;
+    /** N04-09：保存规范 SelectionAnchor（选择动作不改工程；可携带旧 inline 选择供兼容解析） */
+    saveSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      input: { anchor: SelectionAnchor; legacy?: LegacySelection },
+      options?: MutationOptions,
+    ): Promise<SelectionAnchorRecord>;
+    /** N04-09：读取锚点（跨租户 404） */
+    selectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+    ): Promise<SelectionAnchorRecord>;
+    /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
+    createVoiceSession(
+      workspaceId: string,
+      projectId: string,
+      input: { selectionAnchorId?: string | null; preferredTransport?: 'SERVER_RELAY' | 'PROVIDER_SIDEBAND' | 'BROWSER_SPEECH_FALLBACK' },
+      options?: MutationOptions,
+    ): Promise<{ session: VoiceSession; credential: EphemeralCredential }>;
+    /** N05-01：读取会话状态（过期顺目标记；跨租户 404） */
+    voiceSession(workspaceId: string, projectId: string, sessionId: string): Promise<VoiceSession>;
+    /** N05-01：追加流式事件（转写中/修订只写会话草稿，工程零变更） */
+    appendVoiceEvent(
+      workspaceId: string,
+      projectId: string,
+      sessionId: string,
+      event: VoiceEventEnvelope,
+      options?: MutationOptions,
+    ): Promise<{ accepted: true; transcript: VoiceTranscriptRevision | null; projectUntouched: true }>;
+    /** N05-01：封存话语为 IntentRevision（未解析指代不可封存） */
+    sealVoiceUtterance(
+      workspaceId: string,
+      projectId: string,
+      sessionId: string,
+      input: SealUtteranceRequest,
+      options?: MutationOptions,
+    ): Promise<{ intentRevision: IntentRevision; projectUntouched: true }>;
+    /** N05-01：结束采集（幂等） */
+    closeVoiceSession(workspaceId: string, projectId: string, sessionId: string, options?: MutationOptions): Promise<VoiceSession>;
+    /** N05-01：撤销会话（撤销后不得继续执行项目操作） */
+    revokeVoiceSession(workspaceId: string, projectId: string, sessionId: string, options?: MutationOptions): Promise<VoiceSession>;
+    /** N04-09：把锚点重解析到当前工程状态（消失/歧义/版本过期 → FAILED/PARTIAL/AMBIGUOUS/STALE） */
+    remapSelectionAnchor(
+      workspaceId: string,
+      projectId: string,
+      anchorId: string,
+      input: { reason: string },
+      options?: MutationOptions,
+    ): Promise<SelectionAnchorRecord>;
   };
   assets: {
     /** 上传意图：返回带作用域与 TTL 的直传 Signed URL（命中 workspace 哈希去重时为 deduped） */
@@ -2059,6 +2128,38 @@ export function createClient(options: ClientOptions): AncsClient {
       },
       undo: (projectId, mutation) =>
         request('POST', `/api/v1/projects/${projectId}/undo`, editResponseSchema, {
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      saveSelectionAnchor: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors`, selectionAnchorRecordSchema, {
+          body: input,
+          bodySchema: z.object({ anchor: selectionAnchorSchema, legacy: legacySelectionSchema.optional() }).strict(),
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      selectionAnchor: (workspaceId, projectId, anchorId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}`, selectionAnchorRecordSchema),
+      createVoiceSession: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
+          body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      voiceSession: (workspaceId, projectId, sessionId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}`, voiceSessionSchema),
+      appendVoiceEvent: (workspaceId, projectId, sessionId, event, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/events`, appendVoiceEventResponseSchema, {
+          body: { event }, bodySchema: appendVoiceEventRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      sealVoiceUtterance: (workspaceId, projectId, sessionId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/seal`, sealUtteranceResponseSchema, {
+          body: input, bodySchema: sealUtteranceRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      closeVoiceSession: (workspaceId, projectId, sessionId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/close`, voiceSessionSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      revokeVoiceSession: (workspaceId, projectId, sessionId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions/${sessionId}/revoke`, voiceSessionSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      remapSelectionAnchor: (workspaceId, projectId, anchorId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}/remap`, selectionAnchorRecordSchema, {
+          body: input,
+          bodySchema: z.object({ reason: z.string().min(1).max(200) }).strict(),
           idempotencyKey: mutation?.idempotencyKey,
         }),
       redo: (projectId, mutation) =>

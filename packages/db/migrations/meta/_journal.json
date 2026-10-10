@@ -547,6 +547,20 @@
       "when": 1791558814701,
       "tag": "0077_striped_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791572969168,
+      "tag": "0078_selection_anchors",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1791596690276,
+      "tag": "0080_voice_sessions",
+      "breakpoints": true
     }
   ]
 }

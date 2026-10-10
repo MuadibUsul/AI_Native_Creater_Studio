@@ -4,6 +4,8 @@ export { adminPrincipals, adminRoleGrants, adminRoleScopes, adminSessions } from
 export { adminPermissionPolicyVersions, adminEmergencyGrants } from './ops-governance.js';
 export { authAccessTokens, authAuthorizationCodes, authRefreshTokens } from './auth-native.js';
 export { idempotencyKeys } from './idempotency.js';
+export { selectionAnchors } from './selection.js';
+export { voiceSessions } from './voice-sessions.js';
 export { workspaceFeaturePreferences, workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
 export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';
 export { voiceCloneSamples, voiceClones, voiceConsents } from './voice-clone.js';
