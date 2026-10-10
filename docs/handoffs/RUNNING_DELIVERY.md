@@ -237,6 +237,7 @@ ee0c83d  feat(n06-06) 提案替代、取消与晚到结果隔离（迁移 0084�
 783ee0f  feat(n06-05) 采用、继续微调、拒绝与部分采用（迁移 0085）
 aa9a52b  feat(n06-07) 已确认内容保护与回归指纹（迁移 0086）— IN_PROGRESS
 e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_PROGRESS
+3da0131  chore(db) + feat(n06-07) 修复 db:generate 快照冲突；N06-07 收口转 VERIFIED（第二组）
 ```
 
 ---
