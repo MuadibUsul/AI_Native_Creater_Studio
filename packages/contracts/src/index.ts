@@ -293,22 +293,45 @@ export {
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
   PROPOSAL_ERROR_REASONS,
+  PROPOSAL_REVIEW_BLOCK_REASONS,
   PROPOSAL_STATUSES,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   createProposalRequestSchema,
+  proposalImpactConflictSchema,
+  proposalImpactSchema,
+  proposalInterveningChangeSchema,
+  proposalReviewBlockReasonSchema,
   proposalSchema,
   proposalStatusSchema,
+  proposalTargetRefSchema,
   proposalTrialSchema,
+  rebaseProposalRequestSchema,
+  rebaseProposalResponseSchema,
 } from './proposal.js';
 export type {
   AdoptProposalRequest,
   CreateProposalRequest,
   Proposal,
   ProposalErrorReason,
+  ProposalImpact,
+  ProposalImpactConflict,
+  ProposalInterveningChange,
+  ProposalReviewBlockReason,
   ProposalStatus,
+  ProposalTargetRef,
   ProposalTrial,
+  RebaseProposalRequest,
+  RebaseProposalResponse,
 } from './proposal.js';
+export {
+  computeOperationTargetRefs,
+  isEditOperationName,
+  isObjectLockKind,
+  operationTargetRefs,
+  targetRefsIntersect,
+} from './edit-impact.js';
+export type { EditTargetRef } from './edit-impact.js';
 export {
   VOICE_CAPABILITY_FLAGS,
   VOICE_ERROR_REASONS,

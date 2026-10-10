@@ -7,23 +7,30 @@ import {
   createProposalRequestSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
+  proposalImpactSchema,
   proposalSchema,
   proposalTrialSchema,
+  rebaseProposalRequestSchema,
+  rebaseProposalResponseSchema,
 } from '@ancs/contracts';
 import {
   adoptProposal,
+  computeProposalImpact,
   createProposalBranch,
   discardProposal,
   loadProposalForRead,
   previewProposal,
+  rebaseProposal,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
- * N06-01／N06-02／N06-04 私有候选路由。
+ * N06-01／N06-02／N06-03／N06-04 私有候选路由。
  *
- * - 创建候选：不改工程（只存操作集与绑定）；
+ * - 创建候选：不改工程（只存操作集与绑定，并记录读写集/写目标）；
+ * - 影响集：候选写目标 vs base revision 之后干预改动的竞争（只读）；
+ * - rebase：无竞争且身份/素材未变时受控推进 base revision（仍经真实执行器验证）；否则 fail-closed；
  * - 试改：在事务内跑真实执行器再回滚（确定性、零落地）；
  * - 采用：绑定校验（base revision／操作哈希／锚点指纹）→ 统一编辑协议原子执行；失败即失败，不显示"已采用"。
  */
@@ -68,6 +75,42 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return loadProposalForRead(domain, { workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/impact',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-03 影响集（只读）：写目标 vs base revision 之后干预改动的竞争；身份/源素材变化',
+        params: proposalParamsSchema,
+        response: { 200: proposalImpactSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return computeProposalImpact(domain, { workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/rebase',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-03 受控 rebase：无竞争且身份/素材未变才推进 base revision；否则 409',
+        params: proposalParamsSchema,
+        body: rebaseProposalRequestSchema,
+        response: { 200: rebaseProposalResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      return rebaseProposal(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        actorId: context.userId, expectedOperationsHash: request.body.expectedOperationsHash,
+      });
     },
   );
 

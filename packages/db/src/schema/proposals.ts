@@ -26,6 +26,17 @@ export const proposals = pgTable(
     intentRevisionId: text('intent_revision_id'),
     operationsHash: text('operations_hash').notNull(),
     operations: jsonb('operations').notNull(),
+    /** N06-03：创建时记录的字段读集／写集（操作注册表声明的并集） */
+    readSet: jsonb('read_set'),
+    writeSet: jsonb('write_set'),
+    /** N06-03：创建时记录的具体写目标（对象级 + 维度） */
+    writeTargets: jsonb('write_targets'),
+    /** N06-03：候选引用片段的源素材绑定签名（变化 → 必须重新审核） */
+    assetVersionSignature: text('asset_version_signature'),
+    /** N06-03：rebase 次数、最近一次来源 revision 与历史 */
+    rebaseCount: integer('rebase_count').notNull().default(0),
+    rebasedFromRevision: integer('rebased_from_revision'),
+    rebaseLog: jsonb('rebase_log'),
     status: text('status').notNull(),
     committedRevision: integer('committed_revision'),
     /** 采用时使用的幂等键（同一键重放返回同一结果） */

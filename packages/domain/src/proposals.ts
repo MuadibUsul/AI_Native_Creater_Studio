@@ -1,18 +1,33 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray } from 'drizzle-orm';
 import {
   ApiFailure,
+  EDIT_OPERATION_REGISTRY,
   ERROR_CODES,
+  OBJECT_LOCK_DIMENSIONS,
   PROPOSAL_ERROR_REASONS,
+  PROPOSAL_REVIEW_BLOCK_REASONS,
+  computeOperationTargetRefs,
   editOperationSchema,
+  isEditOperationName,
+  isObjectLockKind,
   mediaTimeToLegacyMilliseconds,
   mediaRangeSchema,
+  proposalImpactSchema,
   proposalSchema,
+  proposalTargetRefSchema,
   proposalTrialSchema,
   selectionFingerprintInput,
+  targetRefsIntersect,
   type CreateProposalRequest,
   type EditOperation,
+  type EditTargetRef,
   type Proposal,
+  type ProposalImpact,
+  type ProposalImpactConflict,
+  type ProposalInterveningChange,
+  type ProposalReviewBlockReason,
+  type ProposalTargetRef,
   type ProposalTrial,
 } from '@ancs/contracts';
 import { editEvents, projects, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
@@ -20,13 +35,16 @@ import type { DomainDeps } from './channels.js';
 import { processEdits } from './edits.js';
 
 /**
- * N06-01／N06-02／N06-04：私有候选 → 确定性试改 → 原子采用。
+ * N06-01／N06-02／N06-04／N06-03：私有候选 → 确定性试改 → 原子采用 → 影响集与受控 rebase。
  *
- * - `createProposalBranch` 只存操作集与绑定，**不改工程**；
+ * - `createProposalBranch` 只存操作集与绑定，**不改工程**（N06-03 起同时**记录**字段读写集与具体写目标）；
  * - `previewProposal` 用**真实执行器在事务内跑一遍再回滚**（不是近似动画、不是第二套模拟器），
  *   因此"同一操作集 → 同一结果"，且 `projectUntouched` 是结构性保证；
  * - `adoptProposal` 做**采用绑定校验**（base revision／操作哈希／锚点指纹／意图修订），
  *   通过统一编辑协议**原子**执行；失败时确认版保持完整且不显示"已采用"；
+ * - `computeProposalImpact` 给出候选写目标与 base revision 之后干预改动的**竞争**（同对象同维度）；
+ *   非冲突才允许 `rebaseProposal` 受控推进 base revision（仍经真实执行器验证），
+ *   身份/源素材变化一律要求**重新审核**，绝不以最新 revision 强覆盖；
  * - 幂等：采用使用调用方幂等键，重放返回同一结果（不产生第二次写入）。
  */
 
@@ -37,6 +55,86 @@ const hashOperations = (operations: readonly EditOperation[]): string =>
   createHash('sha256').update(canonicalOperations(operations)).digest('hex');
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+/** N06-03：操作集 → 具体写目标（对象级 + 维度 + 来源操作下标）。纯函数，与编辑执行器同源。 */
+function computeWriteTargets(operations: readonly EditOperation[], projectId: string): ProposalTargetRef[] {
+  const targets: ProposalTargetRef[] = [];
+  operations.forEach((operation, operationIndex) => {
+    for (const target of computeOperationTargetRefs(operation as unknown as Record<string, unknown>, { projectId })) {
+      targets.push({ objectKind: target.objectKind, objectId: target.objectId, dimensions: target.dimensions, operationIndex });
+    }
+  });
+  return targets;
+}
+
+/** N06-03：字段读集／写集 = 各操作在编辑操作注册表中声明的集合的并集（去重排序）。 */
+function computeReadWriteSets(operations: readonly EditOperation[]): { readSet: string[]; writeSet: string[] } {
+  const readSet = new Set<string>();
+  const writeSet = new Set<string>();
+  for (const operation of operations) {
+    const definition = EDIT_OPERATION_REGISTRY[operation.op];
+    for (const item of definition.readSet) readSet.add(item);
+    for (const item of definition.writeSet) writeSet.add(item);
+  }
+  return { readSet: [...readSet].sort(), writeSet: [...writeSet].sort() };
+}
+
+/** N06-03：候选引用片段的源素材绑定签名（缺失片段记 `missing`，变化即触发重新审核）。 */
+async function computeTargetAssetSignature(deps: DomainDeps, input: { workspaceId: string; projectId: string; targets: readonly ProposalTargetRef[] }): Promise<string> {
+  const clipIds = [...new Set(input.targets.filter((target) => target.objectKind === 'CLIP').map((target) => target.objectId))].sort();
+  if (clipIds.length === 0) return sha256('no-asset-targets');
+  const rows = await deps.db.select({ id: sequenceClips.id, assetVersionId: sequenceClips.assetVersionId }).from(sequenceClips).where(and(
+    eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId), inArray(sequenceClips.id, clipIds),
+  ));
+  const bindings = new Map(rows.map((row) => [row.id, row.assetVersionId ?? 'null']));
+  return sha256(clipIds.map((id) => `${id}:${bindings.get(id) ?? 'missing'}`).join('|'));
+}
+
+const parseStoredTargets = (value: unknown): ProposalTargetRef[] | null => {
+  const parsed = proposalTargetRefSchema.array().safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
+
+/**
+ * N06-03：把一条 `edit_events` 记录还原成"哪个对象、哪些维度被改动"。
+ * 维度优先从 `patch` 按与候选同一套规则还原；读不出形状（如涟漪邻居的 `update_clip`）时
+ * **保守取全维度**，宁可多报冲突也不漏报（漏报会让陈旧候选被静默 rebase）。
+ */
+function eventTargetRefs(event: typeof editEvents.$inferSelect, projectId: string): EditTargetRef[] {
+  const patch = (typeof event.patch === 'object' && event.patch !== null ? event.patch : {}) as Record<string, unknown>;
+  const patchTargets = isEditOperationName(patch['op']) ? computeOperationTargetRefs(patch, { projectId }) : [];
+  const patchDimensions = OBJECT_LOCK_DIMENSIONS.filter((dimension) => patchTargets.some((target) => target.dimensions.includes(dimension)));
+  const dimensions = patchDimensions.length > 0 ? patchDimensions : [...OBJECT_LOCK_DIMENSIONS];
+  if (event.objectKind !== null && event.objectId !== null && isObjectLockKind(event.objectKind)) {
+    return [{ objectKind: event.objectKind, objectId: event.objectId, dimensions }];
+  }
+  if (event.sceneId !== null) return [{ objectKind: 'SCENE', objectId: event.sceneId, dimensions }];
+  // 无对象身份的事件（如 reorder_scenes）：完全从 patch 还原（reorder 展开为每个 Scene × POSITION）
+  return patchTargets;
+}
+
+/** N06-03：候选写目标与干预改动在同一对象、同一维度上的竞争（"改同字段"判定）。 */
+function computeConflicts(targets: readonly ProposalTargetRef[], changes: readonly ProposalInterveningChange[]): ProposalImpactConflict[] {
+  const conflicts = new Map<string, ProposalImpactConflict>();
+  for (const target of targets) {
+    for (const change of changes) {
+      const shared = targetRefsIntersect(target, change);
+      if (shared.length === 0) continue;
+      const key = `${target.objectKind}:${target.objectId}:${shared.join(',')}`;
+      const existing = conflicts.get(key);
+      if (existing === undefined) {
+        conflicts.set(key, {
+          objectKind: target.objectKind, objectId: target.objectId, dimensions: shared,
+          operationIndexes: [target.operationIndex], interveningActions: [change.action],
+        });
+        continue;
+      }
+      if (!existing.operationIndexes.includes(target.operationIndex)) existing.operationIndexes.push(target.operationIndex);
+      if (!existing.interveningActions.includes(change.action)) existing.interveningActions.push(change.action);
+    }
+  }
+  return [...conflicts.values()];
+}
 
 /**
  * N06-04：试片缓存依赖键。覆盖 base revision + 操作哈希 + 选择指纹 + 意图修订 + **素材版本签名**——
@@ -120,6 +218,11 @@ const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSch
   operations: row.operations,
   status: row.status,
   committedRevision: row.committedRevision ?? null,
+  readSet: Array.isArray(row.readSet) ? row.readSet : [],
+  writeSet: Array.isArray(row.writeSet) ? row.writeSet : [],
+  writeTargets: parseStoredTargets(row.writeTargets) ?? [],
+  rebaseCount: row.rebaseCount,
+  rebasedFromRevision: row.rebasedFromRevision ?? null,
   createdAt: row.createdAt.toISOString(),
   committedAt: row.committedAt === null ? null : row.committedAt.toISOString(),
   discardedAt: row.discardedAt === null ? null : row.discardedAt.toISOString(),
@@ -177,6 +280,12 @@ export async function createProposalBranch(deps: DomainDeps, input: {
   }
   const proposalId = `prop_${randomUUID()}`;
   const now = new Date();
+  // N06-03：创建时**记录**字段读写集、具体写目标与源素材绑定签名（供影响集/受控 rebase 使用）。
+  const writeTargets = computeWriteTargets(operations, input.projectId);
+  const { readSet, writeSet } = computeReadWriteSets(operations);
+  const assetVersionSignature = await computeTargetAssetSignature(deps, {
+    workspaceId: input.workspaceId, projectId: input.projectId, targets: writeTargets,
+  });
   await deps.db.insert(proposals).values({
     id: proposalId,
     workspaceId: input.workspaceId,
@@ -188,6 +297,12 @@ export async function createProposalBranch(deps: DomainDeps, input: {
     intentRevisionId: input.request.intentRevisionId,
     operationsHash: hashOperations(operations),
     operations,
+    readSet,
+    writeSet,
+    writeTargets,
+    assetVersionSignature,
+    rebaseCount: 0,
+    rebaseLog: [],
     status: 'OPEN',
     createdAt: now,
     updatedAt: now,
@@ -196,27 +311,18 @@ export async function createProposalBranch(deps: DomainDeps, input: {
 }
 
 /**
- * 确定性试改：在**事务内**用真实执行器跑一遍完整操作集，然后**无条件回滚**。
+ * 确定性试改核心：在**事务内**用真实执行器跑一遍完整操作集，然后**无条件回滚**。
  * 因此结果与正式采用完全一致，而工程零变更（不与"预览即预测"混淆：这里跑的是权威路径）。
+ * N06-03：rebase 前也用同一路径在**新 base** 上验证操作仍可执行。
  */
-export async function previewProposal(deps: DomainDeps, input: {
+async function runDeterministicTrial(deps: DomainDeps, input: {
+  row: typeof proposals.$inferSelect;
   workspaceId: string;
   projectId: string;
-  proposalId: string;
+  baseProjectRevision: number;
   actorId?: string;
 }): Promise<ProposalTrial> {
-  const row = await loadProposalRow(deps, input);
-  if (row.status !== 'OPEN') {
-    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal is not open', 409, {
-      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
-    });
-  }
-  // N06-04：先查局部试片缓存；依赖键一致则直接复用确定性结果（不重复跑执行器）。
-  const { dependencyKey, assetVersionSignature } = await computeTrialDependencies(deps, row);
-  const cachedTrial = await loadCachedTrial(deps, row, dependencyKey);
-  if (cachedTrial !== null) return cachedTrial;
-
-  const operations = editOperationSchema.array().parse(row.operations);
+  const operations = editOperationSchema.array().parse(input.row.operations);
   const eventsBefore = await deps.db.select({ seq: editEvents.seq }).from(editEvents).where(eq(editEvents.projectId, input.projectId));
   const maxSeqBefore = eventsBefore.reduce((max, event) => Math.max(max, event.seq), 0);
 
@@ -234,7 +340,7 @@ export async function previewProposal(deps: DomainDeps, input: {
         actor: { type: 'USER', id: input.actorId ?? 'proposal-trial' },
         request: {
           schemaVersion: '1.0',
-          baseProjectRevision: row.baseProjectRevision,
+          baseProjectRevision: input.baseProjectRevision,
           expectedSceneRevisions: {},
           operations,
           idempotencyKey: `trial_${randomUUID()}`,
@@ -244,8 +350,8 @@ export async function previewProposal(deps: DomainDeps, input: {
         eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId),
       ));
       const trial = proposalTrialSchema.parse({
-        proposalId: row.id,
-        operationsHash: row.operationsHash,
+        proposalId: input.row.id,
+        operationsHash: input.row.operationsHash,
         trialRevision: result.response.project.revision,
         events: result.response.editEvents.map((event) => ({
           action: event.action,
@@ -271,10 +377,7 @@ export async function previewProposal(deps: DomainDeps, input: {
       throw new RollbackSentinel(trial);
     });
   } catch (error) {
-    if (error instanceof RollbackSentinel) {
-      await storeTrial(deps, row, { dependencyKey, assetVersionSignature, trial: error.trial });
-      return proposalTrialSchema.parse({ ...error.trial, proposalId: row.id, cached: false, dependencyKey });
-    }
+    if (error instanceof RollbackSentinel) return error.trial;
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed', 422, {
       reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
       cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
@@ -286,6 +389,169 @@ export async function previewProposal(deps: DomainDeps, input: {
   throw new ApiFailure(ERROR_CODES.INTERNAL, `proposal trial did not roll back (seq ${String(maxSeqBefore)}→${String(maxSeqAfter)})`, 500, {
     reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
   });
+}
+
+export async function previewProposal(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  actorId?: string;
+}): Promise<ProposalTrial> {
+  const row = await loadProposalRow(deps, input);
+  if (row.status !== 'OPEN') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal is not open', 409, {
+      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
+    });
+  }
+  // N06-04：先查局部试片缓存；依赖键一致则直接复用确定性结果（不重复跑执行器）。
+  const { dependencyKey, assetVersionSignature } = await computeTrialDependencies(deps, row);
+  const cachedTrial = await loadCachedTrial(deps, row, dependencyKey);
+  if (cachedTrial !== null) return cachedTrial;
+
+  const trial = await runDeterministicTrial(deps, {
+    row, workspaceId: input.workspaceId, projectId: input.projectId, baseProjectRevision: row.baseProjectRevision,
+    ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+  });
+  await storeTrial(deps, row, { dependencyKey, assetVersionSignature, trial });
+  return proposalTrialSchema.parse({ ...trial, proposalId: row.id, cached: false, dependencyKey });
+}
+
+/**
+ * N06-03：影响集视图 —— 候选的写目标、base revision 之后的干预改动、二者的竞争，
+ * 以及身份（锚点指纹）／源素材绑定是否变化。**只读**，不改工程。
+ */
+export async function computeProposalImpact(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+}): Promise<ProposalImpact> {
+  const row = await loadProposalRow(deps, input);
+  const currentRevision = await loadProjectRevision(deps, input);
+  const operations = editOperationSchema.array().parse(row.operations);
+  const writeTargets = parseStoredTargets(row.writeTargets) ?? computeWriteTargets(operations, input.projectId);
+  const sets = computeReadWriteSets(operations);
+  const readSet = Array.isArray(row.readSet) ? (row.readSet as string[]) : sets.readSet;
+  const writeSet = Array.isArray(row.writeSet) ? (row.writeSet as string[]) : sets.writeSet;
+
+  // 干预改动：base revision 之后的全部 edit_events（别的编辑推进了工程）
+  const events = await deps.db.select().from(editEvents).where(and(
+    eq(editEvents.workspaceId, input.workspaceId),
+    eq(editEvents.projectId, input.projectId),
+    gt(editEvents.resultRevision, row.baseProjectRevision),
+  ));
+  const interveningChanges: ProposalInterveningChange[] = events.flatMap((event) =>
+    eventTargetRefs(event, input.projectId).map((target) => ({ ...target, action: event.action })));
+  const conflicts = computeConflicts(writeTargets, interveningChanges);
+
+  // 身份：绑定的选择锚点指纹是否已变化
+  let identityChanged = false;
+  if (row.selectionAnchorId !== null) {
+    const anchorRows = await deps.db.select().from(selectionAnchors).where(and(
+      eq(selectionAnchors.id, row.selectionAnchorId),
+      eq(selectionAnchors.workspaceId, input.workspaceId),
+      eq(selectionAnchors.projectId, input.projectId),
+    )).orderBy(desc(selectionAnchors.revision)).limit(1);
+    const anchorRow = anchorRows[0];
+    const current = anchorRow === undefined ? null : sha256(selectionFingerprintInput(anchorRow.anchor as never));
+    identityChanged = current !== row.selectionFingerprint;
+  }
+
+  // 源素材：候选引用片段的源绑定签名是否变化（创建时已记录）
+  const currentAssetSignature = await computeTargetAssetSignature(deps, {
+    workspaceId: input.workspaceId, projectId: input.projectId, targets: writeTargets,
+  });
+  const assetChanged = row.assetVersionSignature !== null && row.assetVersionSignature !== currentAssetSignature;
+
+  const blockReasons: ProposalReviewBlockReason[] = [];
+  if (conflicts.length > 0) blockReasons.push(PROPOSAL_REVIEW_BLOCK_REASONS.CONFLICT);
+  if (identityChanged) blockReasons.push(PROPOSAL_REVIEW_BLOCK_REASONS.IDENTITY_CHANGED);
+  if (assetChanged) blockReasons.push(PROPOSAL_REVIEW_BLOCK_REASONS.ASSET_CHANGED);
+
+  return proposalImpactSchema.parse({
+    proposalId: row.id,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId,
+    baseProjectRevision: row.baseProjectRevision,
+    currentProjectRevision: currentRevision,
+    readSet, writeSet, writeTargets, interveningChanges, conflicts,
+    identityChanged, assetChanged,
+    rebaseable: blockReasons.length === 0,
+    blockReasons,
+  });
+}
+
+/**
+ * N06-03：受控 rebase —— 仅在**无竞争、身份与源素材未变**时，把候选的 base revision
+ * 推进到当前 revision（仍用真实执行器在新 base 上验证一次）。
+ * 出现竞争（同对象同维度）或身份/素材变化一律 fail-closed：要求以最新状态重新审核，
+ * **绝不**"以最新 revision 强覆盖"。
+ */
+export async function rebaseProposal(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  expectedOperationsHash: string;
+  actorId?: string;
+}): Promise<{ proposal: Proposal; impact: ProposalImpact; rebasedFromRevision: number; rebasedToRevision: number; rebased: boolean }> {
+  const row = await loadProposalRow(deps, input);
+  if (row.status !== 'OPEN') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be rebased', 409, {
+      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
+    });
+  }
+  if (input.expectedOperationsHash !== row.operationsHash) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal operations changed since the user reviewed it', 409, {
+      reason: PROPOSAL_ERROR_REASONS.HASH_MISMATCH, expected: input.expectedOperationsHash, actual: row.operationsHash,
+    });
+  }
+  const impact = await computeProposalImpact(deps, input);
+  if (impact.conflicts.length > 0) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal conflicts with edits made since its base revision', 409, {
+      reason: PROPOSAL_ERROR_REASONS.REBASE_CONFLICT, conflicts: impact.conflicts,
+    });
+  }
+  if (impact.identityChanged || impact.assetChanged) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal must be re-reviewed against the latest state', 409, {
+      reason: PROPOSAL_ERROR_REASONS.REVIEW_REQUIRED,
+      identityChanged: impact.identityChanged, assetChanged: impact.assetChanged, blockReasons: impact.blockReasons,
+    });
+  }
+  const currentRevision = impact.currentProjectRevision;
+  if (currentRevision === row.baseProjectRevision) {
+    // 已是最新：幂等空操作，不写库
+    return { proposal: toProposal(row), impact, rebasedFromRevision: row.baseProjectRevision, rebasedToRevision: currentRevision, rebased: false };
+  }
+  // 非冲突：先在新 base 上验证操作仍可执行（真实执行器事务内跑完回滚），再推进 base revision
+  try {
+    await runDeterministicTrial(deps, {
+      row, workspaceId: input.workspaceId, projectId: input.projectId, baseProjectRevision: currentRevision,
+      ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+    });
+  } catch (error) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal cannot be applied to the latest revision', 409, {
+      reason: PROPOSAL_ERROR_REASONS.REVIEW_REQUIRED,
+      cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    });
+  }
+  const now = new Date();
+  const rebaseLog = Array.isArray(row.rebaseLog) ? row.rebaseLog : [];
+  await deps.db.update(proposals).set({
+    baseProjectRevision: currentRevision,
+    rebasedFromRevision: row.baseProjectRevision,
+    rebaseCount: row.rebaseCount + 1,
+    rebaseLog: [...rebaseLog, { fromRevision: row.baseProjectRevision, toRevision: currentRevision, at: now.toISOString() }],
+    updatedAt: now,
+  }).where(eq(proposals.id, row.id));
+  // base revision 变化 → 依赖键变化（自然失效），这里同时清理旧缓存行（归属/容量）
+  await invalidateProposalTrialRows(deps, row);
+  const updated = await loadProposalRow(deps, input);
+  return {
+    proposal: toProposal(updated),
+    impact: await computeProposalImpact(deps, input),
+    rebasedFromRevision: row.baseProjectRevision,
+    rebasedToRevision: currentRevision,
+    rebased: true,
+  };
 }
 
 /** 原子采用：绑定校验 → 统一编辑协议原子执行 → 候选标记 COMMITTED。 */

@@ -3,6 +3,7 @@ import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { revisionSchema } from './common/revision.js';
 import { editOperationSchema } from './edits.js';
+import { objectLockDimensionSchema, objectLockKindSchema } from './object-locks.js';
 
 /**
  * N06-01／N06-02／N06-04：私有候选（proposal branch）→ 确定性试改 → 原子采用。
@@ -28,9 +29,87 @@ export const PROPOSAL_ERROR_REASONS = {
   SUPERSEDED: 'PROPOSAL_SUPERSEDED',
   TRIAL_FAILED: 'PROPOSAL_TRIAL_FAILED',
   ADOPT_FAILED: 'PROPOSAL_ADOPT_FAILED',
+  /** N06-03：候选的写目标与 base revision 之后的干预改动在同一对象同一维度上竞争 → 不可 rebase */
+  REBASE_CONFLICT: 'PROPOSAL_REBASE_CONFLICT',
+  /** N06-03：身份（锚点指纹）或源素材绑定变化 → 必须以最新状态**重新审核**，不得静默 rebase */
+  REVIEW_REQUIRED: 'PROPOSAL_REVIEW_REQUIRED',
 } as const;
 
 export type ProposalErrorReason = (typeof PROPOSAL_ERROR_REASONS)[keyof typeof PROPOSAL_ERROR_REASONS];
+
+/** N06-03：候选不可自动 rebase 的阻断原因（可同时存在）。 */
+export const PROPOSAL_REVIEW_BLOCK_REASONS = {
+  CONFLICT: 'IMPACT_CONFLICT',
+  IDENTITY_CHANGED: 'IDENTITY_CHANGED',
+  ASSET_CHANGED: 'ASSET_CHANGED',
+} as const;
+export const proposalReviewBlockReasonSchema = z.enum([
+  PROPOSAL_REVIEW_BLOCK_REASONS.CONFLICT,
+  PROPOSAL_REVIEW_BLOCK_REASONS.IDENTITY_CHANGED,
+  PROPOSAL_REVIEW_BLOCK_REASONS.ASSET_CHANGED,
+]);
+export type ProposalReviewBlockReason = z.infer<typeof proposalReviewBlockReasonSchema>;
+
+/** 候选的一个具体写目标（受影响对象 + 维度 + 来源操作下标）。 */
+export const proposalTargetRefSchema = z.object({
+  objectKind: objectLockKindSchema,
+  objectId: z.string().min(1),
+  dimensions: z.array(objectLockDimensionSchema),
+  operationIndex: z.number().int().min(0),
+}).strict();
+export type ProposalTargetRef = z.infer<typeof proposalTargetRefSchema>;
+
+/** 干预改动（base revision 之后由别的编辑产生的对象级变更）。 */
+export const proposalInterveningChangeSchema = z.object({
+  objectKind: objectLockKindSchema,
+  objectId: z.string().min(1),
+  dimensions: z.array(objectLockDimensionSchema),
+  action: z.string().min(1).max(64),
+}).strict();
+export type ProposalInterveningChange = z.infer<typeof proposalInterveningChangeSchema>;
+
+/** 候选与干预改动在同一对象同一维度上的竞争。 */
+export const proposalImpactConflictSchema = z.object({
+  objectKind: objectLockKindSchema,
+  objectId: z.string().min(1),
+  dimensions: z.array(objectLockDimensionSchema).min(1),
+  operationIndexes: z.array(z.number().int().min(0)),
+  interveningActions: z.array(z.string().min(1).max(64)),
+}).strict();
+export type ProposalImpactConflict = z.infer<typeof proposalImpactConflictSchema>;
+
+/**
+ * N06-03 影响集视图：候选的字段读写集与具体写目标、base revision 之后的干预改动、二者的竞争，
+ * 以及身份/源素材是否变化。`rebaseable=true` 才允许自动 rebase（并仍经真实执行器验证）。
+ */
+export const proposalImpactSchema = z.object({
+  proposalId: opaqueIdSchema,
+  workspaceId: opaqueIdSchema,
+  projectId: opaqueIdSchema,
+  baseProjectRevision: revisionSchema,
+  currentProjectRevision: revisionSchema,
+  /** 操作注册表声明的字段读集／写集的并集 */
+  readSet: z.array(z.string().min(1)),
+  writeSet: z.array(z.string().min(1)),
+  /** 候选的具体写目标（对象级，含维度） */
+  writeTargets: z.array(proposalTargetRefSchema),
+  interveningChanges: z.array(proposalInterveningChangeSchema),
+  conflicts: z.array(proposalImpactConflictSchema),
+  /** 绑定的选择锚点指纹已变化 */
+  identityChanged: z.boolean(),
+  /** 候选引用片段的源素材绑定已变化 */
+  assetChanged: z.boolean(),
+  /** 无任何阻断原因才为 true（仍可能是空操作：base 已等于当前 revision） */
+  rebaseable: z.boolean(),
+  blockReasons: z.array(proposalReviewBlockReasonSchema),
+}).strict();
+export type ProposalImpact = z.infer<typeof proposalImpactSchema>;
+
+export const rebaseProposalRequestSchema = z.object({
+  /** 用户看过的候选哈希（防止 rebase 与看到的不一致） */
+  expectedOperationsHash: z.string().length(64),
+}).strict();
+export type RebaseProposalRequest = z.infer<typeof rebaseProposalRequestSchema>;
 
 export const createProposalRequestSchema = z.object({
   /** 候选基于的工程 revision（采用时必须仍然成立） */
@@ -59,6 +138,14 @@ export const proposalSchema = z.object({
   status: proposalStatusSchema,
   /** 采用后得到的工程 revision */
   committedRevision: revisionSchema.nullable().default(null),
+  /** N06-03：创建时记录的字段读集／写集（操作注册表声明的并集） */
+  readSet: z.array(z.string().min(1)).default([]),
+  writeSet: z.array(z.string().min(1)).default([]),
+  /** N06-03：创建时记录的具体写目标（对象级 + 维度） */
+  writeTargets: z.array(proposalTargetRefSchema).default([]),
+  /** N06-03：rebase 次数与最近一次 rebase 的来源 revision */
+  rebaseCount: z.number().int().min(0).default(0),
+  rebasedFromRevision: revisionSchema.nullable().default(null),
   createdAt: isoDateTimeSchema,
   committedAt: isoDateTimeSchema.nullable().default(null),
   discardedAt: isoDateTimeSchema.nullable().default(null),
@@ -115,3 +202,13 @@ export const adoptProposalResponseSchema = z.object({
   /** 采用是否真正生效（服务端校验失败时不会返回 true） */
   adopted: z.literal(true),
 }).strict();
+
+/** N06-03：rebase 结果（旧 base → 新 base；已是最新时 `rebased=false`，为幂等空操作）。 */
+export const rebaseProposalResponseSchema = z.object({
+  proposal: proposalSchema,
+  impact: proposalImpactSchema,
+  rebasedFromRevision: revisionSchema,
+  rebasedToRevision: revisionSchema,
+  rebased: z.boolean(),
+}).strict();
+export type RebaseProposalResponse = z.infer<typeof rebaseProposalResponseSchema>;

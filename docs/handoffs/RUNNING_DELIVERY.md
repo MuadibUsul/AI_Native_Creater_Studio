@@ -3,11 +3,11 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N06-04 局部试片缓存与依赖失效；迁移 0082）
+**最后更新：** 2026-10-10（N06-03 影响集、陈旧提案与受控 rebase；迁移 0083）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0082（`proposal_trials`）
+**迁移：** 到 0083（`proposals` 增影响集/rebase 列）
 
 ---
 
@@ -15,15 +15,21 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02**、N15-01/02、N16-01/02 = **49/219（22.37%）**；另有 **N05-01 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 172 项 |
-| 本地 `pnpm verify` | **14/14，1151/1151**（2026-10-10 实测；Unit 436 / Web 170 / Motion 19 / Integration 481 / Security 24 / Render 6 / Golden 15） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03**、N15-01/02、N16-01/02 = **50/219（22.83%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 169 项 |
+| 本地 `pnpm verify` | **14/14，1228/1228**（2026-10-10 实测；Unit 480 / Web 188 / Motion 19 / Integration 496 / Security 24 / Render 6 / Golden 15） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · N06-03 影响集、陈旧提案与受控 rebase — **VERIFIED**
+- **内容：** 迁移 0083 给 `proposals` 加 `read_set`/`write_set`/`write_targets`/`asset_version_signature`/`rebase_count`/`rebased_from_revision`/`rebase_log`。创建候选时**记录**字段读写集（操作注册表并集）、具体写目标（对象 + 对象锁六维 + 来源操作下标）与候选引用片段的源素材绑定签名。契约新增 `packages/contracts/src/edit-impact.ts`（纯函数 `computeOperationTargetRefs`：操作负载 → 受影响对象与维度；`targetRefsIntersect` 同对象同维度判定；读不出形状时**保守取全维度**）。`computeProposalImpact` 把写目标与 base revision 之后 `edit_events` 还原的干预改动做**同对象同维度**竞争判定；`rebaseProposal` 仅在无竞争且身份（锚点指纹）/源素材未变时受控推进 base revision（仍在新 base 上用真实执行器事务内跑完回滚验证），失败即 409（`PROPOSAL_REBASE_CONFLICT` / `PROPOSAL_REVIEW_REQUIRED`），**绝不以最新 revision 强覆盖**。HTTP `GET .../impact` + `POST .../rebase` + SDK。
+- **证据：** `docs/verification/N06-03.md`（契约 9 项单测 + 集成 8 项：不同片段可合并 / 同对象同维度 409 / 同对象不同维度可合并 / 涟漪位移的间接影响可检测 / 源素材变化重新审核 / 身份变化重新审核 / 已最新幂等空操作 / 创建即记录读写集与写目标）· `docs/handoffs/N06-03.md`　**verify：** 14/14（1228/1228）
+- **为何是 VERIFIED：** 本项实现内容与四条验收/负面路径全部是服务端语义，且均有真实库集成证据；本项**无用户可见 UI**（影响集是只读 API，rebase 是服务端操作；A/B 对比与局部回放的可见呈现属 N06-08／N04-08）。
+- **下一步：** N06-06（提案替代、取消与晚到隔离）→ N06-05（采用/继续微调/拒绝/部分采用）→ 回主线 N03-10。
 
 ### 2026-10-10 · N06-04 局部试片缓存与依赖失效 — **IN_PROGRESS**
 - **内容：** 迁移 0082 `proposal_trials`（行身份 `(workspace, project, dependency_key)`）；依赖键 = sha256(base revision + operationsHash + selectionFingerprint + intentRevisionId + 素材版本签名)；`previewProposal` 命中缓存直接返回（`cached=true`，不跑执行器），未命中才跑真执行器并 upsert；`invalidateProposalTrials` 显式失效 + 采用/丢弃后清理。
@@ -96,9 +102,10 @@
 ## 三、下一步（按优先级，来自 gap map §4；2026-10-10 更新）
 
 **已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）。
+**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）—— 见上方条目。
 
-1. **N06-03**（影响集、陈旧提案与 rebase）：把当前“陈旧直接 409”升级为可 rebase/影响集说明；复用 N01-07 影响集与 N06-04 依赖键。
-2. **N06-06**（替代、取消与晚到结果隔离）：提案 generation/替代与晚到隔离；与 N05-04 的取消代际衔接。
+1. **N06-06**（替代、取消与晚到结果隔离）：提案 generation/替代与晚到隔离；与 N05-04 的取消代际衔接。
+2. **N06-05**（采用、继续微调、拒绝与部分采用）：UI/语音语义区分"方向对再改/采用/后面也这样"；部分采用检查依赖闭包。
 3. **回主线 N03-10**（G0 纯素材交付门）→ N03-11 PlaybackEngine → … → N16。
 4. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
 5. **基础设施可选**：修复 `db:generate` 的 0080/0081 快照冲突（见已知坑）。

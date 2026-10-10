@@ -53,6 +53,9 @@ import {
   proposalTrialSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  proposalImpactSchema,
+  rebaseProposalRequestSchema,
+  rebaseProposalResponseSchema,
   recoverSelectionAnchorRequestSchema,
   selectionRecoveryResultSchema,
   legacySelectionSchema,
@@ -385,6 +388,9 @@ import {
   type ProposalTrial,
   type CreateProposalRequest,
   type AdoptProposalRequest,
+  type ProposalImpact,
+  type RebaseProposalRequest,
+  type RebaseProposalResponse,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
@@ -810,6 +816,16 @@ export interface AncsClient {
     ): Promise<Proposal>;
     /** N06-01：读取候选 */
     proposal(workspaceId: string, projectId: string, proposalId: string): Promise<Proposal>;
+    /** N06-03：候选影响集（只读）：写目标 vs 干预改动的竞争 + 身份/源素材变化 */
+    proposalImpact(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalImpact>;
+    /** N06-03：受控 rebase（无竞争且身份/素材未变才推进 base revision；否则 409） */
+    rebaseProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: RebaseProposalRequest,
+      options?: MutationOptions,
+    ): Promise<RebaseProposalResponse>;
     /** N06-02：确定性私有试改（事务内真跑后回滚；工程零变更） */
     previewProposal(
       workspaceId: string,
@@ -2197,6 +2213,12 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       proposal: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}`, proposalSchema),
+      proposalImpact: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/impact`, proposalImpactSchema),
+      rebaseProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/rebase`, rebaseProposalResponseSchema, {
+          body: input, bodySchema: rebaseProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
       previewProposal: (workspaceId, projectId, proposalId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/preview`, proposalTrialSchema, {
           body: {}, bodySchema: z.object({}).strict(), idempotencyKey: mutation?.idempotencyKey ?? `preview_${proposalId}`,
