@@ -307,6 +307,7 @@ d796331  feat(n04-04) 逐帧步进 + 双时间码换算 + 「这句话/这里的
 88994f1  feat(n06-08) 对照载荷 → 回放计划 + 可见 A/B 面板（第七组；组末 verify 14/14、1319/1319）
 18fbcbb  fix(review-p1) 文章抓取 DNS rebinding 防护 + 文档解析资源上限（第八组；组末 verify 14/14、1329/1329）
 412e9e6  feat(n03-11) PlaybackEngine 契约与统一播放快照 → VERIFIED（第九组；组末 verify 14/14、1343/1343）
+32a7b2c  feat(n03-12) 播放源选路与韧性策略层（第十组；组末 verify 14/14、1356/1356）— IN_PROGRESS
 ```
 
 ---
