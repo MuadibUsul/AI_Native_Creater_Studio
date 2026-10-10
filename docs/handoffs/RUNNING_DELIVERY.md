@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N04-10 锚点自动恢复：幂等/并发/时序重投影/嵌套失效）
+**最后更新：** 2026-10-10（N05-02 语音采集/能力协商/时间对齐；真实 VAD/ASR 待凭据）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -25,6 +25,12 @@
 
 ## 二、本轮连续交付（按时间倒序追加）
 
+### 2026-10-10 · N05-02 语音采集、能力协商与时间对齐 — **IN_PROGRESS**
+- **内容：** `packages/contracts/src/voice-alignment.ts`：采集状态/约束、`VOICE_CLOCK` 采样、播放锚点、能力协商（请求未声明支持 → fail-closed）、音频↔单调↔序列映射；`alignVoiceUtterance` 精度如实标注（WORD_EXACT/AUDIO_RANGE/UTTERANCE_SNAPSHOT/UNAVAILABLE，不伪造逐词精确）；Web `useMicrophoneCapture` + `VoiceCaptureControl`（显式授权、可见监听/电平、卸载停止）。
+- **证据：** `docs/verification/N05-02.md`（领域 7 项 + jsdom 7 项）· `docs/handoffs/N05-02.md`　**verify：** 14/14（详见运行日志）
+- **为何不是 VERIFIED：** **真实 VAD/流式 ASR 未接**（无凭据，保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）；采集控件未挂载到共看片室对话栏（N04-01/N16-06）；无真实浏览器/麦克风证据。
+- **下一步：** N06-04（局部试片缓存与依赖失效）→ N06-03（影响集/陈旧提案 rebase）→ N06-06（替代/取消/晚到隔离）→ 回主线 N03-10。
+
 ### 2026-10-10 · N04-10 刷新/嵌套/时序变更后的锚点自动恢复 — **IN_PROGRESS**
 - **内容：** 目标引用新增可选恢复基线 `bindingBaseline`（不参与指纹、兼容旧锚点）；`recoverSelectionAnchor`：刷新**幂等**（无实质变化不追加修订）、`expectedRevision` + 主键冲突两层并发保护（409 `SELECTION_CONCURRENT_UPDATE`）、`FOLLOW_OBJECT` 位移跟随、`FOLLOW_SOURCE` 源映射重投影（失败标 `STALE`）、嵌套父序列缺失标 `PARTIAL`；新增 `addMediaTime`/`subtractMediaTime`；HTTP `POST .../selection-anchors/:anchorId/recover` + SDK。
 - **证据：** `docs/verification/N04-10.md`（4 项集成：位移跟随+幂等、源映射重投影、并发 409、嵌套 PARTIAL）· `docs/handoffs/N04-10.md`　**verify：** 14/14（详见运行日志）
@@ -35,7 +41,7 @@
 - **内容：** `packages/contracts/src/attention.ts`：11 类共同注意力事件（含真实呈现帧 `PRESENTED_FRAME` 与语音时钟 `VOICE_CLOCK`）、本地单调时钟 + 会话 epoch、有界事件缓冲（默认 8s/512，epoch/单调时钟回退/seq 违反 fail-closed）、鼠标轨迹最小保留（最小距离去样 + 点数上限）、快照导出（缺词级时间时 `wordTimingAvailable=false`）。
 - **证据：** `docs/verification/N04-05.md`（9 项契约单测）· `docs/handoffs/N04-05.md`　**verify：** 14/14（详见本次运行日志）
 - **为何不是 VERIFIED：** `AttentionRecorder` 接线、真实语音时钟映射与服务端按发话时观看记录定位未做（属垂直切片/N05-02）。
-- **下一步：** （N04-10 已完成，见上方 2026-10-10 条目）N05-02 起真实语音链路（待凭据）→ N06-04/N06-03/N06-06 → 回主线 N03-10。
+- **下一步：** （N04-10、N05-02 已完成 s1，见上方条目）N06-04 → N06-03 → N06-06 → 回主线 N03-10；真实语音链路待凭据后接入。
 
 ### 2026-10-10 · N04-02-s1／N04-04-s1 画布原生对象命中 + 横向时间带 — **IN_PROGRESS**（主任务 N04-02／N04-04 未完成）
 - **内容：** `packages/contracts/src/timeline-band.ts`（可视窗口→有理时基换算、播放头/时间选区分离、单击 POINT／拖动半开 RANGES、显式多区间不合并、帧吸附坍缩降级、区间上限 fail-closed）；`visual-picking.ts`（复用 `hitTestVisualObject`，zOrder→细粒度→输入顺序，隐藏/父隐藏排除，重叠轮换，投影四边形）；`selection.ts` 新增 `composeSelectionAnchor`（交互产物→规范锚点+指纹，选择不改工程）。Web 新增 `TimelineBand`、`CanvasInteractionLayer`，并在 `LiteTimeline`（**保留、扩展**）与 `WorkflowDirector`「展开轻时间线」内可选接线。

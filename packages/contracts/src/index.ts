@@ -346,6 +346,36 @@ export type {
   VoiceTransport,
 } from './voice-stream.js';
 export {
+  VOICE_ALIGNMENT_ACCURACIES,
+  VOICE_CAPTURE_STATES,
+  alignVoiceAudioRange,
+  alignmentDriftMs,
+  mapAudioTimeToMonotonicMs,
+  mapMonotonicToSequenceTime,
+  negotiateVoiceCapabilities,
+  voiceAlignmentAccuracySchema,
+  voiceCaptureConstraintsSchema,
+  voiceCaptureStateSchema,
+  voiceCaptureStatusSchema,
+  voiceClockSampleSchema,
+  voiceNegotiationRequestSchema,
+  voiceNegotiationResultSchema,
+  voicePlaybackAnchorSchema,
+  voiceTranscriptAlignmentSchema,
+} from './voice-alignment.js';
+export type {
+  VoiceAlignmentAccuracy,
+  VoiceCaptureConstraints,
+  VoiceCaptureState,
+  VoiceCaptureStatus,
+  VoiceClockSample,
+  VoiceNegotiationInput,
+  VoiceNegotiationRequest,
+  VoiceNegotiationResult,
+  VoicePlaybackAnchor,
+  VoiceTranscriptAlignment,
+} from './voice-alignment.js';
+export {
   GEOMETRY_KINDS,
   GEOMETRY_ROLES,
   INTENT_REVISION_STATUSES,

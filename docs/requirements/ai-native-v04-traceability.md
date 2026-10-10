@@ -52,6 +52,8 @@ N04-05 已交付 AttentionSnapshot 的权威契约与有界缓冲（**整条需�
 
 N04-10 已交付锚点自动恢复的服务端语义（**整条需求仍 `IN_PROGRESS`**）：目标引用新增可选恢复基线（不参与指纹、兼容旧锚点）；`recoverSelectionAnchor` 实现刷新幂等（无实质变化不追加修订）、`expectedRevision` + 主键冲突两层并发保护（409）、`FOLLOW_OBJECT` 位移跟随与 `FOLLOW_SOURCE` 源映射重投影（映射失败标 STALE）、嵌套父序列缺失标 PARTIAL；新增 `addMediaTime`/`subtractMediaTime`；HTTP 与 SDK 恢复入口齐备。UI 呈现与真实浏览器刷新恢复证据待 N04-01/N04-08（见 `docs/verification/N04-10.md`）。
 
+N05-02 已交付采集/对齐的协议与服务层（**整条需求仍 `IN_PROGRESS`**）：`voice-alignment.ts` 提供采集状态与可见开关、`VOICE_CLOCK` 采样与播放锚点、能力协商（请求未声明支持 → 501 fail-closed）与音频↔单调↔序列映射；`alignVoiceUtterance` 精度如实标注（无词级时间退到发话快照或 UNAVAILABLE，不伪造逐词精确）；Web 新增 `useMicrophoneCapture` 与 `VoiceCaptureControl`（显式授权、可见监听/电平、卸载即停止音轨）。**真实 VAD/流式 ASR Provider 未接入**，保持 `UNVERIFIED_CREDENTIALS_REQUIRED`；V03-26 因 N05-01/N05-02 的可验证部分进入 `IN_PROGRESS`，重连/去重仍属 N05-05（见 `docs/verification/N05-02.md`）。
+
 N05-01 部分交付（保持 `IN_PROGRESS`）：实时会话与短期凭证适配已落地并可验证——会话返回**只发一次**的短期 HMAC 凭证（作用域 voice:stream/voice:tools、TTL 15 分钟），未配置签名密钥即 501 fail-closed，**长期 Provider Key 永不下发**；创建会话需 `project:write`（跨租户 404）；能力按传输方式显式声明（浏览器回退明确不承诺服务端 VAD/逐词时间戳/服务端工具）；流式事件信封带状态/代际/时钟/序号四道门，`partial` 只读（不写 edit_events、不动 revision）、改口产生新转写修订，`sealUtterance` 把最新修订封存为 IntentRevision（需绑定 SelectionAnchor）供范围编辑 AI 入口使用。**真实 WebRTC/sideband 传输与真实 VAD/流式 ASR 未接入**（V03-26/V03-49/V03-53 的 Provider 侧实现与浏览器采集），因此不计入完成（见 `docs/verification/N05-01.md`）。
 
 N06-01／N06-02 已按范围 VERIFIED：**私有候选分支 → 确定性试改 → 原子采用**（迁移 0081；N06-04 局部试片缓存与依赖失效未交付，N06-03 的 rebase 与 N06-06 的替代/取消/晚到隔离仍待做）。候选只存操作集与绑定（base revision／选择锚点指纹／意图修订／操作哈希），创建与试改**都不改确认版工程**；试改用真实执行器在事务内跑完再**无条件回滚**（同一操作集 → 同一结果，`projectUntouched` 是结构性保证，不是近似动画）；采用按幂等键、状态、操作哈希、选择指纹、base revision 逐项校验（版本过期/哈希不符/已丢弃/指纹变化分别 409）后经统一编辑协议**原子**执行，执行失败时候选保持 OPEN、零部分写入且不返回已采用；丢弃幂等、同意图旧候选标 SUPERSEDED（见 `docs/verification/N06-01.md`）。V04-10／V04-14 的候选 UI 呈现（ghost 预览与局部回放对照）属 N04-02-s1／N04-04-s1，保持 `IN_PROGRESS`。
@@ -85,7 +87,7 @@ N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片�
 | V03-23 | 转写剪辑、字幕、字体、断句、双语与导出 | §5、§6 | N01-04, N02-05, N03-07, N04-04, N09-04, N11-09 | IN_PROGRESS |
 | V03-24 | 事实／分析／虚构区分、来源与真实图表数据 | §5、§9、§14、§19 | N00-04, N02-05, N02-07, N03-07, N07-02, N08-06, N09-05, N11-04, N14-02 | IN_PROGRESS |
 | V03-25 | 悬浮点击框选与语音时间精确绑定、共同注意力 | §7 | N02-04, N04-02, N04-03, N04-04, N04-05, N04-06, N04-08, N05-02, N05-08, N07-06, N13-08, N14-04 | IN_PROGRESS |
-| V03-26 | 实时语音、文字等价、权限、会话与重连 | §8 | N04-05, N05-01, N05-02, N05-03, N05-05, N05-06, N05-07, N05-08, N09-08, N14-04 | TODO |
+| V03-26 | 实时语音、文字等价、权限、会话与重连 | §8 | N04-05, N05-01, N05-02, N05-03, N05-05, N05-06, N05-07, N05-08, N09-08, N14-04 | IN_PROGRESS |
 | V03-27 | 打断说话、取消提案、取消外部任务分别处理 | §8、§10 | N05-03, N05-04, N05-08, N06-06, N13-04 | TODO |
 | V03-28 | Brief、模糊诉求澄清、创作诊断与必要提问 | §9 | N02-06, N03-09, N04-06, N05-06, N07-01, N07-02, N07-06, N07-08, N11-06 | IN_PROGRESS |
 | V03-29 | 结构化工具和编辑操作；后端权限与预算校验 | §9、§13 | N01-06, N03-09, N06-02, N07-03, N07-04 | IN_PROGRESS |
