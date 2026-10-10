@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（第四组：N06-04 收口转 VERIFIED；此前为第二组基础设施修复 + 第三组外部评审响应）
+**最后更新：** 2026-10-10（第五组：N04-04 主体投影与时间选择→对象；第四组为 N06-04 收口）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,20 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1285/1285**（第四组组末实测；Unit 509 / Web 188 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1297/1297**（第五组组末实测；Unit 518 / Web 191 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · 第五组 · N04-04 主体（真实片段/轨道投影 + 时间选择→对象）— **IN_PROGRESS**
+- **内容：** 新增契约 `packages/contracts/src/timeline-projection.ts`：`projectSequenceToTimeline`（真实轨道/片段 → 车道与几何；有理时基换算；越界如实标 `clippedLeft/Right`；零宽不进 segments 但列入 `outsideViewportClipIds`；孤儿片段列入 `orphanClipIds` 不静默丢弃）、`clipsInTemporalSelection`（POINT 半开区间命中；RANGES 区分完整覆盖/部分相交，**不合并显式多区间**；支持轨道作用域）、`pointSelection`；Web 侧新增 `projectionToBandLanes` 适配器把权威投影喂给既有 `TimelineBand`（只做形状映射，几何只算一次）。
+- **证据：** `docs/verification/N04-04.md`（契约 9 项单测 + jsdom 3 项：真实片段渲染与投影可见集合一致 / 点击发 clipId / 窗外片段不渲染但仍在数据里）· `docs/handoffs/N04-04.md`
+- **为何不是 VERIFIED：** 逐帧步进 UI 与分数帧率用例、源/序列双时间码、说话句段与音乐 region 的语义指向、空间×时间在应用层的组装、真实浏览器高 DPI 目检（N04-01）均未做。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-10 · 第四组 · N06-04 收口 — **VERIFIED**
 - **内容：** `proposals.ts` 新增 `PROPOSAL_TRIAL_TTL_HOURS=24` / `PROPOSAL_TRIAL_MAX_PER_PROJECT=50`（可由 `deps.retention` 覆盖）；`loadCachedTrial` **忽略过期行**；`storeTrial` 写入后按最旧淘汰超出容量的行；新增 `proposalTrialCacheStats`；`runRetentionSweep` 新增第 8 步清理过期试片并计入 `proposalTrialCachePurged`；HTTP `GET .../proposal-trial-cache` + SDK。

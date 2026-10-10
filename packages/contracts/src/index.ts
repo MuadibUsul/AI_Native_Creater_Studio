@@ -612,6 +612,25 @@ export {
 } from './timeline-band.js';
 export type { TimelineViewport } from './timeline-band.js';
 export {
+  clipsInTemporalSelection,
+  pointSelection,
+  projectSequenceToTimeline,
+  temporalSelectionCoverageSchema,
+  timelineLaneSchema,
+  timelineLaneSegmentSchema,
+  timelineProjectionClipSchema,
+  timelineProjectionSchema,
+  timelineProjectionTrackSchema,
+} from './timeline-projection.js';
+export type {
+  TemporalSelectionCoverage,
+  TimelineLane,
+  TimelineLaneSegment,
+  TimelineProjection,
+  TimelineProjectionClip,
+  TimelineProjectionTrack,
+} from './timeline-projection.js';
+export {
   VISUAL_HIT_TARGET_KINDS,
   cycleVisualCandidate,
   localPointFor,
