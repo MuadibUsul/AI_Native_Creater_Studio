@@ -540,10 +540,13 @@ export type {
 export {
   RANGE_EDIT_AUDIO_CLOCK_OPERATIONS,
   RANGE_EDIT_ERROR_REASONS,
+  RANGE_EDIT_LENGTH_GUARD_SOURCES,
   RANGE_EDIT_OUT_OF_SCOPE_REASONS,
   RANGE_EDIT_PLAN_VERSION,
   createRangeEditPlanRequestSchema,
+  estimateRangeEditDurationDeltaMs,
   rangeEditBriefSchema,
+  rangeEditLengthGuardSchema,
   rangeEditOutOfScopeSchema,
   rangeEditPlanSchema,
   rangeEditSourceEvidenceSchema,
@@ -551,6 +554,7 @@ export {
 export type {
   CreateRangeEditPlanRequest,
   RangeEditErrorReason,
+  RangeEditLengthGuard,
   RangeEditOutOfScope,
   RangeEditOutOfScopeReason,
   RangeEditPlan,

@@ -31,6 +31,8 @@ export const MOCK_LLM_MODES = [
   'range_edit_trim',
   'range_edit_hallucinated',
   'range_edit_disallowed',
+  // N06-07 总时长守卫：涟漪收缝（缩短总时长）的计划 —— 用于验证"其他别动"下的时长守卫
+  'range_edit_ripple',
   // P07-02 Motion 设计（completePrompt，purpose='motion_design'）：合法 / 危险词法 / 类型错误 / 未注册
   'motion_valid',
   'motion_unsafe',
@@ -182,6 +184,23 @@ export class MockLlmAdapter implements LlmAdapter {
           content: JSON.stringify({
             rationale: ['尝试使用不在允许清单内的操作'],
             operations: [{ op: 'set_clip_opacity', clipId: first.id, opacity: 0.5 }],
+            outOfScope: [],
+          }),
+          modelVersion: this.options.modelVersion, promptVersion, usage: {},
+        };
+      }
+      if (mode === 'range_edit_ripple') {
+        // N06-07：涟漪收缝（去尾 1s 并把后续片段左移）→ 序列总时长缩短，用于验证总时长守卫
+        return {
+          content: JSON.stringify({
+            rationale: ['去掉所选片段尾部 1s 并收缝（会缩短总时长）'],
+            operations: [{
+              op: 'ripple_clip',
+              clipId: first.id,
+              action: 'TRIM_TAIL',
+              amount: { ticks: '1000', timebase: { num: 1, den: 1000 } },
+              closeAcrossTracks: false,
+            }],
             outOfScope: [],
           }),
           modelVersion: this.options.modelVersion, promptVersion, usage: {},

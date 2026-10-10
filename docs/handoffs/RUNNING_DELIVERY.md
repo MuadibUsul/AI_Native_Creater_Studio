@@ -3,12 +3,12 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N06-08 A/B 比较与差异标记；**N06 收尾组已收口 + 组末全量 verify**）
+**最后更新：** 2026-10-10（第二组：`db:generate` 修复 + N06-07 收口转 VERIFIED）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0086（`content_protections`）
-**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。**N06 收尾组已完成并收口**（N06-05 / N06-07 / N06-08；组末 verify 14/14、1259/1259）。下一组见第三节。
+**迁移：** 到 0086（`content_protections`）；**`db:generate` 已修复**（见第三节「基础设施」）
+**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。N06 收尾组已收口；**第二组（基础设施 + N06-07 收口）已完成**。
 
 ---
 
@@ -16,15 +16,27 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06**、N15-01/02、N16-01/02 = **52/219（23.74%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04／N06-07／N06-08 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 167 项 |
-| 本地 `pnpm verify` | **14/14，1259/1259**（2026-10-10 组末实测；Unit 494 / Web 188 / Motion 19 / Integration 513 / Security 24 / Render 6 / Golden 15） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06／07**、N15-01/02、N16-01/02 = **53/219（24.20%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04／N06-08 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 166 项 |
+| 本地 `pnpm verify` | **14/14，1265/1265**（第二组组末实测；Unit 499 / Web 188 / Motion 19 / Integration 514 / Security 24 / Render 6 / Golden 15） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · 第二组 · 基础设施：修复 `db:generate` 快照冲突
+- **问题：** `migrations/meta/0080_snapshot.json` 与 `0081_snapshot.json` 的 `id`/`prevId` 完全相同 → `drizzle-kit generate` 报 `are pointing to a parent snapshot … collision`，导致 0078—0086 的迁移全部只能手工编写 + 手改 journal（风险累积）。
+- **修复：** 删除冲突的两份快照；用一次性脚手架配置在与当前 schema 一致的临时目录生成快照，改写为新 `id`、`prevId` 指向 0077 快照（保持链一致），落位为 `0085_snapshot.json`（对应 journal 末条 idx 85），随后删除脚手架。
+- **验证：** `pnpm --filter @ancs/db run db:generate` → **`No schema changes, nothing to migrate`**（不再报冲突，也不再产出多余迁移）；`runMigrations`（journal + SQL）与全部集成测试不受影响。
+- **教训：** 手工改迁移名时必须同步 `meta` 快照，否则下一次 `generate` 就会撞车；快照只影响 `generate`，不影响运行时迁移。
+
+### 2026-10-10 · 第二组 · N06-07 收口（转 **VERIFIED**）
+- **内容：** `resolveScopeGuard` 增 `exact` 语义（总时长变化**不可确定**时一律要求解释，**不得当作等长放行**）；`createRangeEditPlanRequestSchema` 增 `preservesEverythingElse`；`packages/contracts/src/range-edit.ts` 新增纯函数 `estimateRangeEditDurationDeltaMs`（由操作负载确定性估算：INSERT/APPEND 变长、涟漪 TRIM_* 按收缝量变短、涟漪 DELETE 与 delete_clip 无法确定 → `exact=false`）与 `rangeEditPlanSchema.lengthGuard`；`planRangeEdit` 回带守卫判定，`requiresExplanation` 时附 rationale（**计划本身不执行、不改工程**）。
+- **证据：** `docs/verification/N06-07.md`（估算器 5 项单测 + 规划器端到端 1 项集成，新增 `range_edit_ripple` Mock 脚本）· `docs/handoffs/N06-07.md`　**verify：** 14/14（1265/1265）
+- **为何转 VERIFIED：** 两条实现内容（三轴指纹/范围外报告、总时长守卫）与两条验收负面路径均有真实库证据；保护范围仅 CLIP 属**已知限制**（显式 501，不静默放过），不影响验收。
+- **下一步：** 见第三节。
 
 ### 2026-10-10 · N06 收尾组收口（N06-05 / N06-07 / N06-08）— 组末全量 verify 14/14（1259/1259）
 - **组内交付：** N06-05（`783ee0f`，VERIFIED）、N06-07（`aa9a52b`，IN_PROGRESS）、N06-08（本组末提交，IN_PROGRESS）。
@@ -131,18 +143,16 @@
 ## 三、下一步（按优先级，来自 gap map §4；2026-10-10 更新）
 
 **已完成（本会话，均 IN_PROGRESS）：** N04-02-s1 / N04-04-s1（画布命中 + 横向时间带）、N04-05（AttentionSnapshot）、N04-10（锚点自动恢复）、N05-02（语音采集/协商/对齐）、N06-04（局部试片缓存与依赖失效）、N06-07（已确认内容保护与回归指纹）、N06-08（A/B 比较与差异标记）。
-**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）、**N06-05**（采用、继续微调、拒绝与部分采用）—— 见上方条目。
+**已完成并 VERIFIED：** **N06-03**（影响集、陈旧提案与受控 rebase）、**N06-06**（提案替代、取消与晚到结果隔离）、**N06-05**（采用、继续微调、拒绝与部分采用）、**N06-07**（已确认内容保护与回归指纹，含总时长守卫接入规划器）—— 见上方条目。
 
-**N06 收尾组已收口**（组末 verify 14/14、1259/1259）。**下一组计划（按依赖顺序）：**
+**第二组已完成**（基础设施 `db:generate` 修复 + N06-07 收口；组末 verify 14/14、1265/1265）。**第三组计划：**
 
-1. **基础设施先行（建议先做）**：修复 `db:generate` 的 0080/0081 快照冲突（否则每次迁移都要手写 + 同步 journal，风险累积）；见已知坑。
-2. **N06-04 UI/跨实例收口**：跨实例试片缓存策略 + 与 N04-02-s1／N04-04-s1 的 ghost 预览对接。
-3. **N06-07 收口**：把 `resolveScopeGuard` 接入规划器（`planRangeEdit` 计算总时长变化并回带判定/等长替代）→ 可转 VERIFIED；并把保护范围扩到字幕/音频区域/视觉对象。
-4. **N04 主线收口**：N04-04 主体（横向时间带的片段/轨道投影与时间选区）→ N04-01（真实画布与高 DPI 目检）→ N04-08（垂直切片真实验收）。
-5. **回主线 N03**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见本文件「N03-10 现状」）。
-6. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
-7. 其余：已交付切片的 UI/浏览器证据收口；N06-08 的播放器侧（切换前后/音频 AB/循环回放）。
-8. **并行工作（可选）**：互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好（库名含 test，通过安全门）；**同一时刻仍只跑一份 `pnpm verify`**（全局门，共用构建产物）。
+1. **收口 N06-04 / N06-08 的缺口**：N06-04 跨实例试片缓存策略 + ghost 预览对接（N04-02-s1／N04-04-s1）；N06-08 播放器侧（切换前后/音频 AB/循环回放）。
+2. **N04 主线收口**：N04-04 主体（横向时间带的片段/轨道投影与时间选区）→ N04-01（真实画布与高 DPI 目检）→ N04-08（垂直切片真实验收）。
+3. **回主线 N03**：**N03-16（G0 基础播放同步）** → **N03-10（G0 纯素材交付门）** → N03-11 PlaybackEngine → … → N16。**⚠ N03-10 硬依赖 N03-16（未交付）**，且需新增"素材渲染 kind + QA 变体 + 冻结时间线快照"（详见本文件「N03-10 现状」）。
+4. **真实语音链路**：待 ASR/VAD 凭据后按 N05-02 verification 的回放路径接入（保持 `UNVERIFIED_CREDENTIALS_REQUIRED`）。
+5. **已有 IN_PROGRESS 的 UI/浏览器证据收口**：N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1。
+6. **并行工作（可选）**：互斥文件集 + 独立测试库即可并行——`ancs_quiet_frame_test_agentb` 已建好；**同一时刻仍只跑一份 `pnpm verify`**。
 
 ### N03-10 现状（Explore 代理调研结论，2026-10-10）
 

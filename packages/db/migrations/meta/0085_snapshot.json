@@ -1,6 +1,6 @@
 {
-  "id": "015a6eb1-523f-4f7a-bb41-92cf9d6235d0",
-  "prevId": "508aaafe-ceb5-4b82-97c9-3923d799dcf3",
+  "id": "e3b10e05-fa94-4e3e-8cd4-84e02570f56b",
+  "prevId": "83e5f5d7-463b-460f-a0f4-3e251aa0a298",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5926,6 +5926,142 @@
         "content_documents_project_id_projects_id_fk": {
           "name": "content_documents_project_id_projects_id_fk",
           "tableFrom": "content_documents",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.content_protections": {
+      "name": "content_protections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "captured_revision": {
+          "name": "captured_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "objects": {
+          "name": "objects",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "content_protections_project_idx": {
+          "name": "content_protections_project_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "content_protections_workspace_id_workspaces_id_fk": {
+          "name": "content_protections_workspace_id_workspaces_id_fk",
+          "tableFrom": "content_protections",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "content_protections_project_id_projects_id_fk": {
+          "name": "content_protections_project_id_projects_id_fk",
+          "tableFrom": "content_protections",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
@@ -13147,6 +13283,346 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.proposal_artifacts": {
+      "name": "proposal_artifacts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proposal_id": {
+          "name": "proposal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_generation": {
+          "name": "current_generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bound": {
+          "name": "bound",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "binding_reason": {
+          "name": "binding_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "proposal_artifacts_project_idx": {
+          "name": "proposal_artifacts_project_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposal_artifacts_proposal_idx": {
+          "name": "proposal_artifacts_proposal_idx",
+          "columns": [
+            {
+              "expression": "proposal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposal_artifacts_reference_uq": {
+          "name": "proposal_artifacts_reference_uq",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reference",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "proposal_artifacts_workspace_id_workspaces_id_fk": {
+          "name": "proposal_artifacts_workspace_id_workspaces_id_fk",
+          "tableFrom": "proposal_artifacts",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "proposal_artifacts_project_id_projects_id_fk": {
+          "name": "proposal_artifacts_project_id_projects_id_fk",
+          "tableFrom": "proposal_artifacts",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.proposal_trials": {
+      "name": "proposal_trials",
+      "schema": "",
+      "columns": {
+        "dependency_key": {
+          "name": "dependency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proposal_id": {
+          "name": "proposal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "base_project_revision": {
+          "name": "base_project_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operations_hash": {
+          "name": "operations_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "selection_fingerprint": {
+          "name": "selection_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intent_revision_id": {
+          "name": "intent_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asset_version_signature": {
+          "name": "asset_version_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trial": {
+          "name": "trial",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "proposal_trials_project_idx": {
+          "name": "proposal_trials_project_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "proposal_trials_workspace_id_workspaces_id_fk": {
+          "name": "proposal_trials_workspace_id_workspaces_id_fk",
+          "tableFrom": "proposal_trials",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "proposal_trials_project_id_projects_id_fk": {
+          "name": "proposal_trials_project_id_projects_id_fk",
+          "tableFrom": "proposal_trials",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "proposal_trials_pkey": {
+          "name": "proposal_trials_pkey",
+          "columns": [
+            "workspace_id",
+            "project_id",
+            "dependency_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.proposals": {
       "name": "proposals",
       "schema": "",
@@ -13210,6 +13686,80 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "read_set": {
+          "name": "read_set",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "write_set": {
+          "name": "write_set",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "write_targets": {
+          "name": "write_targets",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asset_version_signature": {
+          "name": "asset_version_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rebase_count": {
+          "name": "rebase_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "rebased_from_revision": {
+          "name": "rebased_from_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rebase_log": {
+          "name": "rebase_log",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "superseded_by_proposal_id": {
+          "name": "superseded_by_proposal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "superseded_at": {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adopted_operation_indexes": {
+          "name": "adopted_operation_indexes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",

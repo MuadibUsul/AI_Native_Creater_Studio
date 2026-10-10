@@ -7,10 +7,12 @@ import {
   RANGE_EDIT_OUT_OF_SCOPE_REASONS,
   RANGE_EDIT_PLAN_VERSION,
   editOperationSchema,
+  estimateRangeEditDurationDeltaMs,
   mediaTimeToLegacyMilliseconds,
   mediaRangeSchema,
   productionPolicySchema,
   rangeEditPlanSchema,
+  resolveScopeGuard,
   sourceMediaProbeResultSchema,
   type CreateRangeEditPlanRequest,
   type EditOperation,
@@ -240,17 +242,41 @@ export async function planRangeEdit(deps: DomainDeps, input: {
     });
   }
 
+  // N06-07：总时长守卫 —— "其他别动"下变长必须先解释或改等长方案（由操作负载确定性估算）。
+  const durationEstimate = estimateRangeEditDurationDeltaMs(operations);
+  // 等长替代：涟漪是**显式选择**的收缝动作 → 其"不涟漪（留空隙）"的变体即等长方案。
+  const equalLengthAlternativeAvailable = operations.some((operation) => operation.op === 'ripple_clip' && operation.action !== 'DELETE');
+  const guard = resolveScopeGuard({
+    preservesEverythingElse: input.request.preservesEverythingElse ?? false,
+    durationDeltaMs: durationEstimate.deltaMs,
+    equalLengthAlternativeAvailable,
+    exact: durationEstimate.exact,
+  });
+  const lengthGuard = {
+    preservesEverythingElse: input.request.preservesEverythingElse ?? false,
+    estimatedDurationDeltaMs: durationEstimate.deltaMs,
+    exact: durationEstimate.exact,
+    verdict: guard.verdict,
+    requiresExplanation: guard.requiresExplanation,
+    recommendEqualLength: guard.recommendEqualLength,
+    reason: guard.reason,
+  };
+  const finalRationale = guard.requiresExplanation
+    ? [...rationale, `总时长守卫：${guard.reason}（估算变化 ${String(durationEstimate.deltaMs)}ms；请先向用户解释，或改用等长方案）`]
+    : rationale;
+
   return rangeEditPlanSchema.parse({
     planVersion: RANGE_EDIT_PLAN_VERSION,
     projectId: input.projectId,
     sequenceId: input.request.sequenceId,
     documentRevision: project.revision,
-    rationale: rationale.slice(0, 100).map((item) => item.slice(0, 500)),
+    rationale: finalRationale.slice(0, 100).map((item) => item.slice(0, 500)),
     operations,
     outOfScope,
     evidence,
     // 原声保留判据：计划里没有任何触碰音频源时钟的操作
     originalAudioPreserved: operations.every((operation) => !touchesAudioClock(operation)),
+    lengthGuard,
     providerMediaCalls: 0,
     policy: { mode: policy.mode, preserveOriginalSpeech: policy.preserveOriginalSpeech, allowGeneratedMedia },
   });
