@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertSafeHostResolves,
   assertSafeUrl,
   decodeContentBytes,
   detectLanguage,
@@ -188,5 +189,35 @@ describe('文本/手写脚本抽取', () => {
     expect(detectLanguage('이것은 한국어 문장입니다.')).toBe('ko');
     expect(detectLanguage('This is an English article about markets.')).toBe('en');
     expect(detectLanguage('12345 !@#$%')).toBe('unknown');
+  });
+});
+
+describe('assertSafeHostResolves（DNS 解析后复检，2026-10 评审响应）', () => {
+  const resolveTo = (addresses: { address: string; family: number }[]) => () => Promise.resolve(addresses);
+
+  it('公网域名解析到公网地址 → 放行', async () => {
+    const url = await assertSafeHostResolves('https://example.com/article', resolveTo([{ address: '93.184.216.34', family: 4 }]));
+    expect(url.hostname).toBe('example.com');
+  });
+
+  it('公网域名解析到回环/私网/元数据 → 403（这正是 DNS rebinding）', async () => {
+    for (const address of ['127.0.0.1', '10.1.2.3', '192.168.1.10', '169.254.169.254', '::1', 'fd00::1']) {
+      await expect(assertSafeHostResolves('https://evil.example.com/x', resolveTo([{ address, family: 6 }])))
+        .rejects.toMatchObject({ httpStatus: 403, details: { reason: 'BLOCKED_TARGET' } });
+    }
+  });
+
+  it('多地址中任一为内网即拒绝（不能只看第一条）', async () => {
+    await expect(assertSafeHostResolves('https://mixed.example.com/x', resolveTo([
+      { address: '93.184.216.34', family: 4 },
+      { address: '169.254.169.254', family: 4 },
+    ]))).rejects.toMatchObject({ httpStatus: 403, details: { reason: 'BLOCKED_TARGET' } });
+  });
+
+  it('解析失败或空结果 → 422（无法确认安全性时不放行）', async () => {
+    await expect(assertSafeHostResolves('https://nx.example.com/x', () => Promise.reject(new Error('ENOTFOUND'))))
+      .rejects.toMatchObject({ httpStatus: 422 });
+    await expect(assertSafeHostResolves('https://empty.example.com/x', resolveTo([])))
+      .rejects.toMatchObject({ httpStatus: 422 });
   });
 });

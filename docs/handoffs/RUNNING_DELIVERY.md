@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第七组：N06-08 收口——回放计划 + 可见 A/B 面板；第六组为 N04-04 收尾）
+**最后更新：** 2026-10-11（第八组：评审 P1 安全收口——DNS rebinding + 文档解析上限；N03-16 因 N03-11→12→13 全 TODO 推迟）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,22 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1319/1319**（第七组组末实测；Unit 534 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1329/1329**（第八组组末实测；Unit 544 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第八组 · 评审 P1 安全收口（N03-16 因依赖未就绪而推迟）
+- **为何改做这个：** N03-16（G0 基础播放同步）的依赖链 `N03-11 → N03-12 → N03-13` **全为 TODO**（即 G0 线前面有 3 个任务，不止一个）→ 按纪律记录阻塞、改做依赖就绪且可完整验证的项。
+- **已修（均有测试证据）：**
+  1. **文章抓取 DNS rebinding**（P1，评审核实的真实缺口）：新增 `assertSafeHostResolves` —— 逐跳把主机名解析成**全部**地址，任一落在回环/私网/元数据段即 403、解析失败或空结果 422；抓取器逐跳改用它；残余 TOCTOU 与"固定 IP"的部署层修法写入代码注释。测试 4 项。
+  2. **文档解析资源上限**（P1）：ZIP 加条目数/单条解压量/累计解压量/压缩比四道门，且**在解压前按声明值拦截**（`inflateRawSync({maxOutputLength})` 兜底，不再先分配）；上限可注入；PDF 加页数上限（500）。测试 6 项（手写 ZIP 构造压缩炸弹，验证不分配即拒绝）。
+- **证据：** `packages/domain/src/content-extract.test.ts`、`packages/providers/document-extract/src/zip-limits.test.ts`；`docs/decisions/0010-review-response-20261010.md` 第二、三节已同步。
+- **仍未做：** 部署层项（连接固定 IP / 解析移入受限子进程 / 限流与 CORS / 容器化沙箱 / Dockerfile）。
+
 
 ### 2026-10-11 · 第七组 · N06-08 收口（对照载荷 → 回放计划 + 可见 A/B 面板）— **IN_PROGRESS**
 - **内容：** 差异项增 `before/afterSequenceRange`；新增契约 `packages/contracts/src/compare-playback.ts` 的 `buildComparePlaybackPlan`（标记**落到时间轴**并按起点排序；删除用左侧、新增用右侧、修改用两侧且取试改后区间；**不可定位的差异仍列出**并计入 `unplaced`；空循环区间视为无循环）；新增可见面板 `apps/web/src/ui/CompareReplayPanel.tsx`（A/B 切换只改显示、差异标记条可点以 seek 到差异起点、汇总、未定位单列、局部循环指示）。

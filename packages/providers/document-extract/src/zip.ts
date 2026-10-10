@@ -13,6 +13,20 @@ export interface ZipEntry {
   bytes: Uint8Array;
 }
 
+/**
+ * 解压资源上限（2026-10 外部评审核实后新增）：防"压缩炸弹"。
+ * - 单条目声明大小与**实际输出**都受 `MAX_ENTRY_UNCOMPRESSED_BYTES` 限制（`inflateRawSync` 的
+ *   `maxOutputLength` 让 zlib 在超限时直接失败，**不会先分配再报错**）；
+ * - 条目数与**累计**解压量也受限；
+ * - 压缩比上限拦截"极小输入膨胀成极大输出"（DOCX 正常内容远达不到 200:1）。
+ */
+export const ZIP_LIMITS = {
+  maxEntries: 2_048,
+  maxEntryUncompressedBytes: 64 * 1024 * 1024,
+  maxTotalUncompressedBytes: 128 * 1024 * 1024,
+  maxCompressionRatio: 200,
+} as const;
+
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
@@ -28,7 +42,7 @@ export class ZipReadError extends Error {
 }
 
 /** 读取 ZIP 的全部条目（名称 → 解压字节）。 */
-export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
+export function readZipEntries(bytes: Uint8Array, limits: typeof ZIP_LIMITS = ZIP_LIMITS): ZipEntry[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
   // 从尾部向前找 EOCD（注释最多 64KB）
@@ -47,8 +61,12 @@ export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
   if (offset === 0xffffffff || entryCount === 0xffff) {
     throw new ZipReadError('UNSUPPORTED', 'zip64 不受支持（DOCX 不应出现）');
   }
+  if (entryCount > limits.maxEntries) {
+    throw new ZipReadError('CORRUPT', `ZIP 条目数 ${String(entryCount)} 超过上限 ${String(limits.maxEntries)}`);
+  }
 
   const entries: ZipEntry[] = [];
+  let totalUncompressed = 0;
   for (let index = 0; index < entryCount; index += 1) {
     if (offset + 46 > bytes.length || view.getUint32(offset, true) !== CENTRAL_SIGNATURE) {
       throw new ZipReadError('CORRUPT', `中央目录条目 ${String(index)} 非法`);
@@ -70,17 +88,30 @@ export function readZipEntries(bytes: Uint8Array): ZipEntry[] {
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
 
+    // 解压前先按**声明值**拦截（避免先分配后校验）
+    if (uncompressedSize > limits.maxEntryUncompressedBytes) {
+      throw new ZipReadError('CORRUPT', `条目 ${name} 声明解压大小 ${String(uncompressedSize)} 超过条目上限`);
+    }
+    if (totalUncompressed + uncompressedSize > limits.maxTotalUncompressedBytes) {
+      throw new ZipReadError('CORRUPT', `ZIP 累计解压大小超过上限 ${String(limits.maxTotalUncompressedBytes)}`);
+    }
+    if (compressedSize > 0 && uncompressedSize / compressedSize > limits.maxCompressionRatio) {
+      throw new ZipReadError('CORRUPT', `条目 ${name} 压缩比 ${String(Math.round(uncompressedSize / compressedSize))}:1 超过上限 ${String(limits.maxCompressionRatio)}:1`);
+    }
+
     let data: Uint8Array;
     if (method === 0) {
       data = compressed;
     } else if (method === 8) {
-      data = new Uint8Array(inflateRawSync(compressed));
+      // maxOutputLength：zlib 在输出超过上限时直接失败，不会分配 GB 级缓冲
+      data = new Uint8Array(inflateRawSync(compressed, { maxOutputLength: limits.maxEntryUncompressedBytes }));
     } else {
       throw new ZipReadError('UNSUPPORTED', `条目 ${name} 的压缩方法 ${String(method)} 不受支持`);
     }
     if (data.byteLength !== uncompressedSize) {
       throw new ZipReadError('CORRUPT', `条目 ${name} 解压大小不一致（声明 ${String(uncompressedSize)}，实际 ${String(data.byteLength)}）`);
     }
+    totalUncompressed += data.byteLength;
     entries.push({ name, bytes: data });
     offset += 46 + nameLength + extraLength + commentLength;
   }

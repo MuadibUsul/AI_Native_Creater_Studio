@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import dns from 'node:dns';
 import {
   ApiFailure,
   CONTENT_INPUT_ERROR_REASONS,
@@ -73,7 +74,7 @@ export function assertSafeUrl(rawUrl: string): URL {
   return url;
 }
 
-/** IPv4/IPv6 私网、回环、链路本地与元数据地址判定（字面量地址；DNS 解析后的复检由抓取器负责）。 */
+/** IPv4/IPv6 私网、回环、链路本地与元数据地址判定（字面量地址）。 */
 export function isBlockedAddress(host: string): boolean {
   const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
 
@@ -411,4 +412,57 @@ export function detectLanguage(text: string): string {
   if (cjk / total > 0.1) return 'zh';
   if (latin / total > 0.3) return 'en';
   return 'unknown';
+}
+
+/** 供注入的解析器签名（默认用 `node:dns`；测试可注入以离线验证）。 */
+export type ResolveHostAddresses = (hostname: string) => Promise<readonly { address: string; family: number }[]>;
+
+const defaultResolveHostAddresses: ResolveHostAddresses = async (hostname) =>
+  await dns.promises.lookup(hostname, { all: true });
+
+/**
+ * **DNS 解析后**的 SSRF 复检（2026-10 外部评审核实后新增）。
+ *
+ * 为什么必须做：`assertSafeUrl` 只能拦住"字面量就是内网地址"的 URL；一个**公网域名**只要其
+ * A/AAAA 记录指向 `127.0.0.1` / `169.254.169.254` / `10.x`，字面量检查就会放过它（DNS rebinding）。
+ * 因此这里把主机名解析成**全部**地址，任一落在内网/元数据范围即拒绝。
+ *
+ * 已知残余风险（如实记录，不夸大）：本函数与真正建连之间存在 TOCTOU 窗口——DNS 可在校验后改答。
+ * 彻底修复需把连接**固定到已校验的 IP**（如 undici `Agent` 的自定义 `lookup`）或走统一出口代理；
+ * 属部署层加固，见 docs/decisions/0010-review-response-20261010.md 第三节。
+ */
+export async function assertSafeHostResolves(
+  rawUrl: string,
+  resolve: ResolveHostAddresses = defaultResolveHostAddresses,
+): Promise<URL> {
+  const url = assertSafeUrl(rawUrl);
+  const hostname = url.hostname.startsWith('[') && url.hostname.endsWith(']')
+    ? url.hostname.slice(1, -1)
+    : url.hostname;
+  // 字面量地址已在 assertSafeUrl 判定过；这里只处理需要解析的主机名。
+  if (isBlockedAddress(hostname)) return url;
+  let addresses: readonly { address: string; family: number }[];
+  try {
+    addresses = await resolve(hostname);
+  } catch (error) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'DNS 解析失败（无法确认目标地址是否安全）', 422, {
+      reason: CONTENT_INPUT_ERROR_REASONS.UNREACHABLE,
+      host: hostname,
+      cause: error instanceof Error ? error.message.slice(0, 120) : 'dns-error',
+    });
+  }
+  if (addresses.length === 0) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'DNS 未返回任何地址', 422, {
+      reason: CONTENT_INPUT_ERROR_REASONS.UNREACHABLE, host: hostname,
+    });
+  }
+  const blocked = addresses.filter((entry) => isBlockedAddress(entry.address));
+  if (blocked.length > 0) {
+    throw new ApiFailure(ERROR_CODES.FORBIDDEN, '目标域名解析到内网/元数据地址（SSRF 防护拒绝）', 403, {
+      reason: CONTENT_INPUT_ERROR_REASONS.BLOCKED_TARGET,
+      host: hostname,
+      blockedAddresses: blocked.map((entry) => entry.address),
+    });
+  }
+  return url;
 }

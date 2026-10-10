@@ -347,6 +347,7 @@ export {
   updateSource,
 } from './content.js';
 export {
+  assertSafeHostResolves,
   assertSafeUrl,
   decodeContentBytes,
   decodeHtmlEntities,
@@ -358,6 +359,7 @@ export {
   resolveCharset,
   stableBlockId,
 } from './content-extract.js';
+export type { ResolveHostAddresses } from './content-extract.js';
 export {
   collectProviderResult,
   createHmacWebhookVerifier,

@@ -41,6 +41,8 @@
 | **沙箱环境隔离**：`sandboxEnv()` 白名单（仅 `PATH`/`SystemRoot`/`TEMP` 等 Node 启动必需项 + `NODE_OPTIONS=''`），显式 `cwd=os.tmpdir()`；不再透传 `DATABASE_URL`/`BETTER_AUTH_SECRET`/`PLATFORM_PROVIDER_KEYS`/`OBJECT_STORAGE_*` | `apps/motion-worker/src/sandbox.ts` | `apps/motion-worker/src/sandbox-hardening.test.ts`（2 例断言哨兵变量不入子进程）；`pnpm test:motion` 25/25 |
 | **词法门补漏**：新增 `.constructor` 点号形式、`Reflect.construct/getPrototypeOf/apply`、`setPrototypeOf`；精确化以免误伤合法 `class { constructor() {} }` | `apps/motion-worker/src/analysis.ts` | 同测试文件（4 例：点号/反射/原形式不回归/正常代码不误伤） |
 | **凭据密钥生产强制**：生产环境缺 `ANCS_CREDENTIAL_KEYS` 即**启动失败**（不再悄悄派生）；非生产派生改为 **HKDF** 并打印告警；环境 schema 与跨字段校验同步声明；`.env.example` 补文档 | `packages/providers/credential-vault-local/src/index.ts`、`packages/contracts/src/env.ts`、`.env.example` | `vault.test.ts` 新增"生产必须显式配置"用例（4 断言）；`pnpm test:unit` 通过 |
+| **文章抓取 DNS rebinding**（P1，真实缺口）：新增 `assertSafeHostResolves` —— 逐跳把主机名解析成**全部**地址，任一落在回环/私网/元数据段即 403；解析失败/空结果 422（不确认安全就不放行）；抓取器逐跳改用它。残余 TOCTOU 与「把连接固定到已校验 IP」的部署层修法已如实写入代码注释 | `packages/domain/src/content-extract.ts`（导出 `assertSafeHostResolves` / `ResolveHostAddresses`）、`apps/api/src/plugins/article-fetcher.ts` | `packages/domain/src/content-extract.test.ts` 新增 4 项（含多地址任一命中即拒、解析失败 422） |
+| **文档解析资源上限**（P1）：ZIP 条目数 / 单条解压量 / 累计解压量 / 压缩比四道门，且**在解压前按声明值拦截**（`inflateRawSync({ maxOutputLength })` 兜底，不再先分配）；上限可注入以便测试；PDF 加页数上限（500） | `packages/providers/document-extract/src/zip.ts`、`pdf.ts` | 新增 `zip-limits.test.ts` 6 项（手写 ZIP 构造压缩炸弹，验证**不分配即拒绝**） |
 | **FFmpeg 协议收敛**：10 处输入点统一加 `-protocol_whitelist file,pipe`（禁止 demuxer 自动跟随 playlist/`file://`/`http(s)://` 子引用） | `apps/worker/src/source-media-{probe,transcoder,indexer}-process.ts` | 真实 ffmpeg 集成套件 3 文件 **7/7 通过**（探测/索引/转码功能未受影响） |
 | **仓库卫生**：删除 3 个已提交的 `.tmp-*.py`；`.gitignore` 补 `.tmp-*`；**14 个文件**的本机绝对路径改为机器无关表述（复核：已跟踪文件零命中） | `.tmp-*.py`、`.gitignore`、14 个文档 | `git ls-files` + `grep` 复核无残留 |
 | **代理规则**：`AGENTS.md` 禁止事项新增三条（禁本机路径与 `.tmp-*` 入库 / 凭据密钥不得与会话密钥共用 / 沙箱 spawn 必须白名单 env） | `AGENTS.md` | — |
@@ -53,8 +55,8 @@
 - **全历史密钥扫描**：评审要求对公开仓库全历史跑 gitleaks/trufflehog。本机未装该工具，且**一旦命中需要你做轮换/改写的决策**。建议 CI 增独立 job：`gitleaks detect --log-opts=--all`（或 `trufflehog git file://. --only-verified`）。
 
 ### 代码已定位、可直接排期（按价值排序）
-1. **`articleFetcher` DNS rebinding**（P1，真实缺口）：`apps/api/src/plugins/article-fetcher.ts` 在 `assertSafeUrl` 后与每跳后 `dns.promises.lookup(host,{all:true})`，对全部解析 IP 跑 `isBlockedAddress`，并用自定义 `lookup` 固定已解析 IP（防 TOCTOU）；同时改正 `packages/domain/src/content-extract.ts:76` 那句不实的注释。
-2. **文档解析资源上限**（P1）：`packages/providers/document-extract/src/zip.ts:52-84` 增加条目数/解压总量/解压比上限（先限流再 inflate）；`pdf.ts:65` 加页数上限；解析移入受时限的子进程。
+1. ~~`articleFetcher` DNS rebinding~~ ✅ **已完成（解析后复核全部地址）**；**残余**：把连接固定到已校验 IP（undici `Agent` 自定义 `lookup`）或走统一出口代理 —— 属部署层加固。
+2. ~~文档解析资源上限~~ ✅ **已完成**（ZIP 四道门 + PDF 页数上限）；「解析移入受时限子进程」仍属部署层。
 3. **Web 面**（P1）：`apps/api/src/server.ts` 注册限流与显式 CORS 白名单；`apps/api/src/routes/storage.ts:44` 与 `content.ts:120` 增 MIME/扩展名白名单；确认 Better Auth `trustedOrigins`/SameSite 策略（需人确认前端域）。
 4. **媒体管线的 OS 级隔离**（P1 部署项）：容器无出网 + 只读文件系统 + cgroup 内存/CPU 上限；`-max_pixels`/时长上限；`infra/` 目前只有 dev compose，**无 Dockerfile**。
 5. **CSP 头与跨源预览约束**（潜在 XSS）：`apps/web/next.config.mjs` 增 `headers()`；若将来要在浏览器预览 AI 代码，必须跨源 sandboxed iframe + 严格 CSP，禁止与主站同源。
