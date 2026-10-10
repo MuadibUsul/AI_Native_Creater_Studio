@@ -622,6 +622,26 @@ export {
   timelineProjectionSchema,
   timelineProjectionTrackSchema,
 } from './timeline-projection.js';
+export {
+  TEMPORAL_TARGET_KINDS,
+  dualTimecode,
+  dualTimecodeClipSchema,
+  dualTimecodeSchema,
+  formatFrameTimecode,
+  musicRegionSourceSchema,
+  resolveMusicRegionTarget,
+  resolveUtteranceTarget,
+  stepFrames,
+  temporalTargetSchema,
+  utteranceSourceSchema,
+} from './timeline-targeting.js';
+export type {
+  DualTimecode,
+  DualTimecodeClip,
+  MusicRegionSource,
+  TemporalTarget,
+  UtteranceSource,
+} from './timeline-targeting.js';
 export type {
   TemporalSelectionCoverage,
   TimelineLane,

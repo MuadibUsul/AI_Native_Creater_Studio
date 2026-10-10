@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（第五组：N04-04 主体投影与时间选择→对象；第四组为 N06-04 收口）
+**最后更新：** 2026-10-10（第六组：N04-04 收尾——逐帧步进/双时间码换算/语义指向；第五组为 N04-04 主体投影）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,20 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1297/1297**（第五组组末实测；Unit 518 / Web 191 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1311/1311**（第六组组末实测；Unit 530 / Web 193 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · 第六组 · N04-04 收尾（逐帧步进 + 双时间码换算 + 语义指向）— **IN_PROGRESS**
+- **内容：** 新增契约 `packages/contracts/src/timeline-targeting.ts`：`stepFrames`（逐帧步进走有理运算 → **分数帧率不漂移**，`bounds` 夹帧边界）、`formatFrameTimecode`（`HH:MM:SS:FF`，非 drop-frame）、`dualTimecode`（复用 `sequenceTimeToSourcePts`，含 **REVERSE** 镜像；不在片段内 → null）、`resolveUtteranceTarget`（「这句话」→ 字幕 + 词级定位）、`resolveMusicRegionTarget`（「这里的音乐」→ 音频区域，重叠全返回）；`TimelineBand` 新增逐帧按钮与帧时间码（未给 `frameRate` 则不渲染）。
+- **证据：** `docs/verification/N04-04.md`（第二轮：契约 12 项单测 + 时间带 jsdom 5 项）· `docs/handoffs/N04-04.md`
+- **为何不是 VERIFIED：** 双时间码**界面展示**（需把片段 `sourceRange` 带进车道数据）、真实字幕/音频区域行到语义指向的适配接线、空间×时间应用层组网、真实浏览器高 DPI 目检（N04-01）未做。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-10 · 第五组 · N04-04 主体（真实片段/轨道投影 + 时间选择→对象）— **IN_PROGRESS**
 - **内容：** 新增契约 `packages/contracts/src/timeline-projection.ts`：`projectSequenceToTimeline`（真实轨道/片段 → 车道与几何；有理时基换算；越界如实标 `clippedLeft/Right`；零宽不进 segments 但列入 `outsideViewportClipIds`；孤儿片段列入 `orphanClipIds` 不静默丢弃）、`clipsInTemporalSelection`（POINT 半开区间命中；RANGES 区分完整覆盖/部分相交，**不合并显式多区间**；支持轨道作用域）、`pointSelection`；Web 侧新增 `projectionToBandLanes` 适配器把权威投影喂给既有 `TimelineBand`（只做形状映射，几何只算一次）。

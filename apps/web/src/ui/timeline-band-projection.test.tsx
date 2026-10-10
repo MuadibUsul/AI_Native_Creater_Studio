@@ -63,3 +63,45 @@ describe('N04-04 真实片段投影 → 时间带渲染', () => {
     expect(projection.outsideViewportClipIds).toHaveLength(3);
   });
 });
+
+describe('N04-04 逐帧步进接入时间带', () => {
+  const FR = { num: 30, den: 1 } as const;
+  const mtMs = (ms: number) => legacyMillisecondsToMediaTime(ms);
+
+  it('点"下一帧/上一帧"把播放头按帧步进（分数帧率不丢帧）', () => {
+    const onPlayheadChange = vi.fn();
+    const projection = projectSequenceToTimeline({ tracks, clips, viewport });
+    render(
+      <TimelineBand
+        viewport={viewport} playhead={mtMs(1_000)} selection={null}
+        lanes={projectionToBandLanes(projection)} frameRate={FR} onPlayheadChange={onPlayheadChange}
+      />,
+    );
+    // 1.000s 对齐在帧边界上 → 下一帧 = 1/30 s ≈ 1033.33ms
+    const nextBtn = screen.getByTestId('timeline-step-next') as HTMLButtonElement;
+    // eslint-disable-next-line no-console
+    try {
+      fireEvent.click(nextBtn);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log('DEBUG click error=', error instanceof Error ? error.message : String(error));
+    }
+    // eslint-disable-next-line no-console
+    console.log('DEBUG calls=', String(onPlayheadChange.mock.calls.length));
+    const next = onPlayheadChange.mock.calls[0]![0] as { ticks: string; timebase: { num: number; den: number } };
+    expect((Number(next.ticks) * next.timebase.num * 1000) / next.timebase.den).toBeCloseTo(1_033.333, 2);
+
+    onPlayheadChange.mockClear();
+    fireEvent.click(screen.getByTestId('timeline-step-prev'));
+    const prev = onPlayheadChange.mock.calls[0]![0] as { ticks: string; timebase: { num: number; den: number } };
+    expect((Number(prev.ticks) * prev.timebase.num * 1000) / prev.timebase.den).toBeCloseTo(966.667, 2);
+    // 帧时间码可读（非空且形状正确）
+    expect(screen.getByTestId('timeline-frame-timecode').textContent).toMatch(/^\d{2}:\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('未提供 frameRate 时不渲染逐帧控件（不假装支持）', () => {
+    const projection = projectSequenceToTimeline({ tracks, clips, viewport });
+    render(<TimelineBand viewport={viewport} playhead={null} selection={null} lanes={projectionToBandLanes(projection)} />);
+    expect(screen.queryByTestId('timeline-step-next')).toBeNull();
+  });
+});
