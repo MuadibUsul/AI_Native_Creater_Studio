@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>ANCS 播放同步测量台（N03-16）</title>
+</head>
+<body>
+  <!-- 测量台：用**真实适配器**驱动一个真实 <video>，把浏览器实际呈现的数据交给 Node 侧判定。 -->
+  <video id="media" playsinline muted style="width:320px"></video>
+  <script src="./adapter.js"></script>
+  <script>
+    (() => {
+      const element = document.getElementById('media');
+      let backend = null;
+      let playStartWall = 0;
+      let playStartMediaMs = 0;
+
+      const snapshotOf = (url, frameRate) => ({
+        schemaVersion: 'playback-snapshot/1.0', projectId: 'p', sequenceId: 's', documentRevision: 1,
+        frameRate, duration: { ticks: '0', timebase: { num: 1, den: 1000 } },
+        capabilities: { backend: 'HTML_MEDIA_BASELINE', videoPrecision: 'KEYFRAME_APPROXIMATE', audioPrecision: 'KEYFRAME_APPROXIMATE', supported: [], unsupported: [] },
+        videoSegments: [], audioSegments: [], captions: [], excludedTrackIds: [], warnings: [],
+      });
+
+      window.ancsHarness = {
+        async load(url, frameRateNum, frameRateDen) {
+          backend = ancsPlayback.createMediaElementBackend({ element, resolveSourceUrl: () => url });
+          await backend.load(snapshotOf(url, { num: frameRateNum, den: frameRateDen }));
+          // 等首帧真正可播（readyState ≥ 2）
+          const started = performance.now();
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('FIRST_FRAME_TIMEOUT')), 15000);
+            const check = () => {
+              if (element.readyState >= 2) { clearTimeout(timer); resolve(); return; }
+              requestAnimationFrame(check);
+            };
+            check();
+          });
+          return Math.round(performance.now() - started);
+        },
+        async play() {
+          await backend.play();
+          playStartWall = performance.now();
+          playStartMediaMs = element.currentTime * 1000;
+        },
+        async pause() { await backend.pause(); },
+        async seek(ms) {
+          const started = performance.now();
+          await backend.seek({ ticks: String(Math.round(ms)), timebase: { num: 1, den: 1000 } });
+          // seek 完成以"呈现位置跟到目标"为准
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 5000);
+            const check = () => {
+              if (Math.abs(element.currentTime * 1000 - ms) < 40 || element.seeking === false) { clearTimeout(timer); resolve(); return; }
+              requestAnimationFrame(check);
+            };
+            check();
+          });
+          return Math.round(performance.now() - started);
+        },
+        async sample(requestedMs) {
+          const quality = typeof element.getVideoPlaybackQuality === 'function' ? element.getVideoPlaybackQuality() : null;
+          const memory = performance.memory ?? null;
+          return {
+            requestedMs,
+            presentedMs: element.currentTime * 1000,
+            droppedFrames: quality === null ? null : quality.droppedVideoFrames,
+            expectedFrames: quality === null ? null : quality.totalVideoFrames,
+            memoryMb: memory === null ? null : memory.usedJSHeapSize / (1024 * 1024),
+          };
+        },
+        /** 播放中：以"墙上时钟"为参照算漂移（视频自身进度 vs 真实经过时间）。 */
+        async driftSample() {
+          const elapsed = performance.now() - playStartWall;
+          const expectedMs = playStartMediaMs + elapsed;
+          const quality = typeof element.getVideoPlaybackQuality === 'function' ? element.getVideoPlaybackQuality() : null;
+          const memory = performance.memory ?? null;
+          return {
+            requestedMs: expectedMs,
+            presentedMs: element.currentTime * 1000,
+            droppedFrames: quality === null ? null : quality.droppedVideoFrames,
+            expectedFrames: quality === null ? null : quality.totalVideoFrames,
+            memoryMb: memory === null ? null : memory.usedJSHeapSize / (1024 * 1024),
+          };
+        },
+        durationMs() { return (Number.isFinite(element.duration) ? element.duration : 0) * 1000; },
+        async dispose() { if (backend !== null) await backend.dispose(); },
+      };
+    })();
+  </script>
+</body>
+</html>

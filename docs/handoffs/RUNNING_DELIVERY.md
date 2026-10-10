@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第十二组：播放链路浏览器接线 + 真机清单）
+**最后更新：** 2026-10-11（第十三组：N03-16 测量矩阵本体，真实 Chromium + 真实媒体跑通）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,21 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 164 项 |
-| 本地 `pnpm verify` | **14/14，1382/1382**（第十二组组末实测；Unit 584 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1391/1391**（第十三组组末实测；Unit 593 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过；`pnpm test:playback-sync`：真实 Chromium 测量 overall=PASS） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十三组 · N03-16 测量矩阵本体（**真实 Chromium + 真实 MP4 跑通**）— IN_PROGRESS
+- **内容：** 新增 `packages/contracts/src/playback-sync-report.ts`（采样/夹具/报告 schema + §20.4／§20.6 阈值 + `summarizePlaybackSyncReport`：p50/p95 seek、**启动偏移**、**累计漂移**、每分钟漂移、掉帧比例、冷/热首帧、内存峰值、**帧级门**；未测记 `UNKNOWN`；**按路径分组不混算**）；`scripts/playback-sync/harness.html` + `measure.mjs`（esbuild 打包**真实适配器** → Playwright 驱动 Chromium 播放真实夹具 → 判定 → 写报告）；`package.json` 加 `test:playback-sync`。
+- **实测（headless Chromium，本地实时路径）：** `overall = PASS`；`clip-a-24000-1001`（23.976）累计漂移 **2.7ms**、`clip-b` **0.13ms**、`clip-d`（VFR）**0.09ms**；seek p95 最高 17ms（阈值 1000）；冷/热首帧 70/23、18/14、14/15 ms；掉帧比例 0。报告：`docs/verification/artifacts/playback-sync-report.json`。
+- **测量设计教训（重要，已写入验证文档）：** 最初把"呈现与墙上时钟的偏移"直接当漂移，23.976 夹具因**固定启动偏移**（≈2 帧）被判 FAIL——那是**误报**。修法是**拆分两个指标**（启动偏移 / 累计漂移）而不是放宽阈值。缺这一步，"证据"就是假的。
+- **为何不是 VERIFIED：** 真机（Android/iOS）证据未取；`PRERENDER` 路径无夹具结果（`UNKNOWN`，未冒充）；**音频偏移未测**（缺带独立音轨的合成夹具）；转场/J-L cut/多轨/字幕金样未纳入；长片（分钟级）未跑。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-11 · 第十二组 · 播放链路**浏览器接线**（N03-12 适配器 + N03-13 接线面）
 - **内容：**

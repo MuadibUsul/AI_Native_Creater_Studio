@@ -1,0 +1,269 @@
+{
+  "generatedAt": "2026-10-10T18:15:05.340Z",
+  "thresholdSource": "SPEC_20_4_AND_20_6_START_TARGET",
+  "thresholds": {
+    "cachedSeekP95Ms": 1000,
+    "cachedSeekP50Ms": 500,
+    "driftAccumulationMs": 40,
+    "startupOffsetMs": 250,
+    "driftPerMinuteMs": 120,
+    "droppedFrameRatio": 0.02,
+    "firstFrameColdMs": 3000,
+    "maxMemoryMb": 512
+  },
+  "fixtures": [
+    {
+      "fixtureId": "clip-a-24000-1001",
+      "path": "LOCAL_REALTIME",
+      "backendKind": "HTML_MEDIA_BASELINE",
+      "precision": "KEYFRAME_APPROXIMATE",
+      "verdicts": [
+        {
+          "metric": "COLD_FIRST_FRAME",
+          "value": 62,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "HOT_FIRST_FRAME",
+          "value": 25,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": "热缓存应以冷缓存为参照"
+        },
+        {
+          "metric": "CACHED_SEEK_P50",
+          "value": 15,
+          "threshold": 500,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "CACHED_SEEK_P95",
+          "value": 17,
+          "threshold": 1000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "STARTUP_OFFSET",
+          "value": 88.05400001192095,
+          "threshold": 250,
+          "verdict": "PASS",
+          "note": "固定偏移，非漂移"
+        },
+        {
+          "metric": "DRIFT_ACCUMULATION",
+          "value": 7.5730000119209535,
+          "threshold": 40,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DRIFT_PER_MINUTE",
+          "value": 113.5950001788143,
+          "threshold": 120,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DROPPED_FRAME_RATIO",
+          "value": 0,
+          "threshold": 0.02,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "MEMORY_PEAK",
+          "value": 12.77923583984375,
+          "threshold": 512,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "FRAME_ACCURACY",
+          "value": 0,
+          "threshold": 1,
+          "verdict": "PASS",
+          "note": ""
+        }
+      ],
+      "verdict": "PASS",
+      "failureReasons": []
+    },
+    {
+      "fixtureId": "clip-b-30000-1001",
+      "path": "LOCAL_REALTIME",
+      "backendKind": "HTML_MEDIA_BASELINE",
+      "precision": "KEYFRAME_APPROXIMATE",
+      "verdicts": [
+        {
+          "metric": "COLD_FIRST_FRAME",
+          "value": 8,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "HOT_FIRST_FRAME",
+          "value": 15,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": "热缓存应以冷缓存为参照"
+        },
+        {
+          "metric": "CACHED_SEEK_P50",
+          "value": 0,
+          "threshold": 500,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "CACHED_SEEK_P95",
+          "value": 0,
+          "threshold": 1000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "STARTUP_OFFSET",
+          "value": 0.10500001192087893,
+          "threshold": 250,
+          "verdict": "PASS",
+          "note": "固定偏移，非漂移"
+        },
+        {
+          "metric": "DRIFT_ACCUMULATION",
+          "value": 0.08900002384177697,
+          "threshold": 40,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DRIFT_PER_MINUTE",
+          "value": 1.3336666909357189,
+          "threshold": 120,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DROPPED_FRAME_RATIO",
+          "value": 0,
+          "threshold": 0.02,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "MEMORY_PEAK",
+          "value": 12.77923583984375,
+          "threshold": 512,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "FRAME_ACCURACY",
+          "value": 0,
+          "threshold": 1,
+          "verdict": "PASS",
+          "note": ""
+        }
+      ],
+      "verdict": "PASS",
+      "failureReasons": []
+    },
+    {
+      "fixtureId": "clip-d-synthetic-vfr",
+      "path": "LOCAL_REALTIME",
+      "backendKind": "HTML_MEDIA_BASELINE",
+      "precision": "KEYFRAME_APPROXIMATE",
+      "verdicts": [
+        {
+          "metric": "COLD_FIRST_FRAME",
+          "value": 14,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "HOT_FIRST_FRAME",
+          "value": 17,
+          "threshold": 3000,
+          "verdict": "PASS",
+          "note": "热缓存应以冷缓存为参照"
+        },
+        {
+          "metric": "CACHED_SEEK_P50",
+          "value": 15,
+          "threshold": 500,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "CACHED_SEEK_P95",
+          "value": 16,
+          "threshold": 1000,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "STARTUP_OFFSET",
+          "value": 0.14699999999999136,
+          "threshold": 250,
+          "verdict": "PASS",
+          "note": "固定偏移，非漂移"
+        },
+        {
+          "metric": "DRIFT_ACCUMULATION",
+          "value": 0.07400000000012597,
+          "threshold": 40,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DRIFT_PER_MINUTE",
+          "value": 0.9314684663324619,
+          "threshold": 120,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "DROPPED_FRAME_RATIO",
+          "value": 0,
+          "threshold": 0.02,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "MEMORY_PEAK",
+          "value": 12.77923583984375,
+          "threshold": 512,
+          "verdict": "PASS",
+          "note": ""
+        },
+        {
+          "metric": "FRAME_ACCURACY",
+          "value": 0,
+          "threshold": 1,
+          "verdict": "PASS",
+          "note": ""
+        }
+      ],
+      "verdict": "PASS",
+      "failureReasons": []
+    }
+  ],
+  "byPath": [
+    {
+      "path": "LOCAL_REALTIME",
+      "fixtures": 3,
+      "verdict": "PASS"
+    },
+    {
+      "path": "PRERENDER",
+      "fixtures": 0,
+      "verdict": "UNKNOWN"
+    }
+  ],
+  "overall": "PASS"
+}

@@ -2580,3 +2580,28 @@ export type {
   MediaClockSyncAction,
   MediaClockSyncDecision,
 } from './media-clock.js';
+
+// N03-16 播放同步测量与判定（含 §20 阈值与"不支持帧级不得过逐帧门"）
+export {
+  PLAYBACK_SYNC_METRICS,
+  PLAYBACK_SYNC_PATHS,
+  PLAYBACK_SYNC_THRESHOLDS,
+  PLAYBACK_SYNC_THRESHOLD_SOURCE,
+  playbackSyncFixtureReportSchema,
+  playbackSyncFixtureResultSchema,
+  playbackSyncMetricSchema,
+  playbackSyncPathSchema,
+  playbackSyncReportSchema,
+  playbackSyncSampleSchema,
+  playbackSyncVerdictSchema,
+  summarizePlaybackSyncReport,
+} from './playback-sync-report.js';
+export type {
+  PlaybackSyncFixtureReport,
+  PlaybackSyncFixtureResult,
+  PlaybackSyncMetric,
+  PlaybackSyncPath,
+  PlaybackSyncReport,
+  PlaybackSyncSample,
+  PlaybackSyncVerdict,
+} from './playback-sync-report.js';
