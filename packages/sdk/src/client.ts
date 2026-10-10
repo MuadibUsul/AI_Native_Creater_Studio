@@ -48,6 +48,11 @@ import {
   sealUtteranceRequestSchema,
   sealUtteranceResponseSchema,
   voiceSessionSchema,
+  createProposalRequestSchema,
+  proposalSchema,
+  proposalTrialSchema,
+  adoptProposalRequestSchema,
+  adoptProposalResponseSchema,
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
@@ -374,6 +379,10 @@ import {
   type VoiceEventEnvelope,
   type VoiceTranscriptRevision,
   type EphemeralCredential,
+  type Proposal,
+  type ProposalTrial,
+  type CreateProposalRequest,
+  type AdoptProposalRequest,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
@@ -788,6 +797,38 @@ export interface AncsClient {
       projectId: string,
       anchorId: string,
     ): Promise<SelectionAnchorRecord>;
+    /** N06-01：创建私有候选（不改工程） */
+    createProposal(
+      workspaceId: string,
+      projectId: string,
+      input: CreateProposalRequest,
+      options?: MutationOptions,
+    ): Promise<Proposal>;
+    /** N06-01：读取候选 */
+    proposal(workspaceId: string, projectId: string, proposalId: string): Promise<Proposal>;
+    /** N06-02：确定性私有试改（事务内真跑后回滚；工程零变更） */
+    previewProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      options?: MutationOptions,
+    ): Promise<ProposalTrial>;
+    /** N06-04：原子采用（绑定校验 + 幂等键重放） */
+    adoptProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: AdoptProposalRequest,
+      options?: MutationOptions,
+    ): Promise<{ proposal: Proposal; projectRevision: number; adopted: true }>;
+    /** N06-04：丢弃候选 */
+    discardProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: { reason?: string },
+      options?: MutationOptions,
+    ): Promise<Proposal>;
     /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
     createVoiceSession(
       workspaceId: string,
@@ -2138,6 +2179,24 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       selectionAnchor: (workspaceId, projectId, anchorId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/selection-anchors/${anchorId}`, selectionAnchorRecordSchema),
+      createProposal: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals`, proposalSchema, {
+          body: input, bodySchema: createProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      proposal: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}`, proposalSchema),
+      previewProposal: (workspaceId, projectId, proposalId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/preview`, proposalTrialSchema, {
+          body: {}, bodySchema: z.object({}).strict(), idempotencyKey: mutation?.idempotencyKey ?? `preview_${proposalId}`,
+        }),
+      adoptProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/adopt`, adoptProposalResponseSchema, {
+          body: input, bodySchema: adoptProposalRequestSchema, idempotencyKey: input.idempotencyKey ?? mutation?.idempotencyKey,
+        }),
+      discardProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/discard`, proposalSchema, {
+          body: input ?? {}, bodySchema: z.object({ reason: z.string().max(200).optional() }).strict(), idempotencyKey: mutation?.idempotencyKey,
+        }),
       createVoiceSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
           body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,

@@ -561,6 +561,13 @@
       "when": 1791596690276,
       "tag": "0080_voice_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791598504473,
+      "tag": "0081_proposals",
+      "breakpoints": true
     }
   ]
 }

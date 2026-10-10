@@ -11,6 +11,7 @@ import { registerIdempotency } from './plugins/idempotency.js';
 import { registerAiEditRoutes } from './routes/ai-edit.js';
 import { registerSelectionRoutes } from './routes/selection.js';
 import { registerVoiceSessionRoutes } from './routes/voice-sessions.js';
+import { registerProposalRoutes } from './routes/proposals.js';
 import { registerAssetRoutes } from './routes/assets.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAppearanceRoutes } from './routes/appearance.js';
@@ -216,6 +217,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerDirectorRoutes(instance, authDeps);
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerSelectionRoutes(instance, authDeps);
+        registerProposalRoutes(instance, authDeps);
         // N05-01：语音会话签名密钥来自环境（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
         registerVoiceSessionRoutes(instance, authDeps, {
           ...(options.voice?.sessionSecret !== undefined

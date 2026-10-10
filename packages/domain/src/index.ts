@@ -412,6 +412,14 @@ export {
 export { EDIT_OPERATION_V2_ERROR_REASONS, compileEditOperationsV2, processEditsV2 } from './edit-operation-v2.js';
 export { AUDIO_MIX_PLAN_VERSION, planClipAudioMix } from './audio-mix.js';
 export {
+  adoptProposal,
+  createProposalBranch,
+  discardProposal,
+  loadProposalForRead,
+  previewProposal,
+  supersedeProposals,
+} from './proposals.js';
+export {
   VOICE_ADAPTER_CAPABILITIES,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,

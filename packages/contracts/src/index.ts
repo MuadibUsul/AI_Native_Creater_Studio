@@ -290,6 +290,24 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  PROPOSAL_ERROR_REASONS,
+  PROPOSAL_STATUSES,
+  adoptProposalRequestSchema,
+  adoptProposalResponseSchema,
+  createProposalRequestSchema,
+  proposalSchema,
+  proposalStatusSchema,
+  proposalTrialSchema,
+} from './proposal.js';
+export type {
+  AdoptProposalRequest,
+  CreateProposalRequest,
+  Proposal,
+  ProposalErrorReason,
+  ProposalStatus,
+  ProposalTrial,
+} from './proposal.js';
+export {
   VOICE_CAPABILITY_FLAGS,
   VOICE_ERROR_REASONS,
   VOICE_SESSION_STATUSES,
