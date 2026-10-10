@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第十组：N03-12 播放源选路与韧性策略层）
+**最后更新：** 2026-10-11（第十一组：N03-13 统一媒体时钟与音画同步调度逻辑层）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,21 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 164 项 |
-| 本地 `pnpm verify` | **14/14，1356/1356**（第十组组末实测；Unit 571 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1369/1369**（第十一组组末实测；Unit 584 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十一组 · N03-13 统一媒体时钟与音画同步调度 — **IN_PROGRESS**
+- **内容：** 新增 `packages/contracts/src/media-clock.ts` —— 统一媒体时钟（有音轨→AUDIO_CONTEXT，无音轨→**同接口虚拟时钟**）；`seekMediaClock` **递增 epoch** + `isScheduledAudioCurrent`（**只有当前代际的已调度音频可播** → 连续 seek 后旧音频不出声）；`suspendMediaClock`（**冻结**，后台 60s 不推进）/`resumeMediaClock`（**重锚到恢复时刻**，不快进、挂起期间音频时间不计入序列）；`setMediaClockRate`（切换瞬间序列时间**连续**）；`resolveMediaClockPlan`（**未授权 → 明确提示 + 只静音播画面**，不静默无声）；`decideMediaClockSync`（±40ms **容差内不修正**／带内按比例微调速率并限幅 ±5%／超 250ms 才 RESEEK）；`gainDbAt`（淡入淡出包络）；`isClockInsideRange`（半开边界）。
+- **证据：** `docs/verification/N03-13.md`（13 项单测，逐条覆盖四条验收：连续 seek 旧音频不播／后台恢复不快进不重复／长样例 1 小时零漂移／未授权清楚提示）· `docs/handoffs/N03-13.md`
+- **为何不是 VERIFIED：** **真实 WebAudio 接线未做**（AudioContext/AudioBufferSourceNode 按 epoch 排程、suspend/resume、播放速率、GainNode 淡变曲线），字幕跟随渲染未接；实测漂移与挂起行为属 N03-16。
+- **G0 链现状：** `N03-11 ✅ → N03-12（策略层✅／适配器未写）→ N03-13（逻辑层✅／接线未写）→ N03-16 → N03-10`。
+- **下一步：** 浏览器接线（N03-12 适配器 + N03-13 音频侧）→ N03-16 测量矩阵。
+
 
 ### 2026-10-11 · 第十组 · N03-12 播放源选路与韧性（策略层）— **IN_PROGRESS**
 - **内容：** proxy 画像/PTS 映射（N02 已交付，未重造）之上补齐**播放侧策略**：新增 `packages/contracts/src/playback-source.ts` —— `selectPlaybackSource`（按**实测**能力选 HTMLMediaElement／MSE／局部预渲染；**精度如实**：无 WebCodecs 时只能 `KEYFRAME_APPROXIMATE` 且给 `limitations`；`requireFrameAccurate` 达不到则 `playable=false`）、`applyUrlRefresh`（**只换 URL**，时钟/选区逐字段不变）/`urlsNeedingRefresh`、有界分段缓存（条目数+字节双上限 LRU）/`planSegmentFetch`（当前段 + **有界**预取，返回 `cacheHit` 以区分冷/热）。

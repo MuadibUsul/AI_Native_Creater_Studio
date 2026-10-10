@@ -2542,3 +2542,41 @@ export type {
   PlaybackSourceUrl,
   SegmentCacheState,
 } from './playback-source.js';
+
+// N03-13 统一媒体时钟与音画同步调度
+export {
+  AUDIO_PLAYBACK_PERMISSIONS,
+  MEDIA_CLOCK_NOTICES,
+  MEDIA_CLOCK_SOURCES,
+  MEDIA_CLOCK_SYNC,
+  MEDIA_CLOCK_SYNC_ACTIONS,
+  audioGainEnvelopeSchema,
+  audioPlaybackPermissionSchema,
+  createMediaClock,
+  decideMediaClockSync,
+  gainDbAt,
+  isClockInsideRange,
+  isScheduledAudioCurrent,
+  mediaClockNoticeSchema,
+  mediaClockPlanSchema,
+  mediaClockSourceSchema,
+  mediaClockStateSchema,
+  mediaClockSyncActionSchema,
+  mediaClockSyncDecisionSchema,
+  resolveMediaClockPlan,
+  resumeMediaClock,
+  seekMediaClock,
+  sequenceTimeAt,
+  setMediaClockRate,
+  suspendMediaClock,
+} from './media-clock.js';
+export type {
+  AudioGainEnvelope,
+  AudioPlaybackPermission,
+  MediaClockNotice,
+  MediaClockPlan,
+  MediaClockSource,
+  MediaClockState,
+  MediaClockSyncAction,
+  MediaClockSyncDecision,
+} from './media-clock.js';
