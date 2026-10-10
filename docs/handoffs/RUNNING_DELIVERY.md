@@ -262,6 +262,7 @@ e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_P
 65325d0  fix(review) 外部评审逐条核实与 P0 修复（意图识别/沙箱隔离/凭据密钥/FFmpeg 协议/仓库卫生）
 f9344d8  fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复评审响应引入的 unit 回归）
 f9b612b  feat(n06-04) 试片缓存收口（TTL/容量/保留清理/可观测）→ VERIFIED（第四组；组末 verify 14/14、1285/1285）
+305e5ad  feat(n04-04) 真实片段/轨道投影 + 时间选择→对象解析（第五组；组末 verify 14/14、1297/1297）
 ```
 
 ---
