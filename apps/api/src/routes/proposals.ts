@@ -7,8 +7,11 @@ import {
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   cancelProposalRequestSchema,
+  captureConfirmedContentRequestSchema,
+  confirmedContentRecordSchema,
   createProposalRequestSchema,
   errorEnvelopeSchema,
+  objectLockKindSchema,
   opaqueIdSchema,
   proposalArtifactSchema,
   proposalImpactSchema,
@@ -16,6 +19,7 @@ import {
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  regressionReportSchema,
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
 } from '@ancs/contracts';
@@ -23,10 +27,14 @@ import {
   adoptProposal,
   adoptProposalPartial,
   cancelProposal,
+  captureConfirmedContent,
+  checkConfirmedContent,
   computeProposalImpact,
   createProposalBranch,
   discardProposal,
+  listConfirmedContents,
   listProposalArtifacts,
+  loadConfirmedContent,
   loadProposalForRead,
   previewProposal,
   rebaseProposal,
@@ -161,6 +169,7 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         actorId: context.userId, expectedOperationsHash: request.body.expectedOperationsHash,
         expectedSelectionFingerprint: request.body.expectedSelectionFingerprint, idempotencyKey: request.body.idempotencyKey,
+        protectionIds: request.body.protectionIds,
       });
       return { proposal: adopted.proposal, projectRevision: adopted.projectRevision, adopted: true as const };
     },
@@ -204,6 +213,7 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
         actorId: context.userId, selectedOperationIndexes: request.body.selectedOperationIndexes,
         expectedOperationsHash: request.body.expectedOperationsHash,
         expectedSelectionFingerprint: request.body.expectedSelectionFingerprint, idempotencyKey: request.body.idempotencyKey,
+        protectionIds: request.body.protectionIds,
       });
       return {
         proposal: result.proposal,
@@ -271,6 +281,85 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
       await app.requireWorkspace(request, request.params.id, 'workspace:read');
       return listProposalArtifacts(domain, {
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+      });
+    },
+  );
+
+  // ---- N06-07 已确认内容保护与回归指纹（工程作用域，非候选作用域） ----
+
+  const protectionParamsSchema = projectParamsSchema.extend({ protectionId: opaqueIdSchema });
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/content-protections',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 采集已确认内容的三轴指纹（内容/时位/资产；缺省保护全部片段）',
+        params: projectParamsSchema,
+        body: captureConfirmedContentRequestSchema,
+        response: { 200: confirmedContentRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+      return captureConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, actorId: context.userId, request: request.body,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/content-protections',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 列出工程内已确认内容保护记录',
+        params: projectParamsSchema,
+        response: { 200: z.array(confirmedContentRecordSchema), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listConfirmedContents(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/content-protections/:protectionId',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 读取保护记录',
+        params: protectionParamsSchema,
+        response: { 200: confirmedContentRecordSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return loadConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, protectionId: request.params.protectionId,
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/content-protections/:protectionId/check',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-07 回归核对（只读）：受保护内容是否仍引用相同资产与参数；报告范围外变化',
+        params: protectionParamsSchema,
+        body: z.object({
+          explicitTargets: z.array(z.object({ objectKind: objectLockKindSchema, objectId: opaqueIdSchema }).strict()).max(512).optional(),
+        }).strict(),
+        response: { 200: regressionReportSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return checkConfirmedContent(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, protectionId: request.params.protectionId,
+        ...(request.body.explicitTargets === undefined ? {} : { explicitTargets: request.body.explicitTargets }),
       });
     },
   );

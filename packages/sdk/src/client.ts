@@ -62,6 +62,9 @@ import {
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
   cancelProposalRequestSchema,
+  captureConfirmedContentRequestSchema,
+  confirmedContentRecordSchema,
+  regressionReportSchema,
   recoverSelectionAnchorRequestSchema,
   selectionRecoveryResultSchema,
   legacySelectionSchema,
@@ -403,6 +406,9 @@ import {
   type SubmitProposalArtifactRequest,
   type SubmitProposalArtifactResponse,
   type CancelProposalRequest,
+  type CaptureConfirmedContentRequest,
+  type ConfirmedContentRecord,
+  type RegressionReport,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
@@ -887,6 +893,24 @@ export interface AncsClient {
     ): Promise<SubmitProposalArtifactResponse>;
     /** N06-06：读取候选产物台账（含隔离行与理由） */
     proposalArtifacts(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalArtifact[]>;
+    /** N06-07：采集已确认内容三轴指纹（缺省保护全部片段） */
+    captureConfirmedContent(
+      workspaceId: string,
+      projectId: string,
+      input: CaptureConfirmedContentRequest,
+      options?: MutationOptions,
+    ): Promise<ConfirmedContentRecord>;
+    /** N06-07：列出工程内保护记录 */
+    confirmedContents(workspaceId: string, projectId: string): Promise<ConfirmedContentRecord[]>;
+    /** N06-07：读取单条保护记录 */
+    confirmedContent(workspaceId: string, projectId: string, protectionId: string): Promise<ConfirmedContentRecord>;
+    /** N06-07：回归核对（只读）——受保护内容是否仍引用相同资产与参数 */
+    checkConfirmedContent(
+      workspaceId: string,
+      projectId: string,
+      protectionId: string,
+      input?: { explicitTargets?: { objectKind: string; objectId: string }[] },
+    ): Promise<RegressionReport>;
     /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
     createVoiceSession(
       workspaceId: string,
@@ -2283,6 +2307,21 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       proposalArtifacts: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, z.array(proposalArtifactSchema)),
+      captureConfirmedContent: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections`, confirmedContentRecordSchema, {
+          body: input, bodySchema: captureConfirmedContentRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      confirmedContents: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections`, z.array(confirmedContentRecordSchema)),
+      confirmedContent: (workspaceId, projectId, protectionId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections/${protectionId}`, confirmedContentRecordSchema),
+      checkConfirmedContent: (workspaceId, projectId, protectionId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/content-protections/${protectionId}/check`, regressionReportSchema, {
+          body: input ?? {},
+          bodySchema: z.object({
+            explicitTargets: z.array(z.object({ objectKind: z.string(), objectId: z.string() }).strict()).optional(),
+          }).strict(),
+        }),
       createVoiceSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
           body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,

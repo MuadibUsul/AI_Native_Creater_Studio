@@ -211,6 +211,8 @@ export const adoptProposalRequestSchema = z.object({
   expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
   /** 幂等键：重放返回同一结果，不产生第二次写入 */
   idempotencyKey: z.string().min(8).max(120),
+  /** N06-07：要执行的已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds: z.array(opaqueIdSchema).max(32).optional(),
 }).strict();
 
 export type AdoptProposalRequest = z.infer<typeof adoptProposalRequestSchema>;
@@ -294,6 +296,8 @@ export const adoptProposalPartialRequestSchema = z.object({
   expectedOperationsHash: z.string().length(64),
   expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
   idempotencyKey: z.string().min(8).max(120),
+  /** N06-07：要执行的已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds: z.array(opaqueIdSchema).max(32).optional(),
 }).strict();
 export type AdoptProposalPartialRequest = z.infer<typeof adoptProposalPartialRequestSchema>;
 

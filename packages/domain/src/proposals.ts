@@ -36,6 +36,7 @@ import {
 } from '@ancs/contracts';
 import { editEvents, projects, proposalArtifacts, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { assertProtectedContentStable, type ClipDigests, clipDigestsOf } from './content-protection.js';
 import { processEdits } from './edits.js';
 
 /**
@@ -511,13 +512,13 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
   projectId: string;
   baseProjectRevision: number;
   actorId?: string;
-}): Promise<ProposalTrial> {
+}): Promise<{ trial: ProposalTrial; postState: Map<string, ClipDigests> }> {
   const operations = editOperationSchema.array().parse(input.row.operations);
   const eventsBefore = await deps.db.select({ seq: editEvents.seq }).from(editEvents).where(eq(editEvents.projectId, input.projectId));
   const maxSeqBefore = eventsBefore.reduce((max, event) => Math.max(max, event.seq), 0);
 
   class RollbackSentinel extends Error {
-    constructor(readonly trial: ProposalTrial) {
+    constructor(readonly trial: ProposalTrial, readonly postState: Map<string, ClipDigests>) {
       super('trial-rollback');
     }
   }
@@ -563,11 +564,13 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
         }),
         projectUntouched: true,
       });
+      // 试改后状态的三轴指纹（N06-07 已确认内容保护门要用；回滚前采集）
+      const postState = new Map(clips.map((clip) => [clip.id, clipDigestsOf(clip)]));
       // 无条件回滚：试改绝不落地
-      throw new RollbackSentinel(trial);
+      throw new RollbackSentinel(trial, postState);
     });
   } catch (error) {
-    if (error instanceof RollbackSentinel) return error.trial;
+    if (error instanceof RollbackSentinel) return { trial: error.trial, postState: error.postState };
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed', 422, {
       reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
       cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
@@ -601,7 +604,7 @@ export async function previewProposal(deps: DomainDeps, input: {
   const cachedTrial = await loadCachedTrial(deps, row, dependencyKey);
   if (cachedTrial !== null) return cachedTrial;
 
-  const trial = await runDeterministicTrial(deps, {
+  const { trial } = await runDeterministicTrial(deps, {
     row, workspaceId: input.workspaceId, projectId: input.projectId, baseProjectRevision: row.baseProjectRevision,
     ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
   });
@@ -800,6 +803,8 @@ export async function adoptProposal(deps: DomainDeps, input: {
   expectedOperationsHash: string;
   expectedSelectionFingerprint: string | null;
   idempotencyKey: string;
+  /** N06-07：已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds?: readonly string[];
 }): Promise<{ proposal: Proposal; projectRevision: number }> {
   const row = await loadProposalRow(deps, input);
   // 幂等：同一幂等键重放返回同一结果（不产生第二次写入）
@@ -825,6 +830,19 @@ export async function adoptProposal(deps: DomainDeps, input: {
     expectedSelectionFingerprint: input.expectedSelectionFingerprint,
   });
   const operations = editOperationSchema.array().parse(row.operations);
+  // N06-07：已确认内容保护 —— 用**试改后状态**核对，附带的意外移位一律阻止自动采用（零写入）。
+  if (input.protectionIds !== undefined && input.protectionIds.length > 0) {
+    const { postState } = await runDeterministicTrial(deps, {
+      row, workspaceId: input.workspaceId, projectId: input.projectId, baseProjectRevision: row.baseProjectRevision,
+      ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+    });
+    await assertProtectedContentStable(deps, {
+      workspaceId: input.workspaceId, projectId: input.projectId, proposalId: row.id,
+      protectionIds: input.protectionIds,
+      explicitTargetKeys: computeWriteTargets(operations, input.projectId).map((target) => `${target.objectKind}:${target.objectId}`),
+      postState,
+    });
+  }
   const result = await processEdits(deps, {
     workspaceId: input.workspaceId,
     projectId: input.projectId,
@@ -868,6 +886,8 @@ export async function adoptProposalPartial(deps: DomainDeps, input: {
   expectedOperationsHash: string;
   expectedSelectionFingerprint: string | null;
   idempotencyKey: string;
+  /** N06-07：已确认内容保护（附带的意外移位会阻止自动采用） */
+  protectionIds?: readonly string[];
 }): Promise<{ proposal: Proposal; projectRevision: number; adoptedOperationIndexes: number[]; remainingOperationIndexes: number[]; closureExpanded: boolean; effectiveWriteTargets: ProposalTargetRef[] }> {
   const row = await loadProposalRow(deps, input);
   if (row.status !== 'OPEN') {
@@ -891,6 +911,20 @@ export async function adoptProposalPartial(deps: DomainDeps, input: {
   });
   const adoptedOperations = closure.adopted.map((index) => operations[index]!);
   const coversAll = closure.adopted.length === operations.length;
+  // N06-07：已确认内容保护 —— 只对**本批实际采用的操作**做附带变化检查（用试改后状态）。
+  if (input.protectionIds !== undefined && input.protectionIds.length > 0) {
+    const { postState } = await runDeterministicTrial(deps, {
+      row: { ...row, operations: adoptedOperations },
+      workspaceId: input.workspaceId, projectId: input.projectId, baseProjectRevision: row.baseProjectRevision,
+      ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+    });
+    await assertProtectedContentStable(deps, {
+      workspaceId: input.workspaceId, projectId: input.projectId, proposalId: row.id,
+      protectionIds: input.protectionIds,
+      explicitTargetKeys: computeWriteTargets(adoptedOperations, input.projectId).map((target) => `${target.objectKind}:${target.objectId}`),
+      postState,
+    });
+  }
   const result = await processEdits(deps, {
     workspaceId: input.workspaceId,
     projectId: input.projectId,

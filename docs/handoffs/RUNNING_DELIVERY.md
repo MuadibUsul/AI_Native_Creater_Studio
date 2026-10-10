@@ -3,12 +3,12 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（N06-05 采用/继续微调/拒绝/部分采用；迁移 0085）
+**最后更新：** 2026-10-10（N06-07 已确认内容保护与回归指纹；迁移 0086）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
-**迁移：** 到 0085（`proposals` 增 `adopted_operation_indexes`）
-**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。当前组：**N06 收尾组**（N06-05 → N06-07 → N06-08）；已交付 N06-05，组末 verify 待补。
+**迁移：** 到 0086（`content_protections`）
+**交付节奏（2026-10-10 用户确认）：** **按组批量** —— 组内逐任务写 verification/handoff、跑定向套件；**组末统一跑一次全量 `pnpm verify` 并提交**。当前组：**N06 收尾组**（N06-05 → N06-07 → N06-08）；已交付 N06-05（VERIFIED）、N06-07（IN_PROGRESS），组末 verify 待补。
 
 ---
 
@@ -25,6 +25,12 @@
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · N06-07 已确认内容保护与回归指纹 — **IN_PROGRESS**
+- **内容：** 迁移 0086 `content_protections`（保护记录，非第二份作品状态）。契约新增 `packages/contracts/src/content-protection.ts`：三轴指纹（CONTENT 源区间/映射/参数/源流、POSITION 轨道与序列区间、ASSET 素材版本/嵌套序列）、`confirmedContentRecordSchema`、`regressionReportSchema`（含 `outOfScope` 范围外变化）、**`resolveScopeGuard`**（"其他别动 + 总时长改变 → 先解释 / 改等长方案"）。Domain：`clipDigestsOf`、`captureConfirmedContent`、`checkConfirmedContent`、`assertProtectedContentStable`；`runDeterministicTrial` 现在返回**试改后状态指纹**，采用/部分采用的可选 `protectionIds` 用它判定"受保护对象被改动但非本批显式目标"的**附带变化/意外移位** → 409 `CONFIRMED_CONTENT_REGRESSION` 且零写入。HTTP/SDK 4 端点。
+- **证据：** `docs/verification/N06-07.md`（范围守卫 5 项单测 + 集成 4 项：三轮修改后 UNCHANGED / 涟漪附带移位 409 零写入 / 显式目标不算范围外 / 非 CLIP 501）· `docs/handoffs/N06-07.md`
+- **为何不是 VERIFIED：** ①"其他别动 + 总时长改变"只有**权威判定契约 + 单测**，尚未接到规划器（`planRangeEdit` 计算总时长变化并回带判定/等长替代）——属"接口存在 ≠ 功能交付"；②保护范围仅 CLIP（字幕/音频区域/视觉对象显式 501 待扩）；③无 UI 呈现。
+- **下一步（本组内）：** **N06-08**（A/B 比较与版本恢复；依赖 N04-04 仅 s1 就绪，开工前评估）→ 组末全量 verify + 提交。
 
 ### 2026-10-10 · N06-05 采用、继续微调、拒绝与部分采用 — **VERIFIED**
 - **内容：** 迁移 0085 给 `proposals` 加 `adopted_operation_indexes`。契约新增 `packages/contracts/src/proposal-disposition.ts`（`resolveProposalDisposition` 纯函数：显式 UI 动作优先 → 拒绝 → 后面也这样 → 继续微调 → 采用；**沉默/无法识别 → 需确认，绝不据此采用**；多候选无唯一目标 → 需消歧）+ 9 项单测。Domain 新增 `computePartialAdoptClosure`（① 引用闭包：消费 `createdClipId` → 并入其创建操作；② 音画配对闭包：同一 `avGroupId` 的视频/音频操作必须同进；两条迭代到不动点）与 `adoptProposalPartial`；抽出 `assertAdoptPreconditions` 供采用/部分采用共用。响应如实回报 `adoptedOperationIndexes`/`remainingOperationIndexes`/`closureExpanded`/`effectiveWriteTargets`（作用范围明确可见）；越界选择 422 `PROPOSAL_PARTIAL_SCOPE_INVALID` 零写入；部分采用为一次性交付（`PARTIALLY_ADOPTED`，闭包覆盖全部则 `COMMITTED`）。HTTP `POST .../adopt-partial` + SDK。

@@ -346,6 +346,34 @@ export {
   proposalDispositionSchema,
   resolveProposalDisposition,
 } from './proposal-disposition.js';
+export {
+  CONFIRMED_CONTENT_AXES,
+  PROTECTION_ERROR_REASONS,
+  REGRESSION_STATUSES,
+  SCOPE_GUARD_VERDICTS,
+  captureConfirmedContentRequestSchema,
+  confirmedContentAxisSchema,
+  confirmedContentObjectSchema,
+  confirmedContentRecordSchema,
+  regressionDiffSchema,
+  regressionReportSchema,
+  regressionStatusSchema,
+  resolveScopeGuard,
+  scopeGuardVerdictSchema,
+} from './content-protection.js';
+export type {
+  CaptureConfirmedContentRequest,
+  ConfirmedContentAxis,
+  ConfirmedContentObject,
+  ConfirmedContentRecord,
+  ProtectionErrorReason,
+  RegressionDiff,
+  RegressionReport,
+  RegressionStatus,
+  ScopeGuardInput,
+  ScopeGuardResolution,
+  ScopeGuardVerdict,
+} from './content-protection.js';
 export type {
   ProposalDisposition,
   ProposalDispositionCandidate,

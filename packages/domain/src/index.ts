@@ -427,6 +427,15 @@ export {
   supersedeProposals,
 } from './proposals.js';
 export {
+  assertProtectedContentStable,
+  captureConfirmedContent,
+  checkConfirmedContent,
+  clipDigestsOf,
+  listConfirmedContents,
+  loadConfirmedContent,
+} from './content-protection.js';
+export type { ClipDigests } from './content-protection.js';
+export {
   VOICE_ADAPTER_CAPABILITIES,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,
