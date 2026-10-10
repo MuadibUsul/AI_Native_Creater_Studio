@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（第六组：N04-04 收尾——逐帧步进/双时间码换算/语义指向；第五组为 N04-04 主体投影）
+**最后更新：** 2026-10-11（第七组：N06-08 收口——回放计划 + 可见 A/B 面板；第六组为 N04-04 收尾）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,20 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1311/1311**（第六组组末实测；Unit 530 / Web 193 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 本地 `pnpm verify` | **14/14，1319/1319**（第七组组末实测；Unit 534 / Web 197 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第七组 · N06-08 收口（对照载荷 → 回放计划 + 可见 A/B 面板）— **IN_PROGRESS**
+- **内容：** 差异项增 `before/afterSequenceRange`；新增契约 `packages/contracts/src/compare-playback.ts` 的 `buildComparePlaybackPlan`（标记**落到时间轴**并按起点排序；删除用左侧、新增用右侧、修改用两侧且取试改后区间；**不可定位的差异仍列出**并计入 `unplaced`；空循环区间视为无循环）；新增可见面板 `apps/web/src/ui/CompareReplayPanel.tsx`（A/B 切换只改显示、差异标记条可点以 seek 到差异起点、汇总、未定位单列、局部循环指示）。
+- **证据：** `docs/verification/N06-08.md`（第二轮：契约 4 项 + 面板 jsdom 4 项）· `docs/handoffs/N06-08.md`
+- **为何不是 VERIFIED：** 面板尚未挂到真实播放器（切换前后/音频 AB 的实际声音对齐、循环驱动播放）、无真实浏览器证据；空间×时间应用层组网仍未做。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-10 · 第六组 · N04-04 收尾（逐帧步进 + 双时间码换算 + 语义指向）— **IN_PROGRESS**
 - **内容：** 新增契约 `packages/contracts/src/timeline-targeting.ts`：`stepFrames`（逐帧步进走有理运算 → **分数帧率不漂移**，`bounds` 夹帧边界）、`formatFrameTimecode`（`HH:MM:SS:FF`，非 drop-frame）、`dualTimecode`（复用 `sequenceTimeToSourcePts`，含 **REVERSE** 镜像；不在片段内 → null）、`resolveUtteranceTarget`（「这句话」→ 字幕 + 词级定位）、`resolveMusicRegionTarget`（「这里的音乐」→ 音频区域，重叠全返回）；`TimelineBand` 新增逐帧按钮与帧时间码（未给 `frameRate` 则不渲染）。

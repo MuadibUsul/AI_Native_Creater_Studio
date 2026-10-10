@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
+import { mediaRangeSchema } from './common/media-time.js';
 import { objectLockDimensionSchema, objectLockKindSchema } from './object-locks.js';
 
 /**
@@ -30,6 +31,9 @@ export const compareObjectDiffSchema = z.object({
   afterAssetVersionId: z.string().nullable().default(null),
   beforeTrackId: z.string().nullable().default(null),
   afterTrackId: z.string().nullable().default(null),
+  /** N06-08：前后各自在**序列**上的区间（供播放器把差异标记排到时间轴；缺失侧为 null） */
+  beforeSequenceRange: mediaRangeSchema.nullable().default(null),
+  afterSequenceRange: mediaRangeSchema.nullable().default(null),
   /** 该对照是按什么对齐的 */
   alignedBy: compareAlignmentSchema,
 }).strict();

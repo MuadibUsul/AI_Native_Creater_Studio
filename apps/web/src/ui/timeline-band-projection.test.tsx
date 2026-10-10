@@ -78,16 +78,7 @@ describe('N04-04 逐帧步进接入时间带', () => {
       />,
     );
     // 1.000s 对齐在帧边界上 → 下一帧 = 1/30 s ≈ 1033.33ms
-    const nextBtn = screen.getByTestId('timeline-step-next') as HTMLButtonElement;
-    // eslint-disable-next-line no-console
-    try {
-      fireEvent.click(nextBtn);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.log('DEBUG click error=', error instanceof Error ? error.message : String(error));
-    }
-    // eslint-disable-next-line no-console
-    console.log('DEBUG calls=', String(onPlayheadChange.mock.calls.length));
+    fireEvent.click(screen.getByTestId('timeline-step-next'));
     const next = onPlayheadChange.mock.calls[0]![0] as { ticks: string; timebase: { num: number; den: number } };
     expect((Number(next.ticks) * next.timebase.num * 1000) / next.timebase.den).toBeCloseTo(1_033.333, 2);
 

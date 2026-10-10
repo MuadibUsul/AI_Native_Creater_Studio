@@ -386,6 +386,17 @@ export {
   compareProposalRequestSchema,
   compareReportSchema,
 } from './proposal-compare.js';
+export {
+  buildComparePlaybackPlan,
+  compareMarkSideSchema,
+  comparePlaybackMarkSchema,
+  comparePlaybackPlanSchema,
+} from './compare-playback.js';
+export type {
+  CompareMarkSide,
+  ComparePlaybackMark,
+  ComparePlaybackPlan,
+} from './compare-playback.js';
 export type {
   CompareAlignment,
   CompareChange,
