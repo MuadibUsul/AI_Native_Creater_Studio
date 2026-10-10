@@ -18,7 +18,7 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06／07**、N15-01/02、N16-01/02 = **53/219（24.20%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 166 项 |
-| 本地 `pnpm verify` | **14/14，1265/1265**（第二组组末实测；Unit 499 / Web 188 / Motion 19 / Integration 514 / Security 24 / Render 6 / Golden 15） |
+| 本地 `pnpm verify` | **14/14，1281/1281**（第三组组末实测；Unit 509 / Web 188 / Motion 25 / Integration 514 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
@@ -245,6 +245,8 @@ ee0c83d  feat(n06-06) 提案替代、取消与晚到结果隔离（迁移 0084�
 aa9a52b  feat(n06-07) 已确认内容保护与回归指纹（迁移 0086）— IN_PROGRESS
 e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_PROGRESS
 3da0131  chore(db) + feat(n06-07) 修复 db:generate 快照冲突；N06-07 收口转 VERIFIED（第二组）
+65325d0  fix(review) 外部评审逐条核实与 P0 修复（意图识别/沙箱隔离/凭据密钥/FFmpeg 协议/仓库卫生）
+后续     fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复上一条引入的 unit 回归）— 组末 verify 14/14、1281/1281
 ```
 
 ---
