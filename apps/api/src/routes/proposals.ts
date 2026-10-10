@@ -4,35 +4,44 @@ import { z } from 'zod';
 import {
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  cancelProposalRequestSchema,
   createProposalRequestSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
+  proposalArtifactSchema,
   proposalImpactSchema,
   proposalSchema,
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
 } from '@ancs/contracts';
 import {
   adoptProposal,
+  cancelProposal,
   computeProposalImpact,
   createProposalBranch,
   discardProposal,
+  listProposalArtifacts,
   loadProposalForRead,
   previewProposal,
   rebaseProposal,
+  submitProposalArtifact,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
- * N06-01／N06-02／N06-03／N06-04 私有候选路由。
+ * N06-01／N06-02／N06-03／N06-04／N06-06 私有候选路由。
  *
- * - 创建候选：不改工程（只存操作集与绑定，并记录读写集/写目标）；
+ * - 创建候选：不改工程（只存操作集与绑定，并记录读写集/写目标；同时取代同谱系旧候选）；
  * - 影响集：候选写目标 vs base revision 之后干预改动的竞争（只读）；
  * - rebase：无竞争且身份/素材未变时受控推进 base revision（仍经真实执行器验证）；否则 fail-closed；
  * - 试改：在事务内跑真实执行器再回滚（确定性、零落地）；
- * - 采用：绑定校验（base revision／操作哈希／锚点指纹）→ 统一编辑协议原子执行；失败即失败，不显示"已采用"。
+ * - 采用：绑定校验（base revision／操作哈希／锚点指纹）→ 统一编辑协议原子执行；失败即失败，不显示"已采用"；
+ * - 取消：标记 CANCELLED 但**保留已有结果**（N06-06）；
+ * - 产物：外部晚到产物按代际/状态判定，非当前一律**隔离**不自动绑定（N06-06）。
  */
 
 const projectParamsSchema = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
@@ -170,6 +179,64 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
       return discardProposal(domain, {
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/cancel',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 取消候选（标记 CANCELLED，保留已有试片/产物结果；采用被拒）',
+        params: proposalParamsSchema,
+        body: cancelProposalRequestSchema,
+        response: { 200: proposalSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return cancelProposal(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
+      });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/artifacts',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 提交外部晚到产物：仅当前代际且 OPEN 才绑定，否则隔离（不自动绑定）',
+        params: proposalParamsSchema,
+        body: submitProposalArtifactRequestSchema,
+        response: { 200: submitProposalArtifactResponseSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'project:write');
+      return submitProposalArtifact(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
+        request: request.body,
+      });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/proposals/:proposalId/artifacts',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-06 读取候选产物台账（含隔离行与理由）',
+        params: proposalParamsSchema,
+        response: { 200: z.array(proposalArtifactSchema), ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return listProposalArtifacts(domain, {
+        workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
       });
     },
   );

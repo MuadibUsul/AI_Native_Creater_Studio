@@ -37,6 +37,12 @@ export const proposals = pgTable(
     rebaseCount: integer('rebase_count').notNull().default(0),
     rebasedFromRevision: integer('rebased_from_revision'),
     rebaseLog: jsonb('rebase_log'),
+    /** N06-06：候选代际（工程内单调递增；晚到产物按代际隔离） */
+    generation: integer('generation').notNull().default(1),
+    /** N06-06：取代本候选的新候选 / 被取代时间 / 取消时间 */
+    supersededByProposalId: text('superseded_by_proposal_id'),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     status: text('status').notNull(),
     committedRevision: integer('committed_revision'),
     /** 采用时使用的幂等键（同一键重放返回同一结果） */

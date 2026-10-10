@@ -54,8 +54,12 @@ import {
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   proposalImpactSchema,
+  proposalArtifactSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
+  cancelProposalRequestSchema,
   recoverSelectionAnchorRequestSchema,
   selectionRecoveryResultSchema,
   legacySelectionSchema,
@@ -389,8 +393,12 @@ import {
   type CreateProposalRequest,
   type AdoptProposalRequest,
   type ProposalImpact,
+  type ProposalArtifact,
   type RebaseProposalRequest,
   type RebaseProposalResponse,
+  type SubmitProposalArtifactRequest,
+  type SubmitProposalArtifactResponse,
+  type CancelProposalRequest,
   type SealUtteranceRequest,
   type IntentRevision,
   type LegacySelection,
@@ -849,6 +857,24 @@ export interface AncsClient {
       input?: { reason?: string },
       options?: MutationOptions,
     ): Promise<Proposal>;
+    /** N06-06：取消候选（标记 CANCELLED，保留已有结果） */
+    cancelProposal(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input?: CancelProposalRequest,
+      options?: MutationOptions,
+    ): Promise<Proposal>;
+    /** N06-06：提交外部晚到产物（仅当前代际且 OPEN 才绑定，否则隔离） */
+    submitProposalArtifact(
+      workspaceId: string,
+      projectId: string,
+      proposalId: string,
+      input: SubmitProposalArtifactRequest,
+      options?: MutationOptions,
+    ): Promise<SubmitProposalArtifactResponse>;
+    /** N06-06：读取候选产物台账（含隔离行与理由） */
+    proposalArtifacts(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalArtifact[]>;
     /** N05-01：创建实时语音会话（短期凭证 + 显式能力；长期 Key 永不下发） */
     createVoiceSession(
       workspaceId: string,
@@ -2231,6 +2257,16 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/discard`, proposalSchema, {
           body: input ?? {}, bodySchema: z.object({ reason: z.string().max(200).optional() }).strict(), idempotencyKey: mutation?.idempotencyKey,
         }),
+      cancelProposal: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/cancel`, proposalSchema, {
+          body: input ?? {}, bodySchema: cancelProposalRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      submitProposalArtifact: (workspaceId, projectId, proposalId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, submitProposalArtifactResponseSchema, {
+          body: input, bodySchema: submitProposalArtifactRequestSchema, idempotencyKey: mutation?.idempotencyKey,
+        }),
+      proposalArtifacts: (workspaceId, projectId, proposalId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/artifacts`, z.array(proposalArtifactSchema)),
       createVoiceSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/voice-sessions`, createVoiceSessionResponseSchema, {
           body: input, bodySchema: createVoiceSessionRequestSchema, idempotencyKey: mutation?.idempotencyKey,

@@ -292,12 +292,16 @@ export {
 } from './audio-crossfade.js';
 export type { AudioMixGuardReason } from './audio-crossfade.js';
 export {
+  PROPOSAL_ARTIFACT_BINDING_REASONS,
   PROPOSAL_ERROR_REASONS,
   PROPOSAL_REVIEW_BLOCK_REASONS,
   PROPOSAL_STATUSES,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
+  cancelProposalRequestSchema,
   createProposalRequestSchema,
+  proposalArtifactBindingReasonSchema,
+  proposalArtifactSchema,
   proposalImpactConflictSchema,
   proposalImpactSchema,
   proposalInterveningChangeSchema,
@@ -308,11 +312,16 @@ export {
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
+  submitProposalArtifactRequestSchema,
+  submitProposalArtifactResponseSchema,
 } from './proposal.js';
 export type {
   AdoptProposalRequest,
+  CancelProposalRequest,
   CreateProposalRequest,
   Proposal,
+  ProposalArtifact,
+  ProposalArtifactBindingReason,
   ProposalErrorReason,
   ProposalImpact,
   ProposalImpactConflict,
@@ -323,6 +332,8 @@ export type {
   ProposalTrial,
   RebaseProposalRequest,
   RebaseProposalResponse,
+  SubmitProposalArtifactRequest,
+  SubmitProposalArtifactResponse,
 } from './proposal.js';
 export {
   computeOperationTargetRefs,

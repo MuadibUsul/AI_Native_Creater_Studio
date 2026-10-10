@@ -7,6 +7,7 @@ export { idempotencyKeys } from './idempotency.js';
 export { selectionAnchors } from './selection.js';
 export { voiceSessions } from './voice-sessions.js';
 export { proposals } from './proposals.js';
+export { proposalArtifacts } from './proposal-artifacts.js';
 export { proposalTrials } from './proposal-trials.js';
 export { workspaceFeaturePreferences, workspaceInvitations, workspaceMembers, workspaces } from './workspaces.js';
 export { abuseFlags, auditLog, supportAccessGrants } from './security-ops.js';

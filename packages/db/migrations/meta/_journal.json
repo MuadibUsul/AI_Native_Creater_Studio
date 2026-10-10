@@ -582,6 +582,13 @@
       "when": 1791602504473,
       "tag": "0083_proposal_impact_rebase",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1791604504473,
+      "tag": "0084_proposal_lifecycle",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,7 @@ import {
   mediaTimeToLegacyMilliseconds,
   mediaRangeSchema,
   proposalImpactSchema,
+  proposalArtifactSchema,
   proposalSchema,
   proposalTargetRefSchema,
   proposalTrialSchema,
@@ -23,14 +24,17 @@ import {
   type EditOperation,
   type EditTargetRef,
   type Proposal,
+  type ProposalArtifact,
+  type ProposalArtifactBindingReason,
   type ProposalImpact,
   type ProposalImpactConflict,
   type ProposalInterveningChange,
   type ProposalReviewBlockReason,
   type ProposalTargetRef,
   type ProposalTrial,
+  type SubmitProposalArtifactRequest,
 } from '@ancs/contracts';
-import { editEvents, projects, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
+import { editEvents, projects, proposalArtifacts, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { processEdits } from './edits.js';
 
@@ -206,8 +210,72 @@ async function invalidateProposalTrialRows(deps: DomainDeps, row: typeof proposa
   ));
 }
 
-const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSchema.parse({
-  proposalId: row.id,
+/** N06-06：候选的意图谱系键（意图修订优先；否则用绑定的选择锚点；都没有则无谱系）。 */
+interface ProposalLineage { intentRevisionId: string | null; selectionAnchorId: string | null }
+const lineageCondition = (lineage: ProposalLineage) =>
+  lineage.intentRevisionId !== null
+    ? eq(proposals.intentRevisionId, lineage.intentRevisionId)
+    : lineage.selectionAnchorId !== null
+      ? eq(proposals.selectionAnchorId, lineage.selectionAnchorId)
+      : null;
+
+/** N06-06：工程内代际单调递增（新指令得到更大代际）。 */
+async function nextGeneration(deps: DomainDeps, input: { workspaceId: string; projectId: string }): Promise<number> {
+  const rows = await deps.db.select({ generation: proposals.generation }).from(proposals).where(and(
+    eq(proposals.workspaceId, input.workspaceId), eq(proposals.projectId, input.projectId),
+  ));
+  return rows.reduce((max, row) => Math.max(max, row.generation), 0) + 1;
+}
+
+/** N06-06：同一谱系内仍在 OPEN 的旧候选取代（标记 SUPERSEDED 并记录取代者）。返回被取代数。 */
+async function supersedeLineage(deps: DomainDeps, input: {
+  workspaceId: string; projectId: string; keepProposalId: string; lineage: ProposalLineage;
+}): Promise<number> {
+  const condition = lineageCondition(input.lineage);
+  if (condition === null) return 0;
+  const rows = await deps.db.select({ id: proposals.id }).from(proposals).where(and(
+    eq(proposals.workspaceId, input.workspaceId),
+    eq(proposals.projectId, input.projectId),
+    eq(proposals.status, 'OPEN'),
+    condition,
+  ));
+  const now = new Date();
+  let superseded = 0;
+  for (const row of rows) {
+    if (row.id === input.keepProposalId) continue;
+    await deps.db.update(proposals).set({
+      status: 'SUPERSEDED', supersededByProposalId: input.keepProposalId, supersededAt: now, updatedAt: now,
+    }).where(eq(proposals.id, row.id));
+    superseded += 1;
+  }
+  return superseded;
+}
+
+/** N06-06：谱系当前代际（同谱系内最大代际；无谱系时为自身代际）。 */
+async function currentGenerationForLineage(deps: DomainDeps, row: typeof proposals.$inferSelect): Promise<number> {
+  const condition = lineageCondition({ intentRevisionId: row.intentRevisionId ?? null, selectionAnchorId: row.selectionAnchorId ?? null });
+  if (condition === null) return row.generation;
+  const rows = await deps.db.select({ generation: proposals.generation }).from(proposals).where(and(
+    eq(proposals.workspaceId, row.workspaceId), eq(proposals.projectId, row.projectId), condition,
+  ));
+  return rows.reduce((max, item) => Math.max(max, item.generation), row.generation);
+}
+
+const toProposalArtifact = (row: typeof proposalArtifacts.$inferSelect): ProposalArtifact => proposalArtifactSchema.parse({
+  artifactId: row.id,
+  workspaceId: row.workspaceId,
+  projectId: row.projectId,
+  proposalId: row.proposalId ?? null,
+  generation: row.generation,
+  currentGeneration: row.currentGeneration ?? null,
+  kind: row.kind,
+  reference: row.reference,
+  bound: row.bound,
+  bindingReason: row.bindingReason,
+  createdAt: row.createdAt.toISOString(),
+});
+
+const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSchema.parse({  proposalId: row.id,
   workspaceId: row.workspaceId,
   projectId: row.projectId,
   baseProjectRevision: row.baseProjectRevision,
@@ -223,13 +291,16 @@ const toProposal = (row: typeof proposals.$inferSelect): Proposal => proposalSch
   writeTargets: parseStoredTargets(row.writeTargets) ?? [],
   rebaseCount: row.rebaseCount,
   rebasedFromRevision: row.rebasedFromRevision ?? null,
+  generation: row.generation,
+  supersededByProposalId: row.supersededByProposalId ?? null,
+  supersededAt: row.supersededAt === null ? null : row.supersededAt.toISOString(),
+  cancelledAt: row.cancelledAt === null ? null : row.cancelledAt.toISOString(),
   createdAt: row.createdAt.toISOString(),
   committedAt: row.committedAt === null ? null : row.committedAt.toISOString(),
   discardedAt: row.discardedAt === null ? null : row.discardedAt.toISOString(),
 });
 
-const loadProposalRow = async (deps: DomainDeps, input: { workspaceId: string; projectId: string; proposalId: string }) => {
-  const rows = await deps.db.select().from(proposals).where(and(
+const loadProposalRow = async (deps: DomainDeps, input: { workspaceId: string; projectId: string; proposalId: string }) => {  const rows = await deps.db.select().from(proposals).where(and(
     eq(proposals.id, input.proposalId),
     eq(proposals.workspaceId, input.workspaceId),
     eq(proposals.projectId, input.projectId),
@@ -286,6 +357,8 @@ export async function createProposalBranch(deps: DomainDeps, input: {
   const assetVersionSignature = await computeTargetAssetSignature(deps, {
     workspaceId: input.workspaceId, projectId: input.projectId, targets: writeTargets,
   });
+  // N06-06：代际 = 本工程历史最大代际 + 1（新指令得到更大的代际）。
+  const generation = await nextGeneration(deps, input);
   await deps.db.insert(proposals).values({
     id: proposalId,
     workspaceId: input.workspaceId,
@@ -303,9 +376,16 @@ export async function createProposalBranch(deps: DomainDeps, input: {
     assetVersionSignature,
     rebaseCount: 0,
     rebaseLog: [],
+    generation,
     status: 'OPEN',
     createdAt: now,
     updatedAt: now,
+  });
+  // N06-06：同一意图谱系（意图修订或选择锚点）的新候选**取代**旧 OPEN 候选：
+  // 先慢后快的两个任务逆序完成时，仍只以最新一代为当前意图。
+  await supersedeLineage(deps, {
+    workspaceId: input.workspaceId, projectId: input.projectId, keepProposalId: proposalId,
+    lineage: { intentRevisionId: input.request.intentRevisionId, selectionAnchorId: input.request.selectionAnchorId },
   });
   return toProposal(await loadProposalRow(deps, { ...input, proposalId }));
 }
@@ -400,7 +480,10 @@ export async function previewProposal(deps: DomainDeps, input: {
   const row = await loadProposalRow(deps, input);
   if (row.status !== 'OPEN') {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal is not open', 409, {
-      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
+      reason: row.status === 'SUPERSEDED'
+        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
+        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
+      status: row.status,
     });
   }
   // N06-04：先查局部试片缓存；依赖键一致则直接复用确定性结果（不重复跑执行器）。
@@ -496,7 +579,10 @@ export async function rebaseProposal(deps: DomainDeps, input: {
   const row = await loadProposalRow(deps, input);
   if (row.status !== 'OPEN') {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be rebased', 409, {
-      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
+      reason: row.status === 'SUPERSEDED'
+        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
+        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
+      status: row.status,
     });
   }
   if (input.expectedOperationsHash !== row.operationsHash) {
@@ -572,9 +658,12 @@ export async function adoptProposal(deps: DomainDeps, input: {
     }
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal has already been committed', 409, { reason: PROPOSAL_ERROR_REASONS.NOT_OPEN });
   }
-  if (row.status === 'DISCARDED' || row.status === 'SUPERSEDED') {
+  if (row.status === 'DISCARDED' || row.status === 'SUPERSEDED' || row.status === 'CANCELLED') {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal can no longer be adopted', 409, {
-      reason: row.status === 'SUPERSEDED' ? PROPOSAL_ERROR_REASONS.SUPERSEDED : PROPOSAL_ERROR_REASONS.NOT_OPEN, status: row.status,
+      reason: row.status === 'SUPERSEDED'
+        ? PROPOSAL_ERROR_REASONS.SUPERSEDED
+        : row.status === 'CANCELLED' ? PROPOSAL_ERROR_REASONS.CANCELLED : PROPOSAL_ERROR_REASONS.NOT_OPEN,
+      status: row.status,
     });
   }
   if (input.expectedOperationsHash !== row.operationsHash) {
@@ -660,24 +749,101 @@ export async function discardProposal(deps: DomainDeps, input: {
   return toProposal(await loadProposalRow(deps, input));
 }
 
-/** 同一选区/意图的新候选取代旧候选（旧候选只能被丢弃或标记 SUPERSEDED）。 */
+/** 同一选区/意图的新候选取代旧候选（旧候选只能被丢弃或标记 SUPERSEDED，并记录取代者）。 */
 export async function supersedeProposals(deps: DomainDeps, input: {
   workspaceId: string;
   projectId: string;
   intentRevisionId: string;
   keepProposalId: string;
 }): Promise<number> {
-  const rows = await deps.db.select().from(proposals).where(and(
-    eq(proposals.workspaceId, input.workspaceId),
-    eq(proposals.projectId, input.projectId),
-    eq(proposals.intentRevisionId, input.intentRevisionId),
-    eq(proposals.status, 'OPEN'),
-  ));
-  let superseded = 0;
-  for (const row of rows) {
-    if (row.id === input.keepProposalId) continue;
-    await deps.db.update(proposals).set({ status: 'SUPERSEDED', updatedAt: new Date() }).where(eq(proposals.id, row.id));
-    superseded += 1;
+  return supersedeLineage(deps, {
+    workspaceId: input.workspaceId, projectId: input.projectId, keepProposalId: input.keepProposalId,
+    lineage: { intentRevisionId: input.intentRevisionId, selectionAnchorId: null },
+  });
+}
+
+/**
+ * N06-06：取消候选 —— 标记 CANCELLED 表达"这个方向不要了"，但**保留已有结果**
+ * （试片缓存与产物台账都不删除）。取消后采用被拒；晚到产物被隔离。
+ */
+export async function cancelProposal(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  reason?: string;
+}): Promise<Proposal> {
+  const row = await loadProposalRow(deps, input);
+  if (row.status === 'CANCELLED') return toProposal(row);
+  if (row.status === 'COMMITTED') {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'committed proposal cannot be cancelled', 409, { reason: PROPOSAL_ERROR_REASONS.NOT_OPEN });
   }
-  return superseded;
+  // 已丢弃/已取代的候选保持原状态（取消只对 OPEN 候选有意义；这里幂等返回，不覆盖已有终态）
+  if (row.status !== 'OPEN') return toProposal(row);
+  const now = new Date();
+  await deps.db.update(proposals).set({ status: 'CANCELLED', cancelledAt: now, updatedAt: now }).where(eq(proposals.id, row.id));
+  // 保留已有结果：不删除试片缓存、不删除产物台账（与 discardProposal 的清理语义不同）
+  return toProposal(await loadProposalRow(deps, input));
+}
+
+/**
+ * N06-06：外部晚到产物提交 —— 只有**候选仍 OPEN 且为其谱系当前代际**时绑定；
+ * 其余（已提交/已取代/已取消/代际陈旧/非当前）一律**隔离**（`bound=false`），
+ * 写入隔离台账而**不自动绑定**到候选或工程。同一产物重放幂等（按引用唯一）。
+ */
+export async function submitProposalArtifact(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  request: SubmitProposalArtifactRequest;
+}): Promise<{ artifact: ProposalArtifact; bound: boolean }> {
+  const row = await loadProposalRow(deps, input);
+  const currentGeneration = await currentGenerationForLineage(deps, row);
+  let bindingReason: ProposalArtifactBindingReason;
+  if (row.status === 'COMMITTED') bindingReason = 'ALREADY_BOUND';
+  else if (row.status === 'SUPERSEDED') bindingReason = 'SUPERSEDED';
+  else if (row.status === 'CANCELLED') bindingReason = 'CANCELLED';
+  else if (row.status !== 'OPEN') bindingReason = 'NOT_OPEN';
+  else if (input.request.generation !== row.generation) bindingReason = 'STALE_GENERATION';
+  else if (currentGeneration !== row.generation) bindingReason = 'NOT_CURRENT';
+  else bindingReason = 'BOUND';
+  const bound = bindingReason === 'BOUND';
+  const now = new Date();
+  await deps.db.insert(proposalArtifacts).values({
+    id: `art_${randomUUID()}`,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    proposalId: row.id,
+    generation: input.request.generation,
+    currentGeneration,
+    kind: input.request.kind,
+    reference: input.request.reference,
+    bound,
+    bindingReason,
+    createdAt: now,
+  }).onConflictDoUpdate({
+    target: [proposalArtifacts.workspaceId, proposalArtifacts.projectId, proposalArtifacts.kind, proposalArtifacts.reference],
+    set: { proposalId: row.id, generation: input.request.generation, currentGeneration, bound, bindingReason },
+  });
+  const stored = (await deps.db.select().from(proposalArtifacts).where(and(
+    eq(proposalArtifacts.workspaceId, input.workspaceId),
+    eq(proposalArtifacts.projectId, input.projectId),
+    eq(proposalArtifacts.kind, input.request.kind),
+    eq(proposalArtifacts.reference, input.request.reference),
+  )).limit(1))[0]!;
+  return { artifact: toProposalArtifact(stored), bound };
+}
+
+/** 只读读取候选的产物台账（隔离行同样可见，便于运维/客户端理由呈现）。 */
+export async function listProposalArtifacts(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+}): Promise<ProposalArtifact[]> {
+  await loadProposalRow(deps, input);
+  const rows = await deps.db.select().from(proposalArtifacts).where(and(
+    eq(proposalArtifacts.workspaceId, input.workspaceId),
+    eq(proposalArtifacts.projectId, input.projectId),
+    eq(proposalArtifacts.proposalId, input.proposalId),
+  )).orderBy(desc(proposalArtifacts.createdAt));
+  return rows.map(toProposalArtifact);
 }
