@@ -51,6 +51,7 @@ import {
   createProposalRequestSchema,
   proposalSchema,
   proposalTrialSchema,
+  proposalTrialCacheStatsSchema,
   adoptProposalRequestSchema,
   adoptProposalResponseSchema,
   adoptProposalPartialRequestSchema,
@@ -397,6 +398,7 @@ import {
   type EphemeralCredential,
   type Proposal,
   type ProposalTrial,
+  type ProposalTrialCacheStats,
   type CreateProposalRequest,
   type AdoptProposalRequest,
   type AdoptProposalPartialRequest,
@@ -838,6 +840,8 @@ export interface AncsClient {
     ): Promise<Proposal>;
     /** N06-01：读取候选 */
     proposal(workspaceId: string, projectId: string, proposalId: string): Promise<Proposal>;
+    /** N06-04：试片缓存可观测性（行数/过期数/容量与 TTL 策略） */
+    proposalTrialCacheStats(workspaceId: string, projectId: string): Promise<ProposalTrialCacheStats>;
     /** N06-03：候选影响集（只读）：写目标 vs 干预改动的竞争 + 身份/源素材变化 */
     proposalImpact(workspaceId: string, projectId: string, proposalId: string): Promise<ProposalImpact>;
     /** N06-03：受控 rebase（无竞争且身份/素材未变才推进 base revision；否则 409） */
@@ -2286,6 +2290,8 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       proposal: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}`, proposalSchema),
+      proposalTrialCacheStats: (workspaceId, projectId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposal-trial-cache`, proposalTrialCacheStatsSchema),
       proposalImpact: (workspaceId, projectId, proposalId) =>
         request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/proposals/${proposalId}/impact`, proposalImpactSchema),
       rebaseProposal: (workspaceId, projectId, proposalId, input, mutation) =>

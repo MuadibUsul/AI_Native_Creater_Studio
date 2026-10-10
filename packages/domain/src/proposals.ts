@@ -61,6 +61,13 @@ const hashOperations = (operations: readonly EditOperation[]): string =>
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 
+/** N06-04：试片缓存 TTL（小时）与每工程容量上限（可由 `deps.retention` 覆盖，便于测试）。 */
+export const PROPOSAL_TRIAL_TTL_HOURS = 24;
+export const PROPOSAL_TRIAL_MAX_PER_PROJECT = 50;
+const trialTtlHours = (deps: DomainDeps): number => deps.retention?.proposalTrialTtlHours ?? PROPOSAL_TRIAL_TTL_HOURS;
+const trialMaxPerProject = (deps: DomainDeps): number => deps.retention?.proposalTrialMaxPerProject ?? PROPOSAL_TRIAL_MAX_PER_PROJECT;
+const trialTtlCutoff = (deps: DomainDeps, now: Date = new Date()): Date => new Date(now.getTime() - trialTtlHours(deps) * 60 * 60 * 1000);
+
 /** N06-03：操作集 → 具体写目标（对象级 + 维度 + 来源操作下标）。纯函数，与编辑执行器同源。 */
 function computeWriteTargets(operations: readonly EditOperation[], projectId: string): ProposalTargetRef[] {
   const targets: ProposalTargetRef[] = [];
@@ -165,6 +172,8 @@ async function loadCachedTrial(deps: DomainDeps, row: typeof proposals.$inferSel
     eq(proposalTrials.workspaceId, row.workspaceId),
     eq(proposalTrials.projectId, row.projectId),
     eq(proposalTrials.dependencyKey, dependencyKey),
+    // N06-04：过期行不参与命中（依赖键失效为主，TTL 兜底陈旧与容量）
+    gt(proposalTrials.createdAt, trialTtlCutoff(deps)),
   )).limit(1);
   const cached = rows[0];
   if (!cached) return null;
@@ -191,6 +200,32 @@ async function storeTrial(deps: DomainDeps, row: typeof proposals.$inferSelect, 
     target: [proposalTrials.workspaceId, proposalTrials.projectId, proposalTrials.dependencyKey],
     set: { proposalId: row.id, trial: stored, updatedAt: now },
   });
+  // N06-04：容量上限——按最新排序，超出前 N 的旧行直接淘汰（避免无限增长）。
+  const cap = trialMaxPerProject(deps);
+  const stale = await deps.db.select({ dependencyKey: proposalTrials.dependencyKey }).from(proposalTrials).where(and(
+    eq(proposalTrials.workspaceId, row.workspaceId), eq(proposalTrials.projectId, row.projectId),
+  )).orderBy(desc(proposalTrials.createdAt)).offset(cap);
+  if (stale.length > 0) {
+    await deps.db.delete(proposalTrials).where(and(
+      eq(proposalTrials.workspaceId, row.workspaceId),
+      eq(proposalTrials.projectId, row.projectId),
+      inArray(proposalTrials.dependencyKey, stale.map((entry) => entry.dependencyKey)),
+    ));
+  }
+}
+
+/** N06-04：试片缓存可观测性（行数 / 过期数 / 生效策略）。 */
+export async function proposalTrialCacheStats(deps: DomainDeps, input: { workspaceId: string; projectId: string }): Promise<{ rows: number; expired: number; capacity: number; ttlHours: number }> {
+  const rows = await deps.db.select({ dependencyKey: proposalTrials.dependencyKey, createdAt: proposalTrials.createdAt }).from(proposalTrials).where(and(
+    eq(proposalTrials.workspaceId, input.workspaceId), eq(proposalTrials.projectId, input.projectId),
+  ));
+  const cutoff = trialTtlCutoff(deps);
+  return {
+    rows: rows.length,
+    expired: rows.filter((entry) => entry.createdAt.getTime() <= cutoff.getTime()).length,
+    capacity: trialMaxPerProject(deps),
+    ttlHours: trialTtlHours(deps),
+  };
 }
 
 /** N06-04：显式依赖失效（如素材版本变化后主动清理）。返回删除的缓存行数。 */

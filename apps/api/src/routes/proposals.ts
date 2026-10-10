@@ -18,6 +18,7 @@ import {
   proposalArtifactSchema,
   proposalImpactSchema,
   proposalSchema,
+  proposalTrialCacheStatsSchema,
   proposalTrialSchema,
   rebaseProposalRequestSchema,
   rebaseProposalResponseSchema,
@@ -40,6 +41,7 @@ import {
   loadConfirmedContent,
   loadProposalForRead,
   previewProposal,
+  proposalTrialCacheStats,
   rebaseProposal,
   submitProposalArtifact,
   type DomainDeps,
@@ -305,6 +307,22 @@ export function registerProposalRoutes(app: FastifyInstance, deps: AuthDeps): vo
         workspaceId: request.params.id, projectId: request.params.projectId, proposalId: request.params.proposalId,
         request: request.body,
       });
+    },
+  );
+
+  typed.get(
+    '/workspaces/:id/projects/:projectId/proposal-trial-cache',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: 'N06-04 试片缓存可观测性（行数/过期数/容量与 TTL 策略）',
+        params: projectParamsSchema,
+        response: { 200: proposalTrialCacheStatsSchema, ...ERROR_RESPONSES },
+      },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'workspace:read');
+      return proposalTrialCacheStats(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
     },
   );
 

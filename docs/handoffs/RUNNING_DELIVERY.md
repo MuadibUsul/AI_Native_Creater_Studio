@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（第二组：`db:generate` 修复 + N06-07 收口转 VERIFIED）
+**最后更新：** 2026-10-10（第四组：N06-04 收口转 VERIFIED；此前为第二组基础设施修复 + 第三组外部评审响应）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -16,15 +16,22 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／05／06／07**、N15-01/02、N16-01/02 = **53/219（24.20%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-04／N06-08 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 166 项 |
-| 本地 `pnpm verify` | **14/14，1281/1281**（第三组组末实测；Unit 509 / Web 188 / Motion 25 / Integration 514 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 165 项 |
+| 本地 `pnpm verify` | **14/14，1285/1285**（第四组组末实测；Unit 509 / Web 188 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-10 · 第四组 · N06-04 收口 — **VERIFIED**
+- **内容：** `proposals.ts` 新增 `PROPOSAL_TRIAL_TTL_HOURS=24` / `PROPOSAL_TRIAL_MAX_PER_PROJECT=50`（可由 `deps.retention` 覆盖）；`loadCachedTrial` **忽略过期行**；`storeTrial` 写入后按最旧淘汰超出容量的行；新增 `proposalTrialCacheStats`；`runRetentionSweep` 新增第 8 步清理过期试片并计入 `proposalTrialCachePurged`；HTTP `GET .../proposal-trial-cache` + SDK。
+- **证据：** `docs/verification/N06-04.md`（集成 4 项：TTL 过期不复用 / 容量按最旧淘汰 / retention 清理 / 默认策略经 HTTP 暴露）· `docs/handoffs/N06-04.md`
+- **为何转 VERIFIED：** 原缺口（无 TTL/容量、无跨实例策略、无可观测）已补齐；**跨实例**由"依赖键 + TTL + 容量"共同保证，不依赖实例本地状态。已知限制：无命中率计数器、无主动预热。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-10 · 第三组 · 外部评审响应（P0 修复 + 逐条核实）
 - **背景：** 用户转来外部评审（`ANCS-改进建议.md`，基于说明快照、未读源码）。已**逐条核实**并只对"属实"项动手；完整结论见 `docs/decisions/0010-review-response-20261010.md`。

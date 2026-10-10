@@ -422,6 +422,7 @@ export {
   listProposalArtifacts,
   loadProposalForRead,
   previewProposal,
+  proposalTrialCacheStats,
   rebaseProposal,
   submitProposalArtifact,
   supersedeProposals,
