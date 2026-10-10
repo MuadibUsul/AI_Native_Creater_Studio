@@ -198,7 +198,7 @@ export function createFfmpegSourceMediaProbe(options: FfmpegSourceMediaProbeOpti
     async probe(input): Promise<SourceMediaProbeResult> {
       const info = await runBoundedProcess({
         executable: ffprobePath,
-        args: ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', input.filePath],
+        args: ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', '-protocol_whitelist', 'file,pipe', input.filePath],
         timeoutMs,
         maxOutputBytes,
       });
@@ -221,7 +221,7 @@ export function createFfmpegSourceMediaProbe(options: FfmpegSourceMediaProbeOpti
           executable: ffprobePath,
           args: [
             '-v', 'error', '-select_streams', 'v:0', '-read_intervals', '%+120', '-show_frames',
-            '-show_entries', 'frame=best_effort_timestamp', '-print_format', 'json', input.filePath,
+            '-show_entries', 'frame=best_effort_timestamp', '-print_format', 'json', '-protocol_whitelist', 'file,pipe', input.filePath,
           ],
           timeoutMs,
           maxOutputBytes,
@@ -273,7 +273,7 @@ export function createFfmpegSourceMediaProbe(options: FfmpegSourceMediaProbeOpti
       }
       const decode = await runBoundedProcess({
         executable: ffmpegPath,
-        args: ['-nostdin', '-v', 'error', '-xerror', '-i', input.filePath, '-map', '0:v?', '-map', '0:a?', '-f', 'null', '-'],
+        args: ['-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file,pipe', '-i', input.filePath, '-map', '0:v?', '-map', '0:a?', '-f', 'null', '-'],
         timeoutMs,
         maxOutputBytes,
       });

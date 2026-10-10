@@ -71,3 +71,52 @@ describe('N06-05 resolveProposalDisposition', () => {
     expect(resolution.reason).toBe(PROPOSAL_DISPOSITION_REASONS.UNRECOGNIZED);
   });
 });
+
+/**
+ * 评审复现用例（外部评审 2026-10 指出子串匹配会把"采纳"误判为"丢弃"）。
+ * 这些是**真实口语**，必须作为回归用例常驻。
+ */
+describe('N06-05 处置解析回归：含"别/再"的常见词不得被误判', () => {
+  it('「特别好，就用这个」→ ADOPT（"别"在"特别"里，不是否定）', () => {
+    const resolution = resolveProposalDisposition({ utterance: '特别好，就用这个', candidates: single });
+    expect(resolution.disposition).toBe('ADOPT');
+  });
+
+  it('「区别不大，用这个」→ ADOPT（"别"在"区别"里）', () => {
+    const resolution = resolveProposalDisposition({ utterance: '区别不大，用这个', candidates: single });
+    expect(resolution.disposition).toBe('ADOPT');
+  });
+
+  it('「就这样吧，再好不过了」→ ADOPT（"再"不是微调指令）', () => {
+    const resolution = resolveProposalDisposition({ utterance: '就这样吧，再好不过了', candidates: single });
+    expect(resolution.disposition).toBe('ADOPT');
+  });
+
+  it('「不可以，别这样」→ DISCARD（否定 + 明确否定短语）', () => {
+    const resolution = resolveProposalDisposition({ utterance: '不可以，别这样', candidates: single });
+    expect(resolution.disposition).toBe('DISCARD');
+  });
+
+  it('「别这样」→ DISCARD；「别人用的方案」不误判为丢弃', () => {
+    expect(resolveProposalDisposition({ utterance: '别这样', candidates: single }).disposition).toBe('DISCARD');
+    expect(resolveProposalDisposition({ utterance: '这跟别人用的方案不一样，就这样', candidates: single }).disposition).toBe('ADOPT');
+  });
+
+  it('「就这样，再快一点」是复合意图 → 必须确认，不静默采纳', () => {
+    const resolution = resolveProposalDisposition({ utterance: '就这样，再快一点', candidates: single });
+    expect(resolution.dispositions).toContain('ADOPT');
+    expect(resolution.dispositions).toContain('REFINE');
+    expect(resolution.isCompound).toBe(true);
+    expect(resolution.requiresConfirmation).toBe(true);
+    expect(resolution.targetProposalId).toBe('prop_1');
+  });
+
+  it('否定式微调不被当成采纳：「不要再用这个了」→ DISCARD', () => {
+    expect(resolveProposalDisposition({ utterance: '不要再用这个了', candidates: single }).disposition).toBe('DISCARD');
+  });
+
+  it('ASR 口语与错字仍能识别关键短语（「就用这个吧」/「采纳吧」）', () => {
+    expect(resolveProposalDisposition({ utterance: '就用这个吧', candidates: single }).disposition).toBe('ADOPT');
+    expect(resolveProposalDisposition({ utterance: '采纳吧', candidates: single }).disposition).toBe('ADOPT');
+  });
+});

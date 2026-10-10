@@ -1,6 +1,6 @@
 # Quiet Frame Web 重构验证记录
 
-日期：2026-10-08。工作区 `E:\Codes\ANCS`，分支 `codex/quiet-frame-rebuild`。本记录只覆盖本轮 Web 设计迁移和回归；不把参考原型的 QA、视觉夹具或 Mock 结果当作真实业务完成。
+日期：2026-10-08。工作区 `仓库根目录`，分支 `codex/quiet-frame-rebuild`。本记录只覆盖本轮 Web 设计迁移和回归；不把参考原型的 QA、视觉夹具或 Mock 结果当作真实业务完成。
 
 ## 基线与参考
 

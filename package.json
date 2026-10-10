@@ -15,6 +15,7 @@
     "secrets:check": "node scripts/check-secrets.mjs",
     "arch:check": "pnpm --filter @ancs/arch-check run check",
     "test:unit": "vitest run --project unit",
+    "test:eval": "vitest run --project eval",
     "test:contract": "node scripts/planned-suite.mjs test:contract P03-07 \"Provider Adapter 契约测试与 Mock 故障矩阵\"",
     "test:integration": "vitest run --project integration",
     "test:e2e": "node scripts/planned-suite.mjs test:e2e P05-P08 \"创建项目→导入→叙事→分镜→编辑→预览→mock 终渲染→历史恢复\"",

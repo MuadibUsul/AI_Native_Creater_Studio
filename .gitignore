@@ -23,6 +23,8 @@ Thumbs.db
 # 测试与临时产物
 *.tmp
 tmp/
+# 一次性脚手架脚本（此前提交过 .tmp-*.py，见 docs/decisions/0010）
+.tmp-*
 
 # 渲染/验证产物（证据路径记录在 docs/verification/，产物本体不入库）
 .artifacts/

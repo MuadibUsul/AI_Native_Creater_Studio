@@ -26,6 +26,13 @@
 
 ## 二、本轮连续交付（按时间倒序追加）
 
+### 2026-10-10 · 第三组 · 外部评审响应（P0 修复 + 逐条核实）
+- **背景：** 用户转来外部评审（`ANCS-改进建议.md`，基于说明快照、未读源码）。已**逐条核实**并只对"属实"项动手；完整结论见 `docs/decisions/0010-review-response-20261010.md`。
+- **已修（均有测试证据）：** ①**意图识别重写**（P0-4，属实并已复现：「特别好，就用这个」曾被判成**丢弃**）：去单字标记、加否定/惯用语护栏、采纳先于泛化微调、支持复合意图（一律要求确认）、补 `confidence`/`evidence`，8 条复现用例全绿；②**意图评测集** 102 用例 + 准确率/误采纳率指标，独立 `pnpm test:eval`（当前准确率 100%、误采纳 0%）；③**沙箱环境隔离**（P0-1）：`{...process.env}` → `sandboxEnv()` 白名单 + `cwd=os.tmpdir()`；④**词法门补漏**：补 `.constructor` 点号形式与 `Reflect.*`/`setPrototypeOf` 逃逸；⑤**凭据密钥生产强制**（P0-2）：生产缺 `ANCS_CREDENTIAL_KEYS` 即启动失败、非生产改 HKDF 派生并告警、env schema 与 `.env.example` 同步；⑥**FFmpeg 协议收敛**：10 处输入点加 `-protocol_whitelist file,pipe`，真实 ffmpeg 集成 7/7 通过；⑦**仓库卫生**：删 3 个已提交 `.tmp-*.py`、`.gitignore` 补 `.tmp-*`、14 个文件的本机绝对路径清为零命中、`AGENTS.md` 新增三条禁止规则。
+- **核实后判"不属实"（未改）：** `articleFetcher` 的 SSRF **已实现**（逐跳复检 + 私网/元数据拦截 + 5 MiB/15 s 上限），仅残留 DNS rebinding；签名 URL 已短时效 + 最小权限；无 `docs/ai-native-studio-v03-*` 分支；无 LICENSE 文件（`package.json` 为 `UNLICENSED`）。
+- **剩余项 / 需你决策：** 见 0010 第三、四节（历史密钥扫描与轮换、LICENSE、陈旧分支删除、供应商与预算、Web 域/CORS/CSRF、部署形态）。
+- **未按评审执行（我的判断）：** 转向单一楔子、冻结 P 系列、暂停商业化属**产品战略决策**；G0 的"FFmpeg 智能渲染"受 N03-16 与真实凭据阻塞，不宜提前声称完成。
+
 ### 2026-10-10 · 第二组 · 基础设施：修复 `db:generate` 快照冲突
 - **问题：** `migrations/meta/0080_snapshot.json` 与 `0081_snapshot.json` 的 `id`/`prevId` 完全相同 → `drizzle-kit generate` 报 `are pointing to a parent snapshot … collision`，导致 0078—0086 的迁移全部只能手工编写 + 手改 journal（风险累积）。
 - **修复：** 删除冲突的两份快照；用一次性脚手架配置在与当前 schema 一致的临时目录生成快照，改写为新 `id`、`prevId` 指向 0077 快照（保持链一致），落位为 `0085_snapshot.json`（对应 journal 末条 idx 85），随后删除脚手架。
@@ -170,7 +177,7 @@
 
 ```bash
 # 环境
-cd /e/Codes/ANCS                       # 分支 codex/v04-foundation
+cd .                       # 分支 codex/v04-foundation
 docker compose -f infra/docker-compose.dev.yml up -d   # ancs-dev-db / ancs-dev-redis
 export ANCS_TEST_DATABASE_URL='postgres://ancs:ancs@localhost:55432/ancs_quiet_frame_test_261007'  # 库名必须含 test
 
@@ -269,12 +276,12 @@ e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_P
 
 **恢复工作前先做三件事**：① `git log --oneline -5` 与 `git status` 确认与本文一致；② 读 `docs/design/mouse-voice-gap-map.md` 的「进度记录」；③ 跑一次 `pnpm verify` 确认基线（注意：**同时只能跑一份**）。
 
-**本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `/mnt/e`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind /home/ubuntu/ancs-nm /mnt/e/Codes/ANCS/node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
+**本机环境备注（本会话踩过）**：此 Linux/WSL 工作区里 `node_modules` 原先是在 Windows 上安装的（只有 win32 原生二进制），导致 `pnpm verify` 的 `build` 报 `Cannot find module '../lightningcss.linux-x64-gnu.node'`、单测首个 `buildServer` 因从 `外挂盘`（9p）懒加载模块而超过 5s 默认超时。已用 `cp -a` 把 `node_modules` 复制到 Linux 盘并 `sudo mount --bind <Linux 盘上的 node_modules 副本> /mnt./node_modules`（路径不变，workspace 符号链接仍有效）。**这是会话级挂载，不是仓库改动**；换机/重启后若再遇 win32 原生模块缺失，按此重建挂载后再跑 verify。不要通过放宽测试超时或改断言来绕过。
 
 **平台切换备注（2026-10-10 新增）**：若在 **Windows（Git Bash）** 下接手而 `node_modules` 里只有 Linux 原生二进制（`@rolldown/binding-linux-x64-gnu`、`lightningcss-linux-x64-gnu`），`vitest` 会以 `Cannot find native binding`／`@rolldown/binding-wasm32-wasi` 启动失败。修法是按当前平台重装依赖：`CI=true pnpm install --config.confirmModulesPurge=false`（会整目录重装并下载 win32 原生包；`pnpm-lock.yaml` 不变）。**不要**用放宽超时或改断言绕过。
 
 **推送凭据（本会话踩过）**：WSL 内 `git push` 无凭据（`fatal: could not read Username`）。本机 Windows 侧的 Git for Windows 已配置 `credential.helper=manager` 且缓存了 github.com 凭据，可用 Windows git 推送同一提交：
-`cd /e/Codes/ANCS && GIT_TERMINAL_PROMPT=0 "/mnt/c/Program Files/Git/cmd/git.exe" push origin codex/v04-foundation`（提交仍由 WSL git 创建，二者共享同一 `.git`）。
+`cd . && GIT_TERMINAL_PROMPT=0 "系统安装的 git" push origin codex/v04-foundation`（提交仍由 WSL git 创建，二者共享同一 `.git`）。
 
 **本会话新增的纪律/教训（都踩过，务必遵守）**：
 - **同一时刻只跑一份 verify/测试实例**（共用同一测试库会互相清理数据 → 大量假失败；若被中断，先 `pkill -f vitest` 再重跑）。

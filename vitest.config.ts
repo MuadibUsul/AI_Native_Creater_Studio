@@ -36,6 +36,17 @@ export default defineConfig({
   test: {
     projects: [
       {
+        // AI 质量评测（与单测分开跑：`pnpm test:eval`；度量趋势与误采纳率，不进 verify 的强门）
+        test: {
+          name: 'eval',
+          environment: 'node',
+          include: ['packages/**/*.eval.ts', 'apps/**/*.eval.ts'],
+          exclude: ['**/node_modules/**'],
+          alias: workspaceAliases,
+          passWithNoTests: false,
+        },
+      },
+      {
         test: {
           name: 'unit',
           environment: 'node',

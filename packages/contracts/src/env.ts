@@ -69,6 +69,12 @@ export const apiEnvSchema = z.object({
   ...baseEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  /**
+   * 供应商凭据信封加密密钥（`v1:<base64 32B>[,v2:...]`）。
+   * **生产环境必填**：一个密钥泄露不应同时打穿会话、签名 URL 与供应商凭据；
+   * 非生产可省略（由 BETTER_AUTH_SECRET 派生兜底并告警，见 credential-vault-local）。
+   */
+  ANCS_CREDENTIAL_KEYS: z.string().min(1, 'ANCS_CREDENTIAL_KEYS 不能为空字符串（格式 v1:<base64 32B>）').optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL（如 https://api.example.com）').optional(),
   /** 存储驱动：V1 仅 local（S3/R2 适配器未实现 → 明确失败，不静默降级） */
   ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local（S3/R2 适配器属后续阶段）' }).default('local'),
@@ -116,6 +122,13 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
   }
   if (value.NODE_ENV !== 'production' && value.ANCS_OPS_ENVIRONMENT === 'PRODUCTION') {
     issues.push({ variable: 'ANCS_OPS_ENVIRONMENT', message: '非生产进程不得签发 PRODUCTION 运营会话' });
+  }
+  // 生产必须显式配置凭据信封密钥：避免"一把会话密钥同时管会话/签名 URL/供应商凭据"。
+  if (value.NODE_ENV === 'production' && (value.ANCS_CREDENTIAL_KEYS ?? '').trim() === '') {
+    issues.push({
+      variable: 'ANCS_CREDENTIAL_KEYS',
+      message: '生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（v1:<base64 32B>）——不得从 BETTER_AUTH_SECRET 派生',
+    });
   }
   if (value.ANCS_SAAS_MODE === 'live') {
     if (value.ANCS_DEFAULT_PLAN !== 'FREE') {

@@ -8,7 +8,7 @@
 
 ANCS 工程推进细则 · 2026-10-04
 
-目标文件：`E:\Codes\ANCS\ANCS_Plan261004.md`  
+目标文件：`ANCS_Plan261004.md`  
 需求基线：`creator_video_os_spec_v0.2.md`  
 交付方向：先达到内部生产可用，再推进对外 SaaS、Packs、桌面、手机及 Enterprise。  
 细化范围：全部阶段。  

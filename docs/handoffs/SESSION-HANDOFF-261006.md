@@ -3,7 +3,7 @@
 > **2026-10-09 当前状态优先：** 用户已明确取消旧的 Web 人工验收暂停，要求连续推进全部 v0.4。当前分支 `codex/v04-foundation`；N00-01—07、N01-01—11、N02-01—14、N15-01/02、N16-01/02 共 **36/219** 项 VERIFIED（16.44%），剩余 183 项（83.56%）。N02-14 已完成 ASR 人工纠错覆盖、删除/恢复索引同步、成员撤销旧 cursor 失效和客户端缓存清理；迁移仍为 0074，`pnpm verify` **1062/1062**。第三方 ASR/视觉/音频分析 Provider 无凭据，保持未验证；下一任务 N02-15。以下 P14/main/暂停内容是 2026-10-07 历史交接，若冲突以本段和 v0.4 验收账本为准。
 
 - **交接时点**：2026-10-07（P14 阶段 5/5 全部完成；按用户指令暂停验收）
-- **仓库**：`E:\Codes\ANCS`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
+- **仓库**：`仓库根目录`（remote: `https://github.com/MuadibUsul/AI_Native_Creater_Studio.git`，branch main）
 - **P14 交付提交**：`06c979e` `feat(p14): Analytics Director 与 Finance Pack Web 闭环`；最终功能/验收头 `34b68c4`；GitHub CI run `37611980360` 全绿
 - **权威文档**：需求 `creator_video_os_spec_v0.2.md`；计划 `ANCS_Plan261004.md`；协作规则 `AGENTS.md`（**接手前必读并按其 §13.5 启动步骤执行**）
 
@@ -93,7 +93,7 @@
 5. **drizzle `sql\`\`` 内插列对象渲染为未限定列名**——相关子查询必须写显式限定名（`wm.user_id = "user".id`），否则计数恒 0。
 6. **drizzle 0.45 错误包装**：唯一冲突判定用 `@ancs/db` 的 `isUniqueViolation(error)`（解包 cause），不要直接读 `error.code`。
 7. **SDK `Headers` 实例不能展开**（`{...headers}` 得到空对象）——用 `headers.set()`。
-8. **bash 工作目录会在调用间漂移**——每个脚本前显式 `cd /e/Codes/ANCS`；多替换 python 脚本必须**最后才写文件**（中途 assert 失败 = 文件未写，勿假设部分生效）。
+8. **bash 工作目录会在调用间漂移**——每个脚本前显式 `cd .`；多替换 python 脚本必须**最后才写文件**（中途 assert 失败 = 文件未写，勿假设部分生效）。
 9. **zod default 字段的 SDK 类型**：`z.infer` 输出类型必填——客户端入参用 `z.input`（如 PublicationRequestInput/CreateExportPackageRequestInput），SDK 方法签名用 Input 类型。
 10. **只 throw 的 async 方法推断 Promise<void>**（非 never）——实现接口时必须显式注解返回类型；**410 等非标准状态**复用 `ERROR_CODES.PRECONDITION_FAILED` + status 参数区分。
 11. **catch 回调内丢失类型窄化**（如 `input.content.url`）——窄化值先提取为局部变量再进回调。
