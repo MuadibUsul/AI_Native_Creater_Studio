@@ -83,7 +83,7 @@ const parseLockDimensions = (value: unknown): ObjectLockDimension[] =>
 
 // ── 行 ↔ 内核核心字段 ─────────────────────────────────────
 
-const toKernelClip = (row: ClipRow): KernelClip => ({
+export const toKernelClip = (row: ClipRow): KernelClip => ({
   id: row.id,
   sequenceId: row.sequenceId,
   trackId: row.trackId,
@@ -98,12 +98,12 @@ const toKernelClip = (row: ClipRow): KernelClip => ({
   parameters: row.parameters ?? null,
 });
 
-const toKernelTrack = (row: TrackRow): KernelTrack => ({
+export const toKernelTrack = (row: TrackRow): KernelTrack => ({
   id: row.id, sequenceId: row.sequenceId, kind: row.kind, position: row.position, name: row.name,
   locked: row.locked, muted: row.muted, hidden: row.hidden, solo: row.solo, syncLocked: row.syncLocked,
 });
 
-const toKernelAudioRegion = (row: AudioRegionRow): KernelAudioRegion => ({
+export const toKernelAudioRegion = (row: AudioRegionRow): KernelAudioRegion => ({
   id: row.id,
   sequenceId: row.sequenceId,
   trackId: row.trackId,
@@ -119,7 +119,7 @@ const toKernelAudioRegion = (row: AudioRegionRow): KernelAudioRegion => ({
   parameters: row.parameters,
 });
 
-const toKernelCaption = (row: CaptionRow): KernelCaption => ({
+export const toKernelCaption = (row: CaptionRow): KernelCaption => ({
   id: row.id,
   sequenceId: row.sequenceId,
   trackId: row.trackId,

@@ -1241,6 +1241,27 @@ export {
   retentionCliEnvSchema,
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';
+export {
+  RENDER_PLAN_HASHED_FIELDS,
+  RENDER_PLAN_IR_VERSION,
+  renderPlanAnimatedTargetSchema,
+  renderPlanAudioEntrySchema,
+  renderPlanCaptionSchema,
+  renderPlanSchema,
+  renderPlanSourceSchema,
+  renderPlanVideoLayerSchema,
+  renderPlanVideoSegmentSchema,
+  renderRequirementSchema,
+} from './render-plan.js';
+export type {
+  RenderPlan,
+  RenderPlanAudioEntry,
+  RenderPlanCaption,
+  RenderPlanSource,
+  RenderPlanVideoLayer,
+  RenderPlanVideoSegment,
+  RenderRequirement,
+} from './render-plan.js';
 
 // 审批与受控导出契约（P07-06 / §87、§54）
 export {

@@ -9,7 +9,7 @@
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 1 | 3 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 1 | 4 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 11 | PLANNED | — | — |
@@ -21,11 +21,11 @@
 | `roll_clip` | NATIVE | `roll_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `ripple_clip` | NATIVE | `ripple_clip` | KERNEL | 1 | 7 | PLANNED | — | — |
 | `split_av_cut` | NATIVE | `split_av_cut` | KERNEL | 1 | 1 | PLANNED | — | — |
-| `update_track` | NATIVE | `update_track` | KERNEL | 1 | 4 | PLANNED | — | — |
+| `update_track` | NATIVE | `update_track` | KERNEL | 1 | 5 | PLANNED | — | — |
 | `set_av_link` | NATIVE | `set_av_link` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `set_clip_transform` | NATIVE | `set_clip_transform` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `set_clip_crop` | NATIVE | `set_clip_crop` | KERNEL | 1 | 1 | PLANNED | — | — |
-| `set_clip_opacity` | NATIVE | `set_clip_opacity` | KERNEL | 1 | 10 | PLANNED | — | — |
+| `set_clip_opacity` | NATIVE | `set_clip_opacity` | KERNEL | 1 | 11 | PLANNED | — | — |
 | `set_clip_speed` | COMPILED_ALIAS | `update_clip` | KERNEL | 1 | 2 | PLANNED | CONSTANT_LINEAR_REVERSE_ONLY | N11-02 |
 | `add_effect` | PLANNED | — | — | 0 | 0 | PLANNED | NO_EXECUTABLE_HANDLER | N03-05 |
 | `update_effect` | PLANNED | — | — | 0 | 0 | PLANNED | NO_EXECUTABLE_HANDLER | N03-05 |
