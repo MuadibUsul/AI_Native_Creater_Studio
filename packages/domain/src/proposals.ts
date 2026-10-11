@@ -11,7 +11,7 @@ import {
   editOperationSchema,
   isEditOperationName,
   isObjectLockKind,
-  mediaTimeToLegacyMilliseconds,
+  mediaTimeToDisplayMilliseconds,
   mediaRangeSchema,
   proposalImpactSchema,
   proposalArtifactSchema,
@@ -38,6 +38,7 @@ import { editEvents, projects, proposalArtifacts, proposalTrials, proposals, seq
 import type { DomainDeps } from './channels.js';
 import { assertProtectedContentStable, type ClipDigests, clipDigestsOf } from './content-protection.js';
 import { processEdits } from './edits.js';
+import { currentEventSeq } from './versions.js';
 
 /**
  * N06-01／N06-02／N06-04／N06-03：私有候选 → 确定性试改 → 原子采用 → 影响集与受控 rebase。
@@ -177,7 +178,10 @@ async function loadCachedTrial(deps: DomainDeps, row: typeof proposals.$inferSel
   )).limit(1);
   const cached = rows[0];
   if (!cached) return null;
-  return proposalTrialSchema.parse({ ...proposalTrialSchema.parse(cached.trial), proposalId: row.id, cached: true, dependencyKey });
+  // 旧版本写入的缓存行可能缺少后加字段：解析失败按未命中处理（重新试改），不让陈旧缓存让请求失败
+  const parsed = proposalTrialSchema.safeParse(cached.trial);
+  if (!parsed.success) return null;
+  return proposalTrialSchema.parse({ ...parsed.data, proposalId: row.id, cached: true, dependencyKey });
 }
 
 async function storeTrial(deps: DomainDeps, row: typeof proposals.$inferSelect, input: { dependencyKey: string; assetVersionSignature: string; trial: ProposalTrial }): Promise<void> {
@@ -536,6 +540,12 @@ export async function createProposalBranch(deps: DomainDeps, input: {
   return toProposal(await loadProposalRow(deps, { ...input, proposalId }));
 }
 
+/** 试改失败原因的稳定摘要（错误码 + 业务 reason），不含内部异常文本。 */
+function trialFailureCause(error: ApiFailure): { code: string; reason: string | null; message: string } {
+  const reason = error.details['reason'];
+  return { code: error.code, reason: typeof reason === 'string' ? reason : null, message: error.message.slice(0, 200) };
+}
+
 /**
  * 确定性试改核心：在**事务内**用真实执行器跑一遍完整操作集，然后**无条件回滚**。
  * 因此结果与正式采用完全一致，而工程零变更（不与"预览即预测"混淆：这里跑的是权威路径）。
@@ -549,8 +559,7 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
   actorId?: string;
 }): Promise<{ trial: ProposalTrial; postState: Map<string, ClipDigests> }> {
   const operations = editOperationSchema.array().parse(input.row.operations);
-  const eventsBefore = await deps.db.select({ seq: editEvents.seq }).from(editEvents).where(eq(editEvents.projectId, input.projectId));
-  const maxSeqBefore = eventsBefore.reduce((max, event) => Math.max(max, event.seq), 0);
+  const maxSeqBefore = await currentEventSeq(deps.db, input.projectId);
 
   class RollbackSentinel extends Error {
     constructor(readonly trial: ProposalTrial, readonly postState: Map<string, ClipDigests>) {
@@ -591,10 +600,12 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
           return {
             clipId: clip.id,
             trackId: clip.trackId,
-            sequenceStartMs: mediaTimeToLegacyMilliseconds(sequenceRange.start),
-            sequenceEndMs: mediaTimeToLegacyMilliseconds(sequenceRange.end),
-            sourceStartMs: mediaTimeToLegacyMilliseconds(sourceRange.start),
-            sourceEndMs: mediaTimeToLegacyMilliseconds(sourceRange.end),
+            sequenceRange,
+            sourceRange,
+            sequenceStartMs: mediaTimeToDisplayMilliseconds(sequenceRange.start),
+            sequenceEndMs: mediaTimeToDisplayMilliseconds(sequenceRange.end),
+            sourceStartMs: mediaTimeToDisplayMilliseconds(sourceRange.start),
+            sourceEndMs: mediaTimeToDisplayMilliseconds(sourceRange.end),
           };
         }),
         projectUntouched: true,
@@ -606,14 +617,18 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
     });
   } catch (error) {
     if (error instanceof RollbackSentinel) return { trial: error.trial, postState: error.postState };
-    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed', 422, {
-      reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
-      cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
-    });
+    // 只有业务拒绝（ApiFailure：锁、模式、源范围、时序等）才是"提案不合法"→ 422；
+    // 数据库故障、编程错误等原样抛出走统一 500 信封（不把服务端故障伪装成提案问题，也不泄漏内部错误信息）。
+    if (error instanceof ApiFailure) {
+      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed', 422, {
+        reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
+        cause: trialFailureCause(error),
+      });
+    }
+    throw error;
   }
   // 事务未被回滚是不可能的（上面必然 throw）；保守 fail-closed
-  const maxSeqAfter = (await deps.db.select({ seq: editEvents.seq }).from(editEvents).where(eq(editEvents.projectId, input.projectId)))
-    .reduce((max, event) => Math.max(max, event.seq), maxSeqBefore);
+  const maxSeqAfter = await currentEventSeq(deps.db, input.projectId);
   throw new ApiFailure(ERROR_CODES.INTERNAL, `proposal trial did not roll back (seq ${String(maxSeqBefore)}→${String(maxSeqAfter)})`, 500, {
     reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
   });
@@ -762,9 +777,10 @@ export async function rebaseProposal(deps: DomainDeps, input: {
       ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
     });
   } catch (error) {
+    if (!(error instanceof ApiFailure)) throw error;
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'proposal cannot be applied to the latest revision', 409, {
       reason: PROPOSAL_ERROR_REASONS.REVIEW_REQUIRED,
-      cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+      cause: error.details['cause'] ?? trialFailureCause(error),
     });
   }
   const now = new Date();

@@ -23,6 +23,9 @@ interface PdfPageLike {
   cleanup?: () => void;
 }
 
+/** PDF 解析页数上限（正常文档远低于此值；超限明确失败而非静默截断）。 */
+export const PDF_MAX_PAGES = 500;
+
 export async function parsePdfBytes(bytes: Uint8Array): Promise<ParsedDocument> {
   // 动态 import：pdfjs 体积大，仅在真正解析 PDF 时加载
   const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as {
@@ -52,6 +55,13 @@ export async function parsePdfBytes(bytes: Uint8Array): Promise<ParsedDocument> 
   const elements: ParsedDocumentElement[] = [];
   const pagesWithoutText: number[] = [];
   const pageCount = document.numPages;
+  // 2026-10 外部评审核实后新增：页数上限（防"页数炸弹"让解析长时间占用 CPU/内存）。
+  if (pageCount > PDF_MAX_PAGES) {
+    throw new DocumentParseError(
+      DOCUMENT_PARSE_ERROR_REASONS.CORRUPT_FILE,
+      `PDF 页数 ${String(pageCount)} 超过上限 ${String(PDF_MAX_PAGES)}`,
+    );
+  }
   let titleHint: string | null = null;
 
   try {

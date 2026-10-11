@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  compareMediaTime,
   legacyMillisecondsToMediaTime,
   mediaTimeToLegacyMilliseconds,
   sourceMediaProbeResultSchema,
@@ -182,6 +183,40 @@ describe('N06-01／02／04 私有候选 → 确定性试改 → 原子采用（H
     expect(ms(clipAfter.sourceRange.start)).toBe(1_000);
   });
 
+  it('29.97fps 序列：非整毫秒帧边界的试改返回精确区间而不是 422（代码审查 P0-1 回归）', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const ntsc = { num: 30_000, den: 1_001 };
+    const frames = (n: number) => ({ ticks: String(n * 1_001), timebase: { num: 1, den: 30_000 } });
+    const sequence = await createSequence({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, input: { name: 'NTSC', frameRate: ntsc, duration: frames(300) },
+    });
+    const track = await createTrack({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: sequence.id, input: { kind: 'VIDEO', position: 0, name: 'V1' },
+    });
+    const clip = await createClip({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: sequence.id,
+      input: {
+        trackId: track.id, assetVersionId: version,
+        sourceRange: { start: frames(0), end: frames(90) }, sequenceRange: { start: frames(0), end: frames(90) },
+        timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true },
+      },
+    });
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: await revisionOf(client, fixture.projectId),
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'trim_clip', clipId: clip.id, sourceRange: { start: frames(10), end: frames(40) }, sequenceRange: { start: frames(0), end: frames(30) } }],
+    });
+    const trial = await client.projects.previewProposal(fixture.workspaceId, fixture.projectId, proposal.proposalId);
+    const trialClip = trial.clipRanges.find((item) => item.clipId === clip.id)!;
+    // 权威区间无损回传（有理时基）；*Ms 只是显示近似
+    expect(compareMediaTime(trialClip.sequenceRange.end, frames(30))).toBe(0);
+    expect(compareMediaTime(trialClip.sourceRange.start, frames(10))).toBe(0);
+    expect(trialClip.sequenceEndMs).toBe(1_001);
+    expect(trialClip.sourceStartMs).toBe(334);
+  });
+
   it('幂等采用：同一幂等键重放返回同一结果且不产生第二次写入', async () => {
     const client = await newSignedInClient();
     const fixture = await makeProject(client);
@@ -302,6 +337,38 @@ describe('N06-01／02／04 私有候选 → 确定性试改 → 原子采用（H
     expect(reread.status).toBe('OPEN');
     expect(await revisionOf(client, fixture.projectId)).toBe(lockedRevision);
     expect((await eventsOf(fixture.projectId)).length).toBe(eventsBefore);
+  });
+
+  it('N06-02 整批原子：A 可执行、B 被锁 → 整批不采用，A 也不落地（不过滤掉 B 后伪成功）', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const clipA = await seedClip(fixture, version, [0, 2_000]);
+    const clipB = await seedClip(fixture, version, [2_000, 4_000]);
+    const revisionBefore = await revisionOf(client, fixture.projectId);
+    await client.projects.edit(fixture.projectId, {
+      schemaVersion: '1.0', baseProjectRevision: revisionBefore, expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'CLIP', objectId: clipB, dimensions: ['STYLE'], locked: true }],
+      idempotencyKey: `idem_lock_b_${randomUUID()}`,
+    });
+    const lockedRevision = await revisionOf(client, fixture.projectId);
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: lockedRevision,
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'set_clip_opacity', clipId: clipA, opacity: 0.4 }, { op: 'set_clip_opacity', clipId: clipB, opacity: 0.4 }],
+    });
+    const eventsBefore = (await eventsOf(fixture.projectId)).length;
+    const failure = await expectApiFailure(
+      client.projects.adoptProposal(fixture.workspaceId, fixture.projectId, proposal.proposalId, {
+        expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `idem_ab_${randomUUID()}`,
+      }),
+      { status: 409 },
+    );
+    expect(failure.details['reason']).toBe('EDIT_IMPACT_LOCKED');
+    expect(await revisionOf(client, fixture.projectId)).toBe(lockedRevision);
+    expect((await eventsOf(fixture.projectId)).length).toBe(eventsBefore);
+    const clipAfter = (await client.projects.state(fixture.projectId)).document.composition.clips.find((clip) => clip.id === clipA)!;
+    expect(JSON.stringify(clipAfter)).not.toContain('0.4');
   });
 
   it('候选绑定选择锚点：锚点变化后采用被拒（指纹不符）', async () => {

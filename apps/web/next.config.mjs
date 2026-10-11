@@ -7,7 +7,7 @@ const nextConfig = {
     const apiOrigin = (process.env.ANCS_API_INTERNAL_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
     return [{ source: '/api/v1/:path*', destination: `${apiOrigin}/api/v1/:path*` }];
   },
-  transpilePackages: ['@ancs/sdk', '@ancs/contracts', '@ancs/scene-components'],
+  transpilePackages: ['@ancs/sdk', '@ancs/contracts', '@ancs/time', '@ancs/scene-components'],
 };
 
 export default nextConfig;

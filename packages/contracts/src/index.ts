@@ -25,6 +25,10 @@ export {
   mediaTimeToSampleIndex,
   legacyMillisecondsToMediaTime,
   mediaTimeToLegacyMilliseconds,
+  mediaTimeToDisplayMilliseconds,
+  mediaTimeToDisplaySeconds,
+  mediaTimeToApproxMilliseconds,
+  mediaTimesEqual,
   legacyFpsToFrameRate,
   mapRangeBoundary,
   mediaRangeDuration,
@@ -386,6 +390,17 @@ export {
   compareProposalRequestSchema,
   compareReportSchema,
 } from './proposal-compare.js';
+export {
+  buildComparePlaybackPlan,
+  compareMarkSideSchema,
+  comparePlaybackMarkSchema,
+  comparePlaybackPlanSchema,
+} from './compare-playback.js';
+export type {
+  CompareMarkSide,
+  ComparePlaybackMark,
+  ComparePlaybackPlan,
+} from './compare-playback.js';
 export type {
   CompareAlignment,
   CompareChange,
@@ -622,6 +637,26 @@ export {
   timelineProjectionSchema,
   timelineProjectionTrackSchema,
 } from './timeline-projection.js';
+export {
+  TEMPORAL_TARGET_KINDS,
+  dualTimecode,
+  dualTimecodeClipSchema,
+  dualTimecodeSchema,
+  formatFrameTimecode,
+  musicRegionSourceSchema,
+  resolveMusicRegionTarget,
+  resolveUtteranceTarget,
+  stepFrames,
+  temporalTargetSchema,
+  utteranceSourceSchema,
+} from './timeline-targeting.js';
+export type {
+  DualTimecode,
+  DualTimecodeClip,
+  MusicRegionSource,
+  TemporalTarget,
+  UtteranceSource,
+} from './timeline-targeting.js';
 export type {
   TemporalSelectionCoverage,
   TimelineLane,
@@ -2446,3 +2481,133 @@ export {
   setUserAppearancePreferenceRequestSchema,
 } from './appearance.js';
 export type { AppearanceMode, UserAppearancePreference, SetUserAppearancePreferenceRequest } from './appearance.js';
+
+// N03-11 PlaybackEngine（播放权威状态机与后端端口）
+export {
+  PLAYBACK_COMMAND_KINDS,
+  PLAYBACK_ENGINE_ERROR_REASONS,
+  PLAYBACK_ENGINE_STATES,
+  applyPlaybackResult,
+  createPlaybackEngineState,
+  dispatchPlayback,
+  getPlaybackCapabilities,
+  getPlaybackClock,
+  isCapabilitySupported,
+  negotiatePlaybackCapabilities,
+  playbackCommandSchema,
+  playbackEffectSchema,
+  playbackEngineErrorReasonSchema,
+  playbackEngineEventSchema,
+  playbackEngineStateSchema,
+  playbackEngineStatusSchema,
+  playbackRange,
+  playbackResultSchema,
+  presentedDriftMs,
+  runPlaybackEffect,
+} from './playback-engine.js';
+export type {
+  PlaybackCommand,
+  PlaybackEffect,
+  PlaybackEngineErrorReason,
+  PlaybackEngineEvent,
+  PlaybackEngineState,
+  PlaybackBackendPort,
+  PlaybackEngineStatus,
+  PlaybackResult,
+} from './playback-engine.js';
+
+// N03-12 播放源选路与韧性（选路/精度如实/URL 刷新不重置选区/有界分段缓存）
+export {
+  PLAYBACK_SEGMENT_CACHE_LIMITS,
+  PLAYBACK_SOURCE_LIMITATIONS,
+  PLAYBACK_SOURCE_MODES,
+  applyUrlRefresh,
+  createSegmentCacheState,
+  findCachedSegment,
+  mediaTimeToMs,
+  planSegmentFetch,
+  playbackEnvironmentSchema,
+  playbackSourceLimitationSchema,
+  playbackSourceModeSchema,
+  playbackSourcePlanSchema,
+  playbackSourceStateSchema,
+  playbackSourceUrlSchema,
+  segmentCacheStateSchema,
+  selectPlaybackSource,
+  touchSegmentCache,
+  urlsNeedingRefresh,
+} from './playback-source.js';
+export type {
+  PlaybackEnvironment,
+  PlaybackSourceLimitation,
+  PlaybackSourceMode,
+  PlaybackSourcePlan,
+  PlaybackSourceState,
+  PlaybackSourceUrl,
+  SegmentCacheState,
+} from './playback-source.js';
+
+// N03-13 统一媒体时钟与音画同步调度
+export {
+  AUDIO_PLAYBACK_PERMISSIONS,
+  MEDIA_CLOCK_NOTICES,
+  MEDIA_CLOCK_SOURCES,
+  MEDIA_CLOCK_SYNC,
+  MEDIA_CLOCK_SYNC_ACTIONS,
+  audioGainEnvelopeSchema,
+  audioPlaybackPermissionSchema,
+  createMediaClock,
+  decideMediaClockSync,
+  gainDbAt,
+  isClockInsideRange,
+  isScheduledAudioCurrent,
+  mediaClockNoticeSchema,
+  mediaClockPlanSchema,
+  mediaClockSourceSchema,
+  mediaClockStateSchema,
+  mediaClockSyncActionSchema,
+  mediaClockSyncDecisionSchema,
+  resolveMediaClockPlan,
+  resumeMediaClock,
+  seekMediaClock,
+  sequenceTimeAt,
+  setMediaClockRate,
+  suspendMediaClock,
+} from './media-clock.js';
+export type {
+  AudioGainEnvelope,
+  AudioPlaybackPermission,
+  MediaClockNotice,
+  MediaClockPlan,
+  MediaClockSource,
+  MediaClockState,
+  MediaClockSyncAction,
+  MediaClockSyncDecision,
+} from './media-clock.js';
+
+// N03-16 播放同步测量与判定（含 §20 阈值与"不支持帧级不得过逐帧门"）
+export {
+  PLAYBACK_SYNC_METRICS,
+  PLAYBACK_SYNC_PATHS,
+  PLAYBACK_SYNC_THRESHOLDS,
+  PLAYBACK_SYNC_THRESHOLD_SOURCE,
+  playbackSyncFixtureReportSchema,
+  playbackSyncFixtureResultSchema,
+  playbackSyncMetricSchema,
+  playbackSyncPathSchema,
+  playbackSyncReportEnvironmentSchema,
+  playbackSyncReportSchema,
+  playbackSyncSampleSchema,
+  playbackSyncVerdictSchema,
+  summarizePlaybackSyncReport,
+} from './playback-sync-report.js';
+export type {
+  PlaybackSyncFixtureReport,
+  PlaybackSyncFixtureResult,
+  PlaybackSyncMetric,
+  PlaybackSyncPath,
+  PlaybackSyncReport,
+  PlaybackSyncReportEnvironment,
+  PlaybackSyncSample,
+  PlaybackSyncVerdict,
+} from './playback-sync-report.js';

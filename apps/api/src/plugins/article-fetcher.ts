@@ -1,4 +1,4 @@
-import { assertSafeUrl } from '@ancs/domain';
+import { assertSafeHostResolves } from '@ancs/domain';
 import { CONTENT_INPUT_ERROR_REASONS, ERROR_CODES, ApiFailure, type ArticleFetcher } from '@ancs/contracts';
 
 /**
@@ -21,7 +21,7 @@ export function createHttpArticleFetcher(options: { maxRedirects?: number; defau
       const maxBytes = input.maxBytes ?? defaultMaxBytes;
       const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
 
-      let current = assertSafeUrl(input.url).toString();
+      let current = (await assertSafeHostResolves(input.url)).toString();
       for (let hop = 0; hop <= maxRedirects; hop += 1) {
         const controller = new AbortController();
         const timer = setTimeout(() => {
@@ -48,7 +48,7 @@ export function createHttpArticleFetcher(options: { maxRedirects?: number; defau
               throw new ApiFailure(ERROR_CODES.INTERNAL, '重定向缺少 Location', 502, { reason: CONTENT_INPUT_ERROR_REASONS.UNREACHABLE, url: current });
             }
             // 逐跳校验（相对重定向按当前 URL 解析）
-            current = assertSafeUrl(new URL(location, current).toString()).toString();
+            current = (await assertSafeHostResolves(new URL(location, current).toString())).toString();
             continue;
           }
           if (!response.ok) {

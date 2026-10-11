@@ -13,6 +13,8 @@ import { defineConfig } from 'vitest/config';
 const srcAlias = (relPath: string): string => fileURLToPath(new URL(relPath, import.meta.url));
 
 const workspaceAliases: Record<string, string> = {
+  '@ancs/time': srcAlias('./packages/time/src/index.ts'),
+  '@ancs/kernel': srcAlias('./packages/kernel/src/index.ts'),
   '@ancs/contracts': srcAlias('./packages/contracts/src/index.ts'),
   '@ancs/sdk': srcAlias('./packages/sdk/src/index.ts'),
   '@ancs/db': srcAlias('./packages/db/src/index.ts'),
@@ -88,7 +90,8 @@ export default defineConfig({
         test: {
           name: 'web',
           environment: 'jsdom',
-          include: ['apps/web/src/**/*.test.tsx'],
+          // 同时收 .test.ts：否则纯 TS 的浏览器侧测试会被**静默跳过**（看似通过实则没跑）
+          include: ['apps/web/src/**/*.test.tsx', 'apps/web/src/**/*.test.ts'],
           exclude: ['**/node_modules/**'],
           alias: workspaceAliases,
           setupFiles: ['./apps/web/src/test-setup.ts'],

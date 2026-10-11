@@ -8,6 +8,7 @@ export { createMediaIndexHandler } from './media-index-handler.js';
 export { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 export { createMediaTranscriptHandler } from './media-transcript-handler.js';
 export { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
+export { createDeepgramSpeechRecognitionAdapter, mapDeepgramResponse } from './deepgram-speech-recognition.js';
 export { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
 export { createProcessMediaVisualAnalysisAdapter } from './visual-analysis-process.js';
 export { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';

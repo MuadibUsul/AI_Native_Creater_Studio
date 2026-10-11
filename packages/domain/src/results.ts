@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import {
   ApiFailure,
@@ -79,9 +79,10 @@ export function createHmacWebhookVerifier(providerId: string, secret: string, to
       }
       const expected = createHmac('sha256', secret).update(`${timestamp}.${input.rawBody}`).digest('hex');
       const provided = signature.replace(/^sha256=/, '');
-      const a = Buffer.from(expected);
-      const b = Buffer.from(provided);
-      const equal = a.length === b.length && a.every((byte, index) => byte === b[index]);
+      // 恒定时间比较（长度不同直接拒绝；长度由 hex 编码固定，不构成可利用的侧信道）
+      const a = Buffer.from(expected, 'utf8');
+      const b = Buffer.from(provided, 'utf8');
+      const equal = a.length === b.length && timingSafeEqual(a, b);
       return equal ? { ok: true } : { ok: false, reason: WEBHOOK_REJECTION_REASONS.INVALID_SIGNATURE };
     },
   };

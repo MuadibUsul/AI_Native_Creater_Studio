@@ -240,6 +240,28 @@ describe('N03-04 多轨、AV 链接与轨道控制（HTTP + SDK）', () => {
     expect(snapshot.document.composition.clips.map((clip) => clip.id).sort()).toEqual([videoClipId, audioClipId].sort());
   });
 
+  it('update_track 改 position：按重排语义落位且可撤销（V5-M1 修复：旧实现唯一索引冲突 500）', async () => {
+    const client = await newSignedInClient();
+    const project = await makeProject(client);
+    await applyEdits(client, project.projectId, [
+      { op: 'create_track', sequenceId: project.sequenceId, track: { kind: 'CAPTION', position: 2, name: 'C1' } },
+    ]);
+    expect((await tracks(client, project.projectId)).map((track) => track.name)).toEqual(['V1', 'A1', 'C1']);
+    const captionTrackId = (await tracks(client, project.projectId)).find((track) => track.name === 'C1')!.id;
+
+    const edit = await applyEdits(client, project.projectId, [{ op: 'update_track', trackId: captionTrackId, changes: { position: 0, muted: true } }]);
+    const reordered = await tracks(client, project.projectId);
+    expect(reordered.map((track) => [track.name, track.position])).toEqual([['C1', 0], ['V1', 1], ['A1', 2]]);
+    expect(reordered[0]!.muted).toBe(true);
+    // 目标轨 + 两条被让位的兄弟轨各一条事件（撤销按事件逐条进行）
+    expect(edit.editEvents.map((event) => event.action)).toEqual(['UPDATE_TRACK', 'UPDATE_TRACK', 'UPDATE_TRACK']);
+
+    for (let index = 0; index < edit.editEvents.length; index += 1) await client.projects.undo(project.projectId);
+    const restored = await tracks(client, project.projectId);
+    expect(restored.map((track) => [track.name, track.position])).toEqual([['V1', 0], ['A1', 1], ['C1', 2]]);
+    expect(restored.find((track) => track.name === 'C1')!.muted).toBe(false);
+  });
+
   it('delete_track：非空轨默认拒绝；MOVE_CLIPS 迁走片段后删除并重排位置', async () => {
     const client = await newSignedInClient();
     const project = await makeProject(client);

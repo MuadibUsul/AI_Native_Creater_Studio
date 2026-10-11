@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkRules, type WorkspacePackage } from './rules.js';
+import { checkRules, checkSourcePurity, type WorkspacePackage } from './rules.js';
 
 /**
  * 构造测试包。
@@ -185,5 +185,38 @@ describe('checkRules：架构依赖方向', () => {
       pkg('@ancs/render-worker', 'apps/render-worker', { remotion: '^4.0.0', react: '^19.0.0' }),
     ];
     expect(checkRules(pkgs)).toEqual([]);
+  });
+
+  it('R9：编辑内核只能依赖 contracts/time；时间库不得依赖任何 workspace 包（裁决 0012）', () => {
+    const base = [
+      pkg('@ancs/contracts', 'packages/contracts', { '@ancs/time': 'workspace:*' }),
+      pkg('@ancs/time', 'packages/time', { zod: '4.6.5' }),
+      pkg('@ancs/db', 'packages/db'),
+    ];
+    expect(checkRules([...base, pkg('@ancs/kernel', 'packages/kernel', { '@ancs/contracts': 'workspace:*', '@ancs/time': 'workspace:*' })])).toEqual([]);
+    const badKernel = checkRules([...base, pkg('@ancs/kernel', 'packages/kernel', { '@ancs/db': 'workspace:*' }, [])]);
+    expect(badKernel.map((v) => [v.rule, v.dep])).toEqual([['R9', '@ancs/db']]);
+    const badTime = checkRules([
+      pkg('@ancs/contracts', 'packages/contracts'),
+      pkg('@ancs/time', 'packages/time', { '@ancs/contracts': 'workspace:*' }),
+    ]);
+    expect(badTime.map((v) => v.rule)).toEqual(['R9']);
+  });
+});
+
+describe('checkSourcePurity：纯核心源码（R10）', () => {
+  it('拒绝 I/O 导入与非确定性 API；注释中的提及不算', () => {
+    const violations = checkSourcePurity([
+      { path: 'packages/kernel/src/a.ts', content: "import { readFile } from 'node:fs';\nconst id = Math.random();\n// Date.now() 只在注释里" },
+      { path: 'packages/kernel/src/b.ts', content: "import { db } from '@ancs/db';\nconst at = new Date();\nconst env = process.env['X'];" },
+      { path: 'packages/time/src/c.ts', content: "export const ok = (a: bigint) => a + 1n;" },
+    ]);
+    expect(violations.map((v) => `${v.pkg}:${v.dep}`)).toEqual([
+      'packages/kernel/src/a.ts:第 1 行',
+      'packages/kernel/src/a.ts:第 2 行',
+      'packages/kernel/src/b.ts:第 1 行',
+      'packages/kernel/src/b.ts:第 2 行',
+      'packages/kernel/src/b.ts:第 3 行',
+    ]);
   });
 });

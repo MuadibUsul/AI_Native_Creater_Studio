@@ -11,6 +11,10 @@
  *  R6 workspace 依赖必须指向真实存在的 workspace 包（全部依赖）
  *  R7 apps/api|worker 的【生产】workspace 依赖仅允许 domain/contracts/db 与 packages/providers/*（计划 §3.4）
  *  R8 apps/render-worker|motion-worker 的【生产】workspace 依赖仅允许 contracts/scene-schema/scene-components/remotion-core
+ *  R9 编辑内核与时间库（裁决 0012 / V5 §5.2）：packages/kernel 的【全部】workspace 依赖仅允许 @ancs/contracts、@ancs/time；
+ *     packages/time 不得依赖任何 workspace 包；二者同属平台中立包（R3）
+ *  R10 编辑内核与时间库的源码纯度（裁决 0012）：非测试源码不得导入 node:* / @ancs/db / drizzle-orm，
+ *     不得使用 process / fetch / Date.now() / new Date() / Math.random()（确定性：ID、时间由调用方注入）
  *
  * 说明：白名单类规则只约束"生产依赖方向"；devDependencies 允许测试用途的额外引用
  * （例如 apps/api 在集成测试中以 devDependency 使用 @ancs/sdk 扮演客户端）。
@@ -86,7 +90,50 @@ export const PLATFORM_NEUTRAL_PACKAGE_DIRS: readonly string[] = [
   'packages/domain',
   'packages/contracts',
   'packages/extensions',
+  'packages/kernel',
+  'packages/time',
 ];
+
+/** R9：编辑内核/时间库的 workspace 依赖白名单（全部依赖，含 dev） */
+export const PURE_CORE_ALLOWED_WORKSPACE_DEPS: Readonly<Record<string, ReadonlySet<string>>> = {
+  'packages/kernel': new Set(['@ancs/contracts', '@ancs/time']),
+  'packages/time': new Set(),
+};
+
+/** R10：纯核心包的源码禁用模式（导入与非确定性 API） */
+export const PURE_CORE_FORBIDDEN_SOURCE_PATTERNS: readonly { pattern: RegExp; message: string }[] = [
+  { pattern: /from\s+['"]node:/, message: '不得导入 node:* 内置模块（内核需在浏览器/Worker 中同样运行）' },
+  { pattern: /from\s+['"]@ancs\/db['"]/, message: '不得导入 @ancs/db（内核不做持久化）' },
+  { pattern: /from\s+['"]drizzle-orm/, message: '不得导入 drizzle-orm（内核不做持久化）' },
+  { pattern: /\bprocess\./, message: '不得读取 process（配置由调用方注入）' },
+  { pattern: /\bfetch\(/, message: '不得发起网络请求' },
+  { pattern: /\bDate\.now\(/, message: '不得读取墙钟（时间由调用方注入）' },
+  { pattern: /\bnew Date\(/, message: '不得读取墙钟（时间由调用方注入）' },
+  { pattern: /\bMath\.random\(/, message: '不得使用随机数（ID 由调用方注入）' },
+];
+
+export interface SourceFile {
+  /** 仓库根相对路径（POSIX） */
+  path: string;
+  content: string;
+}
+
+/** R10：检查纯核心包源码（调用方负责只传入 packages/kernel|time 的非测试 .ts 文件）。 */
+export function checkSourcePurity(files: readonly SourceFile[]): Violation[] {
+  const violations: Violation[] = [];
+  for (const file of files) {
+    const lines = file.content.split(/\r?\n/);
+    lines.forEach((line, index) => {
+      const code = line.replace(/\/\/.*$/, '');
+      for (const rule of PURE_CORE_FORBIDDEN_SOURCE_PATTERNS) {
+        if (rule.pattern.test(code)) {
+          violations.push({ rule: 'R10', pkg: file.path, dep: `第 ${String(index + 1)} 行`, message: rule.message });
+        }
+      }
+    });
+  }
+  return violations;
+}
 
 export const isWorkspaceDep = (version: string): boolean => version.startsWith('workspace:');
 
@@ -141,6 +188,21 @@ export function checkRules(pkgs: readonly WorkspacePackage[]): Violation[] {
           if (target?.dir.startsWith('packages/providers/')) {
             violations.push({ rule: 'R3', pkg: pkg.name, dep, message: 'domain 不得依赖 providers/*' });
           }
+        }
+      }
+    }
+
+    // R9：编辑内核/时间库的依赖白名单（全部依赖）
+    const pureAllowed = PURE_CORE_ALLOWED_WORKSPACE_DEPS[pkg.dir];
+    if (pureAllowed !== undefined) {
+      for (const dep of allWorkspaceDeps) {
+        if (!pureAllowed.has(dep)) {
+          violations.push({
+            rule: 'R9',
+            pkg: pkg.name,
+            dep,
+            message: `${pkg.dir} 的 workspace 依赖仅允许 ${pureAllowed.size === 0 ? '（无）' : [...pureAllowed].join(' / ')}（裁决 0012）`,
+          });
         }
       }
     }

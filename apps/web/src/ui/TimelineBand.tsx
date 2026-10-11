@@ -4,6 +4,8 @@ import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent }
 import {
   addTemporalRange,
   describeTemporalSelection,
+  formatFrameTimecode,
+  stepFrames,
   sequenceTimeAtX,
   temporalSelectionFromDrag,
   temporalSelectionRanges,
@@ -44,6 +46,8 @@ export interface TimelineBandProps {
   selection: TemporalSelection | null;
   lanes?: TimelineBandLane[];
   frameRate?: FrameRate;
+  /** N04-04：逐帧步进的边界（通常是序列区间）；缺省为可视窗口 */
+  frameBounds?: MediaRange;
   disabled?: boolean;
   onPlayheadChange?: (time: MediaTime) => void;
   onSelectionChange?: (selection: TemporalSelection | null) => void;
@@ -73,6 +77,7 @@ export function TimelineBand({
   selection,
   lanes = [],
   frameRate,
+  frameBounds,
   disabled = false,
   onPlayheadChange,
   onSelectionChange,
@@ -175,9 +180,35 @@ export function TimelineBand({
     >
       <div className="flex items-center justify-between px-2 pt-2 text-xs">
         <span className={ui['primaryText']}>横向时间带</span>
-        <span data-testid="timeline-selection-label" className={ui['mutedText']}>
-          {selectionLabel === null ? '未选择时间段（拖动选择带或 Shift+拖动叠加）' : `时间选区：${selectionLabel}`}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* N04-04：逐帧步进（分数帧率不丢帧；时间码按标称帧率显示） */}
+          {frameRate !== undefined ? (
+            <>
+              <button
+                type="button"
+                data-testid="timeline-step-prev"
+                aria-label="上一帧"
+                disabled={disabled || playhead === null}
+                onClick={() => { if (playhead !== null) onPlayheadChange?.(stepFrames({ time: playhead, frameRate, delta: -1, bounds: frameBounds ?? { start: viewport.start, end: viewport.end } })); }}
+                className={`px-1 ${ui['button']}`}
+              >◀|</button>
+              <button
+                type="button"
+                data-testid="timeline-step-next"
+                aria-label="下一帧"
+                disabled={disabled || playhead === null}
+                onClick={() => { if (playhead !== null) onPlayheadChange?.(stepFrames({ time: playhead, frameRate, delta: 1, bounds: frameBounds ?? { start: viewport.start, end: viewport.end } })); }}
+                className={`px-1 ${ui['button']}`}
+              >|▶</button>
+              <span data-testid="timeline-frame-timecode" className={ui['mutedText']}>
+                {playhead === null ? '--:--:--:--' : formatFrameTimecode(playhead, frameRate)}
+              </span>
+            </>
+          ) : null}
+          <span data-testid="timeline-selection-label" className={ui['mutedText']}>
+            {selectionLabel === null ? '未选择时间段（拖动选择带或 Shift+拖动叠加）' : `时间选区：${selectionLabel}`}
+          </span>
+        </div>
       </div>
 
       <div className="relative px-2" style={{ height: '100%' }}>

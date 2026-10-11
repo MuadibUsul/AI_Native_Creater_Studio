@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-10（第五组：N04-04 主体投影与时间选择→对象；第四组为 N06-04 收口）
+**最后更新：** 2026-10-11（第十六组：首轮 Android 真机验证，adb 全自动）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -16,15 +16,110 @@
 
 | 维度 | 值 |
 |---|---|
-| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09（9/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **54/219（24.66%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
-| 剩余 | 165 项 |
-| 本地 `pnpm verify` | **14/14，1297/1297**（第五组组末实测；Unit 518 / Web 191 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过） |
+| 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
+| 剩余 | 164 项 |
+| 本地 `pnpm verify` | **14/14，1399/1399**（第十五组组末实测；Unit 601 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过；`pnpm test:playback-sync`：真实 Chromium 测量 overall=PASS） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十六组 · **首轮真机验证（Android，adb 全自动）**
+- **方式：** USB + `adb reverse tcp:3000 tcp:3000`；`adb shell am start` 打开页面、`adb exec-out screencap` 截图、`adb shell input tap` 触摸交互；本机 Web（3000）+ API（3001，dev 库 `ancs_dev`）同时运行。全程无人值守。
+- **设备：** OnePlus LE2110（OnePlus 9）/ **Android 14** / 1080×2400 / 系统浏览器（Chrome 内核）。
+- **已验证（3 张真机截图）：** ①API 未启动时**明确报错**（「会话暂不可用 + 重试」，不白屏不静默）②API 启动后落地页 `/welcome` 正常渲染（中文排版/层级/黑白设计系统）③点「体验导演工作台」**跳到 `/sign-in`——鉴权门生效**。①②③ 正是规范 N04 规则「新的 UI 不能屏蔽错误与权限」的正向证据。
+- **未验证（不谎报）：** 横竖屏切换（`user_rotation` 未生效，截图字节相同）、登录后的工作台/画布/时间带、§20 第 263 行"切换后选区仍对应同一对象"、细粒度触摸手势、iOS。
+- **证据：** `docs/verification/android-real-device-20261011.md` + `docs/verification/artifacts/android-real-device/*.png`（含可复现的 adb 命令）。
+
+
+### 2026-10-11 · 第十五组 · **首次真实 Provider 证据**：Deepgram ASR 跑通
+- **内容：** 新增 `apps/worker/src/deepgram-speech-recognition.ts`（真实 HTTP 适配器，实现既有 `SpeechRecognitionAdapter`）+ 纯函数 `mapDeepgramResponse`（响应 → 统一转写快照，可离线验证）；6 项离线单测（含**断言密钥不入日志/错误**）；`.env.example` 补变量名（不含值）。
+- **真实调用（用户密钥 + 用户手机素材）：** `deepgram`/`nova-2`/`zh-CN`/diarize → **59 词、4 段、1 说话人、词级时间戳、平均置信度 988/1000、20s 音频耗时 3386ms**；首段「你的夢想你的未来」。
+- **证据：** `docs/verification/provider-real-deepgram.md`（含回放路径）。**这是项目第一次拿到 `VERIFIED_REAL` 级证据。**
+- **真实发现：** ①`nova-2` 中文输出为**繁体**（归一化应作用于**词条**，见 N03-07 词条权威）；②逐词时间戳可用（N05-02 的 `WORD_EXACT` 前提具备）；③批量约 0.17× 实时，**流式延迟未测**。
+- **不虚报：** N05-01／N05-02 仍为 `IN_PROGRESS`（流式与浏览器采集未验证）；DeepSeek 适配器未接。
+- **凭据纪律：** 仅入本机 `.env`（已忽略、未跟踪）；**用户已把密钥贴进聊天，建议用毕即 rotate**。
+
+
+### 2026-10-11 · 第十四组 · 按规范校正测量口径（用户要求"提问前先查规范"后的自查）
+- **背景：** 用户指出我反复把规范已定的事当成"待你决定"来问。按要求逐条对账后，**自查出两处我自己违规**并已改正：
+  1. **漂移阈值**：§20.4 原文「长片时序：规定测试片全长**不得累计偏差超过一帧**；音频内部操作按**样本精度**测试」→ 阈值改为**按夹具帧率换算的一帧**（23.976→41.7ms、29.97→33.4ms），不再用自定的 40ms。
+  2. **自造指标**：我曾擅自加"每分钟漂移率"，把 4 秒夹具的 8ms 累计外推成 122ms/min → **凭空造出 FAIL**。规范只有"全长不超一帧"这一个漂移门 → **删除该自造指标**（而不是调阈值）。
+  3. **报告环境**：§20.4 要求注明**硬件/浏览器/带宽/素材规格/缓存状态/并发/后端版本** → 报告新增 `environment` 字段并由测量脚本采集（`chromium/149.0.7827.55`、Win32、12 核、32GB…）。
+- **实测（改正后）：** overall=PASS；累计漂移 23.976→**8.1ms**（门 41.7）、29.97→**0.07ms**（门 33.4）、VFR→**0.05ms**（门 33.3）；seek p95 ≤17ms；掉帧 0。
+- **另按 §20.2／§20.5／§20.6 逐条对账**，"未纳入金样"清单改为规范编号：**E13**（独立录音/音频偏移）、**E18**（切项目、资源释放）、**E19**（挂起/变速/独立音轨）、**E23**（半透明图形/中文字幕/J-L cut 容差）、§20.5 的**长时序 fixture**。
+- **口径校正：** "必须 Safari 真机"是**外部评审建议**，规范只要求"真机测量并记录硬件/浏览器"——不再把它当规范门。
+- **证据：** `docs/verification/N03-16.md`（含两次"错误指标造出假证据"的教训）、`docs/verification/artifacts/playback-sync-report.json`。
+
+
+### 2026-10-11 · 第十三组 · N03-16 测量矩阵本体（**真实 Chromium + 真实 MP4 跑通**）— IN_PROGRESS
+- **内容：** 新增 `packages/contracts/src/playback-sync-report.ts`（采样/夹具/报告 schema + §20.4／§20.6 阈值 + `summarizePlaybackSyncReport`：p50/p95 seek、**启动偏移**、**累计漂移**、每分钟漂移、掉帧比例、冷/热首帧、内存峰值、**帧级门**；未测记 `UNKNOWN`；**按路径分组不混算**）；`scripts/playback-sync/harness.html` + `measure.mjs`（esbuild 打包**真实适配器** → Playwright 驱动 Chromium 播放真实夹具 → 判定 → 写报告）；`package.json` 加 `test:playback-sync`。
+- **实测（headless Chromium，本地实时路径）：** `overall = PASS`；`clip-a-24000-1001`（23.976）累计漂移 **2.7ms**、`clip-b` **0.13ms**、`clip-d`（VFR）**0.09ms**；seek p95 最高 17ms（阈值 1000）；冷/热首帧 70/23、18/14、14/15 ms；掉帧比例 0。报告：`docs/verification/artifacts/playback-sync-report.json`。
+- **测量设计教训（重要，已写入验证文档）：** 最初把"呈现与墙上时钟的偏移"直接当漂移，23.976 夹具因**固定启动偏移**（≈2 帧）被判 FAIL——那是**误报**。修法是**拆分两个指标**（启动偏移 / 累计漂移）而不是放宽阈值。缺这一步，"证据"就是假的。
+- **为何不是 VERIFIED：** 真机（Android/iOS）证据未取；`PRERENDER` 路径无夹具结果（`UNKNOWN`，未冒充）；**音频偏移未测**（缺带独立音轨的合成夹具）；转场/J-L cut/多轨/字幕金样未纳入；长片（分钟级）未跑。
+- **下一步：** 见第三节。
+
+
+### 2026-10-11 · 第十二组 · 播放链路**浏览器接线**（N03-12 适配器 + N03-13 接线面）
+- **内容：**
+  - `apps/web/src/playback/media-element-backend.ts`：`PlaybackBackendPort` 的真实实现（只依赖窄接口 `MediaElementLike`）——**presented 时间只取元素实际位置**、URL 失效**有限次刷新且保持播放位置**、范围外 seek 明确拒绝、`dispose` 幂等；
+  - `apps/web/src/playback/PlaybackSurface.tsx`：把引擎 + 端口 + 统一时钟串起来的最小播放面；显示状态、序列时间与**实际呈现时间**、超容差的**同步修正提示**、**未授权/无音轨的明确提示**、协商后的能力表（未支持的不出现）；
+  - `vitest.config.ts`：web 项目补收 `*.test.ts`（此前纯 TS 的浏览器侧测试会被**静默跳过** —— 这是个会制造"假绿"的坑，已修）。
+- **证据：** `apps/web/src/playback/media-element-backend.test.tsx`（7 项）+ `PlaybackSurface.test.tsx`（6 项）；`docs/verification/N03-12.md`、`N03-13.md` 增补"接线"节。
+- **交给你：** `docs/handoffs/PLAYBACK-DEVICE-CHECKLIST.md` —— 真机检查表（无素材也能测一半；有 proxy 后测漂移/连续 seek/后台恢复/URL 过期/冷热首帧）。
+- **状态不变：** N03-12／N03-13 仍 `IN_PROGRESS`——**逻辑与接线都已交付**，余下是**真机证据**与（N03-12）真实媒体上的 Range/分段实测。
+- **下一步：** 见第三节。
+
+
+### 2026-10-11 · 第十一组 · N03-13 统一媒体时钟与音画同步调度 — **IN_PROGRESS**
+- **内容：** 新增 `packages/contracts/src/media-clock.ts` —— 统一媒体时钟（有音轨→AUDIO_CONTEXT，无音轨→**同接口虚拟时钟**）；`seekMediaClock` **递增 epoch** + `isScheduledAudioCurrent`（**只有当前代际的已调度音频可播** → 连续 seek 后旧音频不出声）；`suspendMediaClock`（**冻结**，后台 60s 不推进）/`resumeMediaClock`（**重锚到恢复时刻**，不快进、挂起期间音频时间不计入序列）；`setMediaClockRate`（切换瞬间序列时间**连续**）；`resolveMediaClockPlan`（**未授权 → 明确提示 + 只静音播画面**，不静默无声）；`decideMediaClockSync`（±40ms **容差内不修正**／带内按比例微调速率并限幅 ±5%／超 250ms 才 RESEEK）；`gainDbAt`（淡入淡出包络）；`isClockInsideRange`（半开边界）。
+- **证据：** `docs/verification/N03-13.md`（13 项单测，逐条覆盖四条验收：连续 seek 旧音频不播／后台恢复不快进不重复／长样例 1 小时零漂移／未授权清楚提示）· `docs/handoffs/N03-13.md`
+- **为何不是 VERIFIED：** **真实 WebAudio 接线未做**（AudioContext/AudioBufferSourceNode 按 epoch 排程、suspend/resume、播放速率、GainNode 淡变曲线），字幕跟随渲染未接；实测漂移与挂起行为属 N03-16。
+- **G0 链现状：** `N03-11 ✅ → N03-12（策略层✅／适配器未写）→ N03-13（逻辑层✅／接线未写）→ N03-16 → N03-10`。
+- **下一步：** 浏览器接线（N03-12 适配器 + N03-13 音频侧）→ N03-16 测量矩阵。
+
+
+### 2026-10-11 · 第十组 · N03-12 播放源选路与韧性（策略层）— **IN_PROGRESS**
+- **内容：** proxy 画像/PTS 映射（N02 已交付，未重造）之上补齐**播放侧策略**：新增 `packages/contracts/src/playback-source.ts` —— `selectPlaybackSource`（按**实测**能力选 HTMLMediaElement／MSE／局部预渲染；**精度如实**：无 WebCodecs 时只能 `KEYFRAME_APPROXIMATE` 且给 `limitations`；`requireFrameAccurate` 达不到则 `playable=false`）、`applyUrlRefresh`（**只换 URL**，时钟/选区逐字段不变）/`urlsNeedingRefresh`、有界分段缓存（条目数+字节双上限 LRU）/`planSegmentFetch`（当前段 + **有界**预取，返回 `cacheHit` 以区分冷/热）。
+- **证据：** `docs/verification/N03-12.md`（13 项单测，逐条覆盖四条验收）· `docs/handoffs/N03-12.md`
+- **为何不是 VERIFIED：** **浏览器适配器未写**（HTMLMediaElement/MSE 的 `PlaybackBackendPort`、真实 Range 请求、分段拉流、错误恢复、预取调度、URL 过期刷新接线）；冷/热首帧**实测**属 N03-16。
+- **G0 链现状：** `N03-11 ✅ → N03-12（策略层✅／适配器未写）→ N03-13（TODO）→ N03-16 → N03-10`。
+- **下一步：** N03-13（WebAudio 主时钟与音画同步调度）。
+
+
+### 2026-10-11 · 第九组 · N03-11 PlaybackEngine 契约与统一播放快照 — **VERIFIED**
+- **内容：** 新增 `packages/contracts/src/playback-engine.ts`：状态机（IDLE/LOADING/READY/PLAYING/PAUSED/DISPOSED）、命令 7 类、**效果** 7 类、事件 4 类、结果 3 类；纯函数 `dispatchPlayback` / `applyPlaybackResult`（**唯一**产生"实际呈现时间"的入口）；能力协商（未声明一律不支持、未知值丢弃）；`getPlaybackCapabilities` / `getPlaybackClock` / `presentedDriftMs`；**后端端口** `PlaybackBackendPort` + `runPlaybackEffect`（异常转 FAILED 不抛出）。引擎只持有 N03-08 的 `PlaybackSnapshot`（带 documentRevision），**不维护第二套编辑状态**。
+- **证据：** `docs/verification/N03-11.md`（14 项单测：状态机 10 + 假后端会话 3 + 访问器 1）· `docs/handoffs/N03-11.md`
+- **验收对照：** 切换后端不改工程 ✅；事件带 requestId/revision/**实际 presented 时间**（请求只产生效果，呈现只能由后端回灌）✅；未声明能力不得展示为支持 ✅；dispose 幂等 ✅。
+- **为何是 VERIFIED：** 四条验收/负面路径全部有测试证据，且引擎 API 完整；**具体后端适配器**（Remotion 预览/HTMLMediaElement/MSE）按任务分工属 **N03-12**。
+- **G0 链现状：** `N03-11 ✅ → N03-12（TODO）→ N03-13（TODO）→ N03-16 → N03-10`。
+- **下一步：** N03-12（标准 proxy 与 HTML 媒体／MSE 回退路径）。
+
+
+### 2026-10-11 · 第八组 · 评审 P1 安全收口（N03-16 因依赖未就绪而推迟）
+- **为何改做这个：** N03-16（G0 基础播放同步）的依赖链 `N03-11 → N03-12 → N03-13` **全为 TODO**（即 G0 线前面有 3 个任务，不止一个）→ 按纪律记录阻塞、改做依赖就绪且可完整验证的项。
+- **已修（均有测试证据）：**
+  1. **文章抓取 DNS rebinding**（P1，评审核实的真实缺口）：新增 `assertSafeHostResolves` —— 逐跳把主机名解析成**全部**地址，任一落在回环/私网/元数据段即 403、解析失败或空结果 422；抓取器逐跳改用它；残余 TOCTOU 与"固定 IP"的部署层修法写入代码注释。测试 4 项。
+  2. **文档解析资源上限**（P1）：ZIP 加条目数/单条解压量/累计解压量/压缩比四道门，且**在解压前按声明值拦截**（`inflateRawSync({maxOutputLength})` 兜底，不再先分配）；上限可注入；PDF 加页数上限（500）。测试 6 项（手写 ZIP 构造压缩炸弹，验证不分配即拒绝）。
+- **证据：** `packages/domain/src/content-extract.test.ts`、`packages/providers/document-extract/src/zip-limits.test.ts`；`docs/decisions/0010-review-response-20261010.md` 第二、三节已同步。
+- **仍未做：** 部署层项（连接固定 IP / 解析移入受限子进程 / 限流与 CORS / 容器化沙箱 / Dockerfile）。
+
+
+### 2026-10-11 · 第七组 · N06-08 收口（对照载荷 → 回放计划 + 可见 A/B 面板）— **IN_PROGRESS**
+- **内容：** 差异项增 `before/afterSequenceRange`；新增契约 `packages/contracts/src/compare-playback.ts` 的 `buildComparePlaybackPlan`（标记**落到时间轴**并按起点排序；删除用左侧、新增用右侧、修改用两侧且取试改后区间；**不可定位的差异仍列出**并计入 `unplaced`；空循环区间视为无循环）；新增可见面板 `apps/web/src/ui/CompareReplayPanel.tsx`（A/B 切换只改显示、差异标记条可点以 seek 到差异起点、汇总、未定位单列、局部循环指示）。
+- **证据：** `docs/verification/N06-08.md`（第二轮：契约 4 项 + 面板 jsdom 4 项）· `docs/handoffs/N06-08.md`
+- **为何不是 VERIFIED：** 面板尚未挂到真实播放器（切换前后/音频 AB 的实际声音对齐、循环驱动播放）、无真实浏览器证据；空间×时间应用层组网仍未做。
+- **下一步：** 见第三节。
+
+
+### 2026-10-10 · 第六组 · N04-04 收尾（逐帧步进 + 双时间码换算 + 语义指向）— **IN_PROGRESS**
+- **内容：** 新增契约 `packages/contracts/src/timeline-targeting.ts`：`stepFrames`（逐帧步进走有理运算 → **分数帧率不漂移**，`bounds` 夹帧边界）、`formatFrameTimecode`（`HH:MM:SS:FF`，非 drop-frame）、`dualTimecode`（复用 `sequenceTimeToSourcePts`，含 **REVERSE** 镜像；不在片段内 → null）、`resolveUtteranceTarget`（「这句话」→ 字幕 + 词级定位）、`resolveMusicRegionTarget`（「这里的音乐」→ 音频区域，重叠全返回）；`TimelineBand` 新增逐帧按钮与帧时间码（未给 `frameRate` 则不渲染）。
+- **证据：** `docs/verification/N04-04.md`（第二轮：契约 12 项单测 + 时间带 jsdom 5 项）· `docs/handoffs/N04-04.md`
+- **为何不是 VERIFIED：** 双时间码**界面展示**（需把片段 `sourceRange` 带进车道数据）、真实字幕/音频区域行到语义指向的适配接线、空间×时间应用层组网、真实浏览器高 DPI 目检（N04-01）未做。
+- **下一步：** 见第三节。
+
 
 ### 2026-10-10 · 第五组 · N04-04 主体（真实片段/轨道投影 + 时间选择→对象）— **IN_PROGRESS**
 - **内容：** 新增契约 `packages/contracts/src/timeline-projection.ts`：`projectSequenceToTimeline`（真实轨道/片段 → 车道与几何；有理时基换算；越界如实标 `clippedLeft/Right`；零宽不进 segments 但列入 `outsideViewportClipIds`；孤儿片段列入 `orphanClipIds` 不静默丢弃）、`clipsInTemporalSelection`（POINT 半开区间命中；RANGES 区分完整覆盖/部分相交，**不合并显式多区间**；支持轨道作用域）、`pointSelection`；Web 侧新增 `projectionToBandLanes` 适配器把权威投影喂给既有 `TimelineBand`（只做形状映射，几何只算一次）。
@@ -263,6 +358,16 @@ e6a604d  feat(n06-08) A/B 比较与差异标记（N06 收尾组收口）— IN_P
 f9344d8  fix(env) liveEnv 夹具补 ANCS_CREDENTIAL_KEYS（修复评审响应引入的 unit 回归）
 f9b612b  feat(n06-04) 试片缓存收口（TTL/容量/保留清理/可观测）→ VERIFIED（第四组；组末 verify 14/14、1285/1285）
 305e5ad  feat(n04-04) 真实片段/轨道投影 + 时间选择→对象解析（第五组；组末 verify 14/14、1297/1297）
+d796331  feat(n04-04) 逐帧步进 + 双时间码换算 + 「这句话/这里的音乐」语义指向（第六组；组末 verify 14/14、1311/1311）
+88994f1  feat(n06-08) 对照载荷 → 回放计划 + 可见 A/B 面板（第七组；组末 verify 14/14、1319/1319）
+18fbcbb  fix(review-p1) 文章抓取 DNS rebinding 防护 + 文档解析资源上限（第八组；组末 verify 14/14、1329/1329）
+412e9e6  feat(n03-11) PlaybackEngine 契约与统一播放快照 → VERIFIED（第九组；组末 verify 14/14、1343/1343）
+32a7b2c  feat(n03-12) 播放源选路与韧性策略层（第十组；组末 verify 14/14、1356/1356）— IN_PROGRESS
+772a9f1  feat(n03-13) 统一媒体时钟与音画同步调度逻辑层（第十一组；组末 verify 14/14、1369/1369）— IN_PROGRESS
+5b3b798  feat(n03-12/n03-13) 播放链路浏览器接线 + 真机清单（第十二组；组末 verify 14/14、1382/1382）
+c574b7b  feat(n03-16) 播放同步测量矩阵本体 + 真实 Chromium/真实媒体跑通（第十三组；组末 verify 14/14、1391/1391）— IN_PROGRESS
+19ecaa4  fix(n03-16) 按 §20 校正测量口径（漂移门=一帧、删自造指标、报告记环境）+ 忽略本地测试视频（第十四组；组末 verify 14/14、1393/1393）
+a8a9557  feat(n05) 接入真实 Deepgram ASR 并取得首个真实 Provider 证据（第十五组；组末 verify 14/14、1399/1399）
 ```
 
 ---

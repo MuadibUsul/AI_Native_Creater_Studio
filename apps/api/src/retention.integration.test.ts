@@ -17,6 +17,7 @@ import {
   resolveTestDatabaseUrl,
   runMigrations,
   scenes,
+  sequenceClips,
   uploadIntents,
   user,
   workspaces,
@@ -29,6 +30,8 @@ import {
   createChannel,
   createProject,
   createProjectVersion,
+  createSequence,
+  createTrack,
   createUploadIntent,
   getAsset,
   getAssetLifecycle,
@@ -464,3 +467,74 @@ describe('N02-07 来源、许可与隐私删除', () => {
     expect((await storage.probeObject(uploaded.storageKey)).exists).toBe(false);
   });
 });
+
+describe('V5-M0 清理稳健性（代码审查 P0-2 / P1-1 回归）', () => {
+  async function insertDraftRender(workspaceId: string, createdAt: Date, retentionClass = 'DRAFT_RENDER_30D'): Promise<string> {
+    const assetId = `ast_${randomUUID()}`;
+    const versionId = `av_${randomUUID()}`;
+    await handle.db.insert(assets).values({
+      id: assetId, workspaceId, assetType: 'DRAFT_RENDER', origin: 'SYSTEM_RENDER', status: 'READY', retentionClass,
+      license: { type: 'PROVIDER_TERMS', holder: null, attribution: null, sourceUrl: null, termsUrl: null, notes: null, confirmedBy: null, confirmedAt: null },
+      currentVersionId: versionId, createdAt, updatedAt: createdAt,
+    });
+    await handle.db.insert(assetVersions).values({
+      id: versionId, assetId, workspaceId, versionNumber: 1, storageKey: `workspaces/${workspaceId}/m0/${assetId}.bin`,
+      mimeType: 'video/mp4', sizeBytes: 1, checksumSha256: 'b'.repeat(64), status: 'READY', metadata: {},
+    });
+    return assetId;
+  }
+
+  it('时间线片段引用的资产：跳过而不是让整轮清理因外键失败；排在它后面的到期资产照常清理', async () => {
+    const { workspaceId, projectId } = await makeWorkspace();
+    const referenced = await uploadReadyAsset(workspaceId, projectId, 41);
+    const free = await uploadReadyAsset(workspaceId, projectId, 42);
+    const sequence = await createSequence(deps(), {
+      workspaceId, projectId, input: { name: '主序列', frameRate: { num: 30, den: 1 }, duration: { ticks: '10000', timebase: { num: 1, den: 1000 } } },
+    });
+    const track = await createTrack(deps(), { workspaceId, projectId, sequenceId: sequence.id, input: { kind: 'VIDEO', position: 0, name: 'V1' } });
+    const range = { start: { ticks: '0', timebase: { num: 1, den: 1000 } }, end: { ticks: '1000', timebase: { num: 1, den: 1000 } } };
+    await handle.db.insert(sequenceClips).values({
+      id: `clip_${randomUUID()}`, workspaceId, projectId, sequenceId: sequence.id, trackId: track.id,
+      assetVersionId: referenced.versionId, sourceRange: range, sequenceRange: range,
+      timeMapping: { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true },
+    });
+
+    // 被引用的资产先进 Trash（排在队头），未引用的后进
+    await softDeleteAsset(deps(), { workspaceId, assetId: referenced.assetId });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await softDeleteAsset(deps(), { workspaceId, assetId: free.assetId });
+
+    const report = await runRetentionSweep(deps(), { now: new Date(Date.now() + 31 * DAY), limit: 1 });
+    expect(report.assetsFailed).toBe(0);
+    expect(report.assetsSkippedByReference).toBeGreaterThanOrEqual(1);
+    expect(report.trashAssetsPurged).toBe(1);
+    expect(await handle.db.select().from(assets).where(eq(assets.id, referenced.assetId))).toHaveLength(1);
+    expect(await handle.db.select().from(assets).where(eq(assets.id, free.assetId))).toHaveLength(0);
+    expect((await storage.probeObject(referenced.storageKey)).exists).toBe(true);
+  });
+
+  it('TTL 到期条件下推到 SQL：大量更早的永久类资产不会把到期缓存挤出扫描窗口', async () => {
+    const { workspaceId } = await makeWorkspace();
+    for (let index = 0; index < 6; index += 1) {
+      await insertDraftRender(workspaceId, new Date(Date.now() - (200 - index) * DAY), 'KEEP_FINAL');
+    }
+    const expired = await insertDraftRender(workspaceId, new Date(Date.now() - 40 * DAY));
+    const report = await runRetentionSweep(deps(), { now: new Date(), limit: 1 });
+    expect(report.retentionAssetsPurged).toBe(1);
+    expect(await handle.db.select().from(assets).where(eq(assets.id, expired))).toHaveLength(0);
+    expect(await handle.db.select().from(assets).where(eq(assets.workspaceId, workspaceId))).toHaveLength(6);
+  });
+
+  it('版本快照引用按子串精确匹配：资产 id 中的 _ 不被当作 LIKE 通配符', async () => {
+    const { workspaceId, projectId } = await makeWorkspace();
+    const asset = await uploadReadyAsset(workspaceId, projectId, 43);
+    // 一个只在"_ 位置不同"的快照：LIKE 会误判为引用，strpos 不会
+    const lookalike = asset.assetId.replace('_', 'X');
+    await createProjectVersion(deps(), { workspaceId, projectId, reason: 'MANUAL' });
+    await handle.db.update(projectVersions).set({ snapshot: { note: lookalike } }).where(eq(projectVersions.projectId, projectId));
+    await softDeleteAsset(deps(), { workspaceId, assetId: asset.assetId });
+    const report = await runRetentionSweep(deps(), { now: new Date(Date.now() + 31 * DAY) });
+    expect(report.trashAssetsPurged).toBe(1);
+  });
+});
+

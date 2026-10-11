@@ -22,7 +22,6 @@ const originalMediaDevices = Object.getOwnPropertyDescriptor(globalThis.navigato
 
 afterEach(() => {
   if (originalMediaDevices === undefined) {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete (globalThis.navigator as { mediaDevices?: unknown }).mediaDevices;
   } else {
     Object.defineProperty(globalThis.navigator, 'mediaDevices', originalMediaDevices);

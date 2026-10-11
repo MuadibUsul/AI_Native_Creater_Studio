@@ -86,9 +86,9 @@ const currentRevision = async (deps: DomainDeps, workspaceId: string, projectId:
   return revision;
 };
 
-interface SideClip { clipId: string; trackId: string; anchorKey: string; digests: ReturnType<typeof clipDigestsOf>; assetVersionId: string | null }
+interface SideClip { clipId: string; trackId: string; anchorKey: string; digests: ReturnType<typeof clipDigestsOf>; assetVersionId: string | null; sequenceRange: unknown }
 const toSide = (rows: ClipRow[]): SideClip[] => rows.map((row) => ({
-  clipId: row.id, trackId: row.trackId, anchorKey: anchorKeyOf(row), digests: clipDigestsOf(row), assetVersionId: row.assetVersionId ?? null,
+  clipId: row.id, trackId: row.trackId, anchorKey: anchorKeyOf(row), digests: clipDigestsOf(row), assetVersionId: row.assetVersionId ?? null, sequenceRange: row.sequenceRange,
 }));
 
 /** A/B 对照：右侧候选试改后的真实结果 vs 左侧（当前确认版或另一候选）。只读，不改工程。 */
@@ -204,5 +204,7 @@ const buildDiff = (
   afterAssetVersionId: after?.assetVersionId ?? null,
   beforeTrackId: before?.trackId ?? null,
   afterTrackId: after?.trackId ?? null,
+  beforeSequenceRange: before === null ? null : mediaRangeSchema.parse(before.sequenceRange),
+  afterSequenceRange: after === null ? null : mediaRangeSchema.parse(after.sequenceRange),
   alignedBy,
 });

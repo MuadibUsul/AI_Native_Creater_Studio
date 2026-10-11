@@ -18,6 +18,8 @@
   "dependencies": {
     "@ancs/contracts": "workspace:*",
     "@ancs/db": "workspace:*",
+    "@ancs/kernel": "workspace:*",
+    "@ancs/time": "workspace:*",
     "drizzle-orm": "0.45.3",
     "zod": "4.6.5"
   },

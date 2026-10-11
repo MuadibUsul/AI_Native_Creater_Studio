@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   addMediaTime,
+  mediaTimeToDisplayMilliseconds,
+  mediaTimeToDisplaySeconds,
+  mediaTimesEqual,
   compareMediaTime,
   frameIndexToMediaTime,
   frameRateSchema,
@@ -178,5 +181,35 @@ describe('media-time 线性和（N04-10 时序重投影）', () => {
     const diff = subtractMediaTime(legacyMillisecondsToMediaTime(1_000), legacyMillisecondsToMediaTime(2_500));
     expect(compareMediaTime(diff, { ticks: '-1500', timebase: { num: 1, den: 1000 } })).toBe(0);
     expect(compareMediaTime(subtractMediaTime(legacyMillisecondsToMediaTime(2_000), legacyMillisecondsToMediaTime(2_000)), { ticks: '0', timebase: { num: 1, den: 1 } })).toBe(0);
+  });
+});
+
+describe('V5-M0 显示换算：非整毫秒时基不抛异常（代码审查 P0-1 回归）', () => {
+  const ntscFrame = { ticks: '1001', timebase: { num: 1, den: 30_000 } };
+  const oneSample48k = { ticks: '1', timebase: { num: 1, den: 48_000 } };
+  const probeTimebase = { ticks: '512', timebase: { num: 1, den: 15_360 } };
+
+  it('legacy 精确投影仍拒绝有损换算（旧字段不可静默丢精度）', () => {
+    for (const time of [ntscFrame, oneSample48k, probeTimebase]) expect(() => mediaTimeToLegacyMilliseconds(time)).toThrow(RangeError);
+  });
+
+  it('显示毫秒按显式舍入给出近似值', () => {
+    expect(mediaTimeToDisplayMilliseconds(ntscFrame)).toBe(33);
+    expect(mediaTimeToDisplayMilliseconds(ntscFrame, 'ceil')).toBe(34);
+    expect(mediaTimeToDisplayMilliseconds(oneSample48k)).toBe(0);
+    expect(mediaTimeToDisplayMilliseconds(oneSample48k, 'ceil')).toBe(1);
+    expect(mediaTimeToDisplayMilliseconds(probeTimebase)).toBe(33);
+    expect(mediaTimeToDisplayMilliseconds({ ticks: '-1001', timebase: { num: 1, den: 30_000 } })).toBe(-33);
+    expect(mediaTimeToDisplayMilliseconds(legacyMillisecondsToMediaTime(2_080))).toBe(2_080);
+  });
+
+  it('显示秒（播放器 API）精确到微秒，且大 ticks 不先经 Number 丢精度', () => {
+    expect(mediaTimeToDisplaySeconds(ntscFrame)).toBeCloseTo(1001 / 30000, 6);
+    expect(mediaTimeToDisplaySeconds({ ticks: '90000000000', timebase: { num: 1, den: 90_000 } })).toBe(1_000_000);
+  });
+
+  it('mediaTimesEqual 跨时基精确比较', () => {
+    expect(mediaTimesEqual({ ticks: '30000', timebase: { num: 1, den: 30_000 } }, legacyMillisecondsToMediaTime(1_000))).toBe(true);
+    expect(mediaTimesEqual(ntscFrame, legacyMillisecondsToMediaTime(33))).toBe(false);
   });
 });

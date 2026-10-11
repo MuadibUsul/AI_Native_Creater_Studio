@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # V5 §19.3：长期开发分支直接推送也必须跑 CI
+    branches: [main, 'codex/**']
   pull_request:
 
 jobs:
