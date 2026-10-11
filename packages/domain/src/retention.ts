@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -23,7 +23,9 @@ import {
   proposalArtifacts,
   proposalTrials,
   scenes,
+  sequenceClips,
   uploadIntents,
+  isForeignKeyViolation,
 } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { licenseMetadataSchema } from '@ancs/contracts';
@@ -75,8 +77,12 @@ export interface RetentionSweepReport {
   trashAssetsPurged: number;
   /** 保留类 TTL 到期资产（如 Draft Render 30 天） */
   retentionAssetsPurged: number;
-  /** 因引用保护（Scene 绑定 / 版本快照）而跳过的资产 */
+  /** 因引用保护（Scene 绑定 / 时间线片段 / 版本快照 / 派生 / 外键仍有引用）而跳过的资产 */
   assetsSkippedByReference: number;
+  /** 单条处理失败的资产（不中断整轮；下次清理重试） */
+  assetsFailed: number;
+  /** 失败明细（最多 20 条，供运维排查；不含敏感内容） */
+  failures: { assetId: string; reason: string }[];
   /** 上传意图过期处理（PENDING → EXPIRED；未完成版本 → FAILED） */
   uploadIntentsExpired: number;
   /** N06-06：过期的**隔离**产物清理（bound=false 的孤儿行；bound=true 的已接受结果保留） */
@@ -287,6 +293,24 @@ export async function isAssetBoundToScene(deps: DomainDeps, workspaceId: string,
   return Number(rows[0]?.count ?? 0) > 0;
 }
 
+/** v0.4 时间线片段引用（sequence_clips → asset_versions；外键为 restrict，不检查会让硬删整轮失败）。 */
+export async function isAssetReferencedByTimeline(deps: DomainDeps, workspaceId: string, assetId: string): Promise<boolean> {
+  const rows = await deps.db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(sequenceClips)
+    .innerJoin(assetVersions, eq(assetVersions.id, sequenceClips.assetVersionId))
+    .where(and(eq(sequenceClips.workspaceId, workspaceId), eq(assetVersions.assetId, assetId)));
+  return Number(rows[0]?.count ?? 0) > 0;
+}
+
+/** 资产是否仍被任何已知位置引用（Scene 绑定 / 时间线片段 / 版本快照 / 派生边）。 */
+export async function isAssetReferenced(deps: DomainDeps, workspaceId: string, assetId: string): Promise<boolean> {
+  return (await isAssetBoundToScene(deps, workspaceId, assetId))
+    || (await isAssetReferencedByTimeline(deps, workspaceId, assetId))
+    || (await isAssetReferencedByVersionSnapshot(deps, workspaceId, assetId))
+    || (await isAssetReferencedByDerivation(deps, workspaceId, assetId));
+}
+
 /**
  * 存活项目版本快照中的引用（保守匹配：快照 JSON 文本包含 assetId）。
  * 快照是"可恢复的历史"，其中的资产不得在仍可恢复时被硬删（§23.2 与 §40 的一致性）。
@@ -302,7 +326,8 @@ export async function isAssetReferencedByVersionSnapshot(
     .where(
       and(
         eq(projectVersions.workspaceId, workspaceId),
-        sql`(${projectVersions.snapshot}::text like ${`%${assetId}%`})`,
+        // strpos 是纯子串匹配：资产 id 中的 `_` 不会像 LIKE 那样被当作通配符
+        sql`strpos(${projectVersions.snapshot}::text, ${assetId}) > 0`,
       ),
     );
   return Number(rows[0]?.count ?? 0) > 0;
@@ -356,12 +381,6 @@ async function deleteObjectsForKey(
 
 /** ---------- 清理流程（可重入） ---------- */
 
-const retentionCutoff = (retentionClass: RetentionClass, createdAt: Date, now: Date): boolean => {
-  const ttl = RETENTION_TTL_SECONDS[retentionClass];
-  if (ttl === null) return false;
-  return createdAt.getTime() + ttl * 1000 <= now.getTime();
-};
-
 export async function runRetentionSweep(
   deps: DomainDeps,
   options: { now?: Date; limit?: number } = {},
@@ -383,6 +402,8 @@ export async function runRetentionSweep(
     trashAssetsPurged: 0,
     retentionAssetsPurged: 0,
     assetsSkippedByReference: 0,
+    assetsFailed: 0,
+    failures: [],
     uploadIntentsExpired: 0,
     idempotencyKeysPurged: 0,
     proposalArtifactsPurged: 0,
@@ -393,33 +414,43 @@ export async function runRetentionSweep(
     orphanObjectsDeleted: 0,
   };
 
-  /** 硬删单个资产（引用保护 + 共享对象保护），返回 'purged' | 'skipped' | 'missing'。 */
-  async function purgeAssetRow(assetRow: typeof assets.$inferSelect): Promise<'purged' | 'skipped' | 'missing'> {
-    const bound = await isAssetBoundToScene(deps, assetRow.workspaceId, assetRow.id);
-    const inSnapshot = bound ? false : await isAssetReferencedByVersionSnapshot(deps, assetRow.workspaceId, assetRow.id);
-    const inDerivation = bound || inSnapshot ? false : await isAssetReferencedByDerivation(deps, assetRow.workspaceId, assetRow.id);
-    if (bound || inSnapshot || inDerivation) return 'skipped';
+  /**
+   * 硬删单个资产（引用保护 + 共享对象保护），返回 'purged' | 'skipped' | 'missing' | 'failed'。
+   * - 引用检查与删除在**同一事务**内、锁定资产行之后执行（检查与删除之间不留 TOCTOU 窗口）；
+   * - 外键仍有引用（如审计用的 relink 记录、未来新增的引用表）→ 计为跳过，绝不让整轮清理中断；
+   * - 其他异常只影响这一条（计入 assetsFailed），下一条继续——队头的一条坏数据不能永久阻塞后续清理（含隐私删除）。
+   */
+  async function purgeAssetRow(assetRow: typeof assets.$inferSelect): Promise<'purged' | 'skipped' | 'missing' | 'failed'> {
+    try {
+      const versionRows = await deps.db
+        .select({ id: assetVersions.id, storageKey: assetVersions.storageKey })
+        .from(assetVersions)
+        .where(eq(assetVersions.assetId, assetRow.id));
+      const versionIds = versionRows.map((row) => row.id);
+      const keys = versionRows.map((row) => row.storageKey);
 
-    const versionRows = await deps.db
-      .select({ id: assetVersions.id, storageKey: assetVersions.storageKey })
-      .from(assetVersions)
-      .where(eq(assetVersions.assetId, assetRow.id));
-    const versionIds = versionRows.map((row) => row.id);
-    const keys = versionRows.map((row) => row.storageKey);
+      const outcome = await deps.db.transaction(async (tx): Promise<'purged' | 'skipped' | 'missing'> => {
+        await tx.execute(sql`select id from assets where id = ${assetRow.id} for update`);
+        const fresh = await tx.select({ id: assets.id }).from(assets).where(eq(assets.id, assetRow.id)).limit(1);
+        if (fresh.length === 0) return 'missing'; // 已被其他清理进程处理（幂等）
+        if (await isAssetReferenced({ ...deps, db: tx }, assetRow.workspaceId, assetRow.id)) return 'skipped';
+        await tx.delete(assets).where(eq(assets.id, assetRow.id));
+        return 'purged';
+      });
+      if (outcome !== 'purged') return outcome;
 
-    const deleted = await deps.db.transaction(async (tx) => {
-      await tx.execute(sql`select id from assets where id = ${assetRow.id} for update`);
-      const fresh = await tx.select({ id: assets.id }).from(assets).where(eq(assets.id, assetRow.id)).limit(1);
-      if (fresh.length === 0) return false; // 已被其他清理进程处理（幂等）
-      await tx.delete(assets).where(eq(assets.id, assetRow.id));
-      return true;
-    });
-    if (!deleted) return 'missing';
-
-    const disposition = await deleteObjectsForKey(deps, keys, versionIds);
-    report.objectsDeleted += disposition.deleted;
-    report.objectsKeptShared += disposition.kept;
-    return 'purged';
+      const disposition = await deleteObjectsForKey(deps, keys, versionIds);
+      report.objectsDeleted += disposition.deleted;
+      report.objectsKeptShared += disposition.kept;
+      return 'purged';
+    } catch (error) {
+      if (isForeignKeyViolation(error)) return 'skipped';
+      report.assetsFailed += 1;
+      if (report.failures.length < 20) {
+        report.failures.push({ assetId: assetRow.id, reason: error instanceof Error ? error.name : 'UNKNOWN' });
+      }
+      return 'failed';
+    }
   }
 
   // 1) 幂等键 TTL（先做：无引用关系，纯时间清理）
@@ -492,47 +523,64 @@ export async function runRetentionSweep(
     }
   }
 
-  // 4) 显式隐私删除：无引用时无需等待普通 Trash TTL；有引用时保留原件并继续报告跳过。
-  const privacyAssets = await deps.db.select().from(assets).where(and(
-    isNotNull(assets.deletedAt),
-    isNotNull(assets.privacyDeletionRequestedAt),
-  )).orderBy(asc(assets.privacyDeletionRequestedAt)).limit(limit);
-  for (const assetRow of privacyAssets) {
-    const outcome = await purgeAssetRow(assetRow);
-    if (outcome === 'purged') report.trashAssetsPurged += 1;
-    if (outcome === 'skipped') report.assetsSkippedByReference += 1;
+  /**
+   * 资产候选的分页扫描：已跳过/失败的行在本轮内排除后继续往后取，
+   * 避免"排在最前、但被引用或损坏的若干行"让后面所有到期资产（含隐私删除）永远轮不到。
+   * 每步最多硬删 `limit` 条、最多检查 `limit × 10` 条。
+   */
+  const maxScanPerStep = limit * 10;
+  async function sweepAssets(where: SQL, orderBy: SQL[], onPurged: () => void): Promise<void> {
+    const passed: string[] = [];
+    let purged = 0;
+    while (purged < limit && passed.length < maxScanPerStep) {
+      const rows = await deps.db
+        .select()
+        .from(assets)
+        .where(passed.length === 0 ? where : and(where, notInArray(assets.id, passed)))
+        .orderBy(...orderBy)
+        .limit(limit - purged);
+      if (rows.length === 0) break;
+      for (const assetRow of rows) {
+        const outcome = await purgeAssetRow(assetRow);
+        if (outcome === 'purged') {
+          purged += 1;
+          onPurged();
+        } else {
+          passed.push(assetRow.id);
+          if (outcome === 'skipped') report.assetsSkippedByReference += 1;
+        }
+      }
+    }
   }
+
+  // 4) 显式隐私删除：无引用时无需等待普通 Trash TTL；有引用时保留原件并继续报告跳过。
+  await sweepAssets(
+    and(isNotNull(assets.deletedAt), isNotNull(assets.privacyDeletionRequestedAt))!,
+    [asc(assets.privacyDeletionRequestedAt), asc(assets.id)],
+    () => { report.trashAssetsPurged += 1; },
+  );
 
   // 5) Trash 到期资产
-  const trashedAssets = await deps.db
-    .select()
-    .from(assets)
-    .where(and(isNotNull(assets.deletedAt), lt(assets.deletedAt, trashCutoff)))
-    .orderBy(asc(assets.deletedAt))
-    .limit(limit);
-  for (const assetRow of trashedAssets) {
-    const outcome = await purgeAssetRow(assetRow);
-    if (outcome === 'purged') report.trashAssetsPurged += 1;
-    if (outcome === 'skipped') report.assetsSkippedByReference += 1;
-  }
+  await sweepAssets(
+    and(isNotNull(assets.deletedAt), lt(assets.deletedAt, trashCutoff))!,
+    [asc(assets.deletedAt), asc(assets.id)],
+    () => { report.trashAssetsPurged += 1; },
+  );
 
-  // 6) 保留类 TTL 到期资产（未进 Trash 的缓存类，如 DRAFT_RENDER_30D）
-  const ttlCandidates = await deps.db
-    .select()
-    .from(assets)
-    .where(isNull(assets.deletedAt))
-    .orderBy(asc(assets.createdAt))
-    .limit(limit * 4);
-  let retentionPurged = 0;
-  for (const assetRow of ttlCandidates) {
-    if (retentionPurged >= limit) break;
-    if (!retentionCutoff(assetRow.retentionClass as RetentionClass, assetRow.createdAt, now)) continue;
-    const outcome = await purgeAssetRow(assetRow);
-    if (outcome === 'purged') {
-      report.retentionAssetsPurged += 1;
-      retentionPurged += 1;
-    }
-    if (outcome === 'skipped') report.assetsSkippedByReference += 1;
+  // 6) 保留类 TTL 到期资产（未进 Trash 的缓存类，如 DRAFT_RENDER_30D）。
+  //    按保留类把到期条件下推到 SQL：永久类（KEEP_*）不再占用扫描窗口。
+  const ttlConditions = (Object.entries(RETENTION_TTL_SECONDS) as [RetentionClass, number | null][])
+    .filter((entry): entry is [RetentionClass, number] => entry[1] !== null)
+    .map(([retentionClass, ttlSeconds]) => and(
+      eq(assets.retentionClass, retentionClass),
+      lte(assets.createdAt, new Date(now.getTime() - ttlSeconds * 1000)),
+    ));
+  if (ttlConditions.length > 0) {
+    await sweepAssets(
+      and(isNull(assets.deletedAt), or(...ttlConditions))!,
+      [asc(assets.createdAt), asc(assets.id)],
+      () => { report.retentionAssetsPurged += 1; },
+    );
   }
 
   // 7) N06-06 隔离产物：`bound=false` 的孤儿行按保留期清理；`bound=true`（已接受结果）保留。

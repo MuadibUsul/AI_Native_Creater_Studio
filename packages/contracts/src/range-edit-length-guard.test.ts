@@ -38,3 +38,22 @@ describe('N06-07 estimateRangeEditDurationDeltaMs', () => {
     expect(estimateRangeEditDurationDeltaMs([trim, opacity])).toEqual({ deltaMs: 0, exact: true });
   });
 });
+
+describe('V5-M0 非整毫秒时基（代码审查 P0-1 回归）', () => {
+  it('29.97fps 帧边界的插入与涟漪：不抛异常，精确累加后只在末尾取显示毫秒', () => {
+    const frames = (n: number) => ({ ticks: String(n * 1001), timebase: { num: 1, den: 30_000 } });
+    const insert = { op: 'insert_clip', sourceRange: { start: frames(0), end: frames(3) }, mode: 'INSERT' } as unknown as EditOperation;
+    const ripple = { op: 'ripple_clip', clipId: 'c1', action: 'TRIM_TAIL', amount: frames(1), closeAcrossTracks: false } as unknown as EditOperation;
+    // 3 帧 − 1 帧 = 2 帧 = 2002/30000 s = 66.73ms → 67（若逐项先取整会得到 100 − 33 = 67，但 6 次以上累积就会漂移）
+    expect(estimateRangeEditDurationDeltaMs([insert, ripple])).toEqual({ deltaMs: 67, exact: true });
+    const many = Array.from({ length: 30 }, () => ({ ...insert, sourceRange: { start: frames(0), end: frames(1) } }) as unknown as EditOperation);
+    // 30 帧 = 1.001 s；逐项取整会得到 30 × 33 = 990
+    expect(estimateRangeEditDurationDeltaMs(many)).toEqual({ deltaMs: 1_001, exact: true });
+  });
+
+  it('48kHz 采样时基的涟漪量', () => {
+    const ripple = { op: 'ripple_clip', clipId: 'c1', action: 'TRIM_HEAD', amount: { ticks: '24000', timebase: { num: 1, den: 48_000 } }, closeAcrossTracks: false } as unknown as EditOperation;
+    expect(estimateRangeEditDurationDeltaMs([ripple])).toEqual({ deltaMs: -500, exact: true });
+  });
+});
+

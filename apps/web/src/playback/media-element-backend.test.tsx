@@ -95,6 +95,14 @@ describe('N03-12 media-element 后端：presented 只来自元素', () => {
     expect(element.currentTime).toBeCloseTo(1.0, 8);
   });
 
+  it('seek 到非整毫秒时间（29.97fps 帧边界）不抛异常（代码审查 P0-1 回归）', async () => {
+    const element = new FakeElement();
+    const backend = createMediaElementBackend({ element, resolveSourceUrl: () => 'u' });
+    await backend.load({ ...snapshot, frameRate: { num: 30_000, den: 1_001 } } as PlaybackSnapshot);
+    await backend.seek({ ticks: '3003', timebase: { num: 1, den: 30_000 } });
+    expect(element.currentTime).toBeCloseTo(3003 / 30000, 6);
+  });
+
   it('设定播放范围后，范围外 seek 被明确拒绝（不静默夹断）', async () => {
     const element = new FakeElement();
     const backend = createMediaElementBackend({ element, resolveSourceUrl: () => 'u' });

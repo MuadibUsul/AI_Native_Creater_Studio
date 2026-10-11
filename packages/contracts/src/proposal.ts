@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { revisionSchema } from './common/revision.js';
+import { mediaRangeSchema } from './common/media-time.js';
 import { editOperationSchema } from './edits.js';
 import { objectLockDimensionSchema, objectLockKindSchema } from './object-locks.js';
 
@@ -185,10 +186,15 @@ export const proposalTrialSchema = z.object({
     objectId: z.string().max(64).nullable().default(null),
     summary: z.string().max(200).default(''),
   }).strict()).max(512),
-  /** 试改后受影响的片段区间（供客户端局部回放/对照） */
+  /**
+   * 试改后受影响的片段区间（供客户端局部回放/对照）。
+   * 权威值是 `sequenceRange` / `sourceRange`（有理时基）；`*Ms` 字段仅为显示近似（四舍五入），不得回写。
+   */
   clipRanges: z.array(z.object({
     clipId: opaqueIdSchema,
     trackId: opaqueIdSchema,
+    sequenceRange: mediaRangeSchema,
+    sourceRange: mediaRangeSchema,
     sequenceStartMs: z.number().int(),
     sequenceEndMs: z.number().int(),
     sourceStartMs: z.number().int(),

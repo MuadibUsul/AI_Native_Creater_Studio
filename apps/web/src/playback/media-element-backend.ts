@@ -1,6 +1,6 @@
 import {
   legacyMillisecondsToMediaTime,
-  mediaTimeToLegacyMilliseconds,
+  mediaTimeToDisplaySeconds,
   type MediaRange,
   type MediaTime,
   type PlaybackBackendPort,
@@ -59,7 +59,8 @@ export function createMediaElementBackend(options: MediaElementBackendOptions): 
   let refreshUsed = 0;
   let lastError: string | null = null;
 
-  const secondsOf = (time: MediaTime): number => mediaTimeToLegacyMilliseconds(time) / 1000;
+  // HTMLMediaElement 只接受浮点秒：在显示边界做一次近似换算（非整毫秒时基如 1001/30000 不抛异常）
+  const secondsOf = (time: MediaTime): number => mediaTimeToDisplaySeconds(time);
   const frameRateOf = (): { num: number; den: number } => snapshot?.frameRate ?? { num: 30, den: 1 };
 
   const onError = (): void => {

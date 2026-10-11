@@ -158,6 +158,32 @@ export function mediaTimeToLegacyMilliseconds(time: MediaTime): number {
   return Number(milliseconds);
 }
 
+/**
+ * 显示/日志/提示词用的毫秒近似值（V5 §7：毫秒只出现在显示边界）。
+ * 与 `mediaTimeToLegacyMilliseconds` 不同：非整毫秒时间按显式舍入给出近似值，不抛异常；
+ * 返回值不得再写回权威时间字段（权威计算一律使用 MediaTime）。
+ */
+export function mediaTimeToDisplayMilliseconds(time: MediaTime, rounding: MediaRounding = 'nearest'): number {
+  const value = seconds(mediaTimeSchema.parse(time));
+  const milliseconds = divideRounded(value.num * 1000n, value.den, rounding);
+  if (milliseconds > BigInt(Number.MAX_SAFE_INTEGER) || milliseconds < BigInt(Number.MIN_SAFE_INTEGER)) {
+    throw new RangeError('Display milliseconds exceed safe integer range');
+  }
+  return Number(milliseconds);
+}
+
+/** 显示/播放器 API（如 HTMLMediaElement.currentTime）用的浮点秒近似值；不得回写权威字段。 */
+export function mediaTimeToDisplaySeconds(time: MediaTime): number {
+  const value = seconds(mediaTimeSchema.parse(time));
+  // 先在整数域取到微秒，再转浮点，避免 ticks 很大时 Number(ticks) 先丢精度
+  return Number(divideRounded(value.num * 1_000_000n, value.den, 'nearest')) / 1_000_000;
+}
+
+/** 精确相等（跨时基）。 */
+export function mediaTimesEqual(left: MediaTime, right: MediaTime): boolean {
+  return compareMediaTime(left, right) === 0;
+}
+
 export function legacyFpsToFrameRate(fps: number): FrameRate {
   return frameRateSchema.parse({ num: fps, den: 1 });
 }

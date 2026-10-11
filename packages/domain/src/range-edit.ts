@@ -8,7 +8,8 @@ import {
   RANGE_EDIT_PLAN_VERSION,
   editOperationSchema,
   estimateRangeEditDurationDeltaMs,
-  mediaTimeToLegacyMilliseconds,
+  mediaTimeToDisplayMilliseconds,
+  mediaTimesEqual,
   mediaRangeSchema,
   productionPolicySchema,
   rangeEditPlanSchema,
@@ -37,9 +38,17 @@ export const RANGE_EDIT_PROMPT_VERSION = 'range-edit-v1';
 
 const MAX_ATTEMPTS = 2;
 
+/** 提示词/证据用的显示毫秒（近似值，绝不回写权威时间；非整毫秒时基不抛异常）。 */
 const msOf = (range: unknown): { start: number; end: number } => {
   const parsed = mediaRangeSchema.parse(range);
-  return { start: mediaTimeToLegacyMilliseconds(parsed.start), end: mediaTimeToLegacyMilliseconds(parsed.end) };
+  return { start: mediaTimeToDisplayMilliseconds(parsed.start, 'floor'), end: mediaTimeToDisplayMilliseconds(parsed.end, 'ceil') };
+};
+
+/** 同轨首尾相接（精确比较，跨时基）。 */
+const abuts = (left: unknown, right: unknown): boolean => {
+  const a = mediaRangeSchema.parse(left);
+  const b = mediaRangeSchema.parse(right);
+  return mediaTimesEqual(a.end, b.start) || mediaTimesEqual(a.start, b.end);
 };
 
 /** 可审计的提示词（把证据与允许操作写进提示词）。 */
@@ -142,7 +151,7 @@ export async function planRangeEdit(deps: DomainDeps, input: {
   // 源证据 = 选中片段 + 同轨相邻片段（规划器只能引用这些）
   const evidenceRows = clips.filter((row) => selectedClipIds.has(row.clip.id)
     || selectedRows.some((selected) => selected.clip.trackId === row.clip.trackId
-      && (msOf(row.clip.sequenceRange).end === msOf(selected.clip.sequenceRange).start || msOf(row.clip.sequenceRange).start === msOf(selected.clip.sequenceRange).end)));
+      && abuts(row.clip.sequenceRange, selected.clip.sequenceRange)));
   const evidence: RangeEditSourceEvidence[] = evidenceRows.map((row) => {
     const probe = sourceMediaProbeResultSchema.safeParse(row.mediaProbe);
     return {

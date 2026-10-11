@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { mediaTimeToLegacyMilliseconds } from './common/media-time.js';
+import type { MediaTime } from './common/media-time.js';
 import { scopeGuardVerdictSchema } from './content-protection.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperation } from './edits.js';
 
@@ -114,20 +114,28 @@ export type RangeEditLengthGuard = z.infer<typeof rangeEditLengthGuardSchema>;
 
 /** 由操作负载估算总时长变化（纯函数）：INSERT/APPEND 变长、涟漪 TRIM_* 变短、其余为 0。 */
 export function estimateRangeEditDurationDeltaMs(operations: readonly EditOperation[]): { deltaMs: number; exact: boolean } {
-  let deltaMs = 0;
+  // 精确累加（有理数），只在最后一步换算为显示毫秒：非整毫秒时基（29.97fps、48kHz）不抛异常、也不累积舍入误差。
+  let numerator = 0n;
+  let denominator = 1n;
+  const accumulate = (time: MediaTime, sign: 1n | -1n): void => {
+    const tn = BigInt(time.ticks) * BigInt(time.timebase.num) * sign;
+    const td = BigInt(time.timebase.den);
+    numerator = numerator * td + tn * denominator;
+    denominator *= td;
+  };
   let exact = true;
   for (const operation of operations) {
     switch (operation.op) {
       case 'insert_clip': {
         if (operation.mode === 'OVERWRITE') break;
-        const range = operation.sourceRange;
-        deltaMs += mediaTimeToLegacyMilliseconds(range.end) - mediaTimeToLegacyMilliseconds(range.start);
+        accumulate(operation.sourceRange.end, 1n);
+        accumulate(operation.sourceRange.start, -1n);
         break;
       }
       case 'ripple_clip': {
         if (operation.action === 'DELETE') { exact = false; break; }
         if (operation.amount === null) { exact = false; break; }
-        deltaMs -= mediaTimeToLegacyMilliseconds(operation.amount);
+        accumulate(operation.amount, -1n);
         break;
       }
       case 'delete_clip': {
@@ -139,7 +147,14 @@ export function estimateRangeEditDurationDeltaMs(operations: readonly EditOperat
         break;
     }
   }
-  return { deltaMs, exact };
+  // 以 1/den 秒为时基表达精确结果；den 可能超出 Rational 分量上限，因此直接按 bigint 舍入到毫秒
+  const scaled = numerator * 1000n;
+  const quotient = scaled / denominator;
+  const remainder = scaled % denominator;
+  const magnitude = remainder < 0n ? -remainder : remainder;
+  const rounded = magnitude * 2n >= denominator ? quotient + (scaled < 0n ? -1n : 1n) : quotient;
+  const deltaMs = remainder === 0n ? Number(quotient) : Number(rounded);
+  return { deltaMs: deltaMs === 0 ? 0 : deltaMs, exact };
 }
 
 export const rangeEditPlanSchema = z.object({

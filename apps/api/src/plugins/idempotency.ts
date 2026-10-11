@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { ApiFailure, ERROR_CODES, idempotencyKeySchema } from '@ancs/contracts';
 import { idempotencyKeys, isUniqueViolation } from '@ancs/db';
 import type { AuthDeps } from './auth.js';
@@ -13,14 +13,28 @@ import type { AuthDeps } from './auth.js';
  * - 同键不同摘要 / 同键请求处理中 → 409 IDEMPOTENCY_CONFLICT；
  * - 仅缓存 <500 的响应；5xx 视为未发生（删除记录，允许重试）。
  * 编辑协议（P02-02）的幂等在此基础上扩展请求级语义。
+ *
+ * V5-M0 修正（代码审查 P1-2）：
+ * - 请求摘要包含**实际路径与查询**（不只 body）：同键用于 `DELETE /projects/A` 与 `/projects/B` 时
+ *   不再把 A 的结果回放给 B，而是 409（键被复用于不同请求）；
+ * - "处理中"行超过 IN_FLIGHT_TAKEOVER_MS 视为崩溃遗留，可被同摘要重试接管（不再永久 409）；
+ * - 非 JSON 文本响应（Buffer/Stream）不可回放：记录终态并在重放时明确 409，而不是永远停在"处理中"。
  */
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+/** 处理中记录的接管阈值：超过该时长仍未完成，视为进程崩溃遗留。 */
+export const IN_FLIGHT_TAKEOVER_MS = 5 * 60 * 1000;
+/** 非 JSON 响应的终态标记（无法回放）。 */
+const NON_REPLAYABLE_MARKER = '__ancsNonReplayable';
 
 declare module 'fastify' {
   interface FastifyRequest {
     idempotency: { scope: string; key: string } | null;
   }
+}
+
+function isNonReplayable(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as Record<string, unknown>)[NON_REPLAYABLE_MARKER] === true;
 }
 
 export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void {
@@ -45,7 +59,7 @@ export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void 
     if (context === null) return;
 
     const scope = `user:${context.userId}:${request.method}:${request.routeOptions.url ?? request.url}`;
-    const requestHash = createHash('sha256').update(JSON.stringify(request.body ?? null), 'utf8').digest('hex');
+    const requestHash = createHash('sha256').update(JSON.stringify({ url: request.url, body: request.body ?? null }), 'utf8').digest('hex');
 
     const existingRows = await deps.db
       .select()
@@ -59,10 +73,19 @@ export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void 
         throw new ApiFailure(ERROR_CODES.IDEMPOTENCY_CONFLICT, 'Idempotency-Key 已用于不同的请求内容', 409);
       }
       if (existing.statusCode === null) {
-        throw new ApiFailure(ERROR_CODES.IDEMPOTENCY_CONFLICT, '相同幂等键的请求仍在处理中', 409);
+        const stale = Date.now() - existing.createdAt.getTime() > IN_FLIGHT_TAKEOVER_MS;
+        if (!stale) {
+          throw new ApiFailure(ERROR_CODES.IDEMPOTENCY_CONFLICT, '相同幂等键的请求仍在处理中', 409);
+        }
+        // 崩溃遗留：只删除仍处于"处理中"的这一行，再走下面的插入（并发接管由唯一键裁决）
+        await deps.db.delete(idempotencyKeys).where(and(eq(idempotencyKeys.id, existing.id), isNull(idempotencyKeys.statusCode)));
+      } else {
+        if (isNonReplayable(existing.responseJson)) {
+          throw new ApiFailure(ERROR_CODES.IDEMPOTENCY_CONFLICT, '相同幂等键的请求已完成，但其响应不可回放', 409, { completedStatus: existing.statusCode });
+        }
+        void reply.status(existing.statusCode).header('idempotency-replayed', 'true').send(existing.responseJson);
+        return reply;
       }
-      void reply.status(existing.statusCode).header('idempotency-replayed', 'true').send(existing.responseJson);
-      return reply;
     }
 
     try {
@@ -85,7 +108,17 @@ export function registerIdempotency(app: FastifyInstance, deps: AuthDeps): void 
   app.addHook('onSend', async (request, reply, payload) => {
     const idempotency = request.idempotency;
     if (idempotency === null) return payload;
-    if (typeof payload !== 'string') return payload;
+    if (typeof payload !== 'string') {
+      // 非文本响应：5xx 仍视为未发生；其余落终态（不可回放），避免该键永远停在"处理中"
+      if (reply.statusCode >= 500) {
+        await deps.db.delete(idempotencyKeys).where(and(eq(idempotencyKeys.scope, idempotency.scope), eq(idempotencyKeys.key, idempotency.key)));
+      } else {
+        await deps.db.update(idempotencyKeys)
+          .set({ statusCode: reply.statusCode, responseJson: { [NON_REPLAYABLE_MARKER]: true }, completedAt: new Date() })
+          .where(and(eq(idempotencyKeys.scope, idempotency.scope), eq(idempotencyKeys.key, idempotency.key)));
+      }
+      return payload;
+    }
 
     if (reply.statusCode >= 500) {
       // 视为未发生：允许重试
