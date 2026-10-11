@@ -22,6 +22,7 @@ import {
   projects,
   proposalArtifacts,
   proposalTrials,
+  referenceEdges,
   scenes,
   sequenceClips,
   uploadIntents,
@@ -303,9 +304,23 @@ export async function isAssetReferencedByTimeline(deps: DomainDeps, workspaceId:
   return Number(rows[0]?.count ?? 0) > 0;
 }
 
-/** 资产是否仍被任何已知位置引用（Scene 绑定 / 时间线片段 / 版本快照 / 派生边）。 */
+/**
+ * 引用图中的引用（V5-M2）：当前与**历史**引用边都算——撤销/恢复可以让历史引用重新生效，
+ * 资产在其项目存续期间不得被硬删（项目硬删时边随项目级联删除）。
+ */
+export async function isAssetReferencedByReferenceEdge(deps: DomainDeps, workspaceId: string, assetId: string): Promise<boolean> {
+  const rows = await deps.db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(referenceEdges)
+    .innerJoin(assetVersions, eq(assetVersions.id, referenceEdges.toId))
+    .where(and(eq(referenceEdges.workspaceId, workspaceId), eq(referenceEdges.toKind, 'ASSET_VERSION'), eq(assetVersions.assetId, assetId)));
+  return Number(rows[0]?.count ?? 0) > 0;
+}
+
+/** 资产是否仍被任何已知位置引用（Scene 绑定 / 引用图 / 时间线片段 / 版本快照 / 派生边）。 */
 export async function isAssetReferenced(deps: DomainDeps, workspaceId: string, assetId: string): Promise<boolean> {
   return (await isAssetBoundToScene(deps, workspaceId, assetId))
+    || (await isAssetReferencedByReferenceEdge(deps, workspaceId, assetId))
     || (await isAssetReferencedByTimeline(deps, workspaceId, assetId))
     || (await isAssetReferencedByVersionSnapshot(deps, workspaceId, assetId))
     || (await isAssetReferencedByDerivation(deps, workspaceId, assetId));

@@ -477,6 +477,13 @@ export {
 } from './composition-migration.js';
 export type { CompositionMigrationHooks } from './composition-migration.js';
 export {
+  diffProjectionRows,
+  foldOpLog,
+  rebuildCompositionProjection,
+  verifyCompositionProjection,
+} from './composition-projector.js';
+export type { OpLogSource, ProjectedEntity, ProjectionChange, ProjectionDifference } from './composition-projector.js';
+export {
   assertEffectExecutionSupported,
   createAnimationBinding,
   createAudioRegion,
@@ -547,6 +554,9 @@ export type { EventPage, NotificationDispatchReport } from './events.js';
 export {
   DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
   isAssetBoundToScene,
+  isAssetReferenced,
+  isAssetReferencedByReferenceEdge,
+  isAssetReferencedByTimeline,
   isAssetReferencedByVersionSnapshot,
   isAssetReferencedByDerivation,
   listTrashedAssets,

@@ -182,6 +182,16 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   restore_project_version: { ...common, operation: 'restore_project_version', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT_VERSION'], writeSet: ['PROJECT', 'SCENE', 'SCENE_ORDER'], preconditions: ['EXCLUSIVE_BATCH', 'PROJECT_VERSION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES', 'TIMELINE_RECOMPUTED'], compensation: 'SNAPSHOT_RESTORE' },
 };
 
+/**
+ * 旧 Scene 写入口（V5-M2，决策 0013）：写集触及 Scene / 场景顺序的操作。
+ * 项目切换到组合权威（authorityMode = COMPOSITION）后这些操作只读拒绝；组合操作照常可用。
+ * 整项目版本恢复不在此列：它是补偿语义（K5），同时恢复组合与兼容投影。
+ */
+export const LEGACY_SCENE_WRITE_OPERATIONS: ReadonlySet<EditOperationType> = new Set(
+  EDIT_OPERATION_TYPES.filter((operation) => operation !== 'restore_project_version'
+    && EDIT_OPERATION_REGISTRY[operation].writeSet.some((target) => target === 'SCENE' || target === 'SCENE_ORDER' || target.startsWith('SCENE.'))),
+);
+
 const changesSchema = z.record(z.string(), z.unknown());
 
 /**

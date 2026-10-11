@@ -15,6 +15,9 @@
  *     packages/time 不得依赖任何 workspace 包；二者同属平台中立包（R3）
  *  R10 编辑内核与时间库的源码纯度（裁决 0012）：非测试源码不得导入 node:* / @ancs/db / drizzle-orm，
  *     不得使用 process / fetch / Date.now() / new Date() / Math.random()（确定性：ID、时间由调用方注入）
+ *  R11 组合投影表与操作日志的唯一写入方（裁决 0013 / V5 §6.2）：apps/**、packages/** 的非测试源码中，
+ *     只有 packages/domain/src/composition-projector.ts 可以对组合表、对象锁、操作日志与引用边执行
+ *     insert / update / delete（含原生 SQL）；其他模块必须经投影器写入，保证"日志折叠 = 投影表"
  *
  * 说明：白名单类规则只约束"生产依赖方向"；devDependencies 允许测试用途的额外引用
  * （例如 apps/api 在集成测试中以 devDependency 使用 @ancs/sdk 扮演客户端）。
@@ -272,3 +275,49 @@ export function checkRules(pkgs: readonly WorkspacePackage[]): Violation[] {
 
   return violations;
 }
+
+/** R11：组合投影表（Drizzle 标识符 → 物理表名）。 */
+export const PROJECTION_TABLES: Readonly<Record<string, string>> = {
+  projectSequences: 'project_sequences',
+  sequenceTracks: 'sequence_tracks',
+  sequenceClips: 'sequence_clips',
+  compositionVisualObjects: 'composition_visual_objects',
+  compositionEffectInstances: 'composition_effect_instances',
+  compositionAnimationBindings: 'composition_animation_bindings',
+  compositionCaptionSpans: 'composition_caption_spans',
+  compositionAudioRegions: 'composition_audio_regions',
+  projectObjectLocks: 'project_object_locks',
+  projectOpLog: 'project_op_log',
+  referenceEdges: 'reference_edges',
+};
+
+/** R11：允许写投影表的源码文件（仓库根相对路径）。 */
+export const PROJECTION_WRITER_ALLOWLIST: ReadonlySet<string> = new Set(['packages/domain/src/composition-projector.ts']);
+
+const PROJECTION_IDENTIFIERS = Object.keys(PROJECTION_TABLES).join('|');
+const PROJECTION_SQL_NAMES = Object.values(PROJECTION_TABLES).join('|');
+const PROJECTION_WRITE_PATTERNS: readonly RegExp[] = [
+  new RegExp(String.raw`\.(?:insert|update|delete)\(\s*(${PROJECTION_IDENTIFIERS})\b`, 'g'),
+  new RegExp(String.raw`\b(?:insert\s+into|update|delete\s+from)\s+"?(${PROJECTION_SQL_NAMES})\b`, 'gi'),
+];
+
+/** R11：检查投影表写入方（调用方传入 apps/**、packages/** 的非测试 .ts/.tsx 源码）。 */
+export function checkProjectionWriters(files: readonly SourceFile[]): Violation[] {
+  const violations: Violation[] = [];
+  for (const file of files) {
+    if (PROJECTION_WRITER_ALLOWLIST.has(file.path)) continue;
+    for (const pattern of PROJECTION_WRITE_PATTERNS) {
+      for (const match of file.content.matchAll(pattern)) {
+        const line = file.content.slice(0, match.index).split(/\r?\n/).length;
+        violations.push({
+          rule: 'R11',
+          pkg: file.path,
+          dep: `第 ${String(line)} 行（${match[1] ?? ''}）`,
+          message: '组合投影表只能经 composition-projector 写入（操作日志为权威）',
+        });
+      }
+    }
+  }
+  return violations;
+}
+

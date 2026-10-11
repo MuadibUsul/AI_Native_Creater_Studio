@@ -103,6 +103,11 @@ export interface TimelineState {
   locks: KernelLockTable;
   sources: KernelSourceFacts;
   policy: KernelPolicy;
+  /**
+   * 内核不编辑、但占用轨道的对象数（按 trackId；当前为视觉对象）。
+   * 删除轨道时必须计入：否则数据库外键级联会静默删除它们且无法撤销。
+   */
+  unmanagedTrackObjects?: ReadonlyMap<string, number>;
 }
 
 export interface KernelContext {

@@ -49,6 +49,8 @@ import {
   sequenceTracks,
 } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { inOrder } from './in-order.js';
+import { writeCompositionDirect } from './composition-projector.js';
 import { loadProjectRow } from './projects.js';
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
@@ -203,10 +205,10 @@ export async function createVisualObject(
   }
   const id = newId('vobj');
   const now = new Date();
-  await deps.db.insert(compositionVisualObjects).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_visual_object', objectId: id }, (projector) => projector.insert('visualObject', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: input.sequenceId,
     trackId: request.trackId,
     kind: request.kind,
@@ -219,8 +221,8 @@ export async function createVisualObject(
     parameters: request.parameters,
     createdAt: now,
     updatedAt: now,
-  });
-  return toVisualObject((await deps.db.select().from(compositionVisualObjects).where(eq(compositionVisualObjects.id, id)).limit(1))[0]!);
+  }));
+  return toVisualObject(row);
 }
 
 export async function repositionVisualObject(
@@ -237,14 +239,16 @@ export async function repositionVisualObject(
   if (!rows[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'visual object not found', 404);
   await requireTrack(deps, input, request.trackId, ['VIDEO', 'GRAPHIC']);
   const timing = await resolveBoundRange(deps, input, request.timeBinding, request.localRange);
-  await deps.db.update(compositionVisualObjects).set({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'reposition_visual_object', objectId: input.objectId }, (projector) => projector.update('visualObject', input.objectId, {
     trackId: request.trackId,
     timeBinding: timing.binding,
     localRange: timing.localRange,
     sequenceRange: timing.sequenceRange,
     updatedAt: new Date(),
-  }).where(eq(compositionVisualObjects.id, input.objectId));
-  return toVisualObject((await deps.db.select().from(compositionVisualObjects).where(eq(compositionVisualObjects.id, input.objectId)).limit(1))[0]!);
+  }));
+  if (row === null) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'visual object not found', 404);
+  return toVisualObject(row);
 }
 
 const effectRegistry = SUPPORTED_EFFECTS as Record<string, { versions: readonly string[]; requiredCapability: string }>;
@@ -285,10 +289,10 @@ export async function createEffectInstance(
   const sequenceId = await resolveEffectTarget(deps, { ...input, ...request });
   const id = newId('efx');
   const now = new Date();
-  await deps.db.insert(compositionEffectInstances).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_effect_instance', objectId: id }, (projector) => projector.insert('effect', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId,
     targetKind: request.targetKind,
     targetId: request.targetId,
@@ -299,8 +303,8 @@ export async function createEffectInstance(
     enabled: request.enabled ?? true,
     createdAt: now,
     updatedAt: now,
-  });
-  return toEffectInstance((await deps.db.select().from(compositionEffectInstances).where(eq(compositionEffectInstances.id, id)).limit(1))[0]!);
+  }));
+  return toEffectInstance(row);
 }
 
 export function assertEffectExecutionSupported(effect: EffectInstance, capabilities: ReadonlySet<string>): void {
@@ -377,10 +381,10 @@ export async function createAnimationBinding(
   await assertAnimationKeyframesWithinTarget(deps, { ...input, ...request });
   const id = newId('anim');
   const now = new Date();
-  await deps.db.insert(compositionAnimationBindings).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_animation_binding', objectId: id }, (projector) => projector.insert('animation', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: context.sequenceId,
     targetKind: request.targetKind,
     targetId: request.targetId,
@@ -390,8 +394,8 @@ export async function createAnimationBinding(
     keyframes: request.keyframes.map((keyframe) => ({ ...keyframe, id: newId('kf') })),
     createdAt: now,
     updatedAt: now,
-  });
-  return toAnimationBinding((await deps.db.select().from(compositionAnimationBindings).where(eq(compositionAnimationBindings.id, id)).limit(1))[0]!);
+  }));
+  return toAnimationBinding(row);
 }
 
 export async function createCaptionSpan(
@@ -404,10 +408,10 @@ export async function createCaptionSpan(
   for (const word of request.words) assertRangeWithin(word.range, request.localRange, 'CAPTION_WORD_OUT_OF_BOUNDS');
   const id = newId('cap');
   const now = new Date();
-  await deps.db.insert(compositionCaptionSpans).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_caption_span', objectId: id }, (projector) => projector.insert('caption', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: input.sequenceId,
     trackId: request.trackId,
     timeBinding: timing.binding,
@@ -420,8 +424,8 @@ export async function createCaptionSpan(
     speechAnchorId: request.speechAnchorId ?? null,
     createdAt: now,
     updatedAt: now,
-  });
-  return toCaptionSpan((await deps.db.select().from(compositionCaptionSpans).where(eq(compositionCaptionSpans.id, id)).limit(1))[0]!);
+  }));
+  return toCaptionSpan(row);
 }
 
 export async function createAudioRegion(
@@ -449,10 +453,10 @@ export async function createAudioRegion(
   }
   const id = newId('areg');
   const now = new Date();
-  await deps.db.insert(compositionAudioRegions).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_audio_region', objectId: id }, (projector) => projector.insert('audioRegion', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: input.sequenceId,
     trackId: request.trackId,
     timeBinding: timing.binding,
@@ -467,8 +471,8 @@ export async function createAudioRegion(
     parameters: request.parameters,
     createdAt: now,
     updatedAt: now,
-  });
-  return toAudioRegion((await deps.db.select().from(compositionAudioRegions).where(eq(compositionAudioRegions.id, id)).limit(1))[0]!);
+  }));
+  return toAudioRegion(row);
 }
 
 export async function listProjectCompositionObjects(
@@ -476,12 +480,12 @@ export async function listProjectCompositionObjects(
   input: { workspaceId: string; projectId: string },
 ): Promise<{ visualObjects: VisualObject[]; effects: EffectInstance[]; animations: AnimationBinding[]; captions: CaptionSpan[]; audioRegions: AudioRegion[] }> {
   await loadProjectRow(deps.db, input.workspaceId, input.projectId);
-  const [visualObjects, effects, animations, captions, audioRegions] = await Promise.all([
-    deps.db.select().from(compositionVisualObjects).where(and(eq(compositionVisualObjects.workspaceId, input.workspaceId), eq(compositionVisualObjects.projectId, input.projectId))).orderBy(asc(compositionVisualObjects.createdAt)),
-    deps.db.select().from(compositionEffectInstances).where(and(eq(compositionEffectInstances.workspaceId, input.workspaceId), eq(compositionEffectInstances.projectId, input.projectId))).orderBy(asc(compositionEffectInstances.createdAt)),
-    deps.db.select().from(compositionAnimationBindings).where(and(eq(compositionAnimationBindings.workspaceId, input.workspaceId), eq(compositionAnimationBindings.projectId, input.projectId))).orderBy(asc(compositionAnimationBindings.createdAt)),
-    deps.db.select().from(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, input.workspaceId), eq(compositionCaptionSpans.projectId, input.projectId))).orderBy(asc(compositionCaptionSpans.createdAt)),
-    deps.db.select().from(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, input.workspaceId), eq(compositionAudioRegions.projectId, input.projectId))).orderBy(asc(compositionAudioRegions.createdAt)),
+  const [visualObjects, effects, animations, captions, audioRegions] = await inOrder([
+    () => deps.db.select().from(compositionVisualObjects).where(and(eq(compositionVisualObjects.workspaceId, input.workspaceId), eq(compositionVisualObjects.projectId, input.projectId))).orderBy(asc(compositionVisualObjects.createdAt)),
+    () => deps.db.select().from(compositionEffectInstances).where(and(eq(compositionEffectInstances.workspaceId, input.workspaceId), eq(compositionEffectInstances.projectId, input.projectId))).orderBy(asc(compositionEffectInstances.createdAt)),
+    () => deps.db.select().from(compositionAnimationBindings).where(and(eq(compositionAnimationBindings.workspaceId, input.workspaceId), eq(compositionAnimationBindings.projectId, input.projectId))).orderBy(asc(compositionAnimationBindings.createdAt)),
+    () => deps.db.select().from(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, input.workspaceId), eq(compositionCaptionSpans.projectId, input.projectId))).orderBy(asc(compositionCaptionSpans.createdAt)),
+    () => deps.db.select().from(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, input.workspaceId), eq(compositionAudioRegions.projectId, input.projectId))).orderBy(asc(compositionAudioRegions.createdAt)),
   ]);
   return { visualObjects: visualObjects.map(toVisualObject), effects: effects.map(toEffectInstance), animations: animations.map(toAnimationBinding), captions: captions.map(toCaptionSpan), audioRegions: audioRegions.map(toAudioRegion) };
 }

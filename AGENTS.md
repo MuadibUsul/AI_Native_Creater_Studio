@@ -20,7 +20,7 @@
 - 完成定义：只有 `VERIFIED` 计入完成；Mock 验证通过 ≠ 真实 Provider 验证通过；接口存在 ≠ 功能交付。
 - 证据与交接：每项 N 任务在 `docs/verification/<taskId>.md` 记录证据（命令与结果），在 `docs/handoffs/<taskId>.md` 交接；同步更新两个 `docs/requirements/ai-native-v04-*` 活账本。旧 P 账本保持历史语义，不用新状态覆写。
 - 账本一致性由 `pnpm spec:check`（已在 `pnpm verify` 中）强制：VERIFIED 的依赖必须 VERIFIED、每项有独立证据与交接文件、汇总与明细一致。账本统计以明细表为唯一事实源。
-- V5 架构约束（逐阶段生效，见 V5 §4、§20）：编辑规则进入纯函数内核（禁止 I/O）；权威路径禁用毫秒/浮点秒，显示换算只用 `mediaTimeToDisplay*`；外部/付费调用只经工作流与 Provider Gateway；业务包不得读取 `process.env`。
+- V5 架构约束（逐阶段生效，见 V5 §4、§20）：编辑规则进入纯函数内核（禁止 I/O）；权威路径禁用毫秒/浮点秒，显示换算只用 `mediaTimeToDisplay*`；外部/付费调用只经工作流与 Provider Gateway；业务包不得读取 `process.env`；组合状态以操作日志为权威，组合表只能经 `packages/domain/src/composition-projector.ts` 写入（arch-check R11，裁决 0013）。
 - TODO 必须写清 why / dependency / intended interface。
 - 未实现测试套件必须使用显式 `[PLANNED]` 占位（`scripts/planned-suite.mjs`），不得伪造断言、扩大阈值或静默跳过。
 - 依赖方向由 `pnpm arch:check` 强制（见 `packages/arch-check`）；新增依赖边前先核对现有规则和 v0.4 架构。

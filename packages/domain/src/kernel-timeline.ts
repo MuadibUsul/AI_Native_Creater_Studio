@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
+  ApiFailure,
+  ERROR_CODES,
   OBJECT_LOCK_DIMENSIONS,
   mediaRangeSchema,
   mediaTimeSchema,
@@ -9,6 +11,7 @@ import {
   type ObjectLockDimension,
 } from '@ancs/contracts';
 import {
+  applyKernelResult,
   applyTimelineOperation,
   lockKey,
   referencedAssetVersionIds,
@@ -26,16 +29,19 @@ import {
   assetVersions,
   compositionAudioRegions,
   compositionCaptionSpans,
+  compositionVisualObjects,
   projectObjectLocks,
   projectSequences,
   projects,
   sequenceClips,
   sequenceTracks,
 } from '@ancs/db';
+import type { CompositionProjector } from './composition-projector.js';
+import { jsonbNormalize } from './jsonb.js';
 import { audioRegionSnapshot, captionSnapshot, clipSnapshot, trackSnapshot } from './composition-snapshots.js';
 
 /**
- * 编辑内核适配器（V5 §6，M1）：**加载 → 内核 → 持久化**。
+ * 编辑内核适配器（V5 §6，M1；M2 起写入经组合投影器进入操作日志）：**加载 → 内核 → 持久化**。
  *
  * - 加载：把**整个项目**的序列/轨道/片段/音频区域/字幕、对象锁、源事实与策略读成内核状态
  *   （同一事务内，读到本批前序写入；查找语义与旧实现的查询条件一致，保证错误码不变）；
@@ -173,7 +179,7 @@ const captionColumns = (caption: KernelCaption) => ({
 
 // ── 加载 ─────────────────────────────────────────────────
 
-async function loadTimeline(tx: NodePgDatabase, scope: Scope, operation: KernelTimelineOperation): Promise<{ state: TimelineState; known: KnownRows }> {
+async function loadTimeline(tx: NodePgDatabase, scope: Scope, operations: readonly KernelTimelineOperation[]): Promise<{ state: TimelineState; known: KnownRows }> {
   // 同一事务连接上顺序查询（pg 客户端不支持在同一连接上并发查询）
   const sequenceRows = await tx.select().from(projectSequences).where(and(eq(projectSequences.workspaceId, scope.workspaceId), eq(projectSequences.projectId, scope.projectId)));
   const trackRows = await tx.select().from(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, scope.workspaceId), eq(sequenceTracks.projectId, scope.projectId)));
@@ -181,10 +187,14 @@ async function loadTimeline(tx: NodePgDatabase, scope: Scope, operation: KernelT
   const regionRows = await tx.select().from(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, scope.workspaceId), eq(compositionAudioRegions.projectId, scope.projectId)));
   const captionRows = await tx.select().from(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, scope.workspaceId), eq(compositionCaptionSpans.projectId, scope.projectId)));
   const lockRows = await tx.select().from(projectObjectLocks).where(and(eq(projectObjectLocks.workspaceId, scope.workspaceId), eq(projectObjectLocks.projectId, scope.projectId)));
+  const visualObjectRows = await tx.select({ trackId: compositionVisualObjects.trackId }).from(compositionVisualObjects)
+    .where(and(eq(compositionVisualObjects.workspaceId, scope.workspaceId), eq(compositionVisualObjects.projectId, scope.projectId)));
+  const unmanagedTrackObjects = new Map<string, number>();
+  for (const row of visualObjectRows) unmanagedTrackObjects.set(row.trackId, (unmanagedTrackObjects.get(row.trackId) ?? 0) + 1);
   const projectRows = await tx.select({ productionPolicy: projects.productionPolicy }).from(projects)
     .where(and(eq(projects.id, scope.projectId), eq(projects.workspaceId, scope.workspaceId))).limit(1);
 
-  const assetVersionIds = new Set<string>(referencedAssetVersionIds(operation));
+  const assetVersionIds = new Set<string>(operations.flatMap(referencedAssetVersionIds));
   for (const row of clipRows) if (row.assetVersionId !== null) assetVersionIds.add(row.assetVersionId);
   const assetRows = assetVersionIds.size === 0 ? [] : await tx.select({
     id: assetVersions.id,
@@ -215,6 +225,7 @@ async function loadTimeline(tx: NodePgDatabase, scope: Scope, operation: KernelT
       locks: new Map(lockRows.map((row) => [lockKey(row.objectKind as never, row.objectId), parseLockDimensions(row.dimensions)])),
       sources: { assetVersions: facts },
       policy: { preserveOriginalSpeech: policy?.preserveOriginalSpeech === true },
+      unmanagedTrackObjects,
     },
     known: {
       clip: new Map(clipRows.map((row) => [row.id, row])),
@@ -248,34 +259,35 @@ function snapshotOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: D
   }
 }
 
-async function applyWrite(tx: NodePgDatabase, write: KernelResult['writes'][number], row: AnyRow, now: Date): Promise<void> {
+async function applyWrite(projector: CompositionProjector, write: KernelResult['writes'][number], row: AnyRow, now: Date): Promise<AnyRow> {
   const target = write.type === 'delete' ? write.before : write.after;
   const id = target.value.id;
   if (write.type === 'insert') {
     switch (target.entity) {
-      case 'clip': await tx.insert(sequenceClips).values(row as ClipRow); return;
-      case 'track': await tx.insert(sequenceTracks).values(row as TrackRow); return;
-      case 'audioRegion': await tx.insert(compositionAudioRegions).values(row as AudioRegionRow); return;
-      case 'caption': await tx.insert(compositionCaptionSpans).values(row as CaptionRow); return;
+      case 'clip': return projector.insert('clip', row as ClipRow);
+      case 'track': return projector.insert('track', row as TrackRow);
+      case 'audioRegion': return projector.insert('audioRegion', row as AudioRegionRow);
+      case 'caption': return projector.insert('caption', row as CaptionRow);
     }
   }
   if (write.type === 'update') {
-    switch (target.entity) {
-      case 'clip': await tx.update(sequenceClips).set({ ...clipColumns(target.value), updatedAt: now }).where(eq(sequenceClips.id, id)); return;
-      case 'track': await tx.update(sequenceTracks).set({ ...trackColumns(target.value), updatedAt: now }).where(eq(sequenceTracks.id, id)); return;
-      case 'audioRegion': await tx.update(compositionAudioRegions).set({ ...audioRegionColumns(target.value), updatedAt: now }).where(eq(compositionAudioRegions.id, id)); return;
-      case 'caption': await tx.update(compositionCaptionSpans).set({ ...captionColumns(target.value), updatedAt: now }).where(eq(compositionCaptionSpans.id, id)); return;
-    }
+    const updated = await (() => {
+      switch (target.entity) {
+        case 'clip': return projector.update('clip', id, { ...clipColumns(target.value), updatedAt: now });
+        case 'track': return projector.update('track', id, { ...trackColumns(target.value), updatedAt: now });
+        case 'audioRegion': return projector.update('audioRegion', id, { ...audioRegionColumns(target.value), updatedAt: now });
+        case 'caption': return projector.update('caption', id, { ...captionColumns(target.value), updatedAt: now });
+      }
+    })();
+    if (updated === null) throw new ApiFailure(ERROR_CODES.INTERNAL, `kernel update target ${target.entity}:${id} disappeared`, 500);
+    return updated;
   }
-  switch (target.entity) {
-    case 'clip': await tx.delete(sequenceClips).where(eq(sequenceClips.id, id)); return;
-    case 'track': await tx.delete(sequenceTracks).where(eq(sequenceTracks.id, id)); return;
-    case 'audioRegion': await tx.delete(compositionAudioRegions).where(eq(compositionAudioRegions.id, id)); return;
-    case 'caption': await tx.delete(compositionCaptionSpans).where(eq(compositionCaptionSpans.id, id)); return;
-  }
+  await projector.delete(target.entity, id);
+  return row;
 }
 
-async function persist(tx: NodePgDatabase, scope: Scope, known: KnownRows, result: KernelResult, eventDrafts: KernelEventDraft[]): Promise<void> {
+async function persist(projector: CompositionProjector, known: KnownRows, result: KernelResult, eventDrafts: KernelEventDraft[]): Promise<void> {
+  const scope = projector.scope;
   const now = new Date();
   // 轨道两阶段落位：先把位置会变化的既有轨道整体移出（+10000），再按内核顺序写最终位置。
   const originalPositions = new Map([...known.track.values()].map((row) => [row.id, row.position]));
@@ -287,14 +299,14 @@ async function persist(tx: NodePgDatabase, scope: Scope, known: KnownRows, resul
     }
   }
   for (const trackId of movingTracks) {
-    await tx.update(sequenceTracks).set({ position: (originalPositions.get(trackId) ?? 0) + 10_000, updatedAt: now }).where(eq(sequenceTracks.id, trackId));
+    await projector.update('track', trackId, { position: (originalPositions.get(trackId) ?? 0) + 10_000, updatedAt: now });
   }
 
   for (const write of result.writes) {
     const target = write.type === 'delete' ? write.before : write.after;
     const row = rowOf(known, target, scope, now);
-    await applyWrite(tx, write, row, now);
-    if (write.type !== 'delete') (known[target.entity] as Map<string, AnyRow>).set(target.value.id, row);
+    const written = await applyWrite(projector, write, row, now);
+    if (write.type !== 'delete') (known[target.entity] as Map<string, AnyRow>).set(target.value.id, written);
   }
 
   for (const event of result.events) {
@@ -309,18 +321,74 @@ async function persist(tx: NodePgDatabase, scope: Scope, known: KnownRows, resul
   }
 }
 
-/** 在事务内执行一条内核化的时间线操作。 */
+/** 在事务内执行一条内核化的时间线操作（写入经投影器，随批次进入操作日志）。 */
 export async function runKernelTimelineOperation(
-  tx: NodePgDatabase,
-  scope: Scope,
+  projector: CompositionProjector,
   operation: KernelTimelineOperation,
   eventDrafts: KernelEventDraft[],
   options: { compensation?: boolean } = {},
 ): Promise<void> {
-  const loaded = await loadTimeline(tx, scope, operation);
+  const loaded = await loadTimeline(projector.tx, projector.scope, [operation]);
   const result = applyTimelineOperation(loaded.state, operation, {
     newId: (prefix) => `${prefix}_${randomUUID()}`,
     ...(options.compensation === true ? { compensation: true } : {}),
   });
-  await persist(tx, scope, loaded.known, result, eventDrafts);
+  await persist(projector, loaded.known, result, eventDrafts);
 }
+
+export interface KernelTrialEvent {
+  action: string;
+  objectKind: string;
+  objectId: string;
+  patch: Record<string, unknown>;
+}
+
+/**
+ * 内存试改（V5 §9，M2）：一次加载项目状态，按序在内核中执行整批操作，不写库、不加锁。
+ * 返回与持久化路径同序的事件，以及"若落库再读回"的片段行（未改动的行原样保留，
+ * 改动的行按持久化同一列映射合成并做 jsonb 归一），供试改结果、内容保护指纹与 A/B 对照使用。
+ */
+export async function simulateKernelBatch(
+  tx: NodePgDatabase,
+  scope: Scope,
+  operations: readonly KernelTimelineOperation[],
+): Promise<{ events: KernelTrialEvent[]; clips: ClipRow[] }> {
+  const loaded = await loadTimeline(tx, scope, operations);
+  let state = loaded.state;
+  const clips = new Map(loaded.known.clip);
+  const events: KernelTrialEvent[] = [];
+  const now = new Date();
+  const context = { newId: (prefix: 'clp' | 'avgp' | 'trk' | 'cap') => `${prefix}_${randomUUID()}` };
+  for (const operation of operations) {
+    const result = applyTimelineOperation(state, operation, context);
+    state = applyKernelResult(state, result);
+    for (const write of result.writes) {
+      if (write.type === 'delete') {
+        if (write.before.entity === 'clip') clips.delete(write.before.value.id);
+        continue;
+      }
+      if (write.after.entity !== 'clip') continue;
+      const columns = clipColumns(write.after.value);
+      const base = clips.get(write.after.value.id);
+      clips.set(write.after.value.id, {
+        id: write.after.value.id,
+        workspaceId: scope.workspaceId,
+        projectId: scope.projectId,
+        sequenceId: write.after.value.sequenceId,
+        createdAt: base?.createdAt ?? now,
+        ...base,
+        ...columns,
+        sourceRange: jsonbNormalize(columns.sourceRange),
+        sequenceRange: jsonbNormalize(columns.sequenceRange),
+        timeMapping: jsonbNormalize(columns.timeMapping),
+        parameters: columns.parameters === null ? null : jsonbNormalize(columns.parameters),
+        updatedAt: now,
+      });
+    }
+    for (const event of result.events) {
+      events.push({ action: event.action, objectKind: event.objectKind, objectId: event.objectId, patch: event.patch });
+    }
+  }
+  return { events, clips: [...clips.values()] };
+}
+

@@ -77,6 +77,15 @@ export function deleteTrack(work: WorkingTimeline, operation: Op<'delete_track'>
   const target = work.findTrackOwned(operation.trackId);
   work.assertObjectLockAllows('TRACK', target.id, ['POSITION', 'DURATION']);
   const clips = work.clipsOnTrack(target.id);
+  // 轨道上的字幕/音频区域/视觉对象不随 MOVE_CLIPS 迁移；必须先显式处理，不能交给外键级联静默删除（V5-M2）。
+  const otherObjects = [...work.captions.values()].filter((caption) => caption.trackId === target.id).length
+    + [...work.audioRegions.values()].filter((region) => region.trackId === target.id).length
+    + (work.state.unmanagedTrackObjects?.get(target.id) ?? 0);
+  if (otherObjects > 0) {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track still holds captions, audio regions or visual objects; delete or move them first', 409, {
+      reason: 'TRACK_NOT_EMPTY', clipCount: clips.length, objectCount: otherObjects,
+    });
+  }
   if (clips.length > 0) {
     if (operation.nonEmptyPolicy === 'REJECT') {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is not empty; choose MOVE_CLIPS or delete the clips first', 409, { reason: 'TRACK_NOT_EMPTY', clipCount: clips.length });

@@ -26,6 +26,7 @@ import {
   voiceIdentities,
 } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
+import { inOrder } from './in-order.js';
 import { buildSceneGraph } from './projects.js';
 import { toProjectDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { listProjectComposition } from './composition.js';
@@ -72,29 +73,29 @@ export async function buildSnapshotPayload(
   }
   const defaults = channelStyleDefaultsSchema.parse(styleRow.defaults);
 
-  const [avatarRows, voiceRows, brandRows, speechRows] = await Promise.all([
-    defaults.avatarIdentityId === null
+  const [avatarRows, voiceRows, brandRows, speechRows] = await inOrder([
+    () => defaults.avatarIdentityId === null
       ? Promise.resolve([])
       : db
           .select()
           .from(avatarIdentities)
           .where(and(eq(avatarIdentities.id, defaults.avatarIdentityId), eq(avatarIdentities.workspaceId, project.workspaceId)))
           .limit(1),
-    defaults.voiceIdentityId === null
+    () => defaults.voiceIdentityId === null
       ? Promise.resolve([])
       : db
           .select()
           .from(voiceIdentities)
           .where(and(eq(voiceIdentities.id, defaults.voiceIdentityId), eq(voiceIdentities.workspaceId, project.workspaceId)))
           .limit(1),
-    defaults.brandIdentityId === null
+    () => defaults.brandIdentityId === null
       ? Promise.resolve([])
       : db
           .select()
           .from(brandIdentities)
           .where(and(eq(brandIdentities.id, defaults.brandIdentityId), eq(brandIdentities.workspaceId, project.workspaceId)))
           .limit(1),
-    defaults.speechProfileId === null
+    () => defaults.speechProfileId === null
       ? Promise.resolve([])
       : db
           .select()
@@ -119,10 +120,10 @@ export async function buildSnapshotPayload(
     sceneRows,
   });
 
-  const [composition, compositionObjects, lockRows] = await Promise.all([
-    listProjectComposition({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
-    listProjectCompositionObjects({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
-    db.select().from(projectObjectLocks).where(and(
+  const [composition, compositionObjects, lockRows] = await inOrder([
+    () => listProjectComposition({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
+    () => listProjectCompositionObjects({ db }, { workspaceId: project.workspaceId, projectId: project.id }),
+    () => db.select().from(projectObjectLocks).where(and(
       eq(projectObjectLocks.workspaceId, project.workspaceId),
       eq(projectObjectLocks.projectId, project.id),
     )),

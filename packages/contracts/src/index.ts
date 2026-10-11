@@ -828,6 +828,7 @@ export {
   EDIT_OPERATION_AVAILABILITIES,
   EDIT_COMPENSATION_MODES,
   EDIT_OPERATION_REGISTRY,
+  LEGACY_SCENE_WRITE_OPERATIONS,
   editExecutionBackendSchema,
   editOperationAvailabilitySchema,
   editCompensationModeSchema,

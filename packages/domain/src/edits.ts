@@ -23,7 +23,6 @@ import {
   compositionAudioRegions,
   compositionAnimationBindings,
   compositionCaptionSpans,
-  compositionEffectInstances,
   compositionVisualObjects,
   editEvents,
   outboxEvents,
@@ -40,6 +39,7 @@ import type { DomainDeps } from './channels.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
 import { assertLegacyProjectWriteAllowed } from './composition-migration.js';
+import { CompositionProjector, PROJECTED_ENTITY_ORDER } from './composition-projector.js';
 import { validateEditOperationCandidate } from './edit-operation-registry.js';
 import { assertAnimationKeyframesWithinTarget } from './composition-objects.js';
 import { assertProjectApiSchemaVersion } from './project-state.js';
@@ -162,7 +162,7 @@ export const contentToChanges = (content: SceneContentSnapshot): SceneChanges =>
   dataBindings: content.dataBindings as SceneChanges['dataBindings'],
 });
 
-const versionConflict = (
+export const versionConflict = (
   message: string,
   currentProjectRevision: number,
   sceneRevisions: Record<string, number> = {},
@@ -261,7 +261,7 @@ const animationSnapshot = (row: typeof compositionAnimationBindings.$inferSelect
 });
 
 async function restoreNormalizedSnapshot(
-  tx: NodePgDatabase,
+  projector: CompositionProjector,
   input: Pick<ProcessEditsInput, 'workspaceId' | 'projectId'>,
   snapshot: ReturnType<typeof projectVersionSnapshotSchema.parse>,
 ): Promise<void> {
@@ -288,31 +288,23 @@ async function restoreNormalizedSnapshot(
     throw new ApiFailure(ERROR_CODES.INTERNAL, 'project version contains cross-scope object locks', 500);
   }
 
-  await tx.delete(projectObjectLocks).where(and(eq(projectObjectLocks.workspaceId, input.workspaceId), eq(projectObjectLocks.projectId, input.projectId)));
-  await tx.delete(compositionAnimationBindings).where(and(eq(compositionAnimationBindings.workspaceId, input.workspaceId), eq(compositionAnimationBindings.projectId, input.projectId)));
-  await tx.delete(compositionEffectInstances).where(and(eq(compositionEffectInstances.workspaceId, input.workspaceId), eq(compositionEffectInstances.projectId, input.projectId)));
-  await tx.delete(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, input.workspaceId), eq(compositionCaptionSpans.projectId, input.projectId)));
-  await tx.delete(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, input.workspaceId), eq(compositionAudioRegions.projectId, input.projectId)));
-  await tx.delete(compositionVisualObjects).where(and(eq(compositionVisualObjects.workspaceId, input.workspaceId), eq(compositionVisualObjects.projectId, input.projectId)));
-  await tx.delete(sequenceClips).where(and(eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId)));
-  await tx.delete(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId)));
-  await tx.delete(projectSequences).where(and(eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId)));
+  // 子在前清空（不依赖外键级联：每条删除都进入操作日志），再父在前写回快照。
+  for (const entity of [...PROJECTED_ENTITY_ORDER].reverse()) await projector.deleteWhere(entity);
 
-  if (composition.sequences.length > 0) await tx.insert(projectSequences).values(composition.sequences.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.tracks.length > 0) await tx.insert(sequenceTracks).values(composition.tracks.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.clips.length > 0) await tx.insert(sequenceClips).values(composition.clips.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.visualObjects.length > 0) await tx.insert(compositionVisualObjects).values(composition.visualObjects.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.effects.length > 0) await tx.insert(compositionEffectInstances).values(composition.effects.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.animations.length > 0) await tx.insert(compositionAnimationBindings).values(composition.animations.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.captions.length > 0) await tx.insert(compositionCaptionSpans).values(composition.captions.map((item) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) })));
-  if (composition.audioRegions.length > 0) await tx.insert(compositionAudioRegions).values(composition.audioRegions.map((item) => ({
-    ...item,
+  const dated = <T extends { createdAt: string }>(item: T) => ({ ...item, createdAt: new Date(item.createdAt), updatedAt: new Date(item.createdAt) });
+  await projector.insertMany('sequence', composition.sequences.map(dated));
+  await projector.insertMany('track', composition.tracks.map(dated));
+  await projector.insertMany('clip', composition.clips.map(dated));
+  await projector.insertMany('visualObject', composition.visualObjects.map(dated));
+  await projector.insertMany('effect', composition.effects.map(dated));
+  await projector.insertMany('animation', composition.animations.map(dated));
+  await projector.insertMany('caption', composition.captions.map(dated));
+  await projector.insertMany('audioRegion', composition.audioRegions.map((item) => ({
+    ...dated(item),
     gainDb: String(item.gainDb),
     pan: String(item.pan),
-    createdAt: new Date(item.createdAt),
-    updatedAt: new Date(item.createdAt),
   })));
-  if (snapshot.locks.length > 0) await tx.insert(projectObjectLocks).values(snapshot.locks.map((item) => ({
+  await projector.insertMany('objectLock', snapshot.locks.map((item) => ({
     ...item,
     createdAt: new Date(item.createdAt),
     updatedAt: new Date(item.updatedAt),
@@ -414,6 +406,8 @@ async function applyEditsInTransaction(
     const preApplyRows = sceneRows.map((row) => structuredClone(row));
     // AI 重编导前快照的事件水位线：必须在本批事件插入前捕获
     const txDb = tx as unknown as NodePgDatabase;
+    // 组合表的唯一写入方：本批全部组合写入在提交前追加为一行操作日志（V5-M2）
+    const projector = new CompositionProjector(txDb, { workspaceId: input.workspaceId, projectId: input.projectId });
     const preApplyEventSeq =
       input.actor.type === 'AI' && input.compensation === undefined
         ? await currentEventSeq(txDb, input.projectId)
@@ -752,7 +746,7 @@ async function applyEditsInTransaction(
         case 'delete_caption':
         case 'apply_audio_crossfade':
         case 'update_audio_region': {
-          await runKernelTimelineOperation(txDb, { workspaceId: input.workspaceId, projectId: input.projectId }, operation, eventDrafts, {
+          await runKernelTimelineOperation(projector, operation, eventDrafts, {
             compensation: input.compensation !== undefined,
           });
           break;
@@ -779,7 +773,7 @@ async function applyEditsInTransaction(
             timeBinding: candidate.timeBinding,
             keyframes: candidate.keyframes,
           });
-          await tx.update(compositionAnimationBindings).set({ keyframes: candidate.keyframes, updatedAt: new Date() }).where(eq(compositionAnimationBindings.id, row.id));
+          await projector.update('animation', row.id, { keyframes: candidate.keyframes, updatedAt: new Date() });
           eventDrafts.push({ action: 'UPDATE_ANIMATION', sceneId: null, objectKind: 'ANIMATION', objectId: row.id, patch: { ...operation, before, after: candidate } });
           break;
         }
@@ -837,7 +831,7 @@ async function applyEditsInTransaction(
           if (!versionRow) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project version not found', 404);
           const snapshot = projectVersionSnapshotSchema.parse(versionRow.snapshot);
           const beforeVersionId = project.currentVersionId;
-          await restoreNormalizedSnapshot(txDb, input, snapshot);
+          await restoreNormalizedSnapshot(projector, input, snapshot);
           const desiredScenes = snapshot.graph.scenes;
           const desiredIds = new Set(desiredScenes.map((scene) => scene.id));
 
@@ -972,13 +966,12 @@ async function applyEditsInTransaction(
     for (const target of touchedObjectLocks.values()) {
       const finalLock = candidateResult.locks.find((lock) => lock.objectKind === target.objectKind && lock.objectId === target.objectId);
       if (finalLock === undefined) {
-        await tx.delete(projectObjectLocks).where(and(
-          eq(projectObjectLocks.projectId, input.projectId),
+        await projector.deleteWhere('objectLock', and(
           eq(projectObjectLocks.objectKind, target.objectKind),
           eq(projectObjectLocks.objectId, target.objectId),
         ));
       } else {
-        await tx.insert(projectObjectLocks).values({
+        await projector.putObjectLock({
           id: `lck_${randomUUID()}`,
           workspaceId: input.workspaceId,
           projectId: input.projectId,
@@ -988,9 +981,6 @@ async function applyEditsInTransaction(
           reason: finalLock.reason ?? null,
           createdAt: now,
           updatedAt: now,
-        }).onConflictDoUpdate({
-          target: [projectObjectLocks.projectId, projectObjectLocks.objectKind, projectObjectLocks.objectId],
-          set: { dimensions: finalLock.dimensions, reason: finalLock.reason ?? null, updatedAt: now },
         });
       }
     }
@@ -1101,6 +1091,15 @@ async function applyEditsInTransaction(
       if (eventRow) eventRows.push(eventRow);
     }
 
+    // 5b) 操作日志（与状态、事件同事务；每个被接受的批次一行，revision 唯一）
+    await projector.commit({
+      source: input.compensation === undefined ? 'EDIT' : 'COMPENSATION',
+      operations: request.operations,
+      baseRevision: project.revision,
+      revision: bumpedRow.revision,
+      actor: { type: input.actor.type, id: input.actor.id },
+    });
+
     // 6) Outbox（同一事务；消费者为 P02-06 事件通道）
     await tx.insert(outboxEvents).values({
       id: `obx_${randomUUID()}`,
@@ -1198,7 +1197,7 @@ export async function processEdits(deps: DomainDeps, input: ProcessEditsInput): 
   const request = editRequestSchema.parse(input.request);
   assertProjectApiSchemaVersion(request.schemaVersion);
 
-  await assertLegacyProjectWriteAllowed(deps, input);
+  await assertLegacyProjectWriteAllowed(deps, { ...input, operations: request.operations });
 
   const projectRows = await deps.db
     .select()

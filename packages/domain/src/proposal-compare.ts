@@ -16,7 +16,7 @@ import {
 import { proposals, projects, sequenceClips } from '@ancs/db';
 import type { DomainDeps } from './channels.js';
 import { clipDigestsOf } from './content-protection.js';
-import { processEdits } from './edits.js';
+import { runEditTrial } from './edit-trial.js';
 
 /**
  * N06-08：A/B 对照（服务端对照载荷）。
@@ -47,34 +47,23 @@ const loadProposalRow = async (deps: DomainDeps, input: { workspaceId: string; p
   return row;
 };
 
-/** 跑一遍候选（真实执行器事务内跑完回滚），返回试改后的片段集合。 */
+/** 跑一遍候选（试改引擎：内核内存执行或事务内回滚），返回试改后的片段集合。 */
 async function trialClips(deps: DomainDeps, row: typeof proposals.$inferSelect, workspaceId: string, projectId: string): Promise<ClipRow[]> {
   const operations = editOperationSchema.array().parse(row.operations);
-  class Rollback extends Error {
-    constructor(readonly clips: ClipRow[]) { super('compare-rollback'); }
-  }
   try {
-    await deps.db.transaction(async (tx) => {
-      await processEdits({ ...deps, db: tx }, {
-        workspaceId, projectId,
-        actor: { type: 'USER', id: 'proposal-compare' },
-        request: {
-          schemaVersion: '1.0', baseProjectRevision: row.baseProjectRevision, expectedSceneRevisions: {},
-          operations, idempotencyKey: `compare_${row.id}`,
-        },
-      });
-      const clips = await tx.select().from(sequenceClips).where(and(
-        eq(sequenceClips.workspaceId, workspaceId), eq(sequenceClips.projectId, projectId),
-      ));
-      throw new Rollback(clips);
+    const outcome = await runEditTrial(deps, {
+      workspaceId, projectId, baseProjectRevision: row.baseProjectRevision, operations, actorId: 'proposal-compare',
     });
+    return outcome.clips;
   } catch (error) {
-    if (error instanceof Rollback) return error.clips;
-    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed during compare', 422, {
-      reason: COMPARE_ERROR_REASONS.INVALID, cause: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
-    });
+    // 只有业务拒绝才是"候选不可对照"（422）；服务端故障原样抛出（V5-M2：与试改同一分类规则）
+    if (error instanceof ApiFailure) {
+      throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'proposal trial failed during compare', 422, {
+        reason: COMPARE_ERROR_REASONS.INVALID, cause: error.message.slice(0, 200),
+      });
+    }
+    throw error;
   }
-  throw new ApiFailure(ERROR_CODES.INTERNAL, 'compare trial did not roll back', 500, { reason: COMPARE_ERROR_REASONS.INVALID });
 }
 
 const currentRevision = async (deps: DomainDeps, workspaceId: string, projectId: string): Promise<number> => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkRules, checkSourcePurity, type WorkspacePackage } from './rules.js';
+import { checkProjectionWriters, checkRules, checkSourcePurity, type WorkspacePackage } from './rules.js';
 
 /**
  * 构造测试包。
@@ -220,3 +220,26 @@ describe('checkSourcePurity：纯核心源码（R10）', () => {
     ]);
   });
 });
+
+describe('checkProjectionWriters：组合投影表唯一写入方（R11）', () => {
+  it('投影器以外的模块直接写组合表（Drizzle 或原生 SQL）即违规', () => {
+    const violations = checkProjectionWriters([
+      { path: 'packages/domain/src/edits.ts', content: "await tx.update(sequenceClips).set({ trackId })\nawait tx\n  .insert(\n    projectObjectLocks).values(row)" },
+      { path: 'apps/worker/src/job.ts', content: 'await pool.query(`DELETE FROM "sequence_tracks" WHERE id = $1`)' },
+    ]);
+    expect(violations.map((item) => `${item.rule}:${item.pkg}:${item.dep}`)).toEqual([
+      'R11:packages/domain/src/edits.ts:第 1 行（sequenceClips）',
+      'R11:packages/domain/src/edits.ts:第 3 行（projectObjectLocks）',
+      'R11:apps/worker/src/job.ts:第 1 行（sequence_tracks）',
+    ]);
+  });
+
+  it('投影器自身、只读查询与无关表不违规', () => {
+    expect(checkProjectionWriters([
+      { path: 'packages/domain/src/composition-projector.ts', content: 'await this.tx.insert(projectObjectLocks).values(values)' },
+      { path: 'packages/domain/src/composition.ts', content: 'await db.select().from(sequenceClips).where(eq(sequenceClips.id, id))' },
+      { path: 'packages/domain/src/edits.ts', content: 'await tx.update(scenes).set({ narration })\nselect * from sequence_clips' },
+    ])).toEqual([]);
+  });
+});
+

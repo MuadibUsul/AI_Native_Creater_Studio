@@ -38,13 +38,14 @@ import { editEvents, projects, proposalArtifacts, proposalTrials, proposals, seq
 import type { DomainDeps } from './channels.js';
 import { assertProtectedContentStable, type ClipDigests, clipDigestsOf } from './content-protection.js';
 import { processEdits } from './edits.js';
-import { currentEventSeq } from './versions.js';
+import { runEditTrial, type EditTrialOutcome } from './edit-trial.js';
 
 /**
  * N06-01／N06-02／N06-04／N06-03：私有候选 → 确定性试改 → 原子采用 → 影响集与受控 rebase。
  *
  * - `createProposalBranch` 只存操作集与绑定，**不改工程**（N06-03 起同时**记录**字段读写集与具体写目标）；
- * - `previewProposal` 用**真实执行器在事务内跑一遍再回滚**（不是近似动画、不是第二套模拟器），
+ * - `previewProposal` 经试改引擎执行（V5-M2）：内核操作在**同一编辑内核**中内存执行（不写库、不取锁），
+ *   其他操作在事务内跑真实执行器再回滚；不是近似动画、不是第二套规则，
  *   因此"同一操作集 → 同一结果"，且 `projectUntouched` 是结构性保证；
  * - `adoptProposal` 做**采用绑定校验**（base revision／操作哈希／锚点指纹／意图修订），
  *   通过统一编辑协议**原子**执行；失败时确认版保持完整且不显示"已采用"；
@@ -547,8 +548,8 @@ function trialFailureCause(error: ApiFailure): { code: string; reason: string | 
 }
 
 /**
- * 确定性试改核心：在**事务内**用真实执行器跑一遍完整操作集，然后**无条件回滚**。
- * 因此结果与正式采用完全一致，而工程零变更（不与"预览即预测"混淆：这里跑的是权威路径）。
+ * 确定性试改核心（V5-M2 起经试改引擎）：全部为内核操作时在内核内存执行（零写入、不取项目行锁），
+ * 否则在事务内跑真实执行器后无条件回滚。两条路径结果一致，工程零变更。
  * N06-03：rebase 前也用同一路径在**新 base** 上验证操作仍可执行。
  */
 async function runDeterministicTrial(deps: DomainDeps, input: {
@@ -559,64 +560,16 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
   actorId?: string;
 }): Promise<{ trial: ProposalTrial; postState: Map<string, ClipDigests> }> {
   const operations = editOperationSchema.array().parse(input.row.operations);
-  const maxSeqBefore = await currentEventSeq(deps.db, input.projectId);
-
-  class RollbackSentinel extends Error {
-    constructor(readonly trial: ProposalTrial, readonly postState: Map<string, ClipDigests>) {
-      super('trial-rollback');
-    }
-  }
-
+  let outcome: EditTrialOutcome;
   try {
-    await deps.db.transaction(async (tx) => {
-      const result = await processEdits({ ...deps, db: tx }, {
-        workspaceId: input.workspaceId,
-        projectId: input.projectId,
-        actor: { type: 'USER', id: input.actorId ?? 'proposal-trial' },
-        request: {
-          schemaVersion: '1.0',
-          baseProjectRevision: input.baseProjectRevision,
-          expectedSceneRevisions: {},
-          operations,
-          idempotencyKey: `trial_${randomUUID()}`,
-        },
-      });
-      const clips = await tx.select().from(sequenceClips).where(and(
-        eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId),
-      ));
-      const trial = proposalTrialSchema.parse({
-        proposalId: input.row.id,
-        operationsHash: input.row.operationsHash,
-        trialRevision: result.response.project.revision,
-        events: result.response.editEvents.map((event) => ({
-          action: event.action,
-          objectKind: event.objectKind ?? null,
-          objectId: event.objectId ?? null,
-          summary: typeof event.patch['op'] === 'string' ? String(event.patch['op']) : '',
-        })),
-        clipRanges: clips.map((clip) => {
-          const sequenceRange = mediaRangeSchema.parse(clip.sequenceRange);
-          const sourceRange = mediaRangeSchema.parse(clip.sourceRange);
-          return {
-            clipId: clip.id,
-            trackId: clip.trackId,
-            sequenceRange,
-            sourceRange,
-            sequenceStartMs: mediaTimeToDisplayMilliseconds(sequenceRange.start),
-            sequenceEndMs: mediaTimeToDisplayMilliseconds(sequenceRange.end),
-            sourceStartMs: mediaTimeToDisplayMilliseconds(sourceRange.start),
-            sourceEndMs: mediaTimeToDisplayMilliseconds(sourceRange.end),
-          };
-        }),
-        projectUntouched: true,
-      });
-      // 试改后状态的三轴指纹（N06-07 已确认内容保护门要用；回滚前采集）
-      const postState = new Map(clips.map((clip) => [clip.id, clipDigestsOf(clip)]));
-      // 无条件回滚：试改绝不落地
-      throw new RollbackSentinel(trial, postState);
+    outcome = await runEditTrial(deps, {
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      baseProjectRevision: input.baseProjectRevision,
+      operations,
+      actorId: input.actorId ?? 'proposal-trial',
     });
   } catch (error) {
-    if (error instanceof RollbackSentinel) return { trial: error.trial, postState: error.postState };
     // 只有业务拒绝（ApiFailure：锁、模式、源范围、时序等）才是"提案不合法"→ 422；
     // 数据库故障、编程错误等原样抛出走统一 500 信封（不把服务端故障伪装成提案问题，也不泄漏内部错误信息）。
     if (error instanceof ApiFailure) {
@@ -627,11 +580,30 @@ async function runDeterministicTrial(deps: DomainDeps, input: {
     }
     throw error;
   }
-  // 事务未被回滚是不可能的（上面必然 throw）；保守 fail-closed
-  const maxSeqAfter = await currentEventSeq(deps.db, input.projectId);
-  throw new ApiFailure(ERROR_CODES.INTERNAL, `proposal trial did not roll back (seq ${String(maxSeqBefore)}→${String(maxSeqAfter)})`, 500, {
-    reason: PROPOSAL_ERROR_REASONS.TRIAL_FAILED,
+  const trial = proposalTrialSchema.parse({
+    proposalId: input.row.id,
+    operationsHash: input.row.operationsHash,
+    trialRevision: outcome.revision,
+    events: outcome.events,
+    clipRanges: outcome.clips.map((clip) => {
+      const sequenceRange = mediaRangeSchema.parse(clip.sequenceRange);
+      const sourceRange = mediaRangeSchema.parse(clip.sourceRange);
+      return {
+        clipId: clip.id,
+        trackId: clip.trackId,
+        sequenceRange,
+        sourceRange,
+        sequenceStartMs: mediaTimeToDisplayMilliseconds(sequenceRange.start),
+        sequenceEndMs: mediaTimeToDisplayMilliseconds(sequenceRange.end),
+        sourceStartMs: mediaTimeToDisplayMilliseconds(sourceRange.start),
+        sourceEndMs: mediaTimeToDisplayMilliseconds(sourceRange.end),
+      };
+    }),
+    projectUntouched: true,
   });
+  // 试改后状态的三轴指纹（N06-07 已确认内容保护门要用）
+  const postState = new Map(outcome.clips.map((clip) => [clip.id, clipDigestsOf(clip)]));
+  return { trial, postState };
 }
 
 export async function previewProposal(deps: DomainDeps, input: {

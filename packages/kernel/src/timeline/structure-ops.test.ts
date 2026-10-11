@@ -78,6 +78,17 @@ describe('轨道', () => {
     expect(after.clips[0]!.trackId).toBe('v2');
     expect(positions(after)).toEqual({ v2: 0, a1: 1 });
   });
+
+  it('delete_track：轨道上仍有字幕/音频区域/视觉对象 → 409（V5-M2 修复：不再交给外键级联静默删除）', () => {
+    const withCaption = state({ captions: [caption('cap', r(0, 1_000), [word('一', 0, 1_000)])] });
+    expect(reasonOf(() => apply(withCaption, { op: 'delete_track', trackId: 'c1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }))).toBe('TRACK_NOT_EMPTY');
+    const withRegion = state({ tracks: [track('v1', 'VIDEO', 0), track('a1', 'AUDIO', 1), track('a2', 'AUDIO', 2)], audioRegions: [region('ar', r(0, 1_000))] });
+    expect(reasonOf(() => apply(withRegion, { op: 'delete_track', trackId: 'a1', nonEmptyPolicy: 'MOVE_CLIPS', destinationTrackId: 'a2' }))).toBe('TRACK_NOT_EMPTY');
+    const withVisual = state({ unmanagedTrackObjects: new Map([['v1', 2]]) });
+    expect(reasonOf(() => apply(withVisual, { op: 'delete_track', trackId: 'v1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }))).toBe('TRACK_NOT_EMPTY');
+    // 空轨道照常删除
+    expect(apply(state(), { op: 'delete_track', trackId: 'c1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }).writes[0]).toMatchObject({ type: 'delete' });
+  });
 });
 
 describe('片段参数、AV 链接与 update_clip', () => {
