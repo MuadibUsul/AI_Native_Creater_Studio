@@ -1,6 +1,6 @@
 # AGENTS.md — 代理协作规则
 
-本仓库当前按 `docs/V04/ANCS_AI_Native_v0.4.md` 和 `docs/V04/ANCS_v0.4_Task_Backlog.md` 的 N 系列任务推进，接手流程见 `docs/V04/ANCS_v0.4_Codex_Start.md`。`docs/V04/ANCS_v0.4_Traceability.md` 是需求来源矩阵；实际完成状态以 `docs/requirements/ai-native-v04-traceability.md`、`docs/requirements/ai-native-v04-acceptance-ledger.md` 和逐项证据为准。`creator_video_os_spec_v0.2.md`、`ANCS_Plan261004.md` 与旧 P 系列证据保留为历史。冲突优先级：用户后续明确要求 → v0.4 显式增量 → v0.4 保留内容 → 不冲突的旧规范（见 v0.4 §1.4 和 `docs/decisions/0009-v04-authority-and-scope.md`）。
+**架构权威：`docs/V05/ANCS_v0.5_Architecture.md`（V5，按 M0—M5 推进，裁决见 `docs/decisions/0011-v5-architecture-adoption.md`）。** 产品需求仍按 `docs/V04/ANCS_AI_Native_v0.4.md` 和 `docs/V04/ANCS_v0.4_Task_Backlog.md` 的 N 系列任务推进，接手流程见 `docs/V04/ANCS_v0.4_Codex_Start.md`。`docs/V04/ANCS_v0.4_Traceability.md` 是需求来源矩阵；实际完成状态以 `docs/requirements/ai-native-v04-traceability.md`、`docs/requirements/ai-native-v04-acceptance-ledger.md` 和逐项证据为准。`creator_video_os_spec_v0.2.md`、`ANCS_Plan261004.md` 与旧 P 系列证据保留为历史。冲突优先级：用户后续明确要求 → V5 架构裁决 → v0.4 显式增量 → v0.4 保留内容 → 不冲突的旧规范（见 v0.4 §1.4、`docs/decisions/0009-v04-authority-and-scope.md` 与 `0011-v5-architecture-adoption.md`）。
 
 任何模型接手前必须按顺序执行：
 
@@ -19,6 +19,8 @@
 - 无对应高保真稿时按当前 v0.4 设计系统和现有共享组件自行补齐，不等待新图，不用临时管理模板，不擅自重做本轮未影响的已确认界面。运营读面只显示已授权投影；有副作用的操作走 AdminAction 的预检、授权、执行、逐项结果和审计，不因按钮隐藏而放松服务端权限。
 - 完成定义：只有 `VERIFIED` 计入完成；Mock 验证通过 ≠ 真实 Provider 验证通过；接口存在 ≠ 功能交付。
 - 证据与交接：每项 N 任务在 `docs/verification/<taskId>.md` 记录证据（命令与结果），在 `docs/handoffs/<taskId>.md` 交接；同步更新两个 `docs/requirements/ai-native-v04-*` 活账本。旧 P 账本保持历史语义，不用新状态覆写。
+- 账本一致性由 `pnpm spec:check`（已在 `pnpm verify` 中）强制：VERIFIED 的依赖必须 VERIFIED、每项有独立证据与交接文件、汇总与明细一致。账本统计以明细表为唯一事实源。
+- V5 架构约束（逐阶段生效，见 V5 §4、§20）：编辑规则进入纯函数内核（禁止 I/O）；权威路径禁用毫秒/浮点秒，显示换算只用 `mediaTimeToDisplay*`；外部/付费调用只经工作流与 Provider Gateway；业务包不得读取 `process.env`。
 - TODO 必须写清 why / dependency / intended interface。
 - 未实现测试套件必须使用显式 `[PLANNED]` 占位（`scripts/planned-suite.mjs`），不得伪造断言、扩大阈值或静默跳过。
 - 依赖方向由 `pnpm arch:check` 强制（见 `packages/arch-check`）；新增依赖边前先核对现有规则和 v0.4 架构。

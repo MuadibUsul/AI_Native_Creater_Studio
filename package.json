@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r run typecheck",
     "lint": "eslint .",
     "secrets:check": "node scripts/check-secrets.mjs",
+    "spec:check": "node scripts/spec-check.mjs",
     "arch:check": "pnpm --filter @ancs/arch-check run check",
     "test:unit": "vitest run --project unit",
     "test:eval": "vitest run --project eval",

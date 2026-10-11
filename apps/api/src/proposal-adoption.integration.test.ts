@@ -339,6 +339,38 @@ describe('N06-01／02／04 私有候选 → 确定性试改 → 原子采用（H
     expect((await eventsOf(fixture.projectId)).length).toBe(eventsBefore);
   });
 
+  it('N06-02 整批原子：A 可执行、B 被锁 → 整批不采用，A 也不落地（不过滤掉 B 后伪成功）', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.workspaceId, fixture.workspaceId)).limit(1))[0]!.id;
+    const clipA = await seedClip(fixture, version, [0, 2_000]);
+    const clipB = await seedClip(fixture, version, [2_000, 4_000]);
+    const revisionBefore = await revisionOf(client, fixture.projectId);
+    await client.projects.edit(fixture.projectId, {
+      schemaVersion: '1.0', baseProjectRevision: revisionBefore, expectedSceneRevisions: {},
+      operations: [{ op: 'set_object_lock', objectKind: 'CLIP', objectId: clipB, dimensions: ['STYLE'], locked: true }],
+      idempotencyKey: `idem_lock_b_${randomUUID()}`,
+    });
+    const lockedRevision = await revisionOf(client, fixture.projectId);
+    const proposal = await client.projects.createProposal(fixture.workspaceId, fixture.projectId, {
+      baseProjectRevision: lockedRevision,
+      selectionAnchorId: null, intentRevisionId: null,
+      operations: [{ op: 'set_clip_opacity', clipId: clipA, opacity: 0.4 }, { op: 'set_clip_opacity', clipId: clipB, opacity: 0.4 }],
+    });
+    const eventsBefore = (await eventsOf(fixture.projectId)).length;
+    const failure = await expectApiFailure(
+      client.projects.adoptProposal(fixture.workspaceId, fixture.projectId, proposal.proposalId, {
+        expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `idem_ab_${randomUUID()}`,
+      }),
+      { status: 409 },
+    );
+    expect(failure.details['reason']).toBe('EDIT_IMPACT_LOCKED');
+    expect(await revisionOf(client, fixture.projectId)).toBe(lockedRevision);
+    expect((await eventsOf(fixture.projectId)).length).toBe(eventsBefore);
+    const clipAfter = (await client.projects.state(fixture.projectId)).document.composition.clips.find((clip) => clip.id === clipA)!;
+    expect(JSON.stringify(clipAfter)).not.toContain('0.4');
+  });
+
   it('候选绑定选择锚点：锚点变化后采用被拒（指纹不符）', async () => {
     const client = await newSignedInClient();
     const fixture = await makeProject(client);

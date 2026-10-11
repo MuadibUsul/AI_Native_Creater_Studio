@@ -2,7 +2,7 @@
 /**
  * 统一验证入口（当前 v0.4 增量任务继承旧验证门）。
  *
- * - 顺序：secrets:check → lint → typecheck → build → arch:check → 全部测试套件；
+ * - 顺序：secrets:check → spec:check（账本一致性，V5-M0）→ lint → typecheck → build → arch:check → 全部测试套件；
  * - 不包含 test:provider-smoke（真实 Provider 费用，单独显式开启）；
  * - [PLANNED] 套件不执行断言、不代表通过；任一已实现步骤失败即退出非零。
  */
@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 
 const steps = [
   'secrets:check',
+  'spec:check',
   'lint',
   'typecheck',
   'build',

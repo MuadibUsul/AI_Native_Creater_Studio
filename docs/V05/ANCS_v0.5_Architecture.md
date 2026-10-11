@@ -3,7 +3,7 @@
 | 属性 | 说明 |
 |---|---|
 | 文档日期 | 2026-10-11 |
-| 状态 | **PROPOSED**（待项目所有者确认；确认前 v0.4 仍是唯一生效规范） |
+| 状态 | **ACCEPTED**（2026-10-11 用户指示按 V5 从 M0 推进；裁决见 `docs/decisions/0011-v5-architecture-adoption.md`。v0.4 仍是产品需求权威，本文是架构权威） |
 | 审查对象 | `docs/V04/` 全部文件：总规范 `ANCS_AI_Native_v0.4.md`（§1—§29）、`ANCS_v0.4_Task_Backlog.md`、`task_index.json`、`ANCS_v0.4_Traceability.md`、`ANCS_v0.4_Incremental_Changes.md`、`ANCS_v04_Mouse_Voice_Incremental_Design_20261010.md`、设计系统/运营后台分册 |
 | 对照的代码事实 | 分支 `codex/v04-foundation`（HEAD `12620e9`），以及 `docs/reviews/v04-code-review-20261011.md` 的实测结论 |
 | 本文性质 | **架构增量**：不缩减 v0.4 §1.1 的任何产品要求，不删除 N 系列任务；只改变"怎么组织系统、怎么交付"。不是功能已完成报告 |
