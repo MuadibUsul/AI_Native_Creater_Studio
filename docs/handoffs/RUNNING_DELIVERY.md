@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第十五组：首次真实 Provider 证据——Deepgram ASR 跑通）
+**最后更新：** 2026-10-11（第十六组：首轮 Android 真机验证，adb 全自动）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -25,6 +25,14 @@
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十六组 · **首轮真机验证（Android，adb 全自动）**
+- **方式：** USB + `adb reverse tcp:3000 tcp:3000`；`adb shell am start` 打开页面、`adb exec-out screencap` 截图、`adb shell input tap` 触摸交互；本机 Web（3000）+ API（3001，dev 库 `ancs_dev`）同时运行。全程无人值守。
+- **设备：** OnePlus LE2110（OnePlus 9）/ **Android 14** / 1080×2400 / 系统浏览器（Chrome 内核）。
+- **已验证（3 张真机截图）：** ①API 未启动时**明确报错**（「会话暂不可用 + 重试」，不白屏不静默）②API 启动后落地页 `/welcome` 正常渲染（中文排版/层级/黑白设计系统）③点「体验导演工作台」**跳到 `/sign-in`——鉴权门生效**。①②③ 正是规范 N04 规则「新的 UI 不能屏蔽错误与权限」的正向证据。
+- **未验证（不谎报）：** 横竖屏切换（`user_rotation` 未生效，截图字节相同）、登录后的工作台/画布/时间带、§20 第 263 行"切换后选区仍对应同一对象"、细粒度触摸手势、iOS。
+- **证据：** `docs/verification/android-real-device-20261011.md` + `docs/verification/artifacts/android-real-device/*.png`（含可复现的 adb 命令）。
+
 
 ### 2026-10-11 · 第十五组 · **首次真实 Provider 证据**：Deepgram ASR 跑通
 - **内容：** 新增 `apps/worker/src/deepgram-speech-recognition.ts`（真实 HTTP 适配器，实现既有 `SpeechRecognitionAdapter`）+ 纯函数 `mapDeepgramResponse`（响应 → 统一转写快照，可离线验证）；6 项离线单测（含**断言密钥不入日志/错误**）；`.env.example` 补变量名（不含值）。
