@@ -76,7 +76,8 @@ export const startCompositionFinalRenderRequestSchema = z.object({
   /** 发起时看到的工程 revision；冻结时不一致 → 409（避免导出用户没看过的版本） */
   expectedRevision: z.number().int().nonnegative().optional(),
 }).strict();
-export type StartCompositionFinalRenderRequest = z.infer<typeof startCompositionFinalRenderRequestSchema>;
+// 入参形状（画质参数有服务端默认值，调用方可省略）
+export type StartCompositionFinalRenderRequest = z.input<typeof startCompositionFinalRenderRequestSchema>;
 
 export const COMPOSITION_FINAL_RENDER_ERROR_REASONS = {
   REVISION_CHANGED: 'FINAL_RENDER_REVISION_CHANGED',

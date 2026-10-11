@@ -236,7 +236,8 @@ function nextAction(definition: WorkflowDefinition, steps: readonly StepRow[]): 
     // RUNNING 只可能是丢租约的遗留（本推进者独占运行）；调用方会先把它记为 LEASE_LOST
     const retryable = last.errorClass === 'RETRYABLE' || last.errorClass === 'LEASE_LOST';
     const humanApprovedRetry = (last.result as { humanApprovedRetry?: unknown } | null)?.humanApprovedRetry === true;
-    if (last.status === 'FAILED' && retryable && (last.attempt < step.maxAttempts || humanApprovedRetry)) return { kind: 'RUN', step, attempt: last.attempt + 1 };
+    // 人工批准的重试（NEEDS_HUMAN 处理完毕）不受错误分类与尝试上限约束，但只放行这一次
+    if (last.status === 'FAILED' && ((retryable && last.attempt < step.maxAttempts) || humanApprovedRetry)) return { kind: 'RUN', step, attempt: last.attempt + 1 };
     return { kind: 'FAIL', step, error: (last.error as Record<string, unknown> | null) ?? { errorClass: last.errorClass } };
   }
   return { kind: 'COMPLETE' };

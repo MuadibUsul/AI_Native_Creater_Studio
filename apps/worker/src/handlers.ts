@@ -1,4 +1,4 @@
-import type { DomainDeps } from '@ancs/domain';
+import type { DomainDeps, WorkflowRegistry } from '@ancs/domain';
 import {
   MAINTENANCE_DISPATCH_JOB_TYPE,
   MAINTENANCE_RETENTION_JOB_TYPE,
@@ -17,6 +17,7 @@ import { createMediaIndexHandler } from './media-index-handler.js';
 import { createMediaTranscriptHandler } from './media-transcript-handler.js';
 import { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
 import { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';
+import { createWorkflowAdvanceHandler } from './workflow-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -128,6 +129,8 @@ export interface DefaultRegistryOptions {
   mediaVisualAnalysisAdapter?: MediaVisualAnalysisAdapter;
   /** 源音频事件与节拍分析适配器；未配置时形成可见失败且不修改原音。 */
   mediaAudioAnalysisAdapter?: MediaAudioAnalysisAdapter;
+  /** 工作流定义（V5-M4）；提供时注册 WORKFLOW_ADVANCE 推进处理器。未提供则推进任务落入"未知类型"（明确失败）。 */
+  workflowRegistry?: WorkflowRegistry;
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -151,5 +154,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   handlers.push(createMediaTranscriptHandler({ adapter: options.speechRecognitionAdapter }));
   handlers.push(createMediaVisualAnalysisHandler({ adapter: options.mediaVisualAnalysisAdapter }));
   handlers.push(createMediaAudioAnalysisHandler({ adapter: options.mediaAudioAnalysisAdapter }));
+  if (options.workflowRegistry !== undefined) handlers.push(createWorkflowAdvanceHandler({ registry: options.workflowRegistry }));
   return new JobHandlerRegistry(handlers);
 }

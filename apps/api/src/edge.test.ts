@@ -12,6 +12,7 @@ describe('classifyRequest / TokenBuckets', () => {
     expect(classifyRequest('POST', '/api/v1/auth/sign-in/email')).toBe('auth');
     expect(classifyRequest('POST', '/api/v1/workspaces/w/projects/p/narratives?x=1')).toBe('expensive');
     expect(classifyRequest('POST', '/api/v1/workspaces/w/voice-clones')).toBe('expensive');
+    expect(classifyRequest('POST', '/api/v1/workspaces/w/projects/p/sequences/s/final-renders')).toBe('expensive');
     expect(classifyRequest('POST', '/api/v1/workspaces/w/projects/p/edits')).toBe('write');
     expect(classifyRequest('GET', '/api/v1/workspaces/w/projects')).toBe('read');
     expect(classifyRequest('GET', '/api/v1/health')).toBeNull();

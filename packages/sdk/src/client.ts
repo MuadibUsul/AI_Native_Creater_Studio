@@ -73,6 +73,8 @@ import {
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
+  startCompositionFinalRenderRequestSchema,
+  workflowRunSchema,
   directorPlanSchema,
   renderRecordSchema,
   customMotionComponentSchema,
@@ -368,6 +370,8 @@ import {
   type NarrationBlock,
   type NarrativeGenerationResult,
   type CreateRenderRequest,
+  type StartCompositionFinalRenderRequest,
+  type WorkflowRun,
   type DirectorPlan,
   type RenderRecord,
   type CustomMotionComponent,
@@ -1365,6 +1369,17 @@ export interface AncsClient {
       capability: string,
       query?: { region?: string; callableOnly?: boolean },
     ): Promise<CapabilitySelection>;
+  };
+  /** V5-M4：素材工程终渲染（工作流：冻结 RenderPlan → FFmpeg 媒体图 → 产物入库 → 技术 QA） */
+  finalRenders: {
+    /** 发起（202；同一幂等键返回同一运行） */
+    start(workspaceId: string, projectId: string, sequenceId: string, input: StartCompositionFinalRenderRequest, options?: MutationOptions): Promise<WorkflowRun>;
+    list(workspaceId: string, projectId: string): Promise<WorkflowRun[]>;
+  };
+  /** V5-M4：工作流运行（步骤尝试、输出与错误；取消在步骤边界生效） */
+  workflowRuns: {
+    get(workspaceId: string, runId: string): Promise<WorkflowRun>;
+    cancel(workspaceId: string, runId: string, options?: MutationOptions): Promise<WorkflowRun>;
   };
   renders: {
     /** 创建渲染（P07-03：冻结输入快照；无版本则自动 FINAL_RENDER 快照） */
@@ -2903,6 +2918,23 @@ export function createClient(options: ClientOptions): AncsClient {
           capabilitySelectionSchema,
         );
       },
+    },
+
+    finalRenders: {
+      start: (workspaceId, projectId, sequenceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/final-renders`, workflowRunSchema, {
+          body: input,
+          bodySchema: startCompositionFinalRenderRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/final-renders`, listOf(workflowRunSchema))).items,
+    },
+
+    workflowRuns: {
+      get: (workspaceId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/workflow-runs/${runId}`, workflowRunSchema),
+      cancel: (workspaceId, runId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/workflow-runs/${runId}/cancel`, workflowRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
     },
 
     renders: {

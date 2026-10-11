@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { claimJob, configureDeploymentPolicy, runMaintenanceTick } from '@ancs/domain';
+import { WorkflowRegistry, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, runMaintenanceTick } from '@ancs/domain';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
@@ -10,6 +10,7 @@ import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 import { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
@@ -113,11 +114,17 @@ const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === unde
   executable: config.ANCS_AUDIO_ANALYSIS_EXECUTABLE,
   args: config.ANCS_AUDIO_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_AUDIO_ANALYSIS_ARGS_JSON) as string[],
 });
+// V5-M4：工作流定义（素材工程终渲染：FFmpeg 媒体图后端 + 真实输出探测）。不依赖 Remotion/Chromium，
+// 因此 ANCS_DISABLE_RENDER 不影响它；FFmpeg 缺失时推进会显式失败（工作流运行 FAILED，带错误）。
+const workflowRegistry = new WorkflowRegistry().register(compositionFinalRenderWorkflow({
+  executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
+  outputProbe: sourceMediaProbe,
+}));
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =
   config.ANCS_DISABLE_RENDER === '1'
-    ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder, sourceMediaIndexer, speechRecognitionAdapter, mediaVisualAnalysisAdapter, mediaAudioAnalysisAdapter })
+    ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder, sourceMediaIndexer, speechRecognitionAdapter, mediaVisualAnalysisAdapter, mediaAudioAnalysisAdapter, workflowRegistry })
     : createDefaultRegistry({
         renderExecutor: createProcessRenderExecutor(commandOf(config.ANCS_RENDER_EXECUTOR_CMD)),
         motionValidator: createProcessMotionValidator(commandOf(config.ANCS_MOTION_VALIDATOR_CMD)),
@@ -128,6 +135,7 @@ const registry: JobHandlerRegistry =
         speechRecognitionAdapter,
         mediaVisualAnalysisAdapter,
         mediaAudioAnalysisAdapter,
+        workflowRegistry,
       });
 
 let stopping = false;

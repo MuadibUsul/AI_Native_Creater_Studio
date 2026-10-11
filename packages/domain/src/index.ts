@@ -647,3 +647,6 @@ export {
   startWorkflow,
 } from './workflow.js';
 export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';
+// V5-M4（§11.2）：素材工程终渲染工作流（冻结 → 渲染 → 技术 QA）
+export { compositionFinalRenderWorkflow, startCompositionFinalRender } from './composition-final-render.js';
+export type { CompositionFinalRenderPorts } from './composition-final-render.js';
