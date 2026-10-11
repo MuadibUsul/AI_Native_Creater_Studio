@@ -20,7 +20,7 @@ import {
   type RebuildMediaAnalysisStageRequest,
 } from '@ancs/contracts';
 import { assets, assetVersions, jobs, mediaAnalysisStages, mediaDerivatives, mediaIndexRuns, mediaTranscriptRuns } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { cancelJob } from './jobs.js';
 import { rebuildMediaIndex } from './media-index.js';
 import { rebuildMediaProxy } from './media-proxies.js';

@@ -1,9 +1,8 @@
 import { createHmac } from 'node:crypto';
-import { resolve } from 'node:path';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, crossCheckApiEnv, formatEnvFailure, validateEnv, type EnvIssue } from '@ancs/contracts';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { LocalObjectStorage } from '@ancs/providers-storage-local';
+import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
 import { createAdminDeps } from './plugins/admin.js';
@@ -16,7 +15,7 @@ import { MockLlmAdapter } from '@ancs/providers-mock-llm';
 import { MockTtsAdapter, MockVoiceCloneProvider } from '@ancs/providers-mock-tts';
 import { MockAssetSearchProvider, RunwayGenerationAdapter } from '@ancs/providers-mock-provider';
 import { HeuristicMalwareScanner } from '@ancs/providers-malware-heuristic';
-import { recordAudit } from '@ancs/domain';
+import { configureDeploymentPolicy, createMockDistributionProvider, createPlatformStubProviders, recordAudit } from '@ancs/domain';
 import { LocalDocumentParser } from '@ancs/providers-document-extract';
 
 /**
@@ -37,6 +36,8 @@ if (envIssues.length > 0) {
   process.exit(1);
 }
 const config = envResult.value;
+// 部署策略一次性注入领域层（领域层不读 process.env；非法值已在上面 fail-closed）
+configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
 const port = config.PORT;
 const secret = config.BETTER_AUTH_SECRET;
 const databaseUrl = config.DATABASE_URL;
@@ -58,19 +59,14 @@ const auth = createAuth({
 
 /**
  * 对象存储（P02-04）：默认本地驱动（开发）；生产接 S3/R2 预签名直传（真实凭据阶段，P08/P12）。
- * 本地驱动的端点签名密钥独立于会话密钥：未显式配置时由 BETTER_AUTH_SECRET 派生（作用域隔离）。
+ * 本地驱动的端点签名密钥独立于会话密钥：未显式配置时由 BETTER_AUTH_SECRET 派生（作用域隔离，仅非生产）；
+ * 派生规则与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`（同一把密钥、同一公开基址）。
  */
 const storageDriver = config.ANCS_STORAGE_DRIVER;
 let storageDeps;
 if (storageDriver === 'local') {
-  const storageSecret = config.ANCS_STORAGE_SECRET ?? createHmac('sha256', secret).update('storage-local-v1').digest('hex');
-  const publicBaseUrl = config.ANCS_STORAGE_PUBLIC_BASE_URL ?? config.BETTER_AUTH_URL ?? `http://localhost:${String(port)}`;
   storageDeps = createStorageDeps(
-    new LocalObjectStorage({
-      rootDir: resolve(config.ANCS_STORAGE_LOCAL_DIR ?? '.storage'),
-      publicBaseUrl,
-      signingSecret: storageSecret,
-    }),
+    new LocalObjectStorage(localStorageOptionsFromEnv(config)),
     {
       // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
       scanner: new HeuristicMalwareScanner(),
@@ -154,6 +150,29 @@ if (paymentsDriver === 'mock') {
   process.exit(1);
 }
 
+/**
+ * 分发 Provider（P13-01）：Mock（脚本化发布，无真实平台账户）+ 平台占位（只报能力矩阵，不伪造发布成功）。
+ */
+const distributionProviders = [createMockDistributionProvider(), ...createPlatformStubProviders()];
+
+/**
+ * 装配清单与生产守卫（V5-M3，§11.3）：生产进程装配 MOCK/SCRIPTED 必须显式 ANCS_ALLOW_MOCK_PROVIDERS=1，
+ * 否则启动失败；清单经 /capabilities 报告（客户端据此显示 Mock 标识）。
+ */
+const providerInventory: ProviderInventoryEntry[] = [
+  { capability: 'llm', driver: llmDriver, implementation: 'MOCK' },
+  { capability: 'tts', driver: ttsDriver, implementation: 'MOCK' },
+  { capability: 'voice_clone', driver: 'mock', implementation: 'MOCK' },
+  { capability: 'stock_search', driver: 'mock', implementation: 'MOCK' },
+  { capability: 'distribution', driver: 'mock', implementation: 'MOCK' },
+  ...(paymentsDriver === 'mock' ? [{ capability: 'payments', driver: 'mock', implementation: 'MOCK' as const }] : []),
+];
+const inventoryIssues = checkProviderInventory(config, providerInventory);
+if (inventoryIssues.length > 0) {
+  console.error(formatEnvFailure('api', inventoryIssues));
+  process.exit(1);
+}
+
 const webhookDeps = {
   verifiers: parseWebhookVerifiers(config.ANCS_WEBHOOK_SECRETS),
   resultFetcher: createHttpResultFetcher(),
@@ -193,6 +212,9 @@ const app = await buildServer({
     },
   }),
   payments: paymentDeps,
+  voice: config.ANCS_VOICE_SESSION_SECRET === undefined ? {} : { sessionSecret: config.ANCS_VOICE_SESSION_SECRET },
+  distribution: { providers: distributionProviders },
+  providerInventory,
 });
 
 try {

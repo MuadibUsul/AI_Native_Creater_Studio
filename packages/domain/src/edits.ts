@@ -35,7 +35,7 @@ import {
   sequenceTracks,
 } from '@ancs/db';
 import { assertAssetBindable } from './assets.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 import { AUTO_SNAPSHOT_INTERVAL, buildSnapshotPayload, currentEventSeq } from './versions.js';
 import { assertLegacyProjectWriteAllowed } from './composition-migration.js';

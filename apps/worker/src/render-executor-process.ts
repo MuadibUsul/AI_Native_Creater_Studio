@@ -7,6 +7,7 @@ import {
   type RenderExecutionResult,
   type RenderExecutor,
 } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 /**
  * 进程隔离的渲染执行器（P07-04 生产装配）。
@@ -68,7 +69,7 @@ export function createProcessRenderExecutor(options: ProcessRenderExecutorOption
 
       const child = spawn(executable, [...command.slice(1), '--workdir', input.workDir], {
         cwd,
-        env: { ...process.env, NODE_OPTIONS: '' },
+        env: childProcessEnv(process.env, MEDIA_CHILD_ENV),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 

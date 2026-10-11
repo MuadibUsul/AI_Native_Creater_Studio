@@ -35,7 +35,7 @@ import {
   sequenceTracks,
   selectionAnchors,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * N04-09：SelectionAnchor 归一与旧 Attention 兼容。

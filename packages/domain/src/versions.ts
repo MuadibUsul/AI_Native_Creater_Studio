@@ -25,7 +25,7 @@ import {
   speechProfiles,
   voiceIdentities,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { inOrder } from './in-order.js';
 import { buildSceneGraph } from './projects.js';
 import { toProjectDto, type ProjectRow, type SceneRow } from './mappers.js';

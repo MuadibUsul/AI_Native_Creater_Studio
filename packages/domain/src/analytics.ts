@@ -18,7 +18,7 @@ import {
   type CreatorLearningAction,
 } from '@ancs/contracts';
 import { analyticsEvents, creatorLearnings, projects, projectVersions, providerConnections, publications, scenePerformance, videoPerformance } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const toRecord = (row: typeof videoPerformance.$inferSelect): VideoPerformanceRecord =>
   videoPerformanceRecordSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });

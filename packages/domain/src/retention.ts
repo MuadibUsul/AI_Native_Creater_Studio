@@ -28,7 +28,7 @@ import {
   uploadIntents,
   isForeignKeyViolation,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { licenseMetadataSchema } from '@ancs/contracts';
 
 /**

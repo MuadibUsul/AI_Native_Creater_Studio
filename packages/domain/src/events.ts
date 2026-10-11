@@ -11,7 +11,7 @@ import {
   type WorkspaceEvent,
 } from '@ancs/contracts';
 import { notifications, outboxEvents, workspaceMembers } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 事件通道与通知（P02-06 / 规范 §34；计划 §10）。

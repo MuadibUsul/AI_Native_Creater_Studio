@@ -1224,6 +1224,10 @@ export {
 } from './ops.js';
 export type { OpsOverview, OpsAlert, OpsAuditKind, OpsAuditEntry, OpsAdminAction } from './ops.js';
 
+// Provider 种类显式化与生产装配守卫（V5-M3）
+export { PROVIDER_IMPLEMENTATIONS, providerImplementationSchema, providerInventoryEntrySchema, checkProviderInventory } from './provider-kind.js';
+export type { ProviderImplementation, ProviderInventoryEntry } from './provider-kind.js';
+
 // 部署环境配置契约（P08-01 / §50）
 export {
   validateEnv,
@@ -1233,8 +1237,9 @@ export {
   workerEnvSchema,
   crossCheckWorkerEnv,
   crossCheckApiEnv,
+  retentionCliEnvSchema,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';
 
 // 审批与受控导出契约（P07-06 / §87、§54）
 export {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkProjectionWriters, checkRules, checkSourcePurity, type WorkspacePackage } from './rules.js';
+import { checkNoProcessEnv, checkProjectionWriters, checkRules, checkSourcePurity, type WorkspacePackage } from './rules.js';
 
 /**
  * 构造测试包。
@@ -240,6 +240,19 @@ describe('checkProjectionWriters：组合投影表唯一写入方（R11）', () 
       { path: 'packages/domain/src/composition.ts', content: 'await db.select().from(sequenceClips).where(eq(sequenceClips.id, id))' },
       { path: 'packages/domain/src/edits.ts', content: 'await tx.update(scenes).set({ narration })\nselect * from sequence_clips' },
     ])).toEqual([]);
+  });
+});
+
+describe('checkNoProcessEnv：业务包不读取进程环境（R12）', () => {
+  it('代码中读取 process.env 违规；注释中提及不违规', () => {
+    const violations = checkNoProcessEnv([
+      { path: 'packages/domain/src/plans.ts', content: "const raw = process.env['ANCS_DEFAULT_PLAN'];\n * 文档：不读 process.env\n// process.env 只在入口读取\nconst ok = 1; // 不读 process.env" },
+      { path: 'packages/contracts/src/x.ts', content: 'export const env = { ...process.env };' },
+    ]);
+    expect(violations.map((item) => `${item.rule}:${item.pkg}:${item.dep}`)).toEqual([
+      'R12:packages/domain/src/plans.ts:第 1 行',
+      'R12:packages/contracts/src/x.ts:第 1 行',
+    ]);
   });
 });
 

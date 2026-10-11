@@ -13,7 +13,7 @@ import {
   type Scene,
 } from '@ancs/contracts';
 import { assembleSceneGraph, getProject } from './projects.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * AI Edit 服务（P05-06 / 规范 §37、§52、§55）。

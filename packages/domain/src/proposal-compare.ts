@@ -14,7 +14,7 @@ import {
   type ObjectLockDimension,
 } from '@ancs/contracts';
 import { proposals, projects, sequenceClips } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { clipDigestsOf } from './content-protection.js';
 import { runEditTrial } from './edit-trial.js';
 

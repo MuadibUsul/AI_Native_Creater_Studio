@@ -16,7 +16,7 @@ import {
   type MediaSourceView,
 } from '@ancs/contracts';
 import { assetVersions, assets, mediaDerivatives, projects, sequenceClips } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const toDerivative = (row: typeof mediaDerivatives.$inferSelect): MediaDerivative => mediaDerivativeSchema.parse({
   id: row.id,

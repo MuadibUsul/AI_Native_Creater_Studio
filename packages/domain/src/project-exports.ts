@@ -13,7 +13,7 @@ import {
   type GraphExport,
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, scenes } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assembleSceneGraph } from './projects.js';
 import { loadReferencedSources } from './search.js';
 

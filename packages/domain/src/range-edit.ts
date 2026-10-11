@@ -22,7 +22,7 @@ import {
   type RangeEditSourceEvidence,
 } from '@ancs/contracts';
 import { assetVersions, projectObjectLocks, projectSequences, projects, sequenceClips } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * N03-09 范围编辑的最小 AI 入口（V03-01／V03-04／V03-28／V03-29）。

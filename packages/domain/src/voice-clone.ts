@@ -22,7 +22,7 @@ import {
   type VoiceQualityReport,
 } from '@ancs/contracts';
 import { assetVersions, outboxEvents, providerConnections, voiceCloneSamples, voiceClones, voiceConsents, voiceIdentities } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { requireStorage } from './assets.js';
 import { parseWavPcm16 } from './wav.js';
 

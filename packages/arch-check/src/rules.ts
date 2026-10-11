@@ -18,6 +18,8 @@
  *  R11 组合投影表与操作日志的唯一写入方（裁决 0013 / V5 §6.2）：apps/**、packages/** 的非测试源码中，
  *     只有 packages/domain/src/composition-projector.ts 可以对组合表、对象锁、操作日志与引用边执行
  *     insert / update / delete（含原生 SQL）；其他模块必须经投影器写入，保证"日志折叠 = 投影表"
+ *  R12 业务包不读取进程环境（V5 §4、裁决 0014）：packages/{domain,contracts,kernel,time,sdk,extensions,
+ *     scene-components,remotion-core} 的非测试源码不得出现 `process.env`；配置由进程入口校验后注入
  *
  * 说明：白名单类规则只约束"生产依赖方向"；devDependencies 允许测试用途的额外引用
  * （例如 apps/api 在集成测试中以 devDependency 使用 @ancs/sdk 扮演客户端）。
@@ -317,6 +319,33 @@ export function checkProjectionWriters(files: readonly SourceFile[]): Violation[
         });
       }
     }
+  }
+  return violations;
+}
+
+/** R12：不得读取进程环境的业务包源码目录。 */
+export const NO_PROCESS_ENV_SOURCE_DIRS: readonly string[] = [
+  'packages/domain/src',
+  'packages/contracts/src',
+  'packages/kernel/src',
+  'packages/time/src',
+  'packages/sdk/src',
+  'packages/extensions/src',
+  'packages/scene-components/src',
+  'packages/remotion-core/src',
+];
+
+/** R12：检查业务包源码不读取 process.env（注释行与行尾注释不计）。 */
+export function checkNoProcessEnv(files: readonly SourceFile[]): Violation[] {
+  const violations: Violation[] = [];
+  for (const file of files) {
+    file.content.split(/\r?\n/).forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return;
+      if (/\bprocess\.env\b/.test(line.replace(/\/\/.*$/, ''))) {
+        violations.push({ rule: 'R12', pkg: file.path, dep: `第 ${String(index + 1)} 行`, message: '业务包不得读取 process.env：由进程入口校验配置后注入' });
+      }
+    });
   }
   return violations;
 }

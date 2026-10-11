@@ -61,6 +61,16 @@ describe('轨道', () => {
     expect(result.events.map((event) => `${event.action}:${event.objectId}`)).toEqual(['UPDATE_TRACK:a1', 'UPDATE_TRACK:c1', 'CREATE_TRACK:v2']);
   });
 
+  it('move_track：整体重排、位置连续唯一；目标轨记 MOVE_TRACK、让位轨记 UPDATE_TRACK', () => {
+    const s = state();
+    const result = apply(s, { op: 'move_track', trackId: 'c1', position: 0 });
+    const after = applyKernelResult(s, result);
+    expect(positions(after)).toEqual({ c1: 0, v1: 1, a1: 2 });
+    expect(result.events.map((event) => `${event.action}:${event.objectId}`).sort()).toEqual(['MOVE_TRACK:c1', 'UPDATE_TRACK:a1', 'UPDATE_TRACK:v1']);
+    // 超出范围的位置落到末尾
+    expect(positions(applyKernelResult(s, apply(s, { op: 'move_track', trackId: 'v1', position: 99 })))).toEqual({ a1: 0, c1: 1, v1: 2 });
+  });
+
   it('update_track 改 position 按重排语义落位（修复：目标轨位置不再漏写）', () => {
     const s = state();
     const result = apply(s, { op: 'update_track', trackId: 'c1', changes: { position: 0, muted: true } });
@@ -99,6 +109,19 @@ describe('片段参数、AV 链接与 update_clip', () => {
     const after = applyKernelResult(s, apply(s, { op: 'set_clip_opacity', clipId: 'x', opacity: 0.3 }));
     expect((after.clips[0]!.parameters as { opacity: number }).opacity).toBe(0.3);
     expect(rangeToTicks(after.clips[0]!.sequenceRange, MS)).toEqual({ start: 0n, end: 1_000n });
+  });
+
+  it('set_clip_transform：合并到既有参数（保留透明度），不改时间；STYLE 锁阻止', () => {
+    const s = state({ clips: [clip('x', 'v1', r(0, 1_000))] });
+    const withOpacity = applyKernelResult(s, apply(s, { op: 'set_clip_opacity', clipId: 'x', opacity: 0.5 }));
+    const transform = { position: { x: 0.1, y: -0.05 }, scale: { x: 1.5, y: 1.5 }, rotationDeg: 30, anchor: { x: 0.5, y: 0.5 } };
+    const result = apply(withOpacity, { op: 'set_clip_transform', clipId: 'x', transform });
+    expect(result.events.map((event) => event.action)).toEqual(['SET_CLIP_TRANSFORM']);
+    const after = applyKernelResult(withOpacity, result);
+    expect(after.clips[0]!.parameters).toMatchObject({ transform, opacity: 0.5 });
+    expect(rangeToTicks(after.clips[0]!.sequenceRange, MS)).toEqual({ start: 0n, end: 1_000n });
+    const locked = state({ clips: [clip('x', 'v1', r(0, 1_000))], locks: new Map([['CLIP:x', ['STYLE']]]) });
+    expect(() => apply(locked, { op: 'set_clip_transform', clipId: 'x', transform })).toThrow(ApiFailure);
   });
 
   it('set_av_link：一视频一音频且时长相等才能关联', () => {

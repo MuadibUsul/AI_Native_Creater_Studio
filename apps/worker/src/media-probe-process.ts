@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { mediaProbeResultSchema, type MediaProbeResult, type RenderMediaProbe } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 /**
  * 进程隔离的媒体探测（P07-05 QA 生产装配；与渲染执行器/验证器同一范式）。
@@ -61,7 +62,7 @@ export function createProcessMediaProbe(options: ProcessMediaProbeOptions = {}):
       const mediaPath = path.join(workDir, 'artifact.bin');
       try {
         await writeFile(mediaPath, input.bytes);
-        const child = spawn(executable, [...command.slice(1), '--file', mediaPath], { cwd, env: { ...process.env, NODE_OPTIONS: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn(executable, [...command.slice(1), '--file', mediaPath], { cwd, env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'] });
         let stdout = '';
         let stderr = '';
         const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {

@@ -9,7 +9,7 @@ import {
   type SpeechProfileVersion,
 } from '@ancs/contracts';
 import { speechProfileVersions, speechProfiles } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * SpeechProfile 服务（P01-04 / 规范 §6.4）。

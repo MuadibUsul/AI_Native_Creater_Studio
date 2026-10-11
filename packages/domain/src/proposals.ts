@@ -35,7 +35,7 @@ import {
   type SubmitProposalArtifactRequest,
 } from '@ancs/contracts';
 import { editEvents, projects, proposalArtifacts, proposalTrials, proposals, sequenceClips, selectionAnchors } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assertProtectedContentStable, type ClipDigests, clipDigestsOf } from './content-protection.js';
 import { processEdits } from './edits.js';
 import { runEditTrial, type EditTrialOutcome } from './edit-trial.js';

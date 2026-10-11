@@ -116,6 +116,8 @@ export interface BuildServerOptions {
   voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
   /** N05-01 实时语音会话：短期凭证签名密钥（未配置 → 创建会话 501 fail-closed） */
   voice?: { sessionSecret?: string };
+  /** 本进程装配的外部能力驱动清单（V5-M3；经 /capabilities 报告实现种类，客户端据此显示 Mock 标识） */
+  providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
@@ -134,7 +136,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       options.logger === true || (typeof options.logger === 'object' && options.logger !== null)
         ? {
             ...(typeof options.logger === 'object' && options.logger !== null ? options.logger : {}),
-            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], censor: '[REDACTED]' },
+            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-voice-session-token"]', 'res.headers["set-cookie"]'], censor: '[REDACTED]' },
           }
         : (options.logger ?? false),
     // 请求追踪（§33）：客户端可提供合法 X-Request-Id，否则服务端生成
@@ -218,13 +220,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerSelectionRoutes(instance, authDeps);
         registerProposalRoutes(instance, authDeps);
-        // N05-01：语音会话签名密钥来自环境（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
+        // N05-01：语音会话签名密钥由入口从已校验配置注入（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
         registerVoiceSessionRoutes(instance, authDeps, {
-          ...(options.voice?.sessionSecret !== undefined
-            ? { sessionSecret: options.voice.sessionSecret }
-            : process.env['ANCS_VOICE_SESSION_SECRET'] === undefined
-              ? {}
-              : { sessionSecret: process.env['ANCS_VOICE_SESSION_SECRET'] }),
+          ...(options.voice?.sessionSecret !== undefined ? { sessionSecret: options.voice.sessionSecret } : {}),
         });
         registerMixdownRoutes(instance, authDeps);
         registerNativeFallbackRoutes(instance, authDeps);
@@ -274,7 +272,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance);
-      registerCapabilityRoutes(instance, { extensions });
+      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [] });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);
       }

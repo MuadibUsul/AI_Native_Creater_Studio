@@ -12,7 +12,7 @@ import {
 } from '@ancs/contracts';
 import { isKernelTimelineOperation, type KernelTimelineOperation } from '@ancs/kernel';
 import { projectObjectLocks, projects, scenes, sequenceClips } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { validateEditOperationCandidate } from './edit-operation-registry.js';
 import { processEdits, versionConflict } from './edits.js';
 import { simulateKernelBatch } from './kernel-timeline.js';

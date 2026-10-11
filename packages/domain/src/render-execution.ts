@@ -26,7 +26,7 @@ import {
   type StagedAsset,
 } from '@ancs/contracts';
 import { assetVersions, assets, projectVersions, renders } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getMasterNarrationById } from './alignment.js';
 import { captionCuesOf } from './mixdown.js';
 import { canTransitionRender, getRender, transitionRender } from './render.js';

@@ -12,7 +12,7 @@ import {
   type JobStatus,
 } from '@ancs/contracts';
 import { jobDependencies, jobs, outboxEvents, workspaces } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { workspaceRestrictedFailure } from './security-ops.js';
 
 /**

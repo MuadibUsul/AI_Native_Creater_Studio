@@ -16,7 +16,7 @@ import {
   type WorkspaceRole,
 } from '@ancs/contracts';
 import { isUniqueViolation, user, workspaceInvitations, workspaceMembers, workspaces } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getWorkspaceEntitlement } from './plans.js';
 
 /**

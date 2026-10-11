@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { providerInventoryEntrySchema } from './provider-kind.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { distributionProviderRegistrationSchema } from './publishing.js';
@@ -237,6 +238,8 @@ export type CapabilitySnapshot = z.infer<typeof capabilitySnapshotSchema>;
 /** /capabilities 响应：快照 + 可选的目标输出格式可用性查询 */
 export const capabilitiesResponseSchema = capabilitySnapshotSchema.extend({
   outputFormatAvailability: capabilityAvailabilitySchema.nullable().default(null),
+  /** 本进程装配的外部能力驱动及其种类（V5-M3；客户端据此显示 Mock 标识） */
+  providers: providerInventoryEntrySchema.array().default([]),
 });
 
 export type CapabilitiesResponse = z.infer<typeof capabilitiesResponseSchema>;

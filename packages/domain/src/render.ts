@@ -18,7 +18,7 @@ import { scheduleCmsWritebackInTx } from './cms.js';
 import { assertRenderProfileAllowed, resolveRenderPriority } from './plans.js';
 import { createProjectVersionInTx } from './versions.js';
 import { listProjectCompositionObjects } from './composition-objects.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Render Snapshot 服务（P07-03 / 规范 §28、§39；计划 §4.5）。

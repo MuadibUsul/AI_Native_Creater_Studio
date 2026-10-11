@@ -27,7 +27,7 @@ import {
   mediaTranscriptRuns,
   mediaTranscriptVersions,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 type Query = {
   kind?: UnifiedMediaIndexKind;

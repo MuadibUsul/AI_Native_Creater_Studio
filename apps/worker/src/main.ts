@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { claimJob, runMaintenanceTick } from '@ancs/domain';
-import { crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue } from '@ancs/contracts';
+import { claimJob, configureDeploymentPolicy, runMaintenanceTick } from '@ancs/domain';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -13,6 +13,7 @@ import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 import { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
+import { createDeepgramSpeechRecognitionAdapter } from './deepgram-speech-recognition.js';
 import { createProcessMediaVisualAnalysisAdapter } from './visual-analysis-process.js';
 import { createProcessMediaAudioAnalysisAdapter } from './audio-analysis-process.js';
 
@@ -57,21 +58,53 @@ const databaseUrl = config.DATABASE_URL;
 
 const once = config.ANCS_WORKER_ONCE === '1' || process.argv.includes('--once');
 /** 故障注入（P03-02）：在关键阶段退出进程，用于演练"杀 Worker 后可继续" */
-const crashAt = process.env['ANCS_WORKER_CRASH_AT'] ?? '';
-const workerId = process.env['ANCS_WORKER_ID'] ?? `${hostname()}-${String(process.pid)}`;
-const tickIntervalMs = Number(process.env['ANCS_WORKER_TICK_MS'] ?? 1000);
-const leaseSeconds = Number(process.env['ANCS_WORKER_LEASE_SECONDS'] ?? 60);
-const heartbeatIntervalMs = Number(process.env['ANCS_WORKER_HEARTBEAT_MS'] ?? Math.max(1000, (leaseSeconds * 1000) / 3));
+const crashAt = config.ANCS_WORKER_CRASH_AT ?? '';
+const workerId = config.ANCS_WORKER_ID ?? `${hostname()}-${String(process.pid)}`;
+// 数值在 env schema 中带上下界校验：非法值启动即失败（不再出现 NaN 租约）
+const tickIntervalMs = config.ANCS_WORKER_TICK_MS;
+const leaseSeconds = config.ANCS_WORKER_LEASE_SECONDS;
+const heartbeatIntervalMs = config.ANCS_WORKER_HEARTBEAT_MS ?? Math.max(1000, (leaseSeconds * 1000) / 3);
 
+// 部署策略一次性注入领域层（领域层不读 process.env）
+configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
 const handle = createDb(databaseUrl);
-const deps = createDomainDeps(handle);
-const sourceMediaProbe = createFfmpegSourceMediaProbe();
-const sourceMediaTranscoder = createFfmpegMediaProxyTranscoder();
-const sourceMediaIndexer = createFfmpegMediaIndexer();
-const speechRecognitionAdapter = config.ANCS_ASR_EXECUTABLE === undefined ? undefined : createProcessSpeechRecognitionAdapter({
-  executable: config.ANCS_ASR_EXECUTABLE,
-  args: config.ANCS_ASR_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_ASR_ARGS_JSON) as string[],
-});
+const deps = createDomainDeps(handle, config);
+const ffmpegPaths = {
+  ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+  ...(config.ANCS_FFPROBE_PATH === undefined ? {} : { ffprobePath: config.ANCS_FFPROBE_PATH }),
+};
+const commandOf = (value: string | undefined): { command?: string[] } => (value === undefined ? {} : { command: value.trim().split(/\s+/) });
+const sourceMediaProbe = createFfmpegSourceMediaProbe(ffmpegPaths);
+const sourceMediaTranscoder = createFfmpegMediaProxyTranscoder(ffmpegPaths);
+const sourceMediaIndexer = createFfmpegMediaIndexer(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH });
+/**
+ * ASR（V5-M3：Deepgram 进入正式路径）。驱动由 ANCS_ASR_DRIVER 显式选择；deepgram 缺密钥在 env 校验中启动失败。
+ * 付费调用不自动重试：转写任务 maxAttempts = 1（失败后由用户显式重跑）。
+ */
+const asrDriver = config.ANCS_ASR_DRIVER ?? (config.ANCS_ASR_EXECUTABLE === undefined ? undefined : 'process');
+const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API_KEY !== undefined
+  ? createDeepgramSpeechRecognitionAdapter({
+    apiKey: config.DEEPGRAM_API_KEY,
+    ...(config.ANCS_DEEPGRAM_MODEL === undefined ? {} : { model: config.ANCS_DEEPGRAM_MODEL }),
+    ...(config.ANCS_DEEPGRAM_LANGUAGE === undefined ? {} : { language: config.ANCS_DEEPGRAM_LANGUAGE }),
+  })
+  : asrDriver === 'process' && config.ANCS_ASR_EXECUTABLE !== undefined
+    ? createProcessSpeechRecognitionAdapter({
+      executable: config.ANCS_ASR_EXECUTABLE,
+      args: config.ANCS_ASR_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_ASR_ARGS_JSON) as string[],
+    })
+    : undefined;
+
+/** 装配清单与生产守卫（V5-M3，§11.3）：Worker 当前装配的外部能力驱动均为真实实现或运维配置的子进程。 */
+const providerInventory: ProviderInventoryEntry[] = [
+  ...(asrDriver === undefined ? [] : [{ capability: 'asr', driver: asrDriver, implementation: 'REAL' as const }]),
+];
+const inventoryIssues = checkProviderInventory(config, providerInventory);
+if (inventoryIssues.length > 0) {
+  console.error(formatEnvFailure('worker', inventoryIssues));
+  process.exit(1);
+}
+console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
 const mediaVisualAnalysisAdapter = config.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined ? undefined : createProcessMediaVisualAnalysisAdapter({
   executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,
   args: config.ANCS_VISUAL_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_VISUAL_ANALYSIS_ARGS_JSON) as string[],
@@ -83,12 +116,12 @@ const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === unde
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =
-  process.env['ANCS_DISABLE_RENDER'] === '1'
+  config.ANCS_DISABLE_RENDER === '1'
     ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder, sourceMediaIndexer, speechRecognitionAdapter, mediaVisualAnalysisAdapter, mediaAudioAnalysisAdapter })
     : createDefaultRegistry({
-        renderExecutor: createProcessRenderExecutor(),
-        motionValidator: createProcessMotionValidator(),
-        mediaProbe: createProcessMediaProbe(),
+        renderExecutor: createProcessRenderExecutor(commandOf(config.ANCS_RENDER_EXECUTOR_CMD)),
+        motionValidator: createProcessMotionValidator(commandOf(config.ANCS_MOTION_VALIDATOR_CMD)),
+        mediaProbe: createProcessMediaProbe(commandOf(config.ANCS_MEDIA_PROBE_CMD)),
         sourceMediaProbe,
         sourceMediaTranscoder,
         sourceMediaIndexer,

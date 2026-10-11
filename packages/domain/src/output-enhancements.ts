@@ -13,7 +13,7 @@ import {
   type RenderOutputEnhancements,
 } from '@ancs/contracts';
 import { assetVersions, assets, projectSources, projectVersions, projects } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { chooseThumbnailFrameMs } from './render-execution.js';
 import { getRender } from './render.js';
 import { getLatestRenderApproval } from './approval.js';

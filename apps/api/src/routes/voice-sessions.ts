@@ -19,6 +19,8 @@ import {
   getVoiceSession,
   revokeVoiceSession,
   sealUtterance,
+  VOICE_SESSION_CREDENTIAL_HEADER,
+  verifyVoiceSessionCredential,
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
@@ -79,6 +81,32 @@ export function registerVoiceSessionRoutes(app: FastifyInstance, deps: AuthDeps,
       return getVoiceSession(domain, {
         workspaceId: request.params.id, projectId: request.params.projectId, sessionId: request.params.sessionId,
       });
+    },
+  );
+
+  /**
+   * V5-M3：以**短期会话凭证**（`X-Voice-Session-Token`）提交流式事件——实时通道（中继/旁路）不持有用户会话 Cookie。
+   * 凭证只对签发它的会话与代际有效；伪造/缺失 401，撤销/过期/关闭 409；作用域取自会话本身，不信任客户端。
+   * 凭证不能用于封存、关闭或任何其他端点（这些仍要求用户身份与 project:write）。
+   */
+  typed.post(
+    '/voice-sessions/:sessionId/stream-events',
+    {
+      schema: {
+        tags: ['projects'],
+        summary: '以短期会话凭证提交流式事件（实时通道；只写会话草稿）',
+        params: z.object({ sessionId: opaqueIdSchema }),
+        body: appendVoiceEventRequestSchema,
+        response: { 200: appendVoiceEventResponseSchema, ...ERROR_RESPONSES, 501: errorEnvelopeSchema },
+      },
+    },
+    async (request) => {
+      const header = request.headers[VOICE_SESSION_CREDENTIAL_HEADER];
+      const scope = await verifyVoiceSessionCredential(domain, {
+        sessionId: request.params.sessionId,
+        token: typeof header === 'string' ? header : undefined,
+      });
+      return appendVoiceEvent(domain, { ...scope, envelope: request.body.event });
     },
   );
 

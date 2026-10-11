@@ -29,7 +29,7 @@ import {
   sequenceClips,
   sequenceTracks,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * N03-08 多轨媒体预览与真实合成：**播放快照**投影。

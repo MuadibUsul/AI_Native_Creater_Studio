@@ -48,7 +48,7 @@ import {
   sequenceClips,
   sequenceTracks,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { inOrder } from './in-order.js';
 import { writeCompositionDirect } from './composition-projector.js';
 import { loadProjectRow } from './projects.js';

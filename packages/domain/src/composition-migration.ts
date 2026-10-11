@@ -30,7 +30,7 @@ import {
   projectVersions,
   projects,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { CompositionProjector } from './composition-projector.js';
 import { assembleSceneGraph } from './projects.js';
 

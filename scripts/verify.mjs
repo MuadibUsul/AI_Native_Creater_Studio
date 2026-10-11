@@ -15,6 +15,7 @@ const steps = [
   'typecheck',
   'build',
   'arch:check',
+  'capabilities:check',
   'test:unit',
   'test:web',
   'test:motion',

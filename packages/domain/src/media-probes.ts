@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { ApiFailure, ERROR_CODES, sourceMediaProbeResultSchema, type SourceMediaProbeResult } from '@ancs/contracts';
 import { assetVersions, assets } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { scheduleMediaProxyInTx } from './media-proxies.js';
 import { scheduleMediaIndexInTx } from './media-index.js';
 import { scheduleMediaTranscriptInTx } from './media-transcripts.js';

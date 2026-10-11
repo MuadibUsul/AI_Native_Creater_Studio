@@ -15,7 +15,7 @@ import {
   type GenerateFinanceArtifactRequest,
 } from '@ancs/contracts';
 import { financeArtifacts, financeDataSources, financeTemplates } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const sourceDto = (row: typeof financeDataSources.$inferSelect): FinanceDataSource => financeDataSourceSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
 const templateDto = (row: typeof financeTemplates.$inferSelect): FinanceTemplate => financeTemplateSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });

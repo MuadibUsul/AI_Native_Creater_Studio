@@ -13,7 +13,7 @@ import {
   type RegressionStatus,
 } from '@ancs/contracts';
 import { contentProtections, projects, sequenceClips } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * N06-07：已确认内容保护与回归指纹。

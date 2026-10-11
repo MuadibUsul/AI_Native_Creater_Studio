@@ -38,7 +38,7 @@ import {
   type LicenseMetadata,
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, scenes, uploadIntents, uploadParts } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { createJobInTx } from './jobs.js';
 import { assertStorageQuota } from './plans.js';
 

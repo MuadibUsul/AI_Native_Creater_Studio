@@ -14,7 +14,7 @@ import {
   type ContentCoreState,
 } from '@ancs/contracts';
 import { claims, contentBlocks, contentCores, contentDocuments, projectSources } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Content Core 迁移（P11-01 / 规范 §92—93；计划 §8）。

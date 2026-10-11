@@ -16,7 +16,7 @@ import {
   type ContentAtom,
 } from '@ancs/contracts';
 import { channelRecipes, claims, contentAtoms, projectSources } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getProjectContentCoreState } from './content-core.js';
 
 /**

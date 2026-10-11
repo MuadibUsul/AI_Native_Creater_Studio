@@ -24,7 +24,7 @@ import {
 } from '@ancs/contracts';
 import { contentBlocks, contentDocuments, projectSources, projects } from '@ancs/db';
 import { assertSafeUrl, decodeContentBytes, detectLanguage, extractBlocksFromHtml, extractBlocksFromText } from './content-extract.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 内容归一化服务（P04-01 / 规范 §7；计划 P04-01）。

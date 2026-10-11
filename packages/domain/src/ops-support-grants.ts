@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { opaqueIdSchema, opsSupportGrantListQuerySchema, opsSupportGrantSummarySchema, type OpsSupportGrantSummary } from '@ancs/contracts';
 import { supportAccessGrants } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /** The caller must supply the current, authenticated ops principal and authorize this ticket. */
 export async function listOpsSupportGrantsForTicket(

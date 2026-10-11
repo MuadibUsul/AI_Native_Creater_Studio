@@ -87,6 +87,8 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     ANCS_OPS_ENVIRONMENT: 'PRODUCTION',
     // 生产必须显式配置凭据信封密钥（见 0010：不得与会话密钥共用一把）
     ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, // secrets:check-ignore：测试专用假密钥（非真实凭据）
+    // 生产必须显式配置存储签名密钥（V5-M3：不得从会话密钥派生）
+    ANCS_STORAGE_SECRET: 'S'.repeat(32), // secrets:check-ignore：测试专用假密钥（非真实凭据）
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -127,3 +129,56 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     expect(result.issues.find((issue) => issue.variable === 'ANCS_SAAS_MODE')?.message).toContain('仅支持 internal | live');
   });
 });
+
+describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值', () => {
+  const secret = 'S'.repeat(32); // secrets:check-ignore：测试专用假密钥（非真实凭据）
+
+  it('生产 API/Worker 未显式配置存储签名密钥 → 启动失败；配置后通过', () => {
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_SECRET']);
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production' });
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_CREDENTIAL_KEYS', 'ANCS_STORAGE_SECRET']);
+    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    expect(crossCheckWorkerEnv(fixed.value!)).toEqual([]);
+  });
+
+  it('旧变量名 PLATFORM_PROVIDER_KEYS 从未生效 → 启动失败并提示改名（不静默忽略凭据配置）', () => {
+    const result = validateEnv(apiEnvSchema, { ...validApiEnv, PLATFORM_PROVIDER_KEYS: 'openai:sk-test' });
+    expect(crossCheckApiEnv(result.value!).find((issue) => issue.variable === 'PLATFORM_PROVIDER_KEYS')?.message).toContain('ANCS_PLATFORM_PROVIDER_KEYS');
+    const renamed = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_PLATFORM_PROVIDER_KEYS: 'openai:sk-test' });
+    expect(crossCheckApiEnv(renamed.value!)).toEqual([]);
+  });
+
+  it('Worker 数值配置按上下界校验（非法值启动失败，不再变成 NaN 租约）；心跳必须短于租约', () => {
+    const bad = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_LEASE_SECONDS: 'abc', ANCS_WORKER_TICK_MS: '10' });
+    expect(bad.issues.map((issue) => issue.variable).sort()).toEqual(['ANCS_WORKER_LEASE_SECONDS', 'ANCS_WORKER_TICK_MS']);
+    const defaults = validateEnv(workerEnvSchema, validApiEnv);
+    expect(defaults.value).toMatchObject({ ANCS_WORKER_TICK_MS: 1000, ANCS_WORKER_LEASE_SECONDS: 60 });
+    const slowHeartbeat = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_LEASE_SECONDS: '10', ANCS_WORKER_HEARTBEAT_MS: '10000' });
+    expect(crossCheckWorkerEnv(slowHeartbeat.value!).map((issue) => issue.variable)).toEqual(['ANCS_WORKER_HEARTBEAT_MS']);
+  });
+
+  it('ASR 驱动显式选择：deepgram 缺密钥 / process 缺可执行文件 → 启动失败', () => {
+    const deepgram = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'deepgram' });
+    expect(crossCheckWorkerEnv(deepgram.value!).map((issue) => issue.variable)).toEqual(['DEEPGRAM_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'deepgram', DEEPGRAM_API_KEY: 'k'.repeat(40) }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    const process = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(process.value!).map((issue) => issue.variable)).toEqual(['ANCS_ASR_EXECUTABLE']);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'whisper' }).ok).toBe(false);
+  });
+
+  it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {
+    const blankOptional = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: '', ANCS_STORAGE_SECRET: '  ', ANCS_PLATFORM_PROVIDER_KEYS: '' });
+    expect(blankOptional.ok).toBe(true);
+    expect(blankOptional.value?.ANCS_VOICE_SESSION_SECRET).toBeUndefined();
+    const blankRequired = validateEnv(apiEnvSchema, { ...validApiEnv, DATABASE_URL: '' });
+    expect(blankRequired.issues.map((issue) => issue.variable)).toEqual(['DATABASE_URL']);
+  });
+
+  it('语音会话签名密钥纳入 API 配置校验（过短即失败）', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: 'short' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_VOICE_SESSION_SECRET']);
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: secret }).ok).toBe(true);
+  });
+});
+

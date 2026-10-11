@@ -22,7 +22,7 @@ import { getCreatorIdentity } from './creator-identities.js';
 import { getPlan } from './narrative.js';
 import { getProject } from './projects.js';
 import { planSpeech } from './speech-plan.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Master Narration 与 Alignment 服务（P06-03 / 规范 §5.1、§58）。

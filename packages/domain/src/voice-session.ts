@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import {
   ApiFailure,
@@ -19,7 +19,7 @@ import {
   type VoiceTransport,
 } from '@ancs/contracts';
 import { projectSequences, projects, voiceSessions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getSelectionAnchor } from './selection.js';
 
 /**
@@ -171,6 +171,42 @@ export async function createVoiceSession(deps: DomainDeps, input: {
     session: toSession(row),
     credential: { kind: 'EPHEMERAL_SESSION', token, scopes: ['voice:stream', 'voice:tools'], expiresAt: row.expiresAt.toISOString() },
   };
+}
+
+/** 凭证头名（API 与客户端共用；日志中脱敏）。 */
+export const VOICE_SESSION_CREDENTIAL_HEADER = 'x-voice-session-token';
+
+/**
+ * 校验短期会话凭证（V5-M3；代码审查 P1-4：此前凭证签发后从未被校验）。
+ *
+ * - 由会话行重算签名（会话 id + 代际 + 过期时间），恒定时间比较——凭证只对**签发它的那个会话与代际**有效；
+ * - 签名不符/缺失/会话不存在一律 401 `VOICE_CREDENTIAL_INVALID`（不区分原因，避免探测会话是否存在）；
+ * - 签名有效后再过会话门：撤销/关闭/过期 → 409（与按用户身份访问时相同的领域错误）；
+ * - 返回会话的租户与工程作用域，调用方据此执行流式写入（不信任客户端传入的作用域）。
+ */
+export async function verifyVoiceSessionCredential(deps: DomainDeps, input: {
+  sessionId: string;
+  token: string | undefined;
+}): Promise<{ workspaceId: string; projectId: string; sessionId: string; generation: number }> {
+  const invalid = (): ApiFailure => new ApiFailure(ERROR_CODES.UNAUTHENTICATED, 'voice session credential is invalid', 401, {
+    reason: VOICE_ERROR_REASONS.CREDENTIAL_INVALID,
+  });
+  const secret = deps.voiceSessionSecret;
+  if (secret === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'voice session signing secret is not configured', 501, {
+      reason: VOICE_ERROR_REASONS.CREDENTIAL_UNAVAILABLE,
+    });
+  }
+  if (input.token === undefined || input.token.length === 0 || input.token.length > 256) throw invalid();
+  const rows = await deps.db.select().from(voiceSessions).where(eq(voiceSessions.id, input.sessionId)).limit(1);
+  const row = rows[0];
+  if (row === undefined) throw invalid();
+  const { token: expected } = signCredential(deps, row.id, row.expiresAt, row.generation);
+  const presented = Buffer.from(input.token, 'utf8');
+  const wanted = Buffer.from(expected, 'utf8');
+  if (presented.length !== wanted.length || !timingSafeEqual(presented, wanted)) throw invalid();
+  assertSessionOpen(row);
+  return { workspaceId: row.workspaceId, projectId: row.projectId, sessionId: row.id, generation: row.generation };
 }
 
 export async function getVoiceSession(deps: DomainDeps, input: {

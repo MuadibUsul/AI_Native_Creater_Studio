@@ -15,7 +15,7 @@ import {
   type PaymentProvider,
 } from '@ancs/contracts';
 import { billingEvents, workspaceBillingStates } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx, getActivePlanVersion } from './plans.js';
 import { applyCreditPurchaseInTx } from './credits.js';
 

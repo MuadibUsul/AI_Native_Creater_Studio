@@ -6,7 +6,7 @@ export {
   listChannels,
   updateChannel,
 } from './channels.js';
-export type { DomainDeps } from './channels.js';
+export type { DomainDeps } from './deps.js';
 export { getUserAppearance, setUserAppearance } from './appearance.js';
 export {
   createCreatorIdentity,
@@ -441,6 +441,7 @@ export {
 export type { ClipDigests } from './content-protection.js';
 export {
   VOICE_ADAPTER_CAPABILITIES,
+  VOICE_SESSION_CREDENTIAL_HEADER,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,
   closeVoiceSession,
@@ -451,6 +452,7 @@ export {
   resolveVoiceCapabilities,
   revokeVoiceSession,
   sealUtterance,
+  verifyVoiceSessionCredential,
 } from './voice-session.js';
 export { alignVoiceUtterance, negotiateVoiceSessionCapabilities } from './voice-alignment.js';
 export type { AlignVoiceUtteranceInput } from './voice-alignment.js';
@@ -629,3 +631,5 @@ export {
   listAssets,
   sanitizeFilename,
 } from './assets.js';
+export { configureDeploymentPolicy, deploymentPolicy } from './deployment-policy.js';
+export type { DeploymentPolicy } from './deployment-policy.js';

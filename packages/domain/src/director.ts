@@ -27,7 +27,7 @@ import { processEdits } from './edits.js';
 import { getPlan } from './narrative.js';
 import { getProject } from './projects.js';
 import { planVisual } from './visual-plan.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getMediaEvidenceBundle } from './media-evidence.js';
 
 /**

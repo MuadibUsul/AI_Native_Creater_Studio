@@ -23,7 +23,7 @@ import {
   type AudioRegion,
 } from '@ancs/contracts';
 import { projectObjectLocks, projects } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assembleSceneGraph } from './projects.js';
 import { listProjectComposition } from './composition.js';
 import { listProjectCompositionObjects } from './composition-objects.js';

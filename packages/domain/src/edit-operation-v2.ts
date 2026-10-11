@@ -20,7 +20,7 @@ import {
   type SourceEditOperationType,
 } from '@ancs/contracts';
 import { compositionAnimationBindings } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { processEdits, type ProcessEditsInput, type ProcessEditsResult } from './edits.js';
 
 export const EDIT_OPERATION_V2_ERROR_REASONS = {

@@ -19,7 +19,7 @@ import {
 import { assetVersions, assets, outboxEvents, providerResultStates, webhookEvents } from '@ancs/db';
 import { completeProviderGeneration, recordProviderGeneration, settleHold } from './billing.js';
 import { loadJobRow, transitionJob } from './jobs.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Provider 结果回收与 Webhook 处理（P03-06 / 规范 §30、§31、§33.4；计划 §5.5、§5.6）。

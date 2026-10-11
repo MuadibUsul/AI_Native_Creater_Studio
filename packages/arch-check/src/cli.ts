@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import { checkProjectionWriters, checkRules, checkSourcePurity, type SourceFile } from './rules.js';
+import { NO_PROCESS_ENV_SOURCE_DIRS, checkNoProcessEnv, checkProjectionWriters, checkRules, checkSourcePurity, type SourceFile } from './rules.js';
 import { scanWorkspace } from './scan.js';
 
 const root = resolve(process.argv[2] ?? process.cwd());
@@ -42,10 +42,14 @@ violations.push(...checkSourcePurity(sources));
 const allSources = await collectSources(['apps', 'packages'], ['.ts', '.tsx']);
 violations.push(...checkProjectionWriters(allSources));
 
+/** R12：业务包源码 */
+const businessSources = await collectSources(NO_PROCESS_ENV_SOURCE_DIRS, ['.ts', '.tsx']);
+violations.push(...checkNoProcessEnv(businessSources));
+
 const list = pkgs.length > 0 ? pkgs.map((p) => p.dir).join(', ') : '（尚未创建 workspace 包）';
 console.log(`[arch-check] 根目录：${root}`);
 console.log(`[arch-check] 扫描到 ${pkgs.length} 个 workspace 包：${list}`);
-console.log(`[arch-check] 纯核心源码（R10）：${String(sources.length)} 个文件；投影写入检查（R11）：${String(allSources.length)} 个文件`);
+console.log(`[arch-check] 纯核心源码（R10）：${String(sources.length)} 个文件；投影写入检查（R11）：${String(allSources.length)} 个文件；业务包环境读取（R12）：${String(businessSources.length)} 个文件`);
 
 if (violations.length > 0) {
   for (const v of violations) {
@@ -55,4 +59,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log('[arch-check] 依赖方向与纯核心检查通过（R1—R11）。');
+console.log('[arch-check] 依赖方向与纯核心检查通过（R1—R12）。');

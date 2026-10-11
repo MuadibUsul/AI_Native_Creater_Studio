@@ -19,7 +19,7 @@ import {
   type ObjectLockDimension,
 } from '@ancs/contracts';
 import { editEvents, projects, scenes } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { contentToChanges, processEdits, type ProcessEditsResult, type SceneContentSnapshot } from './edits.js';
 
 /**

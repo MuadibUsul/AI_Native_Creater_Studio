@@ -10,7 +10,7 @@ import {
   type ExportPackageRecord,
 } from '@ancs/contracts';
 import { exportPackages } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assertPublicationApproval } from './publications.js';
 
 /**

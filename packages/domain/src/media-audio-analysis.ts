@@ -12,7 +12,7 @@ import {
   type MediaAudioAnalysisJobInput,
 } from '@ancs/contracts';
 import { assets, assetVersions, mediaIndexEntries, mediaIndexRuns } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { createJobInTx } from './jobs.js';
 
 type DomainTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];

@@ -9,6 +9,7 @@ import {
   type MediaStreamProbe,
   type SourceMediaIndexer,
 } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 export interface FfmpegMediaIndexerOptions { ffmpegPath?: string; timeoutMs?: number; maxOutputBytes?: number }
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -16,7 +17,7 @@ const DEFAULT_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 async function run(input: { executable: string; args: string[]; timeoutMs: number; maxOutputBytes: number; binary?: boolean }): Promise<{ code: number | null; stdout: Buffer; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(input.executable, input.args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(input.executable, input.args, { env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const chunks: Buffer[] = [];
     let stderr = '';
     let bytes = 0;

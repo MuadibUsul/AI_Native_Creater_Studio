@@ -62,7 +62,15 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_OPS_ENVIRONMENT` | 未配置则运营面关闭 | 开发可显式设 `DEVELOPMENT`；生产进程必须显式设 `PRODUCTION`；`TEST` principal 不可登录生产运营面 |
 | `ANCS_OPS_IDLE_SECONDS` / `ANCS_OPS_ABSOLUTE_SECONDS` / `ANCS_OPS_REAUTH_SECONDS` | `900` / `28800` / `300` | 独立运营会话空闲、绝对和敏感操作重验时限（秒） |
 | `ANCS_WEBHOOK_SECRETS` | — | Provider 回调验签密钥（JSON） |
-| `REMOTION_BROWSER_EXECUTABLE` | 自动检测 | 指定 Chrome/Headless Shell 可执行文件 |
+| `REMOTION_BROWSER_EXECUTABLE` | 自动检测 | 指定 Chrome/Headless Shell 可执行文件（新版 Chrome 已移除旧 Headless 模式，需指向 `chrome-headless-shell`） |
+| `ANCS_PLATFORM_PROVIDER_KEYS` | — | 平台托管 Provider 凭据（`供应商:密钥,…`）。旧名 `PLATFORM_PROVIDER_KEYS` 从未生效，配置即启动失败并提示改名 |
+| `ANCS_VOICE_SESSION_SECRET` | 未配置则创建语音会话 501 | 语音会话短期凭证签名密钥（≥32；与其他密钥独立） |
+| `ANCS_ASR_DRIVER` | 有 `ANCS_ASR_EXECUTABLE` 则 `process`，否则不装配 | Worker ASR：`deepgram`（需 `DEEPGRAM_API_KEY`，缺失启动失败）或 `process` |
+| `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动（当前 LLM/TTS/声音克隆/素材搜索/分发均为 Mock）必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告 |
+| `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
+
+生产（`NODE_ENV=production`）额外必填：`ANCS_CREDENTIAL_KEYS`（API 与 Worker 同一值）、`ANCS_STORAGE_SECRET`（API、Worker、清理 CLI 同一值；不得从会话密钥派生）、`ANCS_OPS_ENVIRONMENT=PRODUCTION`（API）。
+空白值（`VAR=`）视为未配置。Worker 的渲染/探测/Motion 验证/FFmpeg 子进程只继承平台必需环境变量（`PATH`、`HOME`、临时目录、语言）与 `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`，不继承连接串与密钥。
 
 密钥轮换：轮换 `BETTER_AUTH_SECRET` 会失效既有会话与本地存储签名 URL（TTL 15 分钟内的下载链接立即失效）；
 轮换存储签名密钥（未显式配置时由 `BETTER_AUTH_SECRET` 派生）同理会失效在途签名链接。轮换窗口与步骤见 P08-03。

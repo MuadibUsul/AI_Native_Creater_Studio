@@ -17,7 +17,7 @@ import {
   type ValidationResult,
 } from '@ancs/contracts';
 import { masterNarrations, podcastEpisodes, projectSources } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getCurrentMasterNarration, synthesizeMasterNarration } from './alignment.js';
 import { getPlan } from './narrative.js';
 

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { accessSync } from 'node:fs';
 import path from 'node:path';
 import { motionValidationReportSchema, type MotionValidator, type MotionValidationReport } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 /**
  * 进程隔离的 Motion 验证器（P07-02 生产装配；与渲染执行器同一范式）。
@@ -58,7 +59,7 @@ export function createProcessMotionValidator(options: ProcessMotionValidatorOpti
       if (executable === undefined) throw new Error('Motion 验证器命令为空');
       const cwd = options.cwd ?? findRepoRootForMotion(import.meta.dirname) ?? process.cwd();
 
-      const child = spawn(executable, command.slice(1), { cwd, env: { ...process.env, NODE_OPTIONS: '' }, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(executable, command.slice(1), { cwd, env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['pipe', 'pipe', 'pipe'] });
       let stdout = '';
       let stderr = '';
       const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {

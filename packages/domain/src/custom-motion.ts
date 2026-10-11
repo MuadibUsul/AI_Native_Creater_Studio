@@ -23,7 +23,7 @@ import {
   type MotionValidator,
 } from '@ancs/contracts';
 import { customMotionComponentVersions, customMotionComponents, jobs, scenes } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getProjectDetail } from './projects.js';
 import { createJob, getJob } from './jobs.js';
 import { assertCustomMotionBudget } from './plans.js';
