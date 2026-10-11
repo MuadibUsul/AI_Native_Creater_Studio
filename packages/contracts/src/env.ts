@@ -61,6 +61,20 @@ export function formatEnvFailure(app: string, issues: readonly EnvIssue[]): stri
 
 const nonEmpty = (label: string): z.ZodString => z.string().min(1, `${label} 未配置`);
 
+/**
+ * URL 的 origin（scheme://host[:port]，小写，省略默认端口）；不是 http(s) URL 返回 null。
+ * 不使用全局 `URL`：本包平台中立，编辑内核等纯核心包以无 DOM/Node 类型的配置编译它。
+ */
+export function originOf(value: string): string | null {
+  const match = /^(https?):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(?:[/?#].*)?$/i.exec(value.trim());
+  if (match === null) return null;
+  const scheme = match[1]!.toLowerCase();
+  const host = match[2]!.toLowerCase();
+  const port = match[3];
+  const defaultPort = scheme === 'https' ? '443' : '80';
+  return port === undefined || port === defaultPort ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
+}
+
 /** API 与 Worker 共用的基础连接配置。 */
 export const baseEnvShape = {
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
@@ -122,6 +136,18 @@ export const apiEnvSchema = z.object({
   ANCS_SAAS_MODE: z.enum(['internal', 'live'], { message: 'ANCS_SAAS_MODE 仅支持 internal | live' }).default('internal'),
   /** 生产进程装配 MOCK/SCRIPTED 驱动的显式许可（V5-M3；缺省 = 不允许，见 checkProviderInventory） */
   ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1'], { message: 'ANCS_ALLOW_MOCK_PROVIDERS 仅支持 0 | 1' }).optional(),
+  /**
+   * 允许的浏览器来源（逗号分隔的完整 origin；V5-M4 Edge）：CORS 白名单与带 Cookie 写请求的 Origin 校验。
+   * 缺省 = BETTER_AUTH_URL 的 origin（非生产另加 http://localhost:3000、http://127.0.0.1:3000）。
+   */
+  ANCS_ALLOWED_ORIGINS: z.string().refine(
+    (value) => value.split(',').map((item) => item.trim()).filter((item) => item !== '').every((item) => originOf(item) === item.replace(/\/+$/, '').toLowerCase()),
+    'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）',
+  ).optional(),
+  /** 前置可信代理跳数（0 = 不信任 X-Forwarded-For；按 IP 限流依赖它取得真实客户端地址） */
+  ANCS_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5, 'ANCS_TRUST_PROXY_HOPS ≤ 5').default(0),
+  /** 限流开关（生产不得关闭） */
+  ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
@@ -144,6 +170,9 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
       variable: 'ANCS_CREDENTIAL_KEYS',
       message: '生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（v1:<base64 32B>）——不得从 BETTER_AUTH_SECRET 派生',
     });
+  }
+  if (value.NODE_ENV === 'production' && value.ANCS_RATE_LIMIT === 'off') {
+    issues.push({ variable: 'ANCS_RATE_LIMIT', message: '生产环境不得关闭限流' });
   }
   if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_DRIVER === 'local' && value.ANCS_STORAGE_SECRET === undefined) {
     issues.push({
@@ -274,3 +303,13 @@ export const retentionCliEnvSchema = z.object({
 });
 
 export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
+
+/** Edge 允许的浏览器来源（V5-M4）：显式配置优先；否则 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 开发端口。 */
+export function resolveAllowedOrigins(value: Pick<ApiEnv, 'ANCS_ALLOWED_ORIGINS' | 'BETTER_AUTH_URL' | 'NODE_ENV' | 'PORT'>): string[] {
+  if (value.ANCS_ALLOWED_ORIGINS !== undefined) {
+    return value.ANCS_ALLOWED_ORIGINS.split(',').map((item) => item.trim().replace(/\/+$/, '')).filter((item) => item !== '');
+  }
+  const base = originOf(value.BETTER_AUTH_URL ?? `http://localhost:${String(value.PORT)}`) ?? `http://localhost:${String(value.PORT)}`;
+  return value.NODE_ENV === 'production' ? [base] : [...new Set([base, 'http://localhost:3000', 'http://127.0.0.1:3000'])];
+}
+

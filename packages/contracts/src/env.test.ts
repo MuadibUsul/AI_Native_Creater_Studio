@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -179,6 +179,35 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
   it('语音会话签名密钥纳入 API 配置校验（过短即失败）', () => {
     expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: 'short' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_VOICE_SESSION_SECRET']);
     expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: secret }).ok).toBe(true);
+  });
+});
+
+describe('V5-M4 Edge 配置', () => {
+  it('允许来源：显式配置优先（逐项必须是完整 origin）；缺省为 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 端口', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_ALLOWED_ORIGINS: 'https://app.example.com/path' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_ALLOWED_ORIGINS']);
+    const explicit = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_ALLOWED_ORIGINS: 'https://app.example.com, https://studio.example.com' }).value!;
+    expect(resolveAllowedOrigins(explicit)).toEqual(['https://app.example.com', 'https://studio.example.com']);
+    const production = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', BETTER_AUTH_URL: 'https://api.example.com/base' }).value!;
+    expect(resolveAllowedOrigins(production)).toEqual(['https://api.example.com']);
+    const development = validateEnv(apiEnvSchema, validApiEnv).value!;
+    expect(resolveAllowedOrigins(development)).toEqual(['http://localhost:3001', 'http://localhost:3000', 'http://127.0.0.1:3000']);
+  });
+
+  it('originOf：小写、省略默认端口、去掉路径；非 http(s) 为 null（平台中立，不依赖全局 URL）', () => {
+    expect(originOf('HTTPS://App.Example.com:443/path?q=1')).toBe('https://app.example.com');
+    expect(originOf('http://localhost:80')).toBe('http://localhost');
+    expect(originOf('http://127.0.0.1:3000/')).toBe('http://127.0.0.1:3000');
+    expect(originOf('http://[::1]:3000')).toBe('http://[::1]:3000');
+    expect(originOf('javascript:alert(1)')).toBeNull();
+    expect(originOf('ftp://example.com')).toBeNull();
+    expect(originOf('https://exa mple.com')).toBeNull();
+  });
+
+  it('生产不得关闭限流；可信代理跳数有上界', () => {
+    const off = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_RATE_LIMIT: 'off' }).value!;
+    expect(crossCheckApiEnv(off).map((issue) => issue.variable)).toContain('ANCS_RATE_LIMIT');
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_TRUST_PROXY_HOPS: '9' }).ok).toBe(false);
+    expect(validateEnv(apiEnvSchema, validApiEnv).value?.ANCS_TRUST_PROXY_HOPS).toBe(0);
   });
 });
 

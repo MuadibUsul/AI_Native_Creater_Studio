@@ -1237,6 +1237,7 @@ export {
   workerEnvSchema,
   crossCheckWorkerEnv,
   crossCheckApiEnv,
+  resolveAllowedOrigins,
   retentionCliEnvSchema,
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';

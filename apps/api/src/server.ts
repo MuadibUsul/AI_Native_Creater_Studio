@@ -67,6 +67,7 @@ import { registerVisualGrammarRoutes } from './routes/visual-grammar.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import type { StorageDeps } from './plugins/storage.js';
 import type { CredentialDeps } from './plugins/credentials.js';
+import { registerEdge, registerSecurityHeaders } from './plugins/edge.js';
 import type { WebhookRouteDeps } from './routes/results.js';
 
 export interface BuildServerOptions {
@@ -116,12 +117,21 @@ export interface BuildServerOptions {
   voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
   /** N05-01 实时语音会话：短期凭证签名密钥（未配置 → 创建会话 501 fail-closed） */
   voice?: { sessionSecret?: string };
+  /**
+   * Edge 安全层（V5-M4）：CORS 白名单、Origin 校验、限流、HSTS；入口按已校验配置提供。
+   * 未提供时只注册安全头（测试与无边缘需求的进程）。`trustProxyHops` 决定客户端 IP 的来源。
+   */
+  edge?: import('./plugins/edge.js').EdgeOptions & { trustProxyHops?: number };
   /** 本进程装配的外部能力驱动清单（V5-M3；经 /capabilities 报告实现种类，客户端据此显示 Mock 标识） */
   providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
 }
+
+/** 信任最近 N 跳代理（proxy-addr 信任函数：第 hop 跳 < N 时可信）；0/未配置 = 不信任 X-Forwarded-For。 */
+const trustProxyHopsOf = (hops: number | undefined): false | ((address: string, hop: number) => boolean) =>
+  hops === undefined || hops <= 0 ? false : (_address: string, hop: number) => hop < hops;
 
 /**
  * 构建 Fastify 实例（独立于 Next.js 的权威业务 API，规范 §29.2）。
@@ -140,6 +150,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           }
         : (options.logger ?? false),
     // 请求追踪（§33）：客户端可提供合法 X-Request-Id，否则服务端生成
+    // 只信任配置的代理跳数（否则 X-Forwarded-For 可被伪造以绕过按 IP 限流）
+    trustProxy: trustProxyHopsOf(options.edge?.trustProxyHops),
     genReqId: (raw) => {
       const provided = raw.headers['x-request-id'];
       if (typeof provided === 'string' && requestIdSchema.safeParse(provided).success) return provided;
@@ -153,6 +165,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   registerErrorHandler(app);
   registerClientContext(app);
+  if (options.edge !== undefined) registerEdge(app, options.edge);
+  else registerSecurityHeaders(app, { hsts: false });
 
   await app.register(swagger, {
     openapi: {

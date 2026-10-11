@@ -68,6 +68,10 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_ASR_DRIVER` | 有 `ANCS_ASR_EXECUTABLE` 则 `process`，否则不装配 | Worker ASR：`deepgram`（需 `DEEPGRAM_API_KEY`，缺失启动失败）或 `process` |
 | `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动（当前 LLM/TTS/声音克隆/素材搜索/分发均为 Mock）必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告 |
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
+| `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
+| `ANCS_TRUST_PROXY_HOPS` | `0` | 前置可信代理跳数；为 0 时不信任 `X-Forwarded-For`。部署在负载均衡/反向代理后必须如实设置，否则所有用户共享代理 IP 的限流桶 |
+| `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流（每实例内存）；生产不得为 `off` |
+| `ANCS_CSP_EXTRA_ORIGINS`（Web **构建期**） | 非生产为本地 API 端口 | Web CSP 额外放行的媒体/上传来源（签名 URL 直达的存储或 API origin）；Next 在构建时固化安全头，修改后需重新构建 Web |
 
 生产（`NODE_ENV=production`）额外必填：`ANCS_CREDENTIAL_KEYS`（API 与 Worker 同一值）、`ANCS_STORAGE_SECRET`（API、Worker、清理 CLI 同一值；不得从会话密钥派生）、`ANCS_OPS_ENVIRONMENT=PRODUCTION`（API）。
 空白值（`VAR=`）视为未配置。Worker 的渲染/探测/Motion 验证/FFmpeg 子进程只继承平台必需环境变量（`PATH`、`HOME`、临时目录、语言）与 `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`，不继承连接串与密钥。

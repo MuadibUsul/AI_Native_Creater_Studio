@@ -1,9 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, resolveAllowedOrigins, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
+import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
 import { createStorageDeps } from './plugins/storage.js';
 import { createAdminDeps } from './plugins/admin.js';
 import { MockPaymentProvider } from '@ancs/providers-mock-payments';
@@ -215,6 +216,13 @@ const app = await buildServer({
   voice: config.ANCS_VOICE_SESSION_SECRET === undefined ? {} : { sessionSecret: config.ANCS_VOICE_SESSION_SECRET },
   distribution: { providers: distributionProviders },
   providerInventory,
+  // V5-M4 Edge：CORS/Origin 白名单、按 IP 限流（可信代理跳数决定客户端 IP）、生产 HSTS
+  edge: {
+    allowedOrigins: resolveAllowedOrigins(config),
+    rateLimits: config.ANCS_RATE_LIMIT === 'off' ? false : DEFAULT_RATE_LIMITS,
+    hsts: config.NODE_ENV === 'production',
+    trustProxyHops: config.ANCS_TRUST_PROXY_HOPS,
+  },
 });
 
 try {
