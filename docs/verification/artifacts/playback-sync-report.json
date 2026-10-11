@@ -1,12 +1,21 @@
 {
-  "generatedAt": "2026-10-10T18:15:05.340Z",
+  "generatedAt": "2026-10-11T01:57:09.612Z",
+  "environment": {
+    "browser": "chromium/149.0.7827.55",
+    "platform": "Win32",
+    "hardwareConcurrency": 12,
+    "deviceMemoryGb": 32,
+    "fixtureSpec": "3 个真实 MP4（23.976/29.97/VFR，mp4/h264）",
+    "cacheState": "MIXED",
+    "concurrency": 1,
+    "backendVersion": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36"
+  },
   "thresholdSource": "SPEC_20_4_AND_20_6_START_TARGET",
   "thresholds": {
     "cachedSeekP95Ms": 1000,
     "cachedSeekP50Ms": 500,
-    "driftAccumulationMs": 40,
+    "driftAccumulationFrames": 1,
     "startupOffsetMs": 250,
-    "driftPerMinuteMs": 120,
     "droppedFrameRatio": 0.02,
     "firstFrameColdMs": 3000,
     "maxMemoryMb": 512
@@ -27,7 +36,7 @@
         },
         {
           "metric": "HOT_FIRST_FRAME",
-          "value": 25,
+          "value": 35,
           "threshold": 3000,
           "verdict": "PASS",
           "note": "热缓存应以冷缓存为参照"
@@ -41,31 +50,24 @@
         },
         {
           "metric": "CACHED_SEEK_P95",
-          "value": 17,
+          "value": 16,
           "threshold": 1000,
           "verdict": "PASS",
           "note": ""
         },
         {
           "metric": "STARTUP_OFFSET",
-          "value": 88.05400001192095,
+          "value": 80.44,
           "threshold": 250,
           "verdict": "PASS",
           "note": "固定偏移，非漂移"
         },
         {
           "metric": "DRIFT_ACCUMULATION",
-          "value": 7.5730000119209535,
-          "threshold": 40,
+          "value": 6.856999988079053,
+          "threshold": 41.708333333333336,
           "verdict": "PASS",
-          "note": ""
-        },
-        {
-          "metric": "DRIFT_PER_MINUTE",
-          "value": 113.5950001788143,
-          "threshold": 120,
-          "verdict": "PASS",
-          "note": ""
+          "note": "阈值 = 1 帧 = 41.7ms"
         },
         {
           "metric": "DROPPED_FRAME_RATIO",
@@ -100,7 +102,7 @@
       "verdicts": [
         {
           "metric": "COLD_FIRST_FRAME",
-          "value": 8,
+          "value": 7,
           "threshold": 3000,
           "verdict": "PASS",
           "note": ""
@@ -121,31 +123,24 @@
         },
         {
           "metric": "CACHED_SEEK_P95",
-          "value": 0,
+          "value": 1,
           "threshold": 1000,
           "verdict": "PASS",
           "note": ""
         },
         {
           "metric": "STARTUP_OFFSET",
-          "value": 0.10500001192087893,
+          "value": 0.2440000000000282,
           "threshold": 250,
           "verdict": "PASS",
           "note": "固定偏移，非漂移"
         },
         {
           "metric": "DRIFT_ACCUMULATION",
-          "value": 0.08900002384177697,
-          "threshold": 40,
+          "value": 0.2720000238417697,
+          "threshold": 33.36666666666667,
           "verdict": "PASS",
-          "note": ""
-        },
-        {
-          "metric": "DRIFT_PER_MINUTE",
-          "value": 1.3336666909357189,
-          "threshold": 120,
-          "verdict": "PASS",
-          "note": ""
+          "note": "阈值 = 1 帧 = 33.4ms"
         },
         {
           "metric": "DROPPED_FRAME_RATIO",
@@ -180,14 +175,14 @@
       "verdicts": [
         {
           "metric": "COLD_FIRST_FRAME",
-          "value": 14,
+          "value": 18,
           "threshold": 3000,
           "verdict": "PASS",
           "note": ""
         },
         {
           "metric": "HOT_FIRST_FRAME",
-          "value": 17,
+          "value": 14,
           "threshold": 3000,
           "verdict": "PASS",
           "note": "热缓存应以冷缓存为参照"
@@ -208,24 +203,17 @@
         },
         {
           "metric": "STARTUP_OFFSET",
-          "value": 0.14699999999999136,
+          "value": 0.09899998807907195,
           "threshold": 250,
           "verdict": "PASS",
           "note": "固定偏移，非漂移"
         },
         {
           "metric": "DRIFT_ACCUMULATION",
-          "value": 0.07400000000012597,
-          "threshold": 40,
+          "value": 0.1120000119207134,
+          "threshold": 33.333333333333336,
           "verdict": "PASS",
-          "note": ""
-        },
-        {
-          "metric": "DRIFT_PER_MINUTE",
-          "value": 0.9314684663324619,
-          "threshold": 120,
-          "verdict": "PASS",
-          "note": ""
+          "note": "阈值 = 1 帧 = 33.3ms"
         },
         {
           "metric": "DROPPED_FRAME_RATIO",

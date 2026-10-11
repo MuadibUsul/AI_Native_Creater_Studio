@@ -88,6 +88,7 @@ async function main() {
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
   const results = [];
+  let environment = null;
 
   for (const entry of MATRIX) {
     await page.goto(`${baseUrl}/harness.html`);
@@ -116,6 +117,18 @@ async function main() {
     const durationMs = await page.evaluate(() => globalThis.window.ancsHarness.durationMs());
     await page.evaluate(() => globalThis.window.ancsHarness.dispose());
 
+    // §20.4：性能报告必须注明硬件/浏览器/带宽/素材规格/缓存状态/并发与后端版本
+    environment = {
+      browser: `${browser.browserType().name()}/${browser.version()}`,
+      platform: await page.evaluate(() => globalThis.navigator.platform ?? 'unknown'),
+      hardwareConcurrency: await page.evaluate(() => globalThis.navigator.hardwareConcurrency ?? null),
+      deviceMemoryGb: await page.evaluate(() => globalThis.navigator.deviceMemory ?? null),
+      fixtureSpec: `${String(MATRIX.length)} 个真实 MP4（23.976/29.97/VFR，mp4/h264）`,
+      cacheState: 'MIXED', // 同一夹具先冷后热，两次都测
+      concurrency: 1,
+      backendVersion: await page.evaluate(() => globalThis.navigator.userAgent),
+    };
+
     results.push({
       fixtureId: entry.fixtureId,
       path: 'LOCAL_REALTIME',
@@ -124,13 +137,15 @@ async function main() {
       precision: 'KEYFRAME_APPROXIMATE',
       frameAccurateRequired: false,
       coldFirstFrameMs, hotFirstFrameMs, seekSamplesMs, samples, durationMs,
+      frameRate: entry.frameRate,
     });
   }
 
   await browser.close();
   server.close();
 
-  const report = contracts.summarizePlaybackSyncReport({ results });
+  if (environment === null) throw new Error('未采集到运行环境（§20.4 要求）');
+  const report = contracts.summarizePlaybackSyncReport({ results, environment });
   await writeFile(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ overall: report.overall, byPath: report.byPath, fixtures: report.fixtures.map((fixture) => ({ fixtureId: fixture.fixtureId, verdict: fixture.verdict, reasons: fixture.failureReasons })) }, null, 2));
   console.log(`报告已写入：${REPORT_PATH}`);

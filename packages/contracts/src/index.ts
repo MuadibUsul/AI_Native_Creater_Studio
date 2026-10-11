@@ -2591,6 +2591,7 @@ export {
   playbackSyncFixtureResultSchema,
   playbackSyncMetricSchema,
   playbackSyncPathSchema,
+  playbackSyncReportEnvironmentSchema,
   playbackSyncReportSchema,
   playbackSyncSampleSchema,
   playbackSyncVerdictSchema,
@@ -2602,6 +2603,7 @@ export type {
   PlaybackSyncMetric,
   PlaybackSyncPath,
   PlaybackSyncReport,
+  PlaybackSyncReportEnvironment,
   PlaybackSyncSample,
   PlaybackSyncVerdict,
 } from './playback-sync-report.js';

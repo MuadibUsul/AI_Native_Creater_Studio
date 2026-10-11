@@ -25,17 +25,17 @@ export const PLAYBACK_SYNC_THRESHOLDS = {
   cachedSeekP95Ms: 1_000,
   cachedSeekP50Ms: 500,
   /**
-   * **累计漂移**容差（毫秒）：衡量"越播越偏"，是 §20.6「长片无累计漂移」的硬门。
-   * 只看偏移量随时间的**变化**，不含启动时的固定偏移。
+   * **累计漂移**容差（**帧数**）：§20.4 原文「长片时序：规定测试片全长**不得累计偏差超过一帧**；
+   * 音频内部操作按**样本精度**测试」。因此阈值按每个夹具自己的帧率换算（23.976 一帧 ≈41.7ms），
+   * **不是统一毫秒值**——统一毫秒会随帧率变松或变紧，违反原文。
    */
-  driftAccumulationMs: 40,
+  driftAccumulationFrames: 1,
   /**
    * **启动偏移**上限（毫秒）：起播瞬间"落后墙上时钟"的固定偏移（首帧延迟/缓冲所致）。
    * 与 `MEDIA_CLOCK_SYNC.reseekThresholdMs` 一致——超过它就该重定位而不是硬播。
    * 二者必须分开：**固定偏移**≠**持续漂移**（把前者当后者会误报）。
    */
   startupOffsetMs: 250,
-  driftPerMinuteMs: 120,
   droppedFrameRatio: 0.02,
   firstFrameColdMs: 3_000,
   maxMemoryMb: 512,
@@ -73,6 +73,8 @@ export const playbackSyncFixtureResultSchema = z.object({
   samples: z.array(playbackSyncSampleSchema).default([]),
   /** 夹具时长（毫秒；用于把漂折算成"每分钟"） */
   durationMs: z.number().finite().nonnegative().nullable().default(null),
+  /** 夹具帧率（用于把"一帧"换算成毫秒；缺失则累计漂移判 UNKNOWN，不猜） */
+  frameRate: z.object({ num: z.number().int().positive(), den: z.number().int().positive() }).strict().nullable().default(null),
 }).strict();
 export type PlaybackSyncFixtureResult = z.infer<typeof playbackSyncFixtureResultSchema>;
 
@@ -80,9 +82,8 @@ export const PLAYBACK_SYNC_METRICS = [
   'CACHED_SEEK_P50', 'CACHED_SEEK_P95',
   /** 启动偏移（首个采样点的固定偏移） */
   'STARTUP_OFFSET',
-  /** 累计漂移（偏移量随时间的最大变化）——长片判定的真正依据 */
+  /** 累计漂移（偏移量随时间的最大变化）——§20.4 的**唯一**漂移门：全长不得超过一帧 */
   'DRIFT_ACCUMULATION',
-  'DRIFT_PER_MINUTE',
   'DROPPED_FRAME_RATIO', 'COLD_FIRST_FRAME', 'HOT_FIRST_FRAME', 'MEMORY_PEAK', 'FRAME_ACCURACY',
 ] as const;
 export const playbackSyncMetricSchema = z.enum(PLAYBACK_SYNC_METRICS);
@@ -109,8 +110,24 @@ export const playbackSyncFixtureReportSchema = z.object({
 }).strict();
 export type PlaybackSyncFixtureReport = z.infer<typeof playbackSyncFixtureReportSchema>;
 
+export const playbackSyncReportEnvironmentSchema = z.object({
+  /** §20.4 要求：性能报告必须注明硬件、浏览器、带宽、素材规格、缓存状态、并发与后端版本 */
+  browser: z.string().min(1).max(200),
+  platform: z.string().min(1).max(200),
+  hardwareConcurrency: z.number().int().positive().nullable().default(null),
+  deviceMemoryGb: z.number().finite().positive().nullable().default(null),
+  /** 素材规格（分辨率/帧率/时长/声道等） */
+  fixtureSpec: z.string().min(1).max(300),
+  cacheState: z.enum(['COLD', 'WARM', 'MIXED']),
+  concurrency: z.number().int().positive(),
+  backendVersion: z.string().min(1).max(200),
+}).strict();
+export type PlaybackSyncReportEnvironment = z.infer<typeof playbackSyncReportEnvironmentSchema>;
+
 export const playbackSyncReportSchema = z.object({
   generatedAt: z.string().min(1),
+  /** §20.4 必记项（缺环境信息的报告不得当作可复现证据） */
+  environment: playbackSyncReportEnvironmentSchema,
   thresholdSource: z.literal(PLAYBACK_SYNC_THRESHOLD_SOURCE),
   thresholds: z.record(z.string(), z.number()),
   fixtures: z.array(playbackSyncFixtureReportSchema),
@@ -134,6 +151,7 @@ const percentile = (values: readonly number[], fraction: number): number | null 
 /** 由原始结果算指标与逐项判定（纯函数）。 */
 export function summarizePlaybackSyncReport(input: {
   results: readonly PlaybackSyncFixtureResult[];
+  environment: PlaybackSyncReportEnvironment;
   generatedAt?: string;
 }): PlaybackSyncReport {
   const fixtures = input.results.map((raw): PlaybackSyncFixtureReport => {
@@ -167,13 +185,16 @@ export function summarizePlaybackSyncReport(input: {
     const accumulation = offsets.length === 0
       ? null
       : Math.max(...offsets.map((offset) => Math.abs(offset - offsets[0]!)));
-    push('DRIFT_ACCUMULATION', accumulation, PLAYBACK_SYNC_THRESHOLDS.driftAccumulationMs,
-      accumulation === null ? null : accumulation <= PLAYBACK_SYNC_THRESHOLDS.driftAccumulationMs);
-    const driftPerMinute = accumulation === null || result.durationMs === null || result.durationMs === 0
+    // §20.4：累计偏差不得超过**一帧** → 阈值按夹具帧率换算（无帧率则无法判定，记 UNKNOWN 而不是用默认值蒙）
+    const oneFrameMs = result.frameRate === null
       ? null
-      : (accumulation / result.durationMs) * 60_000;
-    push('DRIFT_PER_MINUTE', driftPerMinute, PLAYBACK_SYNC_THRESHOLDS.driftPerMinuteMs,
-      driftPerMinute === null ? null : driftPerMinute <= PLAYBACK_SYNC_THRESHOLDS.driftPerMinuteMs);
+      : (PLAYBACK_SYNC_THRESHOLDS.driftAccumulationFrames * 1000 * result.frameRate.den) / result.frameRate.num;
+    push('DRIFT_ACCUMULATION', accumulation, oneFrameMs,
+      accumulation === null || oneFrameMs === null ? null : accumulation <= oneFrameMs,
+      oneFrameMs === null ? '缺帧率，无法按"一帧"判定' : `阈值 = ${PLAYBACK_SYNC_THRESHOLDS.driftAccumulationFrames} 帧 = ${oneFrameMs.toFixed(1)}ms`);
+    // 说明：曾试过再加一个"每分钟漂移率"，但那是**自造指标**——§20.4 只要求"全长累计偏差 ≤ 一帧"。
+    // 短夹具上把几毫秒外推成"每分钟"会凭空造出 FAIL（实测 8.1ms/4s → 122ms/min 被判失败）。
+    // 因此**删除该指标**，只保留按帧率换算的累计漂移门。
 
     // 掉帧比例
     const dropped = result.samples.reduce((sum, sample) => sum + (sample.droppedFrames ?? 0), 0);
@@ -217,6 +238,7 @@ export function summarizePlaybackSyncReport(input: {
 
   return playbackSyncReportSchema.parse({
     generatedAt: input.generatedAt ?? new Date().toISOString(),
+    environment: input.environment,
     thresholdSource: PLAYBACK_SYNC_THRESHOLD_SOURCE,
     thresholds: { ...PLAYBACK_SYNC_THRESHOLDS },
     fixtures, byPath, overall,

@@ -28,3 +28,5 @@ tmp/
 
 # 渲染/验证产物（证据路径记录在 docs/verification/，产物本体不入库）
 .artifacts/
+# 本地测试视频（用户提供/自找的真实素材；体积大，不入库）
+/Videos/
