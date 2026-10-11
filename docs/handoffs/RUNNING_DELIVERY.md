@@ -3,7 +3,7 @@
 > 用途：**每次完成一部分就在这里追加一条**；上下文窗口切换、换人接手、或定时任务接手时，先读本文件即可知道"做到哪、下一步做什么、怎么验证"。
 > 详细证据仍在 `docs/verification/<taskId>.md`，交接细节在 `docs/handoffs/<taskId>.md`；本文件只做**总览与续跑指令**。
 
-**最后更新：** 2026-10-11（第十四组：按 §20 校正测量口径——漂移门=一帧、删自造指标、报告记环境）
+**最后更新：** 2026-10-11（第十五组：首次真实 Provider 证据——Deepgram ASR 跑通）
 **分支：** `codex/v04-foundation`（不推 main）
 **当前 HEAD：** 见文末"提交序列"最后一行
 **账本：** `docs/requirements/ai-native-v04-acceptance-ledger.md`（唯一进度口径）
@@ -18,13 +18,22 @@
 |---|---|
 | 已完成任务（仅算 VERIFIED） | N00 7/7、N01 11/11、N02 15/15、**N03-01…09 + N03-11（10/16）**、**N04-09**、**N06-01／02／03／04／05／06／07**、N15-01/02、N16-01/02 = **55/219（25.11%）**；另有 **N05-01／N05-02／N04-05／N04-10／N04-02-s1／N04-04-s1／N06-08 已部分交付（IN_PROGRESS，不计入）** |
 | 剩余 | 164 项 |
-| 本地 `pnpm verify` | **14/14，1393/1393**（第十四组组末实测；Unit 595 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过；`pnpm test:playback-sync`：真实 Chromium 测量 overall=PASS） |
+| 本地 `pnpm verify` | **14/14，1399/1399**（第十五组组末实测；Unit 601 / Web 210 / Motion 25 / Integration 518 / Security 24 / Render 6 / Golden 15）（另有独立 `pnpm test:eval`：意图评测 102 用例通过；`pnpm test:playback-sync`：真实 Chromium 测量 overall=PASS） |
 | 未通过的总门 | G0—G4、O0、D0/D1 全部未过（任务项完成 ≠ 可交付） |
 | 增量设计（关键需求） | 设计 + 差距映射已就绪；首批契约已落地；垂直切片尚未闭合 |
 
 ---
 
 ## 二、本轮连续交付（按时间倒序追加）
+
+### 2026-10-11 · 第十五组 · **首次真实 Provider 证据**：Deepgram ASR 跑通
+- **内容：** 新增 `apps/worker/src/deepgram-speech-recognition.ts`（真实 HTTP 适配器，实现既有 `SpeechRecognitionAdapter`）+ 纯函数 `mapDeepgramResponse`（响应 → 统一转写快照，可离线验证）；6 项离线单测（含**断言密钥不入日志/错误**）；`.env.example` 补变量名（不含值）。
+- **真实调用（用户密钥 + 用户手机素材）：** `deepgram`/`nova-2`/`zh-CN`/diarize → **59 词、4 段、1 说话人、词级时间戳、平均置信度 988/1000、20s 音频耗时 3386ms**；首段「你的夢想你的未来」。
+- **证据：** `docs/verification/provider-real-deepgram.md`（含回放路径）。**这是项目第一次拿到 `VERIFIED_REAL` 级证据。**
+- **真实发现：** ①`nova-2` 中文输出为**繁体**（归一化应作用于**词条**，见 N03-07 词条权威）；②逐词时间戳可用（N05-02 的 `WORD_EXACT` 前提具备）；③批量约 0.17× 实时，**流式延迟未测**。
+- **不虚报：** N05-01／N05-02 仍为 `IN_PROGRESS`（流式与浏览器采集未验证）；DeepSeek 适配器未接。
+- **凭据纪律：** 仅入本机 `.env`（已忽略、未跟踪）；**用户已把密钥贴进聊天，建议用毕即 rotate**。
+
 
 ### 2026-10-11 · 第十四组 · 按规范校正测量口径（用户要求"提问前先查规范"后的自查）
 - **背景：** 用户指出我反复把规范已定的事当成"待你决定"来问。按要求逐条对账后，**自查出两处我自己违规**并已改正：
