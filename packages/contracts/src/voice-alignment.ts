@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { addMediaTime, compareMediaTime, mediaRangeSchema, mediaTimeSchema, subtractMediaTime, type MediaRange, type MediaTime } from './common/media-time.js';
+import { addMediaTime, compareMediaTime, mediaRangeSchema, mediaTimeSchema, mediaTimeToApproxMilliseconds, subtractMediaTime, type MediaRange, type MediaTime } from './common/media-time.js';
 import { opaqueIdSchema } from './common/ids.js';
 import {
   VOICE_CAPABILITY_FLAGS,
@@ -146,7 +146,7 @@ export function mapAudioTimeToMonotonicMs(audioContextTimeMs: number, samples: r
   return last.monotonicMs + (audioContextTimeMs - last.audioContextTimeMs);
 }
 
-const mediaTimeToMs = (time: MediaTime): number => (Number(time.ticks) * time.timebase.num * 1000) / time.timebase.den;
+const mediaTimeToMs = (time: MediaTime): number => mediaTimeToApproxMilliseconds(time);
 
 const msToMediaTime = (milliseconds: number): MediaTime =>
   mediaTimeSchema.parse({ ticks: String(Math.round(milliseconds)), timebase: { num: 1, den: 1000 } });

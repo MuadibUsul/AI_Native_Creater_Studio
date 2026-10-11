@@ -13,6 +13,8 @@ import { defineConfig } from 'vitest/config';
 const srcAlias = (relPath: string): string => fileURLToPath(new URL(relPath, import.meta.url));
 
 const workspaceAliases: Record<string, string> = {
+  '@ancs/time': srcAlias('./packages/time/src/index.ts'),
+  '@ancs/kernel': srcAlias('./packages/kernel/src/index.ts'),
   '@ancs/contracts': srcAlias('./packages/contracts/src/index.ts'),
   '@ancs/sdk': srcAlias('./packages/sdk/src/index.ts'),
   '@ancs/db': srcAlias('./packages/db/src/index.ts'),

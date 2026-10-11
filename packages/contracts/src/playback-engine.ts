@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { compareMediaTime, mediaRangeSchema, mediaTimeSchema, type MediaRange, type MediaTime } from './common/media-time.js';
+import { compareMediaTime, mediaRangeSchema, mediaTimeSchema, mediaTimeToApproxMilliseconds, type MediaRange, type MediaTime } from './common/media-time.js';
 import {
   PLAYBACK_CAPABILITY_FLAGS,
   playbackBackendKindSchema,
@@ -308,8 +308,7 @@ export function applyPlaybackResult(state: PlaybackEngineState, result: Playback
 /** 便于宿主构造：请求时间与呈现时间的差异（用于同步验收）。 */
 export function presentedDriftMs(requested: MediaTime | null, presented: MediaTime | null): number | null {
   if (requested === null || presented === null) return null;
-  const toMs = (time: MediaTime): number => (Number(time.ticks) * time.timebase.num * 1000) / time.timebase.den;
-  return toMs(presented) - toMs(requested);
+  return mediaTimeToApproxMilliseconds(presented) - mediaTimeToApproxMilliseconds(requested);
 }
 
 /** setRange 的便捷构造（半开区间）。 */

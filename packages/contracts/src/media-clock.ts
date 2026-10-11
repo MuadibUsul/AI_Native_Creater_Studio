@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mediaRangeSchema, type MediaRange } from './common/media-time.js';
+import { mediaRangeSchema, mediaTimeToApproxMilliseconds, type MediaRange } from './common/media-time.js';
 
 /**
  * N03-13：**统一媒体时钟**与音画同步调度（纯逻辑；不含任何 WebAudio/DOM API）。
@@ -195,9 +195,7 @@ export function decideMediaClockSync(input: {
 /** 便捷：当前时钟是否覆盖某个片段序列区间（clip 边界调度用）。 */
 export const isClockInsideRange = (sequenceMs: number, range: MediaRange): boolean => {
   const span = mediaRangeSchema.parse(range);
-  const toMs = (time: { ticks: string; timebase: { num: number; den: number } }): number =>
-    (Number(time.ticks) * time.timebase.num * 1000) / time.timebase.den;
-  return sequenceMs >= toMs(span.start) && sequenceMs < toMs(span.end);
+  return sequenceMs >= mediaTimeToApproxMilliseconds(span.start) && sequenceMs < mediaTimeToApproxMilliseconds(span.end);
 };
 
 // ── 音量淡变（clip 边界的增益包络） ─────────────────────────────

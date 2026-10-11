@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { mediaTimeSchema, type MediaTime } from './common/media-time.js';
+import { mediaTimeSchema, mediaTimeToApproxMilliseconds, type MediaTime } from './common/media-time.js';
 import { PLAYBACK_PRECISIONS, type PlaybackBackendKind } from './playback.js';
 import { MEDIA_PROXY_PLAYBACK_STATUSES, mediaProxyProfileKeySchema } from './media-proxy.js';
 
@@ -231,5 +231,5 @@ export function planSegmentFetch(input: {
   };
 }
 
-/** 便于宿主构造：从 MediaTime 取毫秒（不引入浮点权威）。 */
-export const mediaTimeToMs = (time: MediaTime): number => (Number(time.ticks) * time.timebase.num * 1000) / time.timebase.den;
+/** 便于宿主构造：从 MediaTime 取毫秒近似值（不引入浮点权威）。实现见唯一时间库 `@ancs/time`。 */
+export const mediaTimeToMs = (time: MediaTime): number => mediaTimeToApproxMilliseconds(time);

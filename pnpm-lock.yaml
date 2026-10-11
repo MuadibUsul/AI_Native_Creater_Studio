@@ -326,6 +326,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@ancs/time':
+        specifier: workspace:*
+        version: link:../time
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -367,6 +370,12 @@ importers:
       '@ancs/db':
         specifier: workspace:*
         version: link:../db
+      '@ancs/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@ancs/time':
+        specifier: workspace:*
+        version: link:../time
       drizzle-orm:
         specifier: 0.45.3
         version: 0.45.3(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
@@ -393,6 +402,19 @@ importers:
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/kernel:
+    dependencies:
+      '@ancs/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@ancs/time':
+        specifier: workspace:*
+        version: link:../time
+    devDependencies:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -629,6 +651,16 @@ importers:
       '@types/node':
         specifier: 26.6.4
         version: 26.6.4
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/time:
+    dependencies:
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
       typescript:
         specifier: 6.0.3
         version: 6.0.3

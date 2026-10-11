@@ -27,6 +27,7 @@ export {
   mediaTimeToLegacyMilliseconds,
   mediaTimeToDisplayMilliseconds,
   mediaTimeToDisplaySeconds,
+  mediaTimeToApproxMilliseconds,
   mediaTimesEqual,
   legacyFpsToFrameRate,
   mapRangeBoundary,
