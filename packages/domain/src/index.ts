@@ -635,3 +635,15 @@ export {
 } from './assets.js';
 export { configureDeploymentPolicy, deploymentPolicy } from './deployment-policy.js';
 export type { DeploymentPolicy } from './deployment-policy.js';
+// V5-M4（§11.1）：工作流引擎（运行/步骤持久化，任务表为执行载体）
+export {
+  WorkflowRegistry,
+  advanceWorkflow,
+  cancelWorkflow,
+  defaultWorkflowErrorClass,
+  getWorkflowRun,
+  listWorkflowRuns,
+  resolveWorkflowGate,
+  startWorkflow,
+} from './workflow.js';
+export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';

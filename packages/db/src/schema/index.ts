@@ -40,6 +40,7 @@ export { projectVersions, projects, scenes } from './projects.js';
 export { projectSequences, sequenceTracks, sequenceClips } from './composition.js';
 export { projectObjectLocks } from './object-locks.js';
 export { projectOpLog, referenceEdges } from './op-log.js';
+export { workflowRuns, workflowSteps } from './workflow.js';
 export { projectCompositionMigrations, projectVersionCompositionProjections } from './composition-migration.js';
 export {
   compositionAnimationBindings,

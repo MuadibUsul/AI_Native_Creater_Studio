@@ -1247,6 +1247,25 @@ export {
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';
 export {
+  COMPOSITION_FINAL_RENDER_ERROR_REASONS,
+  COMPOSITION_FINAL_RENDER_STEPS,
+  COMPOSITION_FINAL_RENDER_WORKFLOW,
+  COMPOSITION_FINAL_RENDER_WORKFLOW_VERSION,
+  WORKFLOW_ADVANCE_JOB_TYPE,
+  WORKFLOW_ERROR_CLASSES,
+  WORKFLOW_ERROR_REASONS,
+  WORKFLOW_RUN_STATUSES,
+  WORKFLOW_STEP_STATUSES,
+  WORKFLOW_TERMINAL_STATUSES,
+  startCompositionFinalRenderRequestSchema,
+  workflowErrorClassSchema,
+  workflowRunSchema,
+  workflowRunStatusSchema,
+  workflowStepRecordSchema,
+  workflowStepStatusSchema,
+} from './workflow.js';
+export type { StartCompositionFinalRenderRequest, WorkflowErrorClass, WorkflowRun, WorkflowRunStatus, WorkflowStepRecord } from './workflow.js';
+export {
   FINAL_RENDER_CAPTION_DELIVERIES,
   RENDER_PLAN_AUDIO_RULES,
   RENDER_PLAN_EXECUTION_FILE_KINDS,
