@@ -9,7 +9,6 @@ import {
   rangeDuration,
   rangeOf,
   sequenceSeconds,
-  sequenceTimebase,
   ticksInRange,
   timeFraction,
 } from './support.js';
@@ -25,20 +24,19 @@ const BLOCKING_INSERT_DIMENSIONS = new Set(['POSITION', 'DURATION', 'CONTENT']);
  * 源含音频且 linkAudio → 在首个音频轨（或自动新建）放置同 avGroupId 的音频片段。
  */
 export function insertClip(work: WorkingTimeline, operation: Op<'insert_clip'>, ctx: KernelContext): void {
-  if (work.state.sequence.id !== operation.sequenceId) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+  const { durationTicks, timebase } = work.sequenceTimebase(operation.sequenceId);
   const targetTrack = work.tracks.get(operation.trackId);
-  if (!targetTrack) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'target track not found', 404);
+  if (!targetTrack || targetTrack.sequenceId !== operation.sequenceId) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'target track not found', 404);
   if (targetTrack.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'target track is locked', 409, { reason: 'TRACK_LOCKED' });
 
   const insertSourceRange = mediaRangeSchema.parse(operation.sourceRange);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
   let sourceHasAudio = false;
   if (operation.assetVersionId !== null) {
     // 存在性 / READY / 校验和 / 源边界（同一判据，见 WorkingTimeline.assertSourceRangeUsable）
     work.assertSourceRangeUsable({ assetVersionId: operation.assetVersionId, nestedSequenceId: null, range: insertSourceRange });
     sourceHasAudio = work.state.sources.assetVersions.get(operation.assetVersionId)?.hasAudio ?? false;
   } else if (operation.nestedSequenceId !== null) {
-    const nested = work.state.sources.sequenceDurations.get(operation.nestedSequenceId);
+    const nested = work.state.sequences.get(operation.nestedSequenceId)?.duration;
     if (!nested || compareMediaTime(insertSourceRange.end, nested) > 0) {
       throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
     }
@@ -166,23 +164,23 @@ export function insertClip(work: WorkingTimeline, operation: Op<'insert_clip'>, 
   if (audioGroupId !== null) {
     let audioTrackId = operation.audioTrackId;
     if (audioTrackId === null) {
-      const audioTracks = [...work.tracks.values()].filter((track) => track.kind === 'AUDIO').sort((left, right) => left.position - right.position);
+      const audioTracks = work.tracksOfSequence(operation.sequenceId).filter((track) => track.kind === 'AUDIO');
       const firstAudio = audioTracks[0];
       if (firstAudio) {
         audioTrackId = firstAudio.id;
       } else {
         // 自动创建音频轨（不记事件；undo 只删除片段、保留空轨——见 N03-04 轨道生命周期）
-        const position = [...work.tracks.values()].reduce((max, track) => Math.max(max, track.position), -1) + 1;
+        const position = work.tracksOfSequence(operation.sequenceId).reduce((max, track) => Math.max(max, track.position), -1) + 1;
         const createdTrackId = ctx.newId('trk');
         work.insertTrack({
           id: createdTrackId, sequenceId: operation.sequenceId, kind: 'AUDIO', position, name: '音频',
           locked: false, muted: false, hidden: false, solo: false, syncLocked: false,
-        });
+        }, null);
         audioTrackId = createdTrackId;
       }
     } else {
       const audioTrack = work.tracks.get(audioTrackId);
-      if (!audioTrack) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'audio track not found', 404);
+      if (!audioTrack || audioTrack.sequenceId !== operation.sequenceId) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'audio track not found', 404);
       if (audioTrack.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'audio track is locked', 409, { reason: 'TRACK_LOCKED' });
     }
     const audioClip: KernelClip = { ...inserted, id: operation.createdAudioClipId ?? ctx.newId('clp'), trackId: audioTrackId };
@@ -193,7 +191,7 @@ export function insertClip(work: WorkingTimeline, operation: Op<'insert_clip'>, 
 /** delete_clip：只受轨道锁约束（对象锁由影响面门处理，与旧实现一致）。 */
 export function deleteClip(work: WorkingTimeline, operation: Op<'delete_clip'>): void {
   const clip = work.findClip(operation.clipId);
-  if (work.tracks.get(clip.trackId)?.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
+  if (work.tracks.get(clip.trackId)?.locked === true) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
   work.deleteClip(clip, { action: 'DELETE_CLIP', objectKind: 'CLIP', objectId: clip.id, patch: { ...operation } });
 }
 
@@ -228,7 +226,7 @@ export function splitClipAt(
 export function splitClip(work: WorkingTimeline, operation: Op<'split_clip'>, ctx: KernelContext): void {
   const { clip } = work.editableClip(operation.clipId);
   work.assertObjectLockAllows('CLIP', clip.id, ['CONTENT', 'DURATION', 'POSITION']);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
   const span = ticksInRange(clip.sequenceRange, timebase);
   const atTicks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.at)), timebase);
   if (atTicks <= span.start || atTicks >= span.end) {
@@ -243,7 +241,7 @@ export function splitClip(work: WorkingTimeline, operation: Op<'split_clip'>, ct
   }
   const leftSeconds = sequenceSeconds(leftDuration, timebase);
   // 绑定到该片段的音频区域：局部时钟落在右段或跨越切点 → 需要区域级切分（N03-06），fail-closed 不静默改时钟。
-  for (const region of work.boundAudioRegions(clip.id)) {
+  for (const region of work.boundAudioRegions(clip)) {
     if (compareFraction(rangeDuration(mediaRangeSchema.parse(region.localRange)), leftSeconds) > 0) {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region spans the split point', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
     }
@@ -278,7 +276,7 @@ export function trimClip(work: WorkingTimeline, operation: Op<'trim_clip'>): voi
   work.assertObjectLockAllows('CLIP', clip.id, ['CONTENT', 'DURATION', 'POSITION']);
   const sourceRange = mediaRangeSchema.parse(operation.sourceRange);
   const sequenceRange = mediaRangeSchema.parse(operation.sequenceRange);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
   if (!identityForwardMapping(clip)) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'trim requires a 1:1 forward clip mapping', 422, { reason: 'TRIM_UNSUPPORTED_MAPPING' });
   }
@@ -293,7 +291,7 @@ export function trimClip(work: WorkingTimeline, operation: Op<'trim_clip'>): voi
   const siblings = work.avSiblingsOf(clip);
   work.assertNoTrackOverlap(clip.trackId, timebase, candidate, [clip.id, ...siblings.map((sibling) => sibling.id)]);
   const trimSeconds = rangeDuration(sequenceRange);
-  for (const region of work.boundAudioRegions(clip.id)) {
+  for (const region of work.boundAudioRegions(clip)) {
     const binding = region.timeBinding as { basis?: string } | null;
     if (binding?.basis === 'SOURCE' || compareFraction(rangeDuration(mediaRangeSchema.parse(region.localRange)), trimSeconds) > 0) {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region is invalidated by this trim', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
@@ -317,9 +315,9 @@ export function trimClip(work: WorkingTimeline, operation: Op<'trim_clip'>): voi
 
 export function moveClip(work: WorkingTimeline, operation: Op<'move_clip'>): void {
   const { clip, track: currentTrack } = work.editableClip(operation.clipId);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
   const targetTrackId = operation.trackId ?? clip.trackId;
-  const targetTrack = work.editableTrack(targetTrackId);
+  const targetTrack = work.editableTrack(targetTrackId, clip.sequenceId);
   work.assertObjectLockAllows('TRACK', targetTrackId, ['POSITION', 'DURATION']);
   work.assertObjectLockAllows('CLIP', clip.id, ['POSITION', 'TRACK']);
   if (currentTrack.kind !== targetTrack.kind) {
@@ -339,7 +337,7 @@ export function moveClip(work: WorkingTimeline, operation: Op<'move_clip'>): voi
   const deltaTicks = candidate.start - currentSpan.start;
   work.updateClip(clip, { ...clip, trackId: targetTrackId, sequenceRange }, { action: 'MOVE_CLIP', objectKind: 'CLIP', objectId: clip.id, patch: { ...operation } });
   // 绑定到该片段的音频区域：CLIP_LOCAL 基随片段平移（局部时钟不变）；其它基需要重算时钟（N03-06）→ fail-closed。
-  for (const region of work.boundAudioRegions(clip.id)) {
+  for (const region of work.boundAudioRegions(clip)) {
     const binding = region.timeBinding as { basis?: string } | null;
     if (binding?.basis !== 'CLIP_LOCAL') {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region has a non-local clock', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
@@ -361,13 +359,14 @@ export function moveClip(work: WorkingTimeline, operation: Op<'move_clip'>): voi
 export function duplicateClip(work: WorkingTimeline, operation: Op<'duplicate_clip'>, ctx: KernelContext): void {
   const { clip } = work.editableClip(operation.clipId);
   work.assertObjectLockAllows('CLIP', clip.id, ['CONTENT', 'POSITION']);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
-  const anchor = operation.afterClipId === null ? clip : work.clips.get(operation.afterClipId);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
+  const anchorCandidate = operation.afterClipId === null ? clip : work.clips.get(operation.afterClipId);
+  const anchor = anchorCandidate?.sequenceId === clip.sequenceId ? anchorCandidate : undefined;
   if (anchor === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'anchor clip not found', 404);
   const anchorSpan = ticksInRange(anchor.sequenceRange, timebase);
   const siblings = work.avSiblingsOf(clip);
-  const anchorTrack = work.editableTrack(anchor.trackId);
-  const ownTrack = work.editableTrack(clip.trackId);
+  const anchorTrack = work.editableTrack(anchor.trackId, clip.sequenceId);
+  const ownTrack = work.editableTrack(clip.trackId, clip.sequenceId);
   if (anchorTrack.kind !== ownTrack.kind) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'duplicate_clip requires an anchor on a track of the same kind', 422, { reason: 'TRACK_KIND_MISMATCH' });
   }
@@ -391,7 +390,7 @@ export function duplicateClip(work: WorkingTimeline, operation: Op<'duplicate_cl
   // AV 同步：关联的音频片段在同一位置复制一份，并组成新的关联对。
   if (newGroupId !== null) {
     for (const sibling of siblings) {
-      const siblingTrack = work.editableTrack(sibling.trackId);
+      const siblingTrack = work.editableTrack(sibling.trackId, clip.sequenceId);
       const siblingSpan = ticksInRange(sibling.sequenceRange, timebase);
       const siblingCandidate = { start: anchorSpan.end, end: anchorSpan.end + (siblingSpan.end - siblingSpan.start) };
       if (siblingCandidate.end > durationTicks) {
@@ -420,7 +419,7 @@ export function replaceClipSource(work: WorkingTimeline, operation: Op<'replace_
   }
   work.assertSourceRangeUsable({ assetVersionId: operation.assetVersionId, nestedSequenceId: operation.nestedSequenceId, range: sourceRange });
   // 源基音频区域：源时钟已变，需重算（N03-06）→ fail-closed。
-  for (const region of work.boundAudioRegions(clip.id)) {
+  for (const region of work.boundAudioRegions(clip)) {
     if ((region.timeBinding as { basis?: string } | null)?.basis === 'SOURCE') {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'clip-bound audio region follows the replaced source clock', 409, { reason: 'CLIP_BOUND_AUDIO_REGION_UNSUPPORTED', audioRegionId: region.id });
     }

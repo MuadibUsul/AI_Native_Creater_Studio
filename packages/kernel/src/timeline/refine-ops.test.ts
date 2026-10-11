@@ -22,8 +22,9 @@ const track = (id: string, kind: string, position: number, syncLocked = false) =
 
 function state(clips: KernelClip[], tracks = [track('v1', 'VIDEO', 0), track('a1', 'AUDIO', 1)]): TimelineState {
   return {
-    sequence: { id: 'seq', duration: t(60_000) }, tracks, clips, audioRegions: [], locks: new Map(),
-    sources: { assetVersions: new Map([['av', { status: 'READY', durationMs: 30_000, checksumSha256: 'c'.repeat(64), hasAudio: true }]]), sequenceDurations: new Map() },
+    sequences: new Map([['seq', { id: 'seq', duration: t(60_000) }]]), tracks, clips, audioRegions: [], captions: [], locks: new Map(),
+    sources: { assetVersions: new Map([['av', { status: 'READY', durationMs: 30_000, checksumSha256: 'c'.repeat(64), hasAudio: true }]]) },
+    policy: { preserveOriginalSpeech: false },
   };
 }
 
@@ -92,6 +93,6 @@ describe('ripple / J·L cut', () => {
     expect(ticksOf(after, 'v', 'sequenceRange')).toEqual({ start: 0n, end: 2_000n });
     expect(ticksOf(after, 'a', 'sequenceRange')).toEqual({ start: 0n, end: 1_500n });
     expect(ticksOf(after, 'a2', 'sourceRange')).toEqual({ start: 1_500n, end: 4_000n });
-    expect(result.changes.map((change) => change.event?.action)).toEqual(['SPLIT_AV_CUT', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP']);
+    expect(result.events.map((event) => event.action)).toEqual(['SPLIT_AV_CUT', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP']);
   });
 });

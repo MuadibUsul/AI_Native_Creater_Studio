@@ -10,7 +10,6 @@ import {
   rangeDuration,
   rangeOf,
   sequenceSeconds,
-  sequenceTimebase,
   ticksInRange,
   timeFraction,
 } from './support.js';
@@ -52,7 +51,7 @@ export function slipClip(work: WorkingTimeline, operation: Op<'slip_clip'>): voi
 export function slideClip(work: WorkingTimeline, operation: Op<'slide_clip'>): void {
   const { clip } = work.editableClip(operation.clipId);
   work.assertObjectLockAllows('CLIP', clip.id, ['POSITION']);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
   const offsetTicks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.offset)), timebase);
   const span = ticksInRange(clip.sequenceRange, timebase);
   const trackClips = work.clipsOnTrack(clip.trackId).filter((candidate) => candidate.id !== clip.id);
@@ -123,7 +122,7 @@ export function rollClip(work: WorkingTimeline, operation: Op<'roll_clip'>): voi
   if (left.trackId !== right.trackId) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'roll requires both clips on the same track', 422, { reason: 'ROLL_REQUIRES_SAME_TRACK' });
   }
-  const { timebase } = sequenceTimebase(work.state);
+  const { timebase } = work.sequenceTimebase(left.sequenceId);
   const leftSpan = ticksInRange(left.sequenceRange, timebase);
   const rightSpan = ticksInRange(right.sequenceRange, timebase);
   if (leftSpan.end !== rightSpan.start) {
@@ -165,7 +164,7 @@ export function rollClip(work: WorkingTimeline, operation: Op<'roll_clip'>): voi
 export function rippleClip(work: WorkingTimeline, operation: Op<'ripple_clip'>): void {
   const { clip } = work.editableClip(operation.clipId);
   work.assertObjectLockAllows('CLIP', clip.id, ['CONTENT', 'DURATION', 'POSITION']);
-  const { durationTicks, timebase } = sequenceTimebase(work.state);
+  const { durationTicks, timebase } = work.sequenceTimebase(clip.sequenceId);
   const span = ticksInRange(clip.sequenceRange, timebase);
   const siblings = work.avSiblingsOf(clip);
   let gapTicks: bigint;
@@ -186,7 +185,7 @@ export function rippleClip(work: WorkingTimeline, operation: Op<'ripple_clip'>):
   }
   // 掐头/去尾收缝后，片段自身停在原位、时长缩短 gap；差别在源侧：掐头推进源入点、去尾回收源出点。
   const shiftFrom = span.end;
-  const allTracks = [...work.tracks.values()].sort((left, right) => left.position - right.position);
+  const allTracks = work.tracksOfSequence(clip.sequenceId);
   const scopedTracks = operation.closeAcrossTracks ? allTracks : allTracks.filter((track) => track.id === clip.trackId || track.syncLocked);
   const scopedTrackIds = new Set(scopedTracks.map((track) => track.id));
   for (const sibling of siblings) {
@@ -251,7 +250,7 @@ export function splitAvCut(work: WorkingTimeline, operation: Op<'split_av_cut'>,
   if (video.avGroupId === null || video.avGroupId !== audio.avGroupId) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'split_av_cut requires an AV-linked clip pair', 422, { reason: 'CLIPS_NOT_AV_LINKED' });
   }
-  const { timebase } = sequenceTimebase(work.state);
+  const { timebase } = work.sequenceTimebase(video.sequenceId);
   const offsetTicks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.offset)), timebase);
   const videoAt = exactTicks(timeFraction(mediaTimeSchema.parse(operation.at)), timebase);
   const audioAt = operation.kind === 'J' ? videoAt - offsetTicks : videoAt + offsetTicks;

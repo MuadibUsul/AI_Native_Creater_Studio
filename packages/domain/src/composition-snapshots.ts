@@ -1,5 +1,5 @@
-import { audioRegionSchema, clipSchema, visualParametersSchema } from '@ancs/contracts';
-import type { compositionAudioRegions, sequenceClips } from '@ancs/db';
+import { audioRegionSchema, captionSpanSchema, clipSchema, trackSchema, visualParametersSchema } from '@ancs/contracts';
+import type { compositionAudioRegions, compositionCaptionSpans, sequenceClips, sequenceTracks } from '@ancs/db';
 
 /**
  * 时间线对象的事件快照格式（edit_events.patch.before/after；undo/redo 依赖此格式）。
@@ -19,5 +19,16 @@ export const audioRegionSnapshot = (row: typeof compositionAudioRegions.$inferSe
   ...row,
   gainDb: Number(row.gainDb),
   pan: Number(row.pan),
+  createdAt: row.createdAt.toISOString(),
+});
+
+export const trackSnapshot = (row: typeof sequenceTracks.$inferSelect) => trackSchema.parse({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+});
+
+export type CaptionRowLike = typeof compositionCaptionSpans.$inferSelect;
+export const captionSnapshot = (row: CaptionRowLike) => captionSpanSchema.parse({
+  ...row,
   createdAt: row.createdAt.toISOString(),
 });

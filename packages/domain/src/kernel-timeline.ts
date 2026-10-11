@@ -2,36 +2,46 @@ import { randomUUID } from 'node:crypto';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
-  ApiFailure,
-  ERROR_CODES,
   OBJECT_LOCK_DIMENSIONS,
   mediaRangeSchema,
   mediaTimeSchema,
   sourceMediaProbeResultSchema,
-  type MediaTime,
   type ObjectLockDimension,
 } from '@ancs/contracts';
 import {
   applyTimelineOperation,
   lockKey,
-  primaryClipIdOf,
+  referencedAssetVersionIds,
   type KernelAssetVersionFacts,
   type KernelAudioRegion,
+  type KernelCaption,
   type KernelClip,
+  type KernelEntity,
   type KernelResult,
   type KernelTimelineOperation,
   type KernelTrack,
   type TimelineState,
 } from '@ancs/kernel';
-import { assetVersions, compositionAudioRegions, projectObjectLocks, projectSequences, sequenceClips, sequenceTracks } from '@ancs/db';
-import { audioRegionSnapshot, clipSnapshot } from './composition-snapshots.js';
+import {
+  assetVersions,
+  compositionAudioRegions,
+  compositionCaptionSpans,
+  projectObjectLocks,
+  projectSequences,
+  projects,
+  sequenceClips,
+  sequenceTracks,
+} from '@ancs/db';
+import { audioRegionSnapshot, captionSnapshot, clipSnapshot, trackSnapshot } from './composition-snapshots.js';
 
 /**
  * 编辑内核适配器（V5 §6，M1）：**加载 → 内核 → 持久化**。
  *
- * - 加载：把一个序列的轨道/片段/音频区域、对象锁与源事实读成内核状态（同一事务内，读到本批前序写入）；
- * - 内核：`applyTimelineOperation` 纯函数决定全部规则（锁、边界、AV 同步、源范围、时间精度）；
- * - 持久化：按内核给出的顺序写行，并以与旧实现**完全相同**的形状记录 edit_events（undo/redo 依赖）。
+ * - 加载：把**整个项目**的序列/轨道/片段/音频区域/字幕、对象锁、源事实与策略读成内核状态
+ *   （同一事务内，读到本批前序写入；查找语义与旧实现的查询条件一致，保证错误码不变）；
+ * - 内核：`applyTimelineOperation` 纯函数决定全部规则；
+ * - 持久化：按内核顺序写行（轨道位置两阶段落位，避免 (sequence_id, position) 唯一索引瞬时冲突），
+ *   再按内核事件顺序记录 edit_events（patch 与旧实现同形：内核 patch + 实体快照；undo/redo 依赖）。
  * 领域层在这里不再包含任何编辑规则。
  */
 
@@ -51,15 +61,21 @@ interface Scope {
 type ClipRow = typeof sequenceClips.$inferSelect;
 type TrackRow = typeof sequenceTracks.$inferSelect;
 type AudioRegionRow = typeof compositionAudioRegions.$inferSelect;
+type CaptionRow = typeof compositionCaptionSpans.$inferSelect;
+type AnyRow = ClipRow | TrackRow | AudioRegionRow | CaptionRow;
 
-interface LoadedTimeline {
-  state: TimelineState;
-  clipRows: Map<string, ClipRow>;
-  audioRegionRows: Map<string, AudioRegionRow>;
+/** 已知行（加载 + 本操作写入后的最新值；删除的行保留，供 before 快照补全时间戳）。 */
+interface KnownRows {
+  clip: Map<string, ClipRow>;
+  track: Map<string, TrackRow>;
+  audioRegion: Map<string, AudioRegionRow>;
+  caption: Map<string, CaptionRow>;
 }
 
 const parseLockDimensions = (value: unknown): ObjectLockDimension[] =>
   Array.isArray(value) ? OBJECT_LOCK_DIMENSIONS.filter((dimension) => value.includes(dimension)) : [];
+
+// ── 行 ↔ 内核核心字段 ─────────────────────────────────────
 
 const toKernelClip = (row: ClipRow): KernelClip => ({
   id: row.id,
@@ -77,68 +93,99 @@ const toKernelClip = (row: ClipRow): KernelClip => ({
 });
 
 const toKernelTrack = (row: TrackRow): KernelTrack => ({
-  id: row.id,
-  sequenceId: row.sequenceId,
-  kind: row.kind,
-  position: row.position,
-  name: row.name,
-  locked: row.locked,
-  muted: row.muted,
-  hidden: row.hidden,
-  solo: row.solo,
-  syncLocked: row.syncLocked,
+  id: row.id, sequenceId: row.sequenceId, kind: row.kind, position: row.position, name: row.name,
+  locked: row.locked, muted: row.muted, hidden: row.hidden, solo: row.solo, syncLocked: row.syncLocked,
 });
 
 const toKernelAudioRegion = (row: AudioRegionRow): KernelAudioRegion => ({
   id: row.id,
   sequenceId: row.sequenceId,
+  trackId: row.trackId,
   timeBinding: row.timeBinding,
   localRange: mediaRangeSchema.parse(row.localRange),
   sequenceRange: mediaRangeSchema.parse(row.sequenceRange),
+  sourceStreamId: row.sourceStreamId,
+  channelMapping: row.channelMapping,
+  gainDb: Number(row.gainDb),
+  pan: Number(row.pan),
+  fadeIn: mediaTimeSchema.parse(row.fadeIn),
+  fadeOut: mediaTimeSchema.parse(row.fadeOut),
+  parameters: row.parameters,
 });
 
-/** 操作所在序列：insert_clip 直接给出；其它片段操作由片段反查（不存在 → 404，与旧实现一致）。 */
-async function resolveSequenceId(tx: NodePgDatabase, scope: Scope, operation: KernelTimelineOperation): Promise<string> {
-  if (operation.op === 'insert_clip') {
-    const rows = await tx.select({ id: projectSequences.id }).from(projectSequences).where(and(
-      eq(projectSequences.id, operation.sequenceId), eq(projectSequences.workspaceId, scope.workspaceId), eq(projectSequences.projectId, scope.projectId),
-    )).limit(1);
-    if (!rows[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
-    return rows[0].id;
-  }
-  const clipId = primaryClipIdOf(operation) ?? '';
-  const rows = await tx.select({ sequenceId: sequenceClips.sequenceId }).from(sequenceClips).where(and(
-    eq(sequenceClips.id, clipId), eq(sequenceClips.workspaceId, scope.workspaceId), eq(sequenceClips.projectId, scope.projectId),
-  )).limit(1);
-  if (!rows[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip not found', 404);
-  return rows[0].sequenceId;
-}
+const toKernelCaption = (row: CaptionRow): KernelCaption => ({
+  id: row.id,
+  sequenceId: row.sequenceId,
+  trackId: row.trackId,
+  timeBinding: row.timeBinding,
+  localRange: row.localRange as KernelCaption['localRange'],
+  sequenceRange: mediaRangeSchema.parse(row.sequenceRange),
+  text: row.text,
+  languageTag: row.languageTag,
+  style: row.style,
+  words: row.words,
+  speechAnchorId: row.speechAnchorId,
+});
 
-async function loadTimeline(tx: NodePgDatabase, scope: Scope, sequenceId: string, operation: KernelTimelineOperation): Promise<LoadedTimeline> {
-  const sequenceRows = await tx.select().from(projectSequences).where(and(
-    eq(projectSequences.workspaceId, scope.workspaceId), eq(projectSequences.projectId, scope.projectId),
-  ));
-  const sequence = sequenceRows.find((row) => row.id === sequenceId);
-  if (!sequence) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+const clipColumns = (clip: KernelClip) => ({
+  trackId: clip.trackId,
+  assetVersionId: clip.assetVersionId,
+  nestedSequenceId: clip.nestedSequenceId,
+  sourceStreamId: clip.sourceStreamId,
+  sourceRange: clip.sourceRange,
+  sequenceRange: clip.sequenceRange,
+  timeMapping: clip.timeMapping,
+  avGroupId: clip.avGroupId,
+  parentClipId: clip.parentClipId,
+  parameters: clip.parameters,
+});
+
+const trackColumns = (track: KernelTrack) => ({
+  kind: track.kind, position: track.position, name: track.name, locked: track.locked, muted: track.muted,
+  hidden: track.hidden, solo: track.solo, syncLocked: track.syncLocked,
+});
+
+const audioRegionColumns = (region: KernelAudioRegion) => ({
+  trackId: region.trackId,
+  timeBinding: region.timeBinding,
+  localRange: region.localRange,
+  sequenceRange: region.sequenceRange,
+  sourceStreamId: region.sourceStreamId,
+  channelMapping: region.channelMapping,
+  gainDb: String(region.gainDb),
+  pan: String(region.pan),
+  fadeIn: region.fadeIn,
+  fadeOut: region.fadeOut,
+  parameters: region.parameters,
+});
+
+const captionColumns = (caption: KernelCaption) => ({
+  trackId: caption.trackId,
+  timeBinding: caption.timeBinding,
+  localRange: caption.localRange,
+  sequenceRange: caption.sequenceRange,
+  text: caption.text,
+  languageTag: caption.languageTag,
+  style: caption.style,
+  words: caption.words,
+  speechAnchorId: caption.speechAnchorId,
+});
+
+// ── 加载 ─────────────────────────────────────────────────
+
+async function loadTimeline(tx: NodePgDatabase, scope: Scope, operation: KernelTimelineOperation): Promise<{ state: TimelineState; known: KnownRows }> {
   // 同一事务连接上顺序查询（pg 客户端不支持在同一连接上并发查询）
-  const trackRows = await tx.select().from(sequenceTracks).where(and(
-    eq(sequenceTracks.sequenceId, sequenceId), eq(sequenceTracks.workspaceId, scope.workspaceId), eq(sequenceTracks.projectId, scope.projectId),
-  ));
-  const clipRows = await tx.select().from(sequenceClips).where(and(
-    eq(sequenceClips.sequenceId, sequenceId), eq(sequenceClips.workspaceId, scope.workspaceId), eq(sequenceClips.projectId, scope.projectId),
-  ));
-  const audioRegionRows = await tx.select().from(compositionAudioRegions).where(and(
-    eq(compositionAudioRegions.sequenceId, sequenceId), eq(compositionAudioRegions.workspaceId, scope.workspaceId), eq(compositionAudioRegions.projectId, scope.projectId),
-  ));
-  const lockRows = await tx.select().from(projectObjectLocks).where(and(
-    eq(projectObjectLocks.workspaceId, scope.workspaceId), eq(projectObjectLocks.projectId, scope.projectId),
-  ));
+  const sequenceRows = await tx.select().from(projectSequences).where(and(eq(projectSequences.workspaceId, scope.workspaceId), eq(projectSequences.projectId, scope.projectId)));
+  const trackRows = await tx.select().from(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, scope.workspaceId), eq(sequenceTracks.projectId, scope.projectId)));
+  const clipRows = await tx.select().from(sequenceClips).where(and(eq(sequenceClips.workspaceId, scope.workspaceId), eq(sequenceClips.projectId, scope.projectId)));
+  const regionRows = await tx.select().from(compositionAudioRegions).where(and(eq(compositionAudioRegions.workspaceId, scope.workspaceId), eq(compositionAudioRegions.projectId, scope.projectId)));
+  const captionRows = await tx.select().from(compositionCaptionSpans).where(and(eq(compositionCaptionSpans.workspaceId, scope.workspaceId), eq(compositionCaptionSpans.projectId, scope.projectId)));
+  const lockRows = await tx.select().from(projectObjectLocks).where(and(eq(projectObjectLocks.workspaceId, scope.workspaceId), eq(projectObjectLocks.projectId, scope.projectId)));
+  const projectRows = await tx.select({ productionPolicy: projects.productionPolicy }).from(projects)
+    .where(and(eq(projects.id, scope.projectId), eq(projects.workspaceId, scope.workspaceId))).limit(1);
 
-  const assetVersionIds = new Set<string>();
+  const assetVersionIds = new Set<string>(referencedAssetVersionIds(operation));
   for (const row of clipRows) if (row.assetVersionId !== null) assetVersionIds.add(row.assetVersionId);
-  if ((operation.op === 'insert_clip' || operation.op === 'replace_clip_source') && operation.assetVersionId !== null) {
-    assetVersionIds.add(operation.assetVersionId);
-  }
   const assetRows = assetVersionIds.size === 0 ? [] : await tx.select({
     id: assetVersions.id,
     status: assetVersions.status,
@@ -156,88 +203,109 @@ async function loadTimeline(tx: NodePgDatabase, scope: Scope, sequenceId: string
       hasAudio: probe.success && probe.data.status === 'READY' && probe.data.streams.some((stream) => stream.type === 'AUDIO'),
     }];
   }));
+  const policy = projectRows[0]?.productionPolicy as { preserveOriginalSpeech?: boolean } | null | undefined;
 
-  const state: TimelineState = {
-    sequence: { id: sequence.id, duration: mediaTimeSchema.parse(sequence.duration) },
-    tracks: trackRows.map(toKernelTrack),
-    clips: clipRows.map(toKernelClip),
-    audioRegions: audioRegionRows.map(toKernelAudioRegion),
-    locks: new Map(lockRows.map((row) => [lockKey(row.objectKind as never, row.objectId), parseLockDimensions(row.dimensions)])),
-    sources: {
-      assetVersions: facts,
-      sequenceDurations: new Map<string, MediaTime>(sequenceRows.map((row) => [row.id, mediaTimeSchema.parse(row.duration)])),
-    },
-  };
   return {
-    state,
-    clipRows: new Map(clipRows.map((row) => [row.id, row])),
-    audioRegionRows: new Map(audioRegionRows.map((row) => [row.id, row])),
+    state: {
+      sequences: new Map(sequenceRows.map((row) => [row.id, { id: row.id, duration: mediaTimeSchema.parse(row.duration) }])),
+      tracks: trackRows.map(toKernelTrack),
+      clips: clipRows.map(toKernelClip),
+      audioRegions: regionRows.map(toKernelAudioRegion),
+      captions: captionRows.map(toKernelCaption),
+      locks: new Map(lockRows.map((row) => [lockKey(row.objectKind as never, row.objectId), parseLockDimensions(row.dimensions)])),
+      sources: { assetVersions: facts },
+      policy: { preserveOriginalSpeech: policy?.preserveOriginalSpeech === true },
+    },
+    known: {
+      clip: new Map(clipRows.map((row) => [row.id, row])),
+      track: new Map(trackRows.map((row) => [row.id, row])),
+      audioRegion: new Map(regionRows.map((row) => [row.id, row])),
+      caption: new Map(captionRows.map((row) => [row.id, row])),
+    },
   };
 }
 
-const clipColumns = (clip: KernelClip) => ({
-  trackId: clip.trackId,
-  assetVersionId: clip.assetVersionId,
-  nestedSequenceId: clip.nestedSequenceId,
-  sourceStreamId: clip.sourceStreamId,
-  sourceRange: clip.sourceRange,
-  sequenceRange: clip.sequenceRange,
-  timeMapping: clip.timeMapping,
-  avGroupId: clip.avGroupId,
-  parentClipId: clip.parentClipId,
-  parameters: clip.parameters,
-});
+// ── 持久化 ───────────────────────────────────────────────
 
-/** 按内核顺序落库并记录事件（事件 patch 与旧实现同形：内核 patch + before/after 快照）。 */
-async function persist(tx: NodePgDatabase, scope: Scope, loaded: LoadedTimeline, result: KernelResult, eventDrafts: KernelEventDraft[]): Promise<void> {
-  const clipRows = new Map(loaded.clipRows);
-  const regionRows = new Map(loaded.audioRegionRows);
-  for (const { write, event } of result.changes) {
-    const now = new Date();
-    let before: unknown;
-    let after: unknown;
-    if (write.entity === 'clip') {
-      if (write.type === 'insert') {
-        const row = { id: write.after.id, workspaceId: scope.workspaceId, projectId: scope.projectId, sequenceId: write.after.sequenceId, ...clipColumns(write.after), createdAt: now, updatedAt: now } as ClipRow;
-        await tx.insert(sequenceClips).values(row);
-        clipRows.set(row.id, row);
-        after = clipSnapshot(row);
-      } else if (write.type === 'update') {
-        const current = clipRows.get(write.before.id);
-        if (!current) throw new ApiFailure(ERROR_CODES.INTERNAL, 'kernel updated an unknown clip', 500);
-        const row = { ...current, ...clipColumns(write.after), updatedAt: now } as ClipRow;
-        await tx.update(sequenceClips).set({ ...clipColumns(write.after), updatedAt: now }).where(eq(sequenceClips.id, row.id));
-        clipRows.set(row.id, row);
-        before = clipSnapshot(current);
-        after = clipSnapshot(row);
-      } else {
-        const current = clipRows.get(write.before.id);
-        if (!current) throw new ApiFailure(ERROR_CODES.INTERNAL, 'kernel deleted an unknown clip', 500);
-        await tx.delete(sequenceClips).where(eq(sequenceClips.id, current.id));
-        clipRows.delete(current.id);
-        before = clipSnapshot(current);
-      }
-    } else if (write.entity === 'track') {
-      await tx.insert(sequenceTracks).values({ ...write.after, workspaceId: scope.workspaceId, projectId: scope.projectId, createdAt: now, updatedAt: now });
-    } else {
-      const current = regionRows.get(write.before.id);
-      if (!current) throw new ApiFailure(ERROR_CODES.INTERNAL, 'kernel updated an unknown audio region', 500);
-      const changes = { timeBinding: write.after.timeBinding, localRange: write.after.localRange, sequenceRange: write.after.sequenceRange, updatedAt: now };
-      const row = { ...current, ...changes } as AudioRegionRow;
-      await tx.update(compositionAudioRegions).set(changes).where(eq(compositionAudioRegions.id, current.id));
-      regionRows.set(row.id, row);
-      before = audioRegionSnapshot(current);
-      after = audioRegionSnapshot(row);
+/** 内核实体 → 完整行（以已知行补全租户与时间戳字段；新对象用当前时刻）。 */
+function rowOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: Date): AnyRow {
+  const base = { id: entity.value.id, workspaceId: scope.workspaceId, projectId: scope.projectId, sequenceId: entity.value.sequenceId, createdAt: now, updatedAt: now };
+  switch (entity.entity) {
+    case 'clip': return { ...base, ...known.clip.get(entity.value.id), ...clipColumns(entity.value) } as ClipRow;
+    case 'track': return { ...base, ...known.track.get(entity.value.id), ...trackColumns(entity.value) } as TrackRow;
+    case 'audioRegion': return { ...base, ...known.audioRegion.get(entity.value.id), ...audioRegionColumns(entity.value) } as AudioRegionRow;
+    case 'caption': return { ...base, ...known.caption.get(entity.value.id), ...captionColumns(entity.value) } as CaptionRow;
+  }
+}
+
+function snapshotOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: Date): unknown {
+  const row = rowOf(known, entity, scope, now);
+  switch (entity.entity) {
+    case 'clip': return clipSnapshot(row as ClipRow);
+    case 'track': return trackSnapshot(row as TrackRow);
+    case 'audioRegion': return audioRegionSnapshot(row as AudioRegionRow);
+    case 'caption': return captionSnapshot(row as CaptionRow);
+  }
+}
+
+async function applyWrite(tx: NodePgDatabase, write: KernelResult['writes'][number], row: AnyRow, now: Date): Promise<void> {
+  const target = write.type === 'delete' ? write.before : write.after;
+  const id = target.value.id;
+  if (write.type === 'insert') {
+    switch (target.entity) {
+      case 'clip': await tx.insert(sequenceClips).values(row as ClipRow); return;
+      case 'track': await tx.insert(sequenceTracks).values(row as TrackRow); return;
+      case 'audioRegion': await tx.insert(compositionAudioRegions).values(row as AudioRegionRow); return;
+      case 'caption': await tx.insert(compositionCaptionSpans).values(row as CaptionRow); return;
     }
-    if (event !== null) {
-      eventDrafts.push({
-        action: event.action,
-        sceneId: null,
-        objectKind: event.objectKind,
-        objectId: event.objectId,
-        patch: { ...event.patch, ...(before === undefined ? {} : { before }), ...(after === undefined ? {} : { after }) },
-      });
+  }
+  if (write.type === 'update') {
+    switch (target.entity) {
+      case 'clip': await tx.update(sequenceClips).set({ ...clipColumns(target.value), updatedAt: now }).where(eq(sequenceClips.id, id)); return;
+      case 'track': await tx.update(sequenceTracks).set({ ...trackColumns(target.value), updatedAt: now }).where(eq(sequenceTracks.id, id)); return;
+      case 'audioRegion': await tx.update(compositionAudioRegions).set({ ...audioRegionColumns(target.value), updatedAt: now }).where(eq(compositionAudioRegions.id, id)); return;
+      case 'caption': await tx.update(compositionCaptionSpans).set({ ...captionColumns(target.value), updatedAt: now }).where(eq(compositionCaptionSpans.id, id)); return;
     }
+  }
+  switch (target.entity) {
+    case 'clip': await tx.delete(sequenceClips).where(eq(sequenceClips.id, id)); return;
+    case 'track': await tx.delete(sequenceTracks).where(eq(sequenceTracks.id, id)); return;
+    case 'audioRegion': await tx.delete(compositionAudioRegions).where(eq(compositionAudioRegions.id, id)); return;
+    case 'caption': await tx.delete(compositionCaptionSpans).where(eq(compositionCaptionSpans.id, id)); return;
+  }
+}
+
+async function persist(tx: NodePgDatabase, scope: Scope, known: KnownRows, result: KernelResult, eventDrafts: KernelEventDraft[]): Promise<void> {
+  const now = new Date();
+  // 轨道两阶段落位：先把位置会变化的既有轨道整体移出（+10000），再按内核顺序写最终位置。
+  const originalPositions = new Map([...known.track.values()].map((row) => [row.id, row.position]));
+  const movingTracks = new Set<string>();
+  for (const write of result.writes) {
+    if (write.type === 'update' && write.after.entity === 'track') {
+      const original = originalPositions.get(write.after.value.id);
+      if (original !== undefined && original !== write.after.value.position) movingTracks.add(write.after.value.id);
+    }
+  }
+  for (const trackId of movingTracks) {
+    await tx.update(sequenceTracks).set({ position: (originalPositions.get(trackId) ?? 0) + 10_000, updatedAt: now }).where(eq(sequenceTracks.id, trackId));
+  }
+
+  for (const write of result.writes) {
+    const target = write.type === 'delete' ? write.before : write.after;
+    const row = rowOf(known, target, scope, now);
+    await applyWrite(tx, write, row, now);
+    if (write.type !== 'delete') (known[target.entity] as Map<string, AnyRow>).set(target.value.id, row);
+  }
+
+  for (const event of result.events) {
+    const snapshots = Object.fromEntries(Object.entries(event.snapshots).map(([key, entity]) => [key, snapshotOf(known, entity, scope, now)]));
+    eventDrafts.push({
+      action: event.action,
+      sceneId: null,
+      objectKind: event.objectKind,
+      objectId: event.objectId,
+      patch: { ...event.patch, ...snapshots },
+    });
   }
 }
 
@@ -247,9 +315,12 @@ export async function runKernelTimelineOperation(
   scope: Scope,
   operation: KernelTimelineOperation,
   eventDrafts: KernelEventDraft[],
+  options: { compensation?: boolean } = {},
 ): Promise<void> {
-  const sequenceId = await resolveSequenceId(tx, scope, operation);
-  const loaded = await loadTimeline(tx, scope, sequenceId, operation);
-  const result = applyTimelineOperation(loaded.state, operation, { newId: (prefix) => `${prefix}_${randomUUID()}` });
-  await persist(tx, scope, loaded, result, eventDrafts);
+  const loaded = await loadTimeline(tx, scope, operation);
+  const result = applyTimelineOperation(loaded.state, operation, {
+    newId: (prefix) => `${prefix}_${randomUUID()}`,
+    ...(options.compensation === true ? { compensation: true } : {}),
+  });
+  await persist(tx, scope, loaded.known, result, eventDrafts);
 }

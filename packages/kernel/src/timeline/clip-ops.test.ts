@@ -28,18 +28,19 @@ function clip(id: string, trackId: string, sequence: MediaRange, source: MediaRa
 
 function baseState(overrides: Partial<TimelineState> = {}): TimelineState {
   return {
-    sequence: { id: 'seq_1', duration: t(60_000) },
+    sequences: new Map([['seq_1', { id: 'seq_1', duration: t(60_000) }]]),
     tracks: [
       { id: 'trk_v1', sequenceId: 'seq_1', kind: 'VIDEO', position: 0, name: 'V1', locked: false, muted: false, hidden: false, solo: false, syncLocked: false },
       { id: 'trk_a1', sequenceId: 'seq_1', kind: 'AUDIO', position: 1, name: 'A1', locked: false, muted: false, hidden: false, solo: false, syncLocked: false },
     ],
     clips: [],
     audioRegions: [],
+    captions: [],
     locks: new Map(),
     sources: {
       assetVersions: new Map([['av_1', { status: 'READY', durationMs: 30_000, checksumSha256: 'a'.repeat(64), hasAudio: true }]]),
-      sequenceDurations: new Map([['seq_1', t(60_000)]]),
     },
+    policy: { preserveOriginalSpeech: false },
     ...overrides,
   };
 }
@@ -85,7 +86,7 @@ describe('insert_clip', () => {
     expect(rangeToTicks(rightPart.sourceRange, MS)).toEqual({ start: 1_000n, end: 4_000n });
     const audio = after.clips.find((item) => item.trackId === 'trk_a1')!;
     expect(audio.avGroupId).toBe(byId.get('clp_new')!.avGroupId);
-    expect(result.changes.map((change) => change.event?.action)).toEqual(['UPDATE_CLIP', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP', 'INSERT_CLIP']);
+    expect(result.events.map((event) => event.action)).toEqual(['UPDATE_CLIP', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP', 'INSERT_CLIP']);
   });
 
   it('OVERWRITE：区间内片段删除、边缘片段裁剪，后续位置不变', () => {
@@ -130,9 +131,9 @@ describe('insert_clip', () => {
       op: 'insert_clip', sequenceId: 'seq_1', trackId: 'trk_v1', assetVersionId: 'av_1', nestedSequenceId: null, sourceStreamId: null,
       sourceRange: r(0, 1_000), mode: 'APPEND', sequenceStart: null, linkAudio: true, audioTrackId: null,
     });
-    const trackWrite = result.changes.find((change) => change.write.entity === 'track')!;
-    expect(trackWrite.event).toBeNull();
-    expect(trackWrite.write.entity === 'track' && trackWrite.write.after.kind).toBe('AUDIO');
+    const trackWrite = result.writes.find((write) => write.type === 'insert' && write.after.entity === 'track')!;
+    expect(trackWrite.type === 'insert' && trackWrite.after.entity === 'track' && trackWrite.after.value.kind).toBe('AUDIO');
+    expect(result.events.some((event) => event.objectKind === 'TRACK')).toBe(false);
   });
 });
 
@@ -150,7 +151,7 @@ describe('split / trim / move / duplicate / replace / delete', () => {
     expect(right.parameters).toEqual(params);
     expect(rangeToTicks(right.sourceRange, MS)).toEqual({ start: 1_500n, end: 4_000n });
     expect(rangeToTicks(after.clips.find((item) => item.id === 'clp_ar')!.sequenceRange, MS)).toEqual({ start: 1_500n, end: 4_000n });
-    expect(result.changes.map((change) => change.event?.action)).toEqual(['SPLIT_CLIP', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP']);
+    expect(result.events.map((event) => event.action)).toEqual(['SPLIT_CLIP', 'INSERT_CLIP', 'UPDATE_CLIP', 'INSERT_CLIP']);
   });
 
   it('split_clip 切点必须在片段内部；对象锁命中 → EDIT_IMPACT_LOCKED', () => {
@@ -178,7 +179,10 @@ describe('split / trim / move / duplicate / replace / delete', () => {
         clip('clp_v', 'trk_v1', r(0, 2_000), r(0, 2_000), { avGroupId: 'avgp_1' }),
         clip('clp_a', 'trk_a1', r(0, 2_000), r(0, 2_000), { avGroupId: 'avgp_1' }),
       ],
-      audioRegions: [{ id: 'ar_1', sequenceId: 'seq_1', timeBinding: { basis: 'CLIP_LOCAL', clipId: 'clp_v' }, localRange: r(0, 1_000), sequenceRange: r(500, 1_500) }],
+      audioRegions: [{
+        id: 'ar_1', sequenceId: 'seq_1', trackId: 'trk_a1', timeBinding: { basis: 'CLIP_LOCAL', clipId: 'clp_v' }, localRange: r(0, 1_000), sequenceRange: r(500, 1_500),
+        sourceStreamId: 'a:0', channelMapping: [{ sourceChannel: 0, outputChannel: 0 }], gainDb: 0, pan: 0, fadeIn: t(0), fadeOut: t(0), parameters: {},
+      }],
     });
     const after = applyKernelResult(state, apply(state, { op: 'move_clip', clipId: 'clp_v', sequenceRange: r(3_000, 5_000) }));
     expect(rangeToTicks(after.audioRegions[0]!.sequenceRange, MS)).toEqual({ start: 3_500n, end: 4_500n });
@@ -220,7 +224,7 @@ describe('内核纯度与确定性', () => {
   });
 
   it('时基不能精确表示的边界 → 422 TIME_NOT_REPRESENTABLE（不静默取整）', () => {
-    const state = baseState({ sequence: { id: 'seq_1', duration: t(300 * 1001, NTSC) }, clips: [clip('clp_v', 'trk_v1', r(0, 90 * 1001, NTSC))] });
+    const state = baseState({ sequences: new Map([['seq_1', { id: 'seq_1', duration: t(300 * 1001, NTSC) }]]), clips: [clip('clp_v', 'trk_v1', r(0, 90 * 1001, NTSC))] });
     // 1/7 秒在 1/30000 时基下不是整数 ticks
     expectFailure(() => apply(state, { op: 'split_clip', clipId: 'clp_v', at: { ticks: '1', timebase: { num: 1, den: 7 } } }), 'TIME_NOT_REPRESENTABLE', 422);
   });
@@ -265,10 +269,9 @@ describe('属性测试：随机原语序列在 29.97fps 下保持时间线不变
       const ctx = idSequence();
       const frames = (n: bigint) => t(n * FRAME, NTSC);
       let state = baseState({
-        sequence: { id: 'seq_1', duration: frames(durationFrames) },
+        sequences: new Map([['seq_1', { id: 'seq_1', duration: frames(durationFrames) }]]),
         sources: {
           assetVersions: new Map([['av_1', { status: 'READY', durationMs: 60_000, checksumSha256: 'a'.repeat(64), hasAudio: false }]]),
-          sequenceDurations: new Map(),
         },
       });
       let applied = 0;

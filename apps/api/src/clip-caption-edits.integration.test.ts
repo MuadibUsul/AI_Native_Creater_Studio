@@ -316,6 +316,25 @@ describe('N03-07 字幕与转写驱动剪辑（HTTP + SDK）', () => {
     );
   });
 
+  it('CUT_CONTENT 收缝尊重锁：被剪/被平移的片段锁住对应维度 → 409 且零写入（V5-M1 修复）', async () => {
+    const client = await newSignedInClient();
+    const project = await makeProject(client);
+    const target = await seedCaption(project, { sequenceMs: [0, 4_000], words: ['第一句', '要剪', '的', '内容'] });
+    const lockedClipId = await seedClip(project, [5_000, 6_000]);
+    await applyEdits(client, project.projectId, [
+      { op: 'set_object_lock', objectKind: 'CLIP', objectId: lockedClipId, dimensions: ['POSITION'], locked: true },
+    ]);
+    const before = await client.projects.state(project.projectId, { schemaVersion: '1.0' });
+    await expectApiFailure(
+      applyEdits(client, project.projectId, [{ op: 'cut_caption_range', captionId: target.captionId, wordFrom: 1, wordTo: 2, mode: 'CUT_CONTENT', closeAcrossTracks: true }]),
+      { status: 409, reason: 'EDIT_IMPACT_LOCKED' },
+    );
+    const after = await client.projects.state(project.projectId, { schemaVersion: '1.0' });
+    expect(after.document.projectRevision).toBe(before.document.projectRevision);
+    expect(after.document.composition.clips).toEqual(before.document.composition.clips);
+    expect(after.document.composition.captions).toEqual(before.document.composition.captions);
+  });
+
   it('undo/redo：断句与剪内容都可逐条撤销回源状态；SRT/VTT 输出反映编辑结果', async () => {
     const client = await newSignedInClient();
     const project = await makeProject(client);
