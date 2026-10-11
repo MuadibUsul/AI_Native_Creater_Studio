@@ -13,7 +13,7 @@ import {
   type FrameRate,
   type MediaRange,
   type MediaTime,
-  type PlaybackCapabilities,
+  type RenderBackendCapabilities,
   type RenderPlan,
   type RenderPlanAudioEntry,
   type RenderPlanCaption,
@@ -325,7 +325,7 @@ export function renderPlanHash(plan: Pick<RenderPlan, (typeof RENDER_PLAN_HASHED
 }
 
 /** 计划的需求中，后端未显式声明支持的部分（未声明 = 不支持）。 */
-export function unsupportedRenderRequirements(plan: Pick<RenderPlan, 'requirements'>, capabilities: PlaybackCapabilities): RenderRequirement[] {
+export function unsupportedRenderRequirements(plan: Pick<RenderPlan, 'requirements'>, capabilities: Pick<RenderBackendCapabilities, 'supported' | 'unsupported'>): RenderRequirement[] {
   return plan.requirements.filter((requirement) => !capabilities.supported.includes(requirement) || capabilities.unsupported.includes(requirement));
 }
 
@@ -333,7 +333,7 @@ export function unsupportedRenderRequirements(plan: Pick<RenderPlan, 'requiremen
  * 后端裁决：任一需求不被支持 → 501 `UNSUPPORTED_CAPABILITY`（显式拒绝，不静默省略效果）。
  * `capability` 为首个缺失能力（兼容既有调用方），`capabilities` 列出全部缺失项。
  */
-export function assertRenderPlanSupported(plan: RenderPlan, capabilities: PlaybackCapabilities): void {
+export function assertRenderPlanSupported(plan: RenderPlan, capabilities: RenderBackendCapabilities): void {
   const missing = unsupportedRenderRequirements(plan, capabilities);
   if (missing.length === 0) return;
   const first = missing[0] as RenderRequirement;
@@ -344,6 +344,15 @@ export function assertRenderPlanSupported(plan: RenderPlan, capabilities: Playba
     backend: capabilities.backend,
     ...(first === 'GRAPHICS_COMPONENT_RENDER' ? { objectCount: plan.graphicsElementIds.length } : {}),
   });
+}
+
+/**
+ * 按交付方式调整需求：字幕以侧载文件（SRT/VTT）交付时不需要烧录能力。
+ * 交付方式由调用方显式选择并记入 Manifest——这不是静默省略字幕。
+ */
+export function requirementsForDelivery(plan: RenderPlan, delivery: { captionDelivery: 'SIDECAR' | 'BURNED_IN' }): RenderPlan {
+  if (delivery.captionDelivery === 'BURNED_IN') return plan;
+  return { ...plan, requirements: plan.requirements.filter((requirement) => requirement !== 'CAPTIONS_BURNED_IN') };
 }
 
 /** 段/条目在序列时间上的重叠检查（供后端分区复用）。 */

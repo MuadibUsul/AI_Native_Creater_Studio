@@ -42,6 +42,8 @@ N03-07 已按范围 VERIFIED：字幕文本由**词条**重建（否定词与数
 
 N03-08 已按范围 VERIFIED：多轨预览与真实合成由**同一份**工程文档投影——`buildPlaybackSnapshot` 产出视频段（源版本、源/序列区间、时间映射、变换/裁切/透明度）与音频段（增益/淡入淡出/声像、静音独奏归一化后的可听性）及字幕，并回带 `documentRevision`；`buildServerSynthesisPlan` 由同一快照派生逐帧合成计划（段/字幕/音频起止帧与 `playbackFrameAt` 一致），做到窗口预览与服务端合成关键帧对照，且没有浏览器 props 之外的隐藏工程。能力显式：baseline 后端精度 `KEYFRAME_APPROXIMATE`、**不支持**逐帧图形渲染（图形对象 fail-closed 501，不得用静态截图冒充连续播放），未列出的能力一律不支持；空时间线、源不可播放均 fail-closed；真实 FFmpeg 探测校验源区间/时长/音轨（见 `docs/verification/N03-08.md`）。V04-10／V04-14 的 PlaybackEngine 生命周期与事件（N03-11）、proxy/MSE（N03-12）、WebAudio 主时钟（N03-13）仍属后续任务，保持 `IN_PROGRESS`；V03-41／V03-61 的多端播放一致性仍需 N14 相关任务。
 
+V5-M4（架构任务，见 `docs/verification/V5-M4.md`、裁决 0016/0017）把 N09-09/N09-10/N09-11 推进为 `IN_PROGRESS`：RenderPlan 由编辑内核纯编译（planHash 对同一渲染内容稳定），预览快照、服务端合成计划与 FFmpeg 媒体图终渲染只消费它；同一计划的 baseline 投影与终渲染在真实编解码下逐帧源帧号相等、音频起点/增益/声像/等功率淡变一致。Remotion 图形层、字幕烧录、冻结输入（N09-03）、技术 QA（N09-04）与真实浏览器呈现侧对照仍未完成，V04-14 保持 `IN_PROGRESS`。
+
 N03-09 已按范围 VERIFIED：范围编辑的最小 AI 入口把「选中片段 + Brief + 允许操作清单 + 源证据」交给规划器，输出经契约、允许清单、源引用（不虚构素材）、对象锁与原声保护五道校验的可执行操作，越界请求逐条进 `outOfScope` 并说明原因；「去掉前面废话但保留原音」产出真实可执行裁剪（Apply 后片段 0–4s→0–3s、音频区域逐字段未变），计划阶段零写库、零 Provider 媒体调用（见 `docs/verification/N03-09.md`）。本项产出的结构化计划即增量设计（鼠标点线面 × 横向时间定位 × 流式语音）中 `IntentRevision` 的落点，差距映射见 `docs/design/mouse-voice-gap-map.md`；V03-01／V03-28／V03-29 的语音入口、私有试改与原子采用分别由 N05-01-s1…／N06-0x-s1… 承接，保持 `IN_PROGRESS`。
 
 N04-09（**2026-10-11 回调为 `IMPLEMENTED_UNVERIFIED`**：以下自身验收证据仍有效，但依赖 N04-05 未 VERIFIED，按 AGENTS.md 不计完成，见 `scripts/spec-check.mjs` 与裁决 0011）此前已按范围验收：SelectionAnchor 成为**唯一**规范选择结构（AttentionSnapshot 的选择子结构，不新增第二份权威状态），持久化为 (workspace, project, anchorId, revision) 追加式修订日志（迁移 0079），指纹 = sha256(规范序列化)；旧 inline 选择（分镜/片段/字幕/素材范围/像素区域）经 `selectionAnchorFromLegacySelection` **解析一次**，毫秒入口转 1/1000 有理时基（新请求不丢有理时基），字幕场景携带发话时间（指代使用对应发话时间）；越权（同工作区其他项目）永远 422、帧哈希不能当身份、跨租户 404；重映射把失效选择明确标成 FAILED/PARTIAL/AMBIGUOUS（附候选证据）/STALE 并记入 remapHistory。V04-15 的 AttentionSnapshot 本体（事件缓冲/时钟/轨迹最小保留）仍属 N04-05，锚点自动恢复属 N04-10，画布与时间带属 N04-02-s1／N04-04-s1，均保持 `IN_PROGRESS`（见 `docs/verification/N04-09.md`）。
@@ -145,7 +147,7 @@ N02-14 已按范围 VERIFIED：不可变转写版本保留机器结果并按片�
 | V04-11 | WebCodecs／可选WASM、帧级定位与有界解码 | §15.7 | N03-12, N03-14, N03-16, N12-08, N13-11 | TODO |
 | V04-12 | WebAudio与项目统一播放时钟 | §15.8 | N03-13, N03-16 | TODO |
 | V04-13 | GPU合成、缓存与设备丢失回退 | §15.9 | N03-15, N12-08, N13-11 | TODO |
-| V04-14 | 共享RenderPlan与FFmpeg＋Remotion混合终渲染 | §15.10—15.11 | N03-08, N03-11, N03-16, N09-08, N09-09, N09-10, N09-11 | TODO |
+| V04-14 | 共享RenderPlan与FFmpeg＋Remotion混合终渲染 | §15.10—15.11 | N03-08, N03-11, N03-16, N09-08, N09-09, N09-10, N09-11 | IN_PROGRESS |
 | V04-15 | SelectionAnchor与AttentionSnapshot兼容合并 | §7.5 | N04-05, N04-09, N04-10 | IN_PROGRESS |
 | V04-16 | Smart Timeline、Inspector与命令入口渐进显露 | §4.5 | N04-11, N07-11 | TODO |
 | V04-17 | 版本化Agent Tool Registry与能力授权 | §9.5 | N01-11, N07-04, N07-09, N07-10, N10-12, N14-07, N14-08 | IN_PROGRESS |

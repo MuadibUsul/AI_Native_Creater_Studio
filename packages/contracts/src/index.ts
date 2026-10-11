@@ -36,8 +36,13 @@ export {
   sequenceTimeToSourcePts,
   addMediaTime,
   subtractMediaTime,
+  // 精确有理秒（V5 §7：服务端后端的时间计算也只走唯一时间库）
+  timeToFraction,
+  addFractions,
+  subtractFractions,
+  compareFractions,
 } from './common/media-time.js';
-export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
+export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding, Fraction } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
 export type { Revision } from './common/revision.js';
 export { moneySchema, creditsSchema } from './common/money.js';
@@ -1242,8 +1247,17 @@ export {
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';
 export {
+  FINAL_RENDER_CAPTION_DELIVERIES,
+  RENDER_PLAN_AUDIO_RULES,
+  RENDER_PLAN_EXECUTION_FILE_KINDS,
+  RENDER_PLAN_EXECUTION_RESULT_VERSION,
   RENDER_PLAN_HASHED_FIELDS,
   RENDER_PLAN_IR_VERSION,
+  finalRenderProfileSchema,
+  renderBackendCapabilitiesSchema,
+  renderPlanExecutionFileSchema,
+  renderPlanExecutionResultSchema,
+  stereoPanCoefficients,
   renderPlanAnimatedTargetSchema,
   renderPlanAudioEntrySchema,
   renderPlanCaptionSchema,
@@ -1254,6 +1268,13 @@ export {
   renderRequirementSchema,
 } from './render-plan.js';
 export type {
+  FinalRenderProfile,
+  FinalRenderProfileInput,
+  RenderBackendCapabilities,
+  RenderPlanExecutionFile,
+  RenderPlanExecutionResult,
+  RenderPlanExecutor,
+  StereoPanCoefficients,
   RenderPlan,
   RenderPlanAudioEntry,
   RenderPlanCaption,
