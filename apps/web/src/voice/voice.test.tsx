@@ -124,12 +124,12 @@ describe('V6-2 实时语音（浏览器侧）', () => {
     expect(socket.sent.filter((item) => item instanceof ArrayBuffer)).toHaveLength(1);
 
     act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_1', revision: 1, text: '把这里', isFinal: false }));
-    act(() => socket.receive({ type: 'attention', utteranceId: 'utt_1', attention: { pointer: { timeRange: null, clipIds: ['clp_l'] }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: null } }));
+    act(() => socket.receive({ type: 'attention', utteranceId: 'utt_1', attention: { pointer: { timeRange: null, clipIds: ['clp_l'], frameRegion: null }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: null } }));
     expect(cancelSpeech).toHaveBeenCalled(); // 开口即打断朗读
     expect(screen.getByText('把这里')).toBeTruthy();
     expect(screen.getByText('指的是：片段「lake.mp4」（说"这里"时）')).toBeTruthy();
-    act(() => socket.receive({ type: 'utterance', utteranceId: 'utt_1', text: '把这里剪短一点', attention: { pointer: { timeRange: null, clipIds: ['clp_l'] }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: null } }));
-    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '把这里剪短一点', pointer: { timeRange: null, clipIds: ['clp_l'] } }, expect.anything()));
+    act(() => socket.receive({ type: 'utterance', utteranceId: 'utt_1', text: '把这里剪短一点', attention: { pointer: { timeRange: null, clipIds: ['clp_l'], frameRegion: null }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: null } }));
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '把这里剪短一点', pointer: { timeRange: null, clipIds: ['clp_l'], frameRegion: null } }, expect.anything()));
 
     await userEvent.click(screen.getByRole('button', { name: '结束语音' }));
     expect(socket.json().at(-1)).toEqual({ type: 'end' });

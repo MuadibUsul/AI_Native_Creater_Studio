@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent, type ReactNode, type RefObject } from 'react';
-import type { RenderPlanCaption, SequencePreview } from '@ancs/contracts';
+import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import type { FrameRegion, RenderPlanCaption, SequencePreview } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
 import styles from './studio.module.css';
@@ -53,6 +53,26 @@ export function activeCaptions(captions: readonly RenderPlanCaption[], seconds: 
   return captions.filter((caption) => secondsOf(caption.sequenceRange.start) <= seconds && seconds < secondsOf(caption.sequenceRange.end));
 }
 
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+/** 两个拖动端点（0–1）→ 画面区域；太小（< 2%）视为没框。 */
+export function regionFromPoints(from: { x: number; y: number }, to: { x: number; y: number }): FrameRegion | null {
+  const x = Math.min(from.x, to.x);
+  const y = Math.min(from.y, to.y);
+  const width = Math.abs(to.x - from.x);
+  const height = Math.abs(to.y - from.y);
+  if (![x, y, width, height].every(Number.isFinite) || width < 0.02 || height < 0.02) return null;
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  return { x: round(x), y: round(y), width: round(Math.min(width, 1 - x)), height: round(Math.min(height, 1 - y)) };
+}
+
+const regionStyle = (region: FrameRegion) => ({
+  left: `${String(region.x * 100)}%`,
+  top: `${String(region.y * 100)}%`,
+  width: `${String(region.width * 100)}%`,
+  height: `${String(region.height * 100)}%`,
+});
+
 export function StudioCanvas(props: {
   aspectRatio: string;
   mode: CanvasMode;
@@ -73,12 +93,26 @@ export function StudioCanvas(props: {
   onTimeUpdate: () => void;
   onLoaded: () => void;
   onPlayState: (playing: boolean) => void;
+  /** 框出的画面区域（V6-3："这里"指画面上的一块） */
+  region: FrameRegion | null;
+  /** 正在框选：画面上覆盖一层拖动框选 */
+  drawing: boolean;
+  onRegion: (region: FrameRegion) => void;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.canvas;
   const ratio = parseRatio(props.aspectRatio);
   const [stageRef, box] = useFittedBox(ratio);
   const [dragging, setDragging] = useState(false);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [drawFrom, setDrawFrom] = useState<{ x: number; y: number } | null>(null);
+  const [drawDraft, setDrawDraft] = useState<FrameRegion | null>(null);
+  const pointAt = (event: ReactPointerEvent<HTMLDivElement>): { x: number; y: number } => {
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (rect === undefined || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    return { x: clamp01((event.clientX - rect.left) / rect.width), y: clamp01((event.clientY - rect.top) / rect.height) };
+  };
+  const shownRegion = drawDraft ?? props.region;
 
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!props.canEdit || !event.dataTransfer.types.includes('Files')) return;
@@ -135,7 +169,7 @@ export function StudioCanvas(props: {
     const captions = props.shown === null ? [] : activeCaptions(props.shown.captions, props.seconds);
     const pending = props.target === null || props.target.status === 'QUEUED' || props.target.status === 'RENDERING';
     content = (
-      <div className={styles['frame']} style={{ width: `${String(box.width)}px`, height: `${String(box.height)}px` }}>
+      <div ref={frameRef} className={styles['frame']} style={{ width: `${String(box.width)}px`, height: `${String(box.height)}px` }}>
         {props.shown?.playbackUrl ? (
           <video
             ref={props.videoRef}
@@ -154,6 +188,29 @@ export function StudioCanvas(props: {
         ) : null}
         {captions.length > 0 ? <div className={styles['caption']}>{captions.map((caption) => <span key={caption.captionId}>{caption.text}</span>)}</div> : null}
         {props.shown !== null ? <span className={`${styles['badge']} ${props.trial ? styles['badgeTrial'] : ''}`}>{props.trial ? t.trialBadge : t.currentBadge}</span> : null}
+        {shownRegion !== null ? <span className={styles['regionBox']} role="img" aria-label={t.areaLabel} style={regionStyle(shownRegion)} /> : null}
+        {props.drawing ? (
+          <div
+            className={styles['drawLayer']}
+            role="application"
+            aria-label={t.markAreaHint}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDrawFrom(pointAt(event));
+              setDrawDraft(null);
+            }}
+            onPointerMove={(event) => { if (drawFrom !== null) setDrawDraft(regionFromPoints(drawFrom, pointAt(event))); }}
+            onPointerUp={(event) => {
+              if (drawFrom !== null) {
+                const region = regionFromPoints(drawFrom, pointAt(event));
+                if (region !== null) props.onRegion(region);
+              }
+              setDrawFrom(null);
+              setDrawDraft(null);
+            }}
+            onPointerCancel={() => { setDrawFrom(null); setDrawDraft(null); }}
+          />
+        ) : null}
         {props.targetFailed ? (
           <div className={styles['stageStatus']}><div role="alert">
             <strong>{t.renderFailed}</strong>

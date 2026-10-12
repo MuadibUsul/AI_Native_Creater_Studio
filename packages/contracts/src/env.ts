@@ -274,6 +274,12 @@ export const workerEnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
   /** 导演模型 id（缺省 claude-opus-5-5） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
+  /**
+   * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
+   */
+  ANCS_EFFECT_CODEGEN: z.enum(['disabled', 'enabled'], { message: 'ANCS_EFFECT_CODEGEN 仅支持 disabled / enabled' }).optional(),
+  /** 特效图层渲染命令覆盖（缺省：仓库内 apps/render-worker/src/run-effect.ts） */
+  ANCS_EFFECT_RENDER_CMD: nonEmpty('ANCS_EFFECT_RENDER_CMD').optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

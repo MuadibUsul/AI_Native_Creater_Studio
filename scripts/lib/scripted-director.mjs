@@ -1,6 +1,7 @@
 // 脚本导演（SCRIPTED，不是真实 Provider）：读本轮上下文（素材、时间线、指点、请求），只用统一工具目录里的
-// edit_timeline 与 review_draft；审片讨论只回方案，审片执行按批注指着的片段修改。用于在没有模型密钥时验证界面、服务端与评测框架的闭环；
-// 真实剪辑质量要用真实模型评测。
+// edit_timeline / review_draft / add_effect / update_effect；审片讨论只回方案，审片执行按批注指着的片段修改；
+// 请求里提到特效（爆炸、光效……）时用模板加在指着的画面区域，提到颜色时改已有特效的颜色。
+// 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
 const tag = (text, name) => {
@@ -8,6 +9,11 @@ const tag = (text, name) => {
   return match === null ? null : match[1];
 };
 const usage = { inputTokens: 1200, outputTokens: 180, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+const EFFECT_WORDS = [
+  [/爆炸|explo|boom/i, 'burst'], [/漏光|light leak/i, 'light-leak'], [/光效|光晕|glow/i, 'glow'], [/闪光|sparkle/i, 'sparkles'],
+  [/冲击波|shock/i, 'shockwave'], [/彩纸|confetti/i, 'confetti'],
+];
+const COLOR_WORDS = [[/红|red/i, '#ff3b30'], [/蓝|blue/i, '#3aa0ff'], [/金|gold/i, '#ffd25a'], [/绿|green/i, '#34c759']];
 
 export class ScriptedDirector {
   providerId = 'scripted';
@@ -25,7 +31,12 @@ export class ScriptedDirector {
     const results = last.content.filter((block) => block.type === 'tool_result');
     if (results.length > 0) {
       const failed = results.find((block) => block.isError);
-      if (failed !== undefined) return this.#reply((zh ? '这次改不了：' : "Couldn't apply: ") + failed.content.slice(0, 160));
+      if (failed !== undefined) {
+        if (failed.content.includes('PRODUCTION_POLICY_BLOCKED')) {
+          return this.#reply(zh ? '这个作品还没开启特效：点顶栏的"特效：关"打开后再说一次。' : 'Effects are off for this project. Turn them on with "Effects: off" in the top bar, then ask again.');
+        }
+        return this.#reply((zh ? '这次改不了：' : "Couldn't apply: ") + failed.content.slice(0, 160));
+      }
       // 编辑之后先自检一次（和真实导演一样走通用自检），再回应
       const reviewed = request.messages.some((message) => message.content.some((block) => block.type === 'tool_use' && block.name === 'review_draft'));
       if (!reviewed) return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'review_draft', input: {} }], stopReason: 'tool_use', usage };
@@ -55,9 +66,24 @@ export class ScriptedDirector {
       const operations = [...[...targets].map((clipId) => ({ op: 'trim_clip', clipId, trimTail: '1' })), { op: 'fit_length' }];
       return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
     }
+    const requestText = tag(text, 'request') ?? '';
+    const effectClip = (timeline.clips ?? []).find((clip) => typeof clip.effect === 'string');
+    const color = COLOR_WORDS.find(([pattern]) => pattern.test(requestText))?.[1];
+    if (effectClip !== undefined && color !== undefined) {
+      // 改已有特效的颜色：同一段特效代码按新参数重渲（不写新代码）
+      this.pendingReply = zh ? `把「${effectClip.effect}」改成了新的颜色。` : `Changed the color of "${effectClip.effect}".`;
+      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'update_effect', input: { clipId: effectClip.id, params: { color } } }], stopReason: 'tool_use', usage };
+    }
+    const template = EFFECT_WORDS.find(([pattern]) => pattern.test(requestText))?.[1];
+    if (template !== undefined) {
+      // 加特效：位置与时间取指着的画面区域与时间（工具缺省值），只给模板与时长
+      const where = pointer.frameRegion === undefined ? (zh ? '画面中间' : 'the middle of the picture') : (zh ? '框出的位置' : 'the framed area');
+      this.pendingReply = zh ? `在${where}加了一个特效（模板 ${template}）。` : `Added an effect (${template} template) in ${where}.`;
+      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'add_effect', input: { template, ...(color === undefined ? {} : { params: { color } }) } }], stopReason: 'tool_use', usage };
+    }
     const items = (Array.isArray(footage) ? footage : footage.footage ?? []).filter((item) => item.kind === 'video').sort((a, b) => a.name.localeCompare(b.name));
     const videoTracks = new Set((timeline.tracks ?? []).filter((track) => track.kind === 'VIDEO').map((track) => track.id));
-    const videoClips = (timeline.clips ?? []).filter((clip) => videoTracks.has(clip.track));
+    const videoClips = (timeline.clips ?? []).filter((clip) => videoTracks.has(clip.track) && clip.effect === undefined);
     let operations;
     if (videoClips.length === 0) {
       operations = [...items.map((item) => ({ op: 'place_clip', footageId: item.footageId, sourceStart: '0.5', sourceEnd: '3.5' })), { op: 'fit_length' }];

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { agentPointerSchema, agentTurnSchema } from './agent.js';
 import { opaqueIdSchema } from './common/ids.js';
+import { frameRegionSchema } from './frame-region.js';
 import { isoDateTimeSchema } from './common/time.js';
 
 /**
@@ -14,13 +15,8 @@ import { isoDateTimeSchema } from './common/time.js';
  *   OPEN（可标记/讨论）→ APPLYING（AI 正在一次执行）→ READY（试改待采用）→ APPLIED（已采用）。
  */
 
-/** 画面上的框选（0–1 归一化坐标，原点左上；只用于定位说明，不是时间权威）。 */
-export const reviewRegionSchema = z.object({
-  x: z.number().min(0).max(1),
-  y: z.number().min(0).max(1),
-  width: z.number().gt(0).max(1),
-  height: z.number().gt(0).max(1),
-}).strict().refine((region) => region.x + region.width <= 1.0001 && region.y + region.height <= 1.0001, 'region must stay inside the frame');
+/** 画面上的框选（与对话指向、特效区域同一形状；只用于定位说明，不是时间权威）。 */
+export const reviewRegionSchema = frameRegionSchema;
 export type ReviewRegion = z.infer<typeof reviewRegionSchema>;
 
 /** 用户可设的批注状态；APPLIED 由轮次派生（批注被包含在已采用的执行里）。 */

@@ -66,7 +66,7 @@ function connect(base: string, query: { session: string; token: string }, origin
   return { socket, messages, closed, rejected, opened, json: (value: unknown) => socket.send(JSON.stringify(value)) };
 }
 
-const pointer = (seconds: number, clipIds: string[], label: string): RealtimePointerSample => ({ atSample: Math.round(seconds * 16_000), pointer: { timeRange: null, clipIds }, playhead: null, label });
+const pointer = (seconds: number, clipIds: string[], label: string): RealtimePointerSample => ({ atSample: Math.round(seconds * 16_000), pointer: { timeRange: null, clipIds, frameRegion: null }, playhead: null, label });
 const audio = (seconds: number) => new Uint8Array(Math.round(seconds * 16_000) * 2);
 const ofType = <T extends RealtimeServerMessage['type']>(messages: RealtimeServerMessage[], type: T) => messages.filter((message): message is Extract<RealtimeServerMessage, { type: T }> => message.type === type);
 

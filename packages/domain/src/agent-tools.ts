@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   ApiFailure,
@@ -10,8 +10,10 @@ import {
   mediaTimeToDisplaySecondsText,
   normalizeRational,
   sourceMediaProbeResultSchema,
+  type AgentEffectPorts,
   type AgentFrameSampler,
   type AgentImage,
+  type AgentPointer,
   type AgentToolDescriptor,
   type EditOperation,
   type MediaTime,
@@ -26,6 +28,7 @@ import { readTimelineSnapshot, runEditTrial } from './edit-trial.js';
 import { searchMediaSegments } from './media-search.js';
 import { listUnifiedMediaIndex } from './unified-media-index.js';
 import { reviewTimeline, type ReviewFootage } from './agent-review.js';
+import { EFFECT_AGENT_TOOLS, effectLayersOnTimeline, type EffectLayerRef } from './agent-effects.js';
 
 /**
  * 统一工具目录（V6 §6.3）：AI 通过同一形状的工具读取素材与时间线、改动草稿。
@@ -52,6 +55,10 @@ export interface AgentToolContext {
   draft: AgentDraft;
   /** 素材抽帧（Worker 装配；未装配时"看素材"工具明确报不可用） */
   frames?: AgentFrameSampler;
+  /** 特效渲染（V6-3，Worker 装配；未装配时特效工具明确报不可用） */
+  effects?: AgentEffectPorts;
+  /** 本轮的指向（工具缺省参数用：例如特效默认放在框出的区域、所指时间） */
+  pointer?: AgentPointer;
 }
 
 export interface AgentToolOutcome {
@@ -106,12 +113,13 @@ export interface AgentTimelineView {
   sequenceId: string;
   length: string;
   tracks: { id: string; kind: string; name: string; position: number; muted: boolean; hidden: boolean; locked: boolean }[];
-  clips: { id: string; track: string; footageId: string | null; source: [string, string]; at: [string, string]; linkedClips: string[]; opacity?: number }[];
+  clips: { id: string; track: string; footageId: string | null; source: [string, string]; at: [string, string]; linkedClips: string[]; opacity?: number; effect?: string }[];
   captions: { id: string; track: string; at: [string, string]; text: string }[];
   audioRegions: number;
 }
 
-export function buildAgentTimelineView(state: TimelineState, sequenceId: string): AgentTimelineView {
+/** `effects`：时间线上的特效图层（资产版本 → 特效），给对应片段标上特效名（V6-3）。 */
+export function buildAgentTimelineView(state: TimelineState, sequenceId: string, effects?: ReadonlyMap<string, EffectLayerRef>): AgentTimelineView {
   const sequence = state.sequences.get(sequenceId);
   if (sequence === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
   const tracks = state.tracks.filter((track) => track.sequenceId === sequenceId).sort((left, right) => left.position - right.position);
@@ -133,6 +141,7 @@ export function buildAgentTimelineView(state: TimelineState, sequenceId: string)
         at: [seconds(clip.sequenceRange.start), seconds(clip.sequenceRange.end)],
         linkedClips: clip.avGroupId === null ? [] : state.clips.filter((other) => other.avGroupId === clip.avGroupId && other.id !== clip.id).map((other) => other.id),
         ...(typeof opacity === 'number' && opacity !== 1 ? { opacity } : {}),
+        ...(clip.assetVersionId !== null && effects?.has(clip.assetVersionId) === true ? { effect: effects.get(clip.assetVersionId)!.effect.name } : {}),
       };
     }),
     captions: state.captions.filter((caption) => caption.sequenceId === sequenceId)
@@ -212,6 +221,8 @@ async function listProjectFootage(context: Pick<AgentToolContext, 'deps' | 'work
       eq(assets.projectId, context.projectId),
       eq(assets.status, 'READY'),
       isNull(assets.deletedAt),
+      // 特效图层是渲染产物，不是素材（V6-3）
+      ne(assets.assetType, 'CUSTOM_MOTION_RENDER'),
       eq(assetVersions.status, 'READY'),
       ...(footageIds === undefined ? [] : [inArray(assetVersions.id, [...footageIds])]),
     ));
@@ -277,12 +288,12 @@ function compactPayload(kind: string, payload: Record<string, unknown>): Record<
 const getTimelineTool: AgentToolDefinition<Record<string, never>> = {
   descriptor: {
     name: 'get_timeline', capability: 'timeline.read', effect: 'READ', permission: 'project:read', metered: false,
-    description: 'Read the current draft timeline: length, tracks, clips (footage, source in/out, timeline in/out, linked audio), captions. All times are seconds. Reflects every edit you made in this turn.',
+    description: 'Read the current draft timeline: length, tracks, clips (footage, source in/out, timeline in/out, linked audio; effect clips carry the effect name), captions. All times are seconds. Reflects every edit you made in this turn.',
   },
   input: z.object({}).strict(),
   async run(context) {
     const simulated = await simulateAgentDraft(context, context.draft);
-    const view = buildAgentTimelineView(simulated.timeline, context.sequenceId);
+    const view = buildAgentTimelineView(simulated.timeline, context.sequenceId, await effectLayersOnTimeline(context, simulated.timeline, context.sequenceId));
     const changed = simulated.baseRevision !== context.draft.baseRevision;
     return {
       content: json(changed ? { ...view, projectChangedByUser: true } : view),
@@ -538,7 +549,10 @@ const reviewDraftTool: AgentToolDefinition<Record<string, never>> = {
   input: z.object({}).strict(),
   async run(context) {
     const simulated = await simulateAgentDraft(context, context.draft);
-    const view = buildAgentTimelineView(simulated.timeline, context.sequenceId);
+    // 特效图层叠在画面上，不是素材：不参与素材类检查（黑场、静音、重复使用、有画无声……）
+    const effectLayers = await effectLayersOnTimeline(context, simulated.timeline, context.sequenceId);
+    const fullView = buildAgentTimelineView(simulated.timeline, context.sequenceId, effectLayers);
+    const view = { ...fullView, clips: fullView.clips.filter((clip) => clip.effect === undefined) };
     // 序列时基即帧网格；毫秒时基的旧序列按 30 fps 估一帧（只用来判定"空洞是否超过一帧"）
     const timebase = simulated.timeline.sequences.get(context.sequenceId)?.duration.timebase ?? { num: 1, den: 30 };
     const footageIds = [...new Set(view.clips.map((clip) => clip.footageId).filter((id): id is string => id !== null))];
@@ -586,7 +600,9 @@ const lookAtTimelineTool: AgentToolDefinition<z.infer<typeof lookAtTimelineInput
   async run(context, input) {
     if (context.frames === undefined) return { content: json({ error: 'frame viewing is not available in this deployment' }), isError: true, summary: 'frames unavailable' };
     const simulated = await simulateAgentDraft(context, context.draft);
-    const view = buildAgentTimelineView(simulated.timeline, context.sequenceId);
+    // 看的是特效与字幕之前的画面：跳过特效图层
+    const fullView = buildAgentTimelineView(simulated.timeline, context.sequenceId, await effectLayersOnTimeline(context, simulated.timeline, context.sequenceId));
+    const view = { ...fullView, clips: fullView.clips.filter((clip) => clip.effect === undefined) };
     const visibleVideoTracks = view.tracks.filter((track) => track.kind === 'VIDEO' && !track.hidden).sort((left, right) => right.position - left.position);
     const footageRows = await listProjectFootage(context, [...new Set(view.clips.map((clip) => clip.footageId).filter((id): id is string => id !== null))]);
     const frames: { at: string; clipId: string | null; footage: string | null; footageAt: string | null }[] = [];
@@ -619,7 +635,7 @@ const lookAtTimelineTool: AgentToolDefinition<z.infer<typeof lookAtTimelineInput
   },
 };
 
-/** 默认目录：读取、看素材、草稿编辑与自检（后续里程碑的组件在此注册：代码动效、生成……）。 */
+/** 默认目录：读取、看素材、草稿编辑、自检与特效（后续里程碑的组件在此注册：讲述、生成……）。 */
 export function defaultAgentToolCatalog(): AgentToolCatalog {
   return new AgentToolCatalog()
     .register(getTimelineTool)
@@ -629,5 +645,8 @@ export function defaultAgentToolCatalog(): AgentToolCatalog {
     .register(searchFootageTool)
     .register(editTimelineTool)
     .register(reviewDraftTool)
-    .register(lookAtTimelineTool);
+    .register(lookAtTimelineTool)
+    .register(EFFECT_AGENT_TOOLS[0])
+    .register(EFFECT_AGENT_TOOLS[1])
+    .register(EFFECT_AGENT_TOOLS[2]);
 }

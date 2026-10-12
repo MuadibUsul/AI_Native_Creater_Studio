@@ -22,7 +22,7 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | V6-0 | 工作流引擎 + FFmpeg 终渲染（素材工程导出） | 已交付，真实 FFmpeg 验证 |
 | V6-1 | 共看片室最小闭环：上传 → AI 剪第一版（风格可选）→ 点选/拖选 + 文字 → 原地试改 → 采用/撤回 → 局部预览 → 导出；中英双语界面；AI 自检；初剪评测框架 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**AI 导演用脚本导演验证，真实 Claude 待密钥** |
 | V6-2 | 流式双语语音 + 共同注意力：共看片室里边看边说，边说边出文字，“这个/这里”按说出那一刻绑定，没说完先等后半句；新进程 Realtime Gateway | 已交付，真实浏览器（假麦克风）+ 真实网关验证；**流式识别用本地同协议假服务，真实 Deepgram 待密钥**；AI 语音回应暂用浏览器朗读 |
-| V6-3 | 代码生成特效（模板库 + 沙箱渲染 + 合成） | 未开始 |
+| V6-3 | 代码生成特效：在画面上框出一块说“这里加个爆炸/光效”→ 透明特效图层成为试改（特效轨）→ “换个颜色”只重渲图层 → 采用；6 个模板，AI 写的特效代码先过四道门禁、在隔离子进程里渲染；素材作品缺省不允许程序化特效，由用户在顶栏开启 | 已交付，真实浏览器 + 真实特效渲染 + 真实 FFmpeg 预览/终渲染验证（区域内像素变化、区域外不变）；**AI 为脚本导演，真实 Claude 待密钥**；AI 写特效代码缺省关闭，待真实模型评测后开启 |
 | V6-4 | 批注式审片：手机或桌面逐处标记（位置 + 一句话 + 可选框选）→ 逐条和 AI 讨论方案 → 一次执行 → 只重渲改动的分段 → 采用；可添加到主屏幕 | 已交付，真实浏览器（手机 + 桌面）+ 真实 FFmpeg 验证；**AI 为脚本导演，真实 Claude 待密钥**；语音批注随 V6-2 |
 | V6-5 — V6-8 | 讲述配音、蒸馏器（参考视频 → 风格）、数字人、生成式特效与视频生成 | 未开始 |
 
@@ -66,7 +66,7 @@ node apps/realtime/dist/main.js      # Realtime Gateway（实时语音，可选�
 cd apps/web && npx next start -p 3000
 ```
 
-登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。看完后点顶栏"审片"（`/w/<workspaceId>/review/<projectId>`，手机上可添加到主屏幕）逐处标记问题、和 AI 商量后一次改完。
+登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。想加特效：顶栏打开"特效"，暂停到某一刻点"框选画面"框出位置，再说"这里加个光效"。看完后点顶栏"审片"（`/w/<workspaceId>/review/<projectId>`，手机上可添加到主屏幕）逐处标记问题、和 AI 商量后一次改完。
 
 ## 验收与评测脚本
 
@@ -74,6 +74,7 @@ cd apps/web && npx next start -p 3000
 |---|---|
 | `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
 | `node scripts/voice-browser-check.mjs` | 实时语音端到端：Chrome 假麦克风 → AudioWorklet → 网关 → 流式识别（本地同协议假服务）→ 指代绑定 → 试改；中英文；截图写入 `docs/verification/artifacts/v6-2/` |
+| `node scripts/effects-browser-check.mjs` | 代码生成特效端到端：项目规则开关 → 框选画面 → 特效试改（预览像素校验）→ 改颜色 → 采用，真实 API/Worker/FFmpeg + 真实特效渲染子进程，脚本导演；截图写入 `docs/verification/artifacts/v6-3/` |
 | `node scripts/review-browser-check.mjs` | 批注式审片端到端：手机 390×844 触屏 + 桌面，真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-4/` |
 | `node scripts/eval-first-cut.mjs` | 初剪评测冒烟（`evals/first-cut/smoke.json`，脚本导演，只证明框架可用） |
 | `node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export` | 真实模型初剪评测：自动指标 + 人工评分表 + 导出成片（需 `ANTHROPIC_API_KEY`，素材放 `Videos/`，见评分标准文档） |

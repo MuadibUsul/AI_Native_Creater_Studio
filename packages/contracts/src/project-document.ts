@@ -64,6 +64,27 @@ export const productionPolicyOverridesSchema = productionPolicySchema
   .strict();
 export type ProductionPolicyOverrides = z.infer<typeof productionPolicyOverridesSchema>;
 
+/**
+ * 用户显式修改项目制作规则（V6-3 起：例如素材工程开启"程序化特效"）。只改各项"允许"开关，
+ * 不改工程模式；服务端在每次相应能力调用时仍按当前规则拦截。每次修改记审计事件。
+ */
+export const updateProductionPolicyRequestSchema = productionPolicySchema.pick({
+  allowGeneratedVideo: true,
+  allowGeneratedImage: true,
+  allowGeneratedSpeech: true,
+  allowVoiceReplacement: true,
+  allowScriptRewrite: true,
+  allowGeneratedMusic: true,
+  allowGeneratedSfx: true,
+  allowProceduralGraphics: true,
+  allowCaptions: true,
+  allowGenerativeFill: true,
+  allowFrameInterpolation: true,
+  allowExternalStock: true,
+  allowExternalAnalysis: true,
+}).partial().strict().refine((value) => Object.keys(value).length > 0, 'at least one policy switch is required');
+export type UpdateProductionPolicyRequest = z.infer<typeof updateProductionPolicyRequestSchema>;
+
 export function defaultProductionPolicy(mode: ProjectMode): ProductionPolicy {
   const shared = {
     mode,

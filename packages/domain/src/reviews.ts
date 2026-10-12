@@ -273,7 +273,7 @@ export async function applyReview(deps: DomainDeps, input: {
   const turn = await startAgentTurn(deps, {
     workspaceId: input.workspaceId,
     sessionId: session.id,
-    request: { message: APPLY_MESSAGES[locale](agreed.length), pointer: { timeRange: null, clipIds: [] } },
+    request: { message: APPLY_MESSAGES[locale](agreed.length), pointer: { timeRange: null, clipIds: [], frameRegion: null } },
     review: { purpose: 'APPLY_REVIEW', roundId: row.id, noteIds: agreed.map((note) => note.id), expectedApplyTurnId: row.applyTurnId },
     createdBy: input.createdBy ?? null,
     idempotencyKey: input.idempotencyKey === null || input.idempotencyKey === undefined ? null : `review-apply:${input.idempotencyKey}`,

@@ -9,7 +9,7 @@
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 9 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 10 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 12 | PLANNED | — | — |

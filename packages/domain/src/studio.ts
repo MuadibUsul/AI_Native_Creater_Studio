@@ -7,11 +7,14 @@ import {
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
   createStudioProjectRequestSchema,
+  effectLayerMetadataSchema,
   mediaTimeSchema,
+  productionPolicySchema,
   mediaTimeToDisplaySecondsText,
   studioStateSchema,
   type CreateStudioProjectRequest,
   type StudioAnalysisState,
+  type StudioEffect,
   type StudioFootage,
   type StudioProjectRef,
   type StudioState,
@@ -101,7 +104,14 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
       ne(assets.origin, 'SYSTEM_RENDER'),
     ))
     .orderBy(asc(assets.createdAt));
-  const versionIds = rows.map((row) => row.version?.id).filter((id): id is string => id !== undefined);
+  // 特效图层（V6-3）是渲染产物：不在素材里，单独列出供时间带标名
+  const effects: StudioEffect[] = rows.flatMap(({ asset, version }) => {
+    if (asset.assetType !== 'CUSTOM_MOTION_RENDER' || version === null) return [];
+    const parsed = effectLayerMetadataSchema.safeParse((asset.metadata as { effect?: unknown } | null)?.effect);
+    return parsed.success ? [{ footageId: version.id, name: parsed.data.name, templateId: parsed.data.templateId, source: parsed.data.source, params: parsed.data.params }] : [];
+  });
+  const footageRows = rows.filter(({ asset }) => asset.assetType !== 'CUSTOM_MOTION_RENDER');
+  const versionIds = footageRows.map((row) => row.version?.id).filter((id): id is string => id !== undefined);
   // 镜头索引与视觉理解记在 media_index_runs，语音转写记在 media_transcript_runs
   const indexRuns = versionIds.length === 0 ? [] : await deps.db.select({ source: mediaIndexRuns.sourceAssetVersionId, processor: mediaIndexRuns.processorVersion, status: mediaIndexRuns.status, errorCode: mediaIndexRuns.errorCode })
     .from(mediaIndexRuns).where(and(eq(mediaIndexRuns.workspaceId, input.workspaceId), inArray(mediaIndexRuns.sourceAssetVersionId, versionIds)));
@@ -110,7 +120,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
   const runOf = (versionId: string | undefined, processor: string) =>
     [...indexRuns, ...transcriptRuns].find((run) => run.source === versionId && run.processor === processor);
 
-  const footage: StudioFootage[] = rows.map(({ asset, version }) => {
+  const footage: StudioFootage[] = footageRows.map(({ asset, version }) => {
     const mime = version?.mimeType ?? String((asset.metadata as { mimeType?: unknown } | null)?.mimeType ?? '');
     const filename = (asset.metadata as { filename?: unknown } | null)?.filename;
     // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线
@@ -135,10 +145,14 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
   });
 
   return studioStateSchema.parse({
-    project: { id: project.id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision },
+    project: {
+      id: project.id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision,
+      allowEffects: productionPolicySchema.safeParse(project.productionPolicy).data?.allowProceduralGraphics === true,
+    },
     sequenceId: sequence.id,
     session,
     footage,
+    effects,
     cost: await projectAgentCost(deps, input),
   });
 }

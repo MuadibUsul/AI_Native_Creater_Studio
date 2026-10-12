@@ -19,13 +19,15 @@ import { createFfmpegMediaProxyTranscoder } from '../../apps/worker/dist/source-
 import { createFfmpegMediaIndexer } from '../../apps/worker/dist/source-media-indexer-process.js';
 import { createFfmpegRenderPlanExecutor } from '../../apps/worker/dist/render-plan/ffmpeg-executor.js';
 import { createStorageFrameSampler } from '../../apps/worker/dist/frame-sampler-process.js';
+import { createProcessEffectRenderer } from '../../apps/worker/dist/effect-renderer-process.js';
+import { createProcessMotionValidator } from '../../apps/worker/dist/motion-validator-process.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
 
 /**
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
- *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] } }} options
+ *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' } }} options
  *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
 export async function startStudioEnv(options) {
@@ -81,7 +83,14 @@ export async function startStudioEnv(options) {
   const probe = createFfmpegSourceMediaProbe();
   const workflowRegistry = new WorkflowRegistry()
     .register(compositionFinalRenderWorkflow({ executor: createFfmpegRenderPlanExecutor(), outputProbe: probe }))
-    .register(agentTurnWorkflow({ model: options.director, frames: createStorageFrameSampler({ storage }) }));
+    .register(agentTurnWorkflow({
+      model: options.director,
+      frames: createStorageFrameSampler({ storage }),
+      // V6-3：特效图层渲染（真实子进程 + 无头浏览器）；options.effects = { codegen: 'enabled' | 'disabled' }
+      ...(options.effects === undefined ? {} : {
+        effects: { renderer: createProcessEffectRenderer({ probe }), validator: createProcessMotionValidator(), codegen: options.effects.codegen ?? 'disabled' },
+      }),
+    }));
   const registry = createDefaultRegistry({
     sourceMediaProbe: probe,
     sourceMediaTranscoder: createFfmpegMediaProxyTranscoder(),

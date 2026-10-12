@@ -21,6 +21,7 @@ import { buildServer } from './server.js';
  * - 工作台状态：只列用户素材（不含系统渲染产物），上传/理解进度按处理器聚合；AI 成本从 0 开始；
  * - 撤销这次修改：同一版本号的一批事件一组撤销；没有可撤销 → 409；之后仍可逐条重做；
  * - VIEWER 可读不可撤销（403）；跨工作区 404。
+ * - V6-3 制作规则开关：素材工程默认不允许程序化特效；编辑者显式开启/关闭（工作台状态随之变化），VIEWER 403、跨工作区 404、空修改被契约拒绝。
  */
 
 const PASSWORD = 'password-1234';
@@ -90,7 +91,8 @@ describe('V6-1c 共看片室（HTTP + SDK）', () => {
     const ref = await owner.studio.create(workspace.id, { title: '冰岛环岛', aspectRatio: '9:16', locale: 'en' }, { idempotencyKey: `s-${randomUUID()}` });
 
     const state = await owner.studio.state(workspace.id, ref.projectId);
-    expect(state.project).toMatchObject({ id: ref.projectId, title: '冰岛环岛', aspectRatio: '9:16' });
+    expect(state.project).toMatchObject({ id: ref.projectId, title: '冰岛环岛', aspectRatio: '9:16', allowEffects: false });
+    expect(state.effects).toEqual([]);
     expect(state.sequenceId).toBe(ref.sequenceId);
     expect(state.session).toMatchObject({ id: ref.sessionId, sequenceId: ref.sequenceId, locale: 'en' });
     expect(state.footage).toEqual([]);
@@ -166,5 +168,30 @@ describe('V6-1c 共看片室（HTTP + SDK）', () => {
     await owner.projects.redo(ref.projectId);
     const redone = await snapshot();
     expect(redone).toMatchObject({ clips: 1, duration: '240/30' });
+  }, 60_000);
+
+  it('制作规则开关（V6-3）：默认关闭程序化特效；编辑者显式开关；VIEWER 403；跨工作区 404；空修改被拒', async () => {
+    const owner = await signedIn();
+    const workspace = await owner.workspaces.create({ name: `特效-${randomUUID().slice(0, 8)}` });
+    const ref = await owner.studio.create(workspace.id, { title: 'Effects' }, { idempotencyKey: `s-${randomUUID()}` });
+    expect((await owner.studio.state(workspace.id, ref.projectId)).project.allowEffects).toBe(false);
+
+    const enabled = await owner.studio.updateProductionPolicy(workspace.id, ref.projectId, { allowProceduralGraphics: true }, { idempotencyKey: `p-${randomUUID()}` });
+    expect(enabled).toMatchObject({ mode: 'FOOTAGE_EDIT', allowProceduralGraphics: true, allowGeneratedVideo: false, preserveOriginalSpeech: true });
+    expect((await owner.studio.state(workspace.id, ref.projectId)).project.allowEffects).toBe(true);
+
+    const viewerEmail = `effects-viewer-${randomUUID()}@test.local`;
+    const viewer = await signedIn(viewerEmail);
+    await owner.workspaces.members.add(workspace.id, { email: viewerEmail, role: 'VIEWER' });
+    await expectApiError(viewer.studio.updateProductionPolicy(workspace.id, ref.projectId, { allowProceduralGraphics: false }, { idempotencyKey: `p-${randomUUID()}` }), 403);
+    const stranger = await signedIn();
+    const strangerWorkspace = await stranger.workspaces.create({ name: `外部-${randomUUID().slice(0, 8)}` });
+    await expectApiError(stranger.studio.updateProductionPolicy(strangerWorkspace.id, ref.projectId, { allowProceduralGraphics: false }, { idempotencyKey: `p-${randomUUID()}` }), 404);
+    // 空修改：契约拒绝（SDK 发出前即按同一 schema 校验）
+    await expect(owner.studio.updateProductionPolicy(workspace.id, ref.projectId, {}, { idempotencyKey: `p-${randomUUID()}` })).rejects.toThrow(/at least one policy switch/);
+
+    const disabled = await owner.studio.updateProductionPolicy(workspace.id, ref.projectId, { allowProceduralGraphics: false }, { idempotencyKey: `p-${randomUUID()}` });
+    expect(disabled.allowProceduralGraphics).toBe(false);
+    expect((await owner.studio.state(workspace.id, ref.projectId)).project.allowEffects).toBe(false);
   }, 60_000);
 });

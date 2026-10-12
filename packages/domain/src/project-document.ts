@@ -1,4 +1,5 @@
-import { and, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -9,9 +10,11 @@ import {
   projectBriefSchema,
   projectDocumentSchema,
   productionPolicySchema,
+  updateProductionPolicyRequestSchema,
   type GovernedGenerationCapability,
   type ProductionPolicy,
   type ProjectDocument,
+  type UpdateProductionPolicyRequest,
   type SceneGraph,
   type Sequence,
   type Track,
@@ -22,7 +25,7 @@ import {
   type CaptionSpan,
   type AudioRegion,
 } from '@ancs/contracts';
-import { projectObjectLocks, projects } from '@ancs/db';
+import { outboxEvents, projectObjectLocks, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { assembleSceneGraph } from './projects.js';
 import { listProjectComposition } from './composition.js';
@@ -224,4 +227,40 @@ export async function assertProjectGenerationAllowed(
     });
   }
   return policy;
+}
+
+/**
+ * 用户显式修改项目制作规则（V6-3：素材工程开启"程序化特效"等）。只改"允许"开关、不改工程模式；
+ * 行锁内读改写，变化写入工作区事件（谁、改了哪几项、改前改后），没有变化时不写事件。
+ */
+export async function updateProjectProductionPolicy(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; actorId: string | null; changes: UpdateProductionPolicyRequest },
+): Promise<ProductionPolicy> {
+  const changes = updateProductionPolicyRequestSchema.parse(input.changes);
+  return deps.db.transaction(async (tx) => {
+    const rows = await tx.select({ productionPolicy: projects.productionPolicy }).from(projects)
+      .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt)))
+      .for('update').limit(1);
+    const row = rows[0];
+    if (row === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    const before = productionPolicySchema.parse(row.productionPolicy);
+    const after = productionPolicySchema.parse({ ...before, ...changes });
+    const changed = (Object.keys(changes) as (keyof UpdateProductionPolicyRequest)[]).filter((key) => before[key] !== after[key]);
+    if (changed.length === 0) return before;
+    await tx.update(projects).set({ productionPolicy: after, updatedAt: sql`now()` }).where(eq(projects.id, input.projectId));
+    await tx.insert(outboxEvents).values({
+      id: `obx_${randomUUID()}`,
+      workspaceId: input.workspaceId,
+      type: 'project.production_policy.updated',
+      payload: {
+        projectId: input.projectId,
+        mode: after.mode,
+        changes: Object.fromEntries(changed.map((key) => [key, { from: before[key], to: after[key] }])),
+        actorId: input.actorId,
+        actorType: 'USER',
+      },
+    });
+    return after;
+  });
 }

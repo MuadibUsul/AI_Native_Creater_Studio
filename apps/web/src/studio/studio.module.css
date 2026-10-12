@@ -284,3 +284,10 @@
 .strategyField { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
 .strategyField select { width: auto; min-height: 28px; padding: 2px 8px; font-size: var(--ui-type-metadata); }
 .strategyHint { flex: 1; min-width: 200px; font-size: var(--ui-type-metadata); color: var(--ui-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* V6-3：画面框选（"这里"指画面上的一块）与特效轨 */
+.regionBox { position: absolute; pointer-events: none; border: 2px solid var(--studio-on-matte); border-radius: 4px; background: rgba(245, 245, 245, .10); box-shadow: 0 0 0 1px rgba(0, 0, 0, .65); z-index: 2; }
+.drawLayer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; outline: 2px dashed var(--studio-on-matte); outline-offset: -4px; z-index: 3; }
+.laneEffect .laneLabel { font-weight: 600; }
+.clipEffect { background: var(--ui-bg-subtle); border: 1px dashed var(--ui-fg-secondary); color: var(--ui-fg-primary); }
+.clipEffect::before { content: '✦ '; }

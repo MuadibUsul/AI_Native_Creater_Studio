@@ -49,17 +49,31 @@ export const studioFootageSchema = z.object({
 }).strict();
 export type StudioFootage = z.infer<typeof studioFootageSchema>;
 
+/** 时间线上的特效图层（V6-3）：AI 渲染出的透明图层视频；时间带据此给片段标名，不出现在素材列表里。 */
+export const studioEffectSchema = z.object({
+  /** 图层的资产版本 id（片段引用的 footageId） */
+  footageId: opaqueIdSchema,
+  name: z.string(),
+  templateId: z.string().nullable(),
+  source: z.enum(['TEMPLATE', 'CODE']),
+  params: z.record(z.string(), z.union([z.string(), z.number()])),
+}).strict();
+export type StudioEffect = z.infer<typeof studioEffectSchema>;
+
 export const studioStateSchema = z.object({
   project: z.object({
     id: opaqueIdSchema,
     title: z.string(),
     aspectRatio: z.string(),
     revision: z.number().int().nonnegative(),
+    /** 项目制作规则是否允许程序化特效（素材工程默认关闭，用户可显式开启） */
+    allowEffects: z.boolean(),
   }).strict(),
   sequenceId: opaqueIdSchema,
   /** 该序列最近的 AI 会话；没有时为空（只读读面不代建，界面在第一次说话前经 agent 接口建会话） */
   session: agentSessionSchema.nullable(),
   footage: z.array(studioFootageSchema),
+  effects: z.array(studioEffectSchema),
   cost: projectAgentCostSchema,
 }).strict();
 export type StudioState = z.infer<typeof studioStateSchema>;

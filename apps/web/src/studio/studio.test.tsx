@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { apiError, mockClient, renderWithClient } from '@/test-utils';
@@ -30,19 +30,20 @@ const footage = (name: string, footageId: string) => ({
   understanding: { index: 'READY', transcript: 'WORKING', visual: 'FAILED' },
 });
 const studioState = (overrides: Record<string, unknown> = {}) => ({
-  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5 },
+  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5, allowEffects: false },
   sequenceId: 'seq_1',
   session: { id: 'ses_1', workspaceId: 'ws_1', projectId: 'prj_1', sequenceId: 'seq_1', locale: 'zh-CN', createdBy: null, createdAt: '2026-10-12T00:00:00.000Z' },
   footage: [footage('glacier.mp4', 'av_g'), footage('lake.mp4', 'av_l')],
+  effects: [],
   cost: { projectId: 'prj_1', turns: 1, usage: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 120_000, unpricedCalls: 0 },
   ...overrides,
 });
-const projectState = (clips: unknown[] = []) => ({
+const projectState = (clips: unknown[] = [], extraTracks: unknown[] = []) => ({
   document: {
     projectRevision: 5,
     composition: {
       sequences: [{ id: 'seq_1', duration: mt(30), frameRate: { num: 30, den: 1 } }],
-      tracks: [{ id: 'trk_v', sequenceId: 'seq_1', kind: 'VIDEO', position: 0 }, { id: 'trk_a', sequenceId: 'seq_1', kind: 'AUDIO', position: 1 }],
+      tracks: [{ id: 'trk_v', sequenceId: 'seq_1', kind: 'VIDEO', position: 0 }, { id: 'trk_a', sequenceId: 'seq_1', kind: 'AUDIO', position: 1 }, ...extraTracks],
       clips,
     },
   },
@@ -85,7 +86,7 @@ function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown
   const sdk = mockClient({
     auth: { session: vi.fn().mockResolvedValue({ user: { id: 'usr_1' } }) },
     workspaces: { get: vi.fn().mockResolvedValue({ id: 'ws_1', role: 'EDITOR' }) },
-    studio: { state: vi.fn().mockResolvedValue(overrides.state ?? studioState()), undoChange: vi.fn() },
+    studio: { state: vi.fn().mockResolvedValue(overrides.state ?? studioState()), undoChange: vi.fn(), updateProductionPolicy: vi.fn().mockResolvedValue({ allowProceduralGraphics: true }) },
     projects: {
       state: vi.fn().mockResolvedValue(projectState(overrides.clips)),
       proposal: vi.fn().mockResolvedValue(proposal),
@@ -145,7 +146,7 @@ describe('V6-1c 共看片室', () => {
     const { sdk, startTurn } = client({ turns: [] });
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
     await userEvent.click(await screen.findByRole('button', { name: '让 AI 剪第一版' }));
-    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '用这些素材剪出第一版。', pointer: { timeRange: null, clipIds: [] } }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '用这些素材剪出第一版。', pointer: { timeRange: null, clipIds: [], frameRegion: null } }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
   });
 
   it('试改：就地播放试改预览，时间带显示试改的片段；"就这样"按看过的哈希采用', async () => {
@@ -170,9 +171,65 @@ describe('V6-1c 共看片室', () => {
     await userEvent.keyboard('{Enter}');
     expect(screen.getByText('片段「lake.mp4」')).toBeTruthy();
     await userEvent.type(screen.getByLabelText('告诉 AI 怎么改'), '再短一点{Enter}');
-    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '再短一点', pointer: { timeRange: null, clipIds: ['clp_l'] } }, expect.anything()));
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '再短一点', pointer: { timeRange: null, clipIds: ['clp_l'], frameRegion: null } }, expect.anything()));
     await userEvent.click(screen.getByRole('button', { name: '清除选择' }));
     expect(screen.getByText('未选择 · 作用于整条视频')).toBeTruthy();
+  });
+
+  it('V6-3 指画面与特效：特效开关显式修改项目规则；框出画面区域随对话发出；特效轨与特效片段单独标名', async () => {
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    // jsdom 没有 PointerEvent：用带坐标的鼠标事件代替（与浏览器同样带 clientX/clientY）
+    if (!('PointerEvent' in globalThis)) {
+      globalThis.PointerEvent = class extends MouseEvent {
+        readonly pointerId: number;
+        constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+      } as unknown as typeof PointerEvent;
+    }
+    const withEffect = preview({ clips: [...preview().clips as unknown[], { clipId: 'clp_fx', trackId: 'trk_fx', kind: 'VIDEO', sourceVersionId: 'av_fx', sequenceRange: range(15, 60) }] });
+    const { sdk, startTurn } = client({
+      turns: [turn()],
+      state: studioState({ effects: [{ footageId: 'av_fx', name: 'Glow', templateId: 'glow', source: 'TEMPLATE', params: { color: '#ffffff' } }] }),
+      extra: { previews: { request: vi.fn().mockResolvedValue(withEffect), get: vi.fn().mockResolvedValue(withEffect) } },
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByRole('button', { name: /^片段 特效 Glow，00:00\.5 到 00:02\.0$/ })).toBeTruthy();
+    expect(screen.getByText('特效', { selector: 'span' })).toBeTruthy();
+
+    const toggle = screen.getByRole('button', { name: /特效：关/ });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(toggle);
+    await waitFor(() => expect(sdk.studio.updateProductionPolicy).toHaveBeenCalledWith('ws_1', 'prj_1', { allowProceduralGraphics: true }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+
+    await userEvent.click(screen.getByRole('button', { name: /框选画面/ }));
+    const layer = screen.getByRole('application', { name: /在画面上拖动/ });
+    fireEvent.pointerDown(layer, { clientX: 450, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(layer, { clientX: 700, clientY: 25, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 810, clientY: 30, pointerId: 1 });
+    expect(screen.queryByRole('application')).toBeNull();
+    expect(screen.getByRole('img', { name: '框出的画面区域' })).toBeTruthy();
+    expect(screen.getByText('画面区域 · 00:00.0')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('告诉 AI 怎么改'), '这里加个光效{Enter}');
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', {
+      // 没选时间：以框选时那一帧起的 1 秒为"这里"的时间
+      message: '这里加个光效', pointer: { timeRange: { start: pointerSecondsText(mt(0)), end: pointerSecondsText(mt(30)) }, clipIds: [], frameRegion: { x: 0.5, y: 0.25, width: 0.4, height: 0.5 } },
+    }, expect.anything()));
+    await userEvent.click(screen.getByRole('button', { name: '清除选择' }));
+    expect(screen.queryByRole('img', { name: '框出的画面区域' })).toBeNull();
+  });
+
+  it('V6-3 已采用的特效：工程里特效轨上的片段也上时间带并标名', async () => {
+    const clips = [
+      { id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sequenceRange: range(0, 30) },
+      { id: 'clp_fx', sequenceId: 'seq_1', trackId: 'trk_fx', assetVersionId: 'av_fx', sequenceRange: range(6, 21) },
+    ];
+    const { sdk } = client({
+      turns: [],
+      state: studioState({ effects: [{ footageId: 'av_fx', name: 'Sparkles', templateId: 'sparkles', source: 'TEMPLATE', params: {} }] }),
+      extra: { projects: { state: vi.fn().mockResolvedValue(projectState(clips, [{ id: 'trk_fx', sequenceId: 'seq_1', kind: 'VIDEO', position: 2 }])), proposal: vi.fn().mockResolvedValue(proposal) } },
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByRole('button', { name: /^片段 特效 Sparkles，00:00\.2 到 00:00\.7$/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^片段 glacier\.mp4/ })).toBeTruthy();
   });
 
   it('风格（可选）：默认不选；选了风格和旋钮，这一轮对话带上策略包与取值', async () => {
@@ -186,7 +243,7 @@ describe('V6-1c 共看片室', () => {
     await userEvent.selectOptions(screen.getByLabelText('节奏'), 'intense');
     await userEvent.type(screen.getByLabelText('告诉 AI 怎么改'), '更有冲击力{Enter}');
     await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', {
-      message: '更有冲击力', pointer: { timeRange: null, clipIds: [] }, strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'intense' },
+      message: '更有冲击力', pointer: { timeRange: null, clipIds: [], frameRegion: null }, strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'intense' },
     }, expect.anything()));
   });
 

@@ -70,7 +70,7 @@ export function findDeicticWords(words: readonly RealtimeWord[], locale: string)
   return found;
 }
 
-const isExplicit = (pointer: AgentPointer): boolean => pointer.timeRange !== null || pointer.clipIds.length > 0;
+const isExplicit = (pointer: AgentPointer): boolean => pointer.timeRange !== null || pointer.clipIds.length > 0 || pointer.frameRegion !== null;
 
 /** 某一时刻（秒）的指向样本：取时钟不晚于该时刻（加宽限）的最后一个样本。 */
 export function pointerSampleAt(samples: readonly RealtimePointerSample[], seconds: number, sampleRate: number, graceSeconds = GRACE_SECONDS): RealtimePointerSample | null {
@@ -88,20 +88,27 @@ function playheadRange(playhead: string | null): AgentPointer | null {
   if (playhead === null) return null;
   const at = Number(playhead);
   if (!Number.isFinite(at) || at < 0) return null;
-  return { timeRange: { start: decimal(Math.max(0, at - PLAYHEAD_SPAN_SECONDS)), end: decimal(at + PLAYHEAD_SPAN_SECONDS) }, clipIds: [] };
+  return { timeRange: { start: decimal(Math.max(0, at - PLAYHEAD_SPAN_SECONDS)), end: decimal(at + PLAYHEAD_SPAN_SECONDS) }, clipIds: [], frameRegion: null };
 }
 
-/** 两处指向合并（"从这里到这里"）：时间取并集范围，片段取并集。 */
+/** 只框了画面区域、没有选时间或片段：区域配上当时的播放位置（"这里加个光效"= 这块画面、这一刻）。 */
+function withPlayheadTime(pointer: AgentPointer, playhead: string | null): AgentPointer {
+  if (pointer.timeRange !== null || pointer.clipIds.length > 0) return pointer;
+  const range = playheadRange(playhead);
+  return range === null ? pointer : { ...range, frameRegion: pointer.frameRegion };
+}
+
+/** 两处指向合并（"从这里到这里"）：时间取并集范围，片段取并集，画面区域取先指的那一处。 */
 function mergePointers(left: AgentPointer, right: AgentPointer): AgentPointer {
   const ranges = [left.timeRange, right.timeRange].filter((range): range is { start: string; end: string } => range !== null);
   const timeRange = ranges.length === 0 ? null : {
     start: decimal(Math.min(...ranges.map((range) => Number(range.start)))),
     end: decimal(Math.max(...ranges.map((range) => Number(range.end)))),
   };
-  return { timeRange, clipIds: [...new Set([...left.clipIds, ...right.clipIds])] };
+  return { timeRange, clipIds: [...new Set([...left.clipIds, ...right.clipIds])], frameRegion: left.frameRegion ?? right.frameRegion };
 }
 
-const EMPTY: AgentPointer = { timeRange: null, clipIds: [] };
+const EMPTY: AgentPointer = { timeRange: null, clipIds: [], frameRegion: null };
 
 export function bindAttention(input: {
   words: readonly RealtimeWord[];
@@ -114,7 +121,7 @@ export function bindAttention(input: {
   const deictic = findDeicticWords(input.words, input.locale);
   const bound = deictic.map((hit) => {
     const sample = pointerSampleAt(input.samples, hit.at, input.sampleRate);
-    if (sample !== null && isExplicit(sample.pointer)) return { hit, sample, pointer: sample.pointer, evidence: 'DEICTIC_WORD' as const };
+    if (sample !== null && isExplicit(sample.pointer)) return { hit, sample, pointer: withPlayheadTime(sample.pointer, sample.playhead), evidence: 'DEICTIC_WORD' as const };
     const fromPlayhead = sample === null ? null : playheadRange(sample.playhead);
     return fromPlayhead === null ? null : { hit, sample, pointer: fromPlayhead, evidence: 'PLAYHEAD_AT_WORD' as const };
   }).filter((item): item is NonNullable<typeof item> => item !== null);
@@ -134,7 +141,7 @@ export function bindAttention(input: {
   }
   const atStart = pointerSampleAt(input.samples, input.utteranceStart, input.sampleRate, 0);
   if (atStart !== null && isExplicit(atStart.pointer)) {
-    return { pointer: atStart.pointer, evidence: 'SELECTION_AT_START', word: null, atSeconds: Math.round(input.utteranceStart * 1000) / 1000, label: atStart.label };
+    return { pointer: withPlayheadTime(atStart.pointer, atStart.playhead), evidence: 'SELECTION_AT_START', word: null, atSeconds: Math.round(input.utteranceStart * 1000) / 1000, label: atStart.label };
   }
   return { pointer: EMPTY, evidence: 'NONE', word: null, atSeconds: null, label: null };
 }

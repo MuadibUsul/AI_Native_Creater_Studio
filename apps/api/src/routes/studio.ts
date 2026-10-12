@@ -8,19 +8,22 @@ import {
   createStudioProjectRequestSchema,
   errorEnvelopeSchema,
   opaqueIdSchema,
+  productionPolicySchema,
   studioProjectRefSchema,
   studioStateSchema,
   undoChangeResponseSchema,
+  updateProductionPolicyRequestSchema,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
-import { createStudioProject, getStudioState, undoLastChange, type DomainDeps } from '@ancs/domain';
+import { createStudioProject, getStudioState, undoLastChange, updateProjectProductionPolicy, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
  * V6-1c：共看片室（单屏工作台）的服务端入口。
  * - POST /workspaces/:id/studio-projects：一步建好素材工程 + 主序列 + AI 会话；
  * - GET  /workspaces/:id/projects/:projectId/studio：工作台状态（工程、序列、会话、素材上传/理解进度、AI 成本）；
- * - POST /workspaces/:id/projects/:projectId/undo-change：撤销"这次修改"（同一版本号的全部事件一组撤销）。
+ * - POST /workspaces/:id/projects/:projectId/undo-change：撤销"这次修改"（同一版本号的全部事件一组撤销）；
+ * - PATCH /workspaces/:id/projects/:projectId/production-policy：用户显式修改制作规则的"允许"开关（V6-3 开启特效；写工作区事件）。
  * 其余动作复用既有接口：对话走 agent，试看走 previews，采用/撤回走 proposals，导出走 final-renders。
  * 鉴权：读 project:read，写 project:write；跨工作区 → 404（反枚举）。
  */
@@ -60,5 +63,12 @@ export function registerStudioRoutes(app: FastifyInstance, deps: AuthDeps): void
     const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
     await requireProject(request.params.id, request.params.projectId);
     return undoLastChange(domain, { workspaceId: request.params.id, projectId: request.params.projectId, actor: { type: 'USER', id: context.userId } });
+  });
+
+  typed.patch('/workspaces/:id/projects/:projectId/production-policy', {
+    schema: { tags: ['projects'], summary: '修改项目制作规则的"允许"开关（不改工程模式；每项能力调用时服务端仍按规则拦截）', params: projectParams, body: updateProductionPolicyRequestSchema, response: { 200: productionPolicySchema, ...ERROR_RESPONSES } },
+  }, async (request) => {
+    const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+    return updateProjectProductionPolicy(domain, { workspaceId: request.params.id, projectId: request.params.projectId, actorId: context.userId, changes: request.body });
   });
 }

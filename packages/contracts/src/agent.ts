@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { strategyKnobValuesSchema } from './strategy.js';
 import { opaqueIdSchema } from './common/ids.js';
+import { frameRegionSchema } from './frame-region.js';
 import { isoDateTimeSchema } from './common/time.js';
 import type { ProviderImplementation } from './provider-kind.js';
 
@@ -199,11 +200,13 @@ export function agentModelCostMicros(model: string, usage: AgentModelUsage): num
 // 会话与轮次 API
 // ---------------------------------------------------------------------------
 
-/** 用户在发话时指着的东西（V6 §5.1）：时间范围（秒文本，精确解析）与/或片段。 */
+/** 用户在发话时指着的东西（V6 §5.1）：时间范围（秒文本，精确解析）与/或片段，以及画面上框出的区域（V6-3）。 */
 export const agentPointerSchema = z.object({
   /** 序列时间范围（十进制秒文本，例如 "12.4"） */
   timeRange: z.object({ start: z.string().max(20), end: z.string().max(20) }).strict().nullable().default(null),
   clipIds: z.array(opaqueIdSchema).max(50).default([]),
+  /** 画面上框出的区域（0–1 归一化）；"这里加个光效"的"这里" */
+  frameRegion: frameRegionSchema.nullable().default(null),
 }).strict();
 export type AgentPointer = z.infer<typeof agentPointerSchema>;
 
@@ -226,7 +229,7 @@ export type AgentSession = z.infer<typeof agentSessionSchema>;
 
 export const startAgentTurnRequestSchema = z.object({
   message: z.string().trim().min(1).max(4000),
-  pointer: agentPointerSchema.default({ timeRange: null, clipIds: [] }),
+  pointer: agentPointerSchema.default({ timeRange: null, clipIds: [], frameRegion: null }),
   /** 可选的策略（V6 §6.6）：只作为风格参考进入上下文，不改变工具与编排 */
   strategyPackId: z.string().min(1).max(120).nullable().default(null),
   /** 选用策略时的旋钮取值（缺省用策略包的默认值） */

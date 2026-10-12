@@ -6,7 +6,7 @@ import { bindAttention, findDeicticWords, isUnclosedUtterance, joinTranscript, p
 
 const RATE = 16_000;
 const sample = (seconds: number, pointer: Partial<RealtimePointerSample['pointer']> = {}, playhead: string | null = null, label: string | null = null): RealtimePointerSample => ({
-  atSample: Math.round(seconds * RATE), pointer: { timeRange: null, clipIds: [], ...pointer }, playhead, label,
+  atSample: Math.round(seconds * RATE), pointer: { timeRange: null, clipIds: [], frameRegion: null, ...pointer }, playhead, label,
 });
 const words = (...items: [string, number][]): RealtimeWord[] => items.map(([text, start]) => ({ text, start, end: start + 0.2 }));
 
@@ -45,7 +45,7 @@ describe('realtime attention', () => {
   it('"这里"绑定说出那一刻的选择，而不是句末的鼠标', () => {
     const samples = [sample(0, { clipIds: ['clp_a'] }, null, '片段 a'), sample(2.5, { clipIds: ['clp_c'] }, null, '片段 c')];
     const attention = bindAttention({ words: words(['把', 0.1], ['这里', 0.6], ['剪短', 1.0], ['一点', 1.6]), samples, sampleRate: RATE, locale: 'zh-CN', utteranceStart: 0.1 });
-    expect(attention).toEqual({ pointer: { timeRange: null, clipIds: ['clp_a'] }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: '片段 a' });
+    expect(attention).toEqual({ pointer: { timeRange: null, clipIds: ['clp_a'], frameRegion: null }, evidence: 'DEICTIC_WORD', word: '这里', atSeconds: 0.6, label: '片段 a' });
   });
 
   it('"从这里到这里"：两处时间点合成一个范围；没有明确选择时用当时的播放位置', () => {
@@ -54,11 +54,19 @@ describe('realtime attention', () => {
     expect(attention).toMatchObject({ pointer: { timeRange: { start: '1.000', end: '7.500' }, clipIds: [] }, evidence: 'PLAYHEAD_AT_WORD', word: '这里' });
   });
 
+  it('只框了画面区域："这里"= 这块画面 + 说话那一刻的播放位置', () => {
+    const region = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
+    const samples = [sample(0, { frameRegion: region }, '5.000', '画面区域')];
+    const attention = bindAttention({ words: words(['这里', 0.3], ['加个', 0.6], ['爆炸', 0.9]), samples, sampleRate: RATE, locale: 'zh-CN', utteranceStart: 0.3 });
+    expect(attention.pointer).toEqual({ timeRange: { start: '4.000', end: '6.000' }, clipIds: [], frameRegion: region });
+    expect(attention.evidence).toBe('DEICTIC_WORD');
+  });
+
   it('没有指代词：用开口那一刻的明确选择；什么都没指 → 整条视频', () => {
     const selected = [sample(0, { timeRange: { start: '3.600', end: '5.000' } }, '4.000', '00:03.6–00:05.0')];
     expect(bindAttention({ words: words(['剪短', 0.5], ['一点', 0.9]), samples: selected, sampleRate: RATE, locale: 'zh-CN', utteranceStart: 0.5 }))
-      .toEqual({ pointer: { timeRange: { start: '3.600', end: '5.000' }, clipIds: [] }, evidence: 'SELECTION_AT_START', word: null, atSeconds: 0.5, label: '00:03.6–00:05.0' });
+      .toEqual({ pointer: { timeRange: { start: '3.600', end: '5.000' }, clipIds: [], frameRegion: null }, evidence: 'SELECTION_AT_START', word: null, atSeconds: 0.5, label: '00:03.6–00:05.0' });
     expect(bindAttention({ words: words(['make', 0.2], ['it', 0.4], ['shorter', 0.6]), samples: [sample(0, {}, '1.000')], sampleRate: RATE, locale: 'en', utteranceStart: 0.2 }))
-      .toEqual({ pointer: { timeRange: null, clipIds: [] }, evidence: 'NONE', word: null, atSeconds: null, label: null });
+      .toEqual({ pointer: { timeRange: null, clipIds: [], frameRegion: null }, evidence: 'NONE', word: null, atSeconds: null, label: null });
   });
 });

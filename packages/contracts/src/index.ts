@@ -98,6 +98,7 @@ export {
   projectBriefSchema,
   productionPolicySchema,
   productionPolicyOverridesSchema,
+  updateProductionPolicyRequestSchema,
   defaultProductionPolicy,
   semanticSceneSchema,
   semanticPlanSchema,
@@ -111,6 +112,7 @@ export type {
   ProjectBrief,
   ProductionPolicy,
   ProductionPolicyOverrides,
+  UpdateProductionPolicyRequest,
   ProjectDocument,
   GovernedGenerationCapability,
 } from './project-document.js';
@@ -2770,12 +2772,13 @@ export {
   createStudioProjectRequestSchema,
   studioAnalysisStateSchema,
   studioAspectRatioSchema,
+  studioEffectSchema,
   studioFootageSchema,
   studioProjectRefSchema,
   studioStateSchema,
   undoChangeResponseSchema,
 } from './studio.js';
-export type { CreateStudioProjectRequest, StudioAnalysisState, StudioFootage, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
 export {
   STRATEGY_ERROR_REASONS,
   STRATEGY_PACK_KINDS,
@@ -2829,3 +2832,16 @@ export type {
   StreamingAsrSession,
   StreamingSpeechRecognizer,
 } from './realtime.js';
+export {
+  EFFECT_CODEGEN_MODES,
+  EFFECT_COVERAGE,
+  EFFECT_ERROR_REASONS,
+  EFFECT_PARAM_KINDS,
+  effectLayerMetadataSchema,
+  effectParamSchema,
+  effectRegionSchema,
+  effectTemplateSchema,
+} from './effects.js';
+export type { AgentEffectPorts, AgentEffectRenderer, EffectCodegenMode, EffectLayerMetadata, EffectParam, EffectRegion, EffectRenderRequest, EffectTemplate } from './effects.js';
+export { frameRegionSchema } from './frame-region.js';
+export type { FrameRegion } from './frame-region.js';

@@ -118,6 +118,13 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - 反向代理：把 Web 同源的 `/realtime/v1/voice`（WebSocket 升级）转到网关；或在构建 Web 时设 `NEXT_PUBLIC_ANCS_REALTIME_URL=wss://…/realtime/v1/voice` 并把该 origin 加进 `ANCS_CSP_EXTRA_ORIGINS`。
 - 网关不读写工程、不调用 AI：一句话说完交还浏览器，浏览器把它当作一轮对话发给 API（权限、幂等、预算不变）。
 
+### 5.2 特效渲染（V6-3）
+
+- Worker 在仓库根启动时自动装配特效渲染：spawn `apps/render-worker/src/run-effect.ts`（Remotion 无头浏览器 → ProRes 4444 → 无损转 PNG/QuickTime 透明图层），可用 `ANCS_EFFECT_RENDER_CMD` 覆盖命令；需要 `REMOTION_BROWSER_EXECUTABLE`（或本机 Chrome）与 FFmpeg。`ANCS_DISABLE_RENDER=1` 时不装配，特效工具明确报不可用。
+- 子进程只继承白名单环境变量（平台启动项 + `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`），硬超时 3 分钟；特效代码在页面里运行时浏览器网络/存储/DOM 能力被遮蔽。
+- AI 当场写特效代码缺省关闭；按评测结果设 `ANCS_EFFECT_CODEGEN=enabled` 开启（代码先过 Custom Motion 四道门禁）。
+- 程序化特效受项目制作规则约束（素材工程缺省关闭），用户在共看片室顶栏开启：`PATCH /api/v1/workspaces/:id/projects/:projectId/production-policy`，写工作区事件 `project.production_policy.updated`。
+
 ## 6. 队列
 
 - 默认 `ANCS_QUEUE_DRIVER=db`：队列消息只作"及时性"信号，**权威状态在数据库**；Outbox 保证崩溃后重放；

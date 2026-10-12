@@ -540,6 +540,10 @@ import {
   type UploadIntentResponse,
   type UploadIntentStatus,
   type UploadPartTargetResponse,
+  productionPolicySchema,
+  updateProductionPolicyRequestSchema,
+  type ProductionPolicy,
+  type UpdateProductionPolicyRequest,
 } from '@ancs/contracts';
 
 /**
@@ -1442,6 +1446,8 @@ export interface AncsClient {
     create(workspaceId: string, input: CreateStudioProjectRequest, options?: MutationOptions): Promise<StudioProjectRef>;
     state(workspaceId: string, projectId: string): Promise<StudioState>;
     undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
+    /** 显式修改项目制作规则的"允许"开关（V6-3：例如素材工程开启程序化特效）；返回修改后的规则 */
+    updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
   };
   /** V6-4：批注式审片（标记 → 逐条讨论 → 全部执行 → 采用走 proposals 接口） */
   review: {
@@ -3058,6 +3064,12 @@ export function createClient(options: ClientOptions): AncsClient {
       state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
       undoChange: (workspaceId, projectId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      updateProductionPolicy: (workspaceId, projectId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-policy`, productionPolicySchema, {
+          body: input,
+          bodySchema: updateProductionPolicyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     review: {

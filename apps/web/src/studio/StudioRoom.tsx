@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AGENT_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, type AgentPointer, type AgentTurn, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, type AgentPointer, type AgentTurn, type FrameRegion, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
@@ -96,6 +96,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   // 时间带显示的就是正在看的那一版：试改时取试改预览的计划（片段 id 与采用后一致），否则取工程当前版本
   const trialView = trial !== null && targetPreview !== null && targetPreview.proposalId === trial.proposalId ? targetPreview : null;
+  // 特效图层（V6-3）：资产版本 → 特效名；时间带给特效轨与片段标名
+  const effectNames = useMemo(() => new Map((state?.effects ?? []).map((effect) => [effect.footageId, effect.name])), [state?.effects]);
   const strip = useMemo(() => {
     if (timeline === null) return null;
     const lanes: StripLane[] = [
@@ -106,15 +108,21 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     const clips: StripClip[] = trialView !== null
       ? trialView.clips.map((clip) => ({ id: clip.clipId, trackId: clip.trackId, kind: clip.kind, assetVersionId: clip.sourceVersionId, sequenceRange: clip.sequenceRange }))
       : timeline.clips.flatMap((clip) => {
-        const kind = kindOf.get(clip.trackId);
+        const kind = kindOf.get(clip.trackId) ?? timeline.trackKinds.get(clip.trackId);
         return kind === undefined ? [] : [{ id: clip.id, trackId: clip.trackId, kind, assetVersionId: clip.assetVersionId, sequenceRange: clip.sequenceRange }];
       });
     for (const clip of clips) {
       if (!kindOf.has(clip.trackId)) { kindOf.set(clip.trackId, clip.kind); lanes.push({ trackId: clip.trackId, kind: clip.kind }); }
     }
-    lanes.sort((left, right) => (left.kind === right.kind ? 0 : left.kind === 'VIDEO' ? -1 : 1));
+    for (const lane of lanes) {
+      const laneClips = clips.filter((clip) => clip.trackId === lane.trackId);
+      if (lane.kind === 'VIDEO' && laneClips.length > 0 && laneClips.every((clip) => clip.assetVersionId !== null && effectNames.has(clip.assetVersionId))) lane.effect = true;
+    }
+    // 自上而下：特效轨（叠在画面上）→ 画面 → 声音
+    const rank = (lane: StripLane): number => (lane.effect === true ? 0 : lane.kind === 'VIDEO' ? 1 : 2);
+    lanes.sort((left, right) => rank(left) - rank(right));
     return { duration: trialView?.duration ?? timeline.duration, frameRate: timeline.frameRate, lanes, clips };
-  }, [timeline, trialView]);
+  }, [timeline, trialView, effectNames]);
 
   // 播放
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -154,18 +162,29 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   // 指：时间带选择 → 交给 AI 的 pointer
   const [selection, setSelection] = useState<StudioSelection>({ range: null, clipId: null });
-  const footageName = useCallback((clip: StripClip): string => state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage]);
+  const footageName = useCallback((clip: StripClip): string => (clip.assetVersionId === null ? undefined : effectNames.get(clip.assetVersionId))
+    ?? state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage, effectNames]);
+  // 指画面（V6-3）：在画面上框出一块区域，和时间选择一起交给 AI；框的是哪一刻的画面也记下（没选时间时以它为"这里"的时间）
+  const [framed, setFramed] = useState<{ region: FrameRegion; at: MediaTime } | null>(null);
+  const frameRegion = framed?.region ?? null;
+  const [drawing, setDrawing] = useState(false);
   const selectedClip = selection.clipId === null ? null : strip?.clips.find((clip) => clip.id === selection.clipId) ?? null;
   useEffect(() => {
     if (selection.clipId !== null && strip !== null && selectedClip === null) setSelection({ range: null, clipId: null });
   }, [selection.clipId, selectedClip, strip]);
+  // 只框了画面、没选时间或片段：时间取框选时那一帧起的 1 秒
+  const framedRange = framed === null || selection.range !== null || selectedClip !== null ? null
+    : { start: framed.at, end: frameTimeAtSeconds(displaySeconds(framed.at) + 1, frameRate) };
   const pointer: AgentPointer = {
-    timeRange: selection.range === null ? null : { start: pointerSecondsText(selection.range.start), end: pointerSecondsText(selection.range.end) },
+    timeRange: selection.range !== null ? { start: pointerSecondsText(selection.range.start), end: pointerSecondsText(selection.range.end) }
+      : framedRange !== null ? { start: pointerSecondsText(framedRange.start), end: pointerSecondsText(framedRange.end) } : null,
     clipIds: selectedClip === null ? [] : [selectedClip.id],
+    frameRegion,
   };
-  const pointerLabel = selection.range !== null
+  const timeLabel = selection.range !== null
     ? t.pointer.range(formatClock(selection.range.start), formatClock(selection.range.end))
-    : selectedClip !== null ? t.pointer.clip(footageName(selectedClip)) : null;
+    : selectedClip !== null ? t.pointer.clip(footageName(selectedClip)) : framed !== null ? formatClock(framed.at) : null;
+  const pointerLabel = frameRegion === null ? timeLabel : timeLabel === null ? t.pointer.region : t.pointer.regionWith(timeLabel);
 
   // 风格（可选）：默认不选；选择只在本页面内保留
   const strategies = useStrategyPacks(workspaceId);
@@ -308,6 +327,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
           {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
+          <button
+            type="button"
+            className="btn small ghost"
+            aria-pressed={state.project.allowEffects}
+            title={state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff}
+            disabled={!canEdit || actions.setEffectsAllowed.isPending}
+            onClick={() => {
+              setActionError(null);
+              actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
+            }}
+          ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => setFootageOpen(!footageOpen)}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
@@ -336,6 +366,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         onTimeUpdate={syncFromVideo}
         onLoaded={() => { const video = videoRef.current; if (video !== null) video.currentTime = Math.min(displaySeconds(playhead), video.duration || 0); }}
         onPlayState={setPlaying}
+        region={frameRegion}
+        drawing={drawing}
+        onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
       />
 
       <div className={styles['dock']}>
@@ -344,6 +377,11 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
             <QuietIcon name={playing ? 'pause' : 'play'} />
           </button>
           <span className={styles['clock']} aria-label={t.transport.position}>{formatClock(playhead)} <span>/ {strip === null ? '--:--.-' : formatClock(strip.duration)}</span></span>
+          {shown !== null && canEdit ? (
+            <button type="button" className="btn small ghost" aria-pressed={drawing} title={t.canvas.markAreaHint} onClick={() => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); }}>
+              <QuietIcon name="expand" />{drawing ? t.canvas.markAreaActive : t.canvas.markArea}
+            </button>
+          ) : null}
           <span className={styles['spacer']} />
           {shown !== null && shown.segments.reused > 0 ? <span className={styles['meta']}>{t.canvas.reused(shown.segments.reused, shown.segments.total)}</span> : null}
         </div>
@@ -373,7 +411,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           adopting={actions.adopt.isPending}
           discarding={actions.discard.isPending}
           undoing={actions.undoChange.isPending}
-          onClearPointer={() => setSelection({ range: null, clipId: null })}
+          onClearPointer={() => { setSelection({ range: null, clipId: null }); setFramed(null); setDrawing(false); }}
           onSend={send}
           onStop={stop}
           onKeep={keep}

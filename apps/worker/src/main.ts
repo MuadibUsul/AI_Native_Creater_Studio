@@ -7,6 +7,7 @@ import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validate
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
+import { createProcessEffectRenderer, resolveDefaultEffectRenderCommand } from './effect-renderer-process.js';
 import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
@@ -45,6 +46,12 @@ if (envResult.ok && envResult.value !== null) {
         message: `渲染执行器脚本不存在（${repoRootCandidates.join(' / ')}）：请在仓库根启动，或用 ANCS_RENDER_EXECUTOR_CMD 显式配置命令（部署形态见 docs/ops/deployment-runbook.md）`,
       });
     }
+  }
+  if (!disableRender && envResult.value.ANCS_EFFECT_RENDER_CMD === undefined && !existsSync('./apps/render-worker/src/run-effect.ts')) {
+    envIssues.push({
+      variable: 'ANCS_EFFECT_RENDER_CMD',
+      message: '特效渲染脚本不存在（./apps/render-worker/src/run-effect.ts）：请在仓库根启动，或用 ANCS_EFFECT_RENDER_CMD 显式配置命令',
+    });
   }
   if (!customMotionCmd && !existsSync('./apps/motion-worker/src/run-validate.ts')) {
     envIssues.push({
@@ -135,6 +142,15 @@ const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === unde
   executable: config.ANCS_AUDIO_ANALYSIS_EXECUTABLE,
   args: config.ANCS_AUDIO_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_AUDIO_ANALYSIS_ARGS_JSON) as string[],
 });
+/**
+ * V6-3：特效图层渲染（隔离子进程里的无头浏览器，与 Remotion 渲染同一前提；ANCS_DISABLE_RENDER=1 时不装配，特效工具明确报不可用）。
+ * AI 当场写特效代码默认关闭（ANCS_EFFECT_CODEGEN=enabled 开启），开启后代码先过 Custom Motion 四道门禁。
+ */
+const effectPorts = config.ANCS_DISABLE_RENDER === '1' ? undefined : {
+  renderer: createProcessEffectRenderer({ probe: sourceMediaProbe, command: resolveDefaultEffectRenderCommand(config.ANCS_EFFECT_RENDER_CMD) }),
+  validator: createProcessMotionValidator(commandOf(config.ANCS_MOTION_VALIDATOR_CMD)),
+  codegen: config.ANCS_EFFECT_CODEGEN ?? 'disabled',
+};
 // V5-M4：工作流定义（素材工程终渲染：FFmpeg 媒体图后端 + 真实输出探测）。不依赖 Remotion/Chromium，
 // 因此 ANCS_DISABLE_RENDER 不影响它；FFmpeg 缺失时推进会显式失败（工作流运行 FAILED，带错误）。
 const workflowRegistry = new WorkflowRegistry()
@@ -143,7 +159,7 @@ const workflowRegistry = new WorkflowRegistry()
     outputProbe: sourceMediaProbe,
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
-  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler }));
+  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler, ...(effectPorts === undefined ? {} : { effects: effectPorts }) }));
 // V6-1d：低清预览（与终渲染同一 FFmpeg 媒体图后端，按时间窗缓存复用）
 const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegPaths), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，

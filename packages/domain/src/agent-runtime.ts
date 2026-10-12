@@ -21,6 +21,7 @@ import {
   isDecimalSecondsText,
   startAgentTurnRequestSchema,
   type AgentContentBlock,
+  type AgentEffectPorts,
   type AgentEffort,
   type AgentFrameSampler,
   type AgentModelAdapter,
@@ -39,6 +40,7 @@ import { agentSessions, agentTurnMessages, agentTurns, projectSequences, project
 import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
+import { effectLayersOnTimeline } from './agent-effects.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
@@ -75,6 +77,8 @@ export interface AgentTurnPorts {
   limits?: Partial<AgentRuntimeLimits>;
   /** 素材抽帧（Worker 装配）；未装配时 look_at_footage 明确报不可用 */
   frames?: AgentFrameSampler;
+  /** 特效渲染（V6-3，Worker 装配）；未装配时特效工具明确报不可用 */
+  effects?: AgentEffectPorts;
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
   /** 策略要点（缺省从内置预设与工作区策略包生成，见 strategies.ts） */
   strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; knobs: Record<string, string>; locale: string }) => Promise<string | null>;
@@ -418,6 +422,8 @@ export async function runAgentTurnLoop(
     locale,
     draft: { baseRevision, operations },
     ...(ports.frames === undefined ? {} : { frames: ports.frames }),
+    ...(ports.effects === undefined ? {} : { effects: ports.effects }),
+    pointer: agentPointerSchema.parse(loaded.pointer),
   });
   let draft = editOperationSchema.array().parse(turn.draftOperations);
   const tools = catalog.descriptors().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }));
@@ -615,7 +621,7 @@ async function compileTurnContext(
   const policy = (projectRows[0]?.productionPolicy ?? {}) as Record<string, unknown>;
   const constraints = Object.entries(policy).filter(([key, value]) => key.startsWith('allow') && value === false).map(([key]) => key);
   const { timeline: state } = await simulateAgentDraft(context, context.draft);
-  const timeline = buildAgentTimelineView(state, session.sequenceId);
+  const timeline = buildAgentTimelineView(state, session.sequenceId, await effectLayersOnTimeline(context, state, session.sequenceId));
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const footageTool = catalog.get('list_footage');
   const footage = footageTool === undefined ? null : JSON.parse((await footageTool.run(context, {})).content) as unknown;
@@ -624,6 +630,7 @@ async function compileTurnContext(
   const pointerView = {
     timeRange: pointer.timeRange !== null && isDecimalSecondsText(pointer.timeRange.start) && isDecimalSecondsText(pointer.timeRange.end) ? pointer.timeRange : null,
     clips: timeline.clips.filter((clip) => pointer.clipIds.includes(clip.id)),
+    ...(pointer.frameRegion === null ? {} : { frameRegion: pointer.frameRegion }),
   };
 
   let strategy: { id: string; guidance: string } | null = null;

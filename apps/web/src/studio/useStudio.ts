@@ -41,6 +41,8 @@ export interface StudioTimeline {
   frameRate: { num: number; den: number };
   videoTrackId: string | null;
   audioTrackId: string | null;
+  /** 序列里每条画面/声音轨的种类（特效轨等其他画面轨上的片段也要上时间带） */
+  trackKinds: ReadonlyMap<string, 'VIDEO' | 'AUDIO'>;
   clips: Clip[];
 }
 
@@ -63,6 +65,7 @@ export function useStudioTimeline(projectId: string, sequenceId: string | undefi
       frameRate: sequence.frameRate,
       videoTrackId: tracks.find((track) => track.kind === 'VIDEO')?.id ?? null,
       audioTrackId: tracks.find((track) => track.kind === 'AUDIO')?.id ?? null,
+      trackKinds: new Map(tracks.flatMap((track) => (track.kind === 'VIDEO' || track.kind === 'AUDIO' ? [[track.id, track.kind] as const] : []))),
       clips: composition.clips.filter((clip) => clip.sequenceId === sequenceId),
     };
   }, [query.data, sequenceId]);
@@ -201,5 +204,11 @@ export function useStudioActions(workspaceId: string, projectId: string) {
       client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision }, { idempotencyKey: randomKey('export') }),
   });
 
-  return { send, cancel, adopt, discard, undoChange, startExport, invalidateProject };
+  /** 项目制作规则：开/关程序化特效（V6-3；用户显式操作，服务端记事件） */
+  const setEffectsAllowed = useMutation({
+    mutationFn: (allowed: boolean) => client.studio.updateProductionPolicy(workspaceId, projectId, { allowProceduralGraphics: allowed }, { idempotencyKey: randomKey('policy') }),
+    onSuccess: invalidateProject,
+  });
+
+  return { send, cancel, adopt, discard, undoChange, startExport, setEffectsAllowed, invalidateProject };
 }

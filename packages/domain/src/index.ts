@@ -399,6 +399,7 @@ export {
   assembleProjectDocument,
   getProjectProductionPolicy,
   assertProjectGenerationAllowed,
+  updateProjectProductionPolicy,
 } from './project-document.js';
 export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
 export { clipInstanceToLegacyProjection, compileLegacyClipProjectionUpdate, listProjectMediaViews, upsertMediaDerivativeState } from './media-sources.js';
@@ -691,3 +692,6 @@ export { addReviewNote, applyReview, deleteReviewNote, getReviewState, listRevie
 export { bindAttention, findDeicticWords, isUnclosedUtterance, joinTranscript, pointerSampleAt } from './realtime-attention.js';
 export { BUILT_IN_STRATEGY_PACKS, defaultStrategyGuidance, getStrategyPack, listStrategyPacks, resolveStrategyKnobs, saveStrategyPack, strategyGuidanceText } from './strategies.js';
 export { reviewDraftOperations, scoreFirstCut, type DraftReview, type EvalIndicator, type FirstCutScorecard } from './agent-eval.js';
+export { EFFECT_TEMPLATES, findEffectTemplate, resolveEffectParams } from './effect-templates.js';
+export { EFFECT_AGENT_TOOLS, effectLayerSize, effectRegionTransform, loadEffectLayers } from './agent-effects.js';
+export type { EffectLayerRef } from './agent-effects.js';
