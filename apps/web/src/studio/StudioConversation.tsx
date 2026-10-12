@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, type KeyboardEvent } from 'react';
-import { AGENT_ERROR_REASONS, type AgentTurn, type Proposal } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, type AgentTurn, type Proposal, type StrategyPackSummary } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { formatUsdMicros } from './studio-time';
+import { StudioStrategyPicker } from './StudioStrategyPicker';
+import type { StudioStrategyChoice } from './useStudio';
 import styles from './studio.module.css';
 
 /**
@@ -41,6 +43,9 @@ export interface ConversationProps {
   onKeep: (proposal: Proposal) => void;
   onDiscard: (proposal: Proposal) => void;
   onUndoChange: () => void;
+  strategies: StrategyPackSummary[];
+  strategy: StudioStrategyChoice | null;
+  onStrategyChange: (value: StudioStrategyChoice | null) => void;
 }
 
 export function StudioConversation(props: ConversationProps) {
@@ -141,6 +146,7 @@ export function StudioConversation(props: ConversationProps) {
           {props.error !== null ? <div className={styles['alert']} role="alert">{props.error}</div> : null}
         </div>
       ) : null}
+      {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} /> : null}
       <div className={styles['composer']}>
         <div className={styles['composerField']}>
           <span className={`${styles['chip']} ${props.pointerLabel !== null ? styles['chipActive'] : ''}`}>

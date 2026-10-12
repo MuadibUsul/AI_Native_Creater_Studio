@@ -278,3 +278,9 @@
   .stage { padding: var(--ui-space-3); }
   .aspects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 风格（可选） */
+.strategyRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2) var(--ui-space-3); min-width: 0; }
+.strategyField { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.strategyField select { width: auto; min-height: 28px; padding: 2px 8px; font-size: var(--ui-type-metadata); }
+.strategyHint { flex: 1; min-width: 200px; font-size: var(--ui-type-metadata); color: var(--ui-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

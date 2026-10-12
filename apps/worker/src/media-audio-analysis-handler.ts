@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MEDIA_AUDIO_ANALYSIS_JOB_TYPE, mediaAudioAnalysisJobInputSchema, type MediaAudioAnalysisAdapter } from '@ancs/contracts';
+import { MEDIA_ANALYSIS_ERROR_CODES, MEDIA_AUDIO_ANALYSIS_JOB_TYPE, mediaAudioAnalysisJobInputSchema, type MediaAudioAnalysisAdapter } from '@ancs/contracts';
 import { beginMediaAudioAnalysis, completeMediaAudioAnalysis, failMediaAudioAnalysis } from '@ancs/domain';
 import type { JobHandler } from './handlers.js';
 
@@ -14,7 +14,7 @@ export function createMediaAudioAnalysisHandler(options: { adapter?: MediaAudioA
       const current = await beginMediaAudioAnalysis(deps, { workspaceId: context.workspaceId, jobInput });
       if (current.alreadyComplete) return { runId: jobInput.runId, status: 'READY', idempotent: true };
       if (options.adapter === undefined) {
-        await failMediaAudioAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '音频事件检测器尚未配置；原音和基础波形未受影响。' });
+        await failMediaAudioAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '音频事件检测器尚未配置；原音和基础波形未受影响。', code: MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED });
         throw new Error('AUDIO_ANALYSIS_CAPABILITY_UNAVAILABLE');
       }
       const storage = deps.storage;

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MEDIA_TRANSCRIPT_JOB_TYPE, mediaTranscriptJobInputSchema, type SpeechRecognitionAdapter } from '@ancs/contracts';
+import { MEDIA_ANALYSIS_ERROR_CODES, MEDIA_TRANSCRIPT_JOB_TYPE, mediaTranscriptJobInputSchema, type SpeechRecognitionAdapter } from '@ancs/contracts';
 import { beginMediaTranscript, completeMediaTranscript, failMediaTranscript } from '@ancs/domain';
 import type { JobHandler } from './handlers.js';
 
@@ -14,7 +14,7 @@ export function createMediaTranscriptHandler(options: { adapter?: SpeechRecognit
       const current = await beginMediaTranscript(deps, { workspaceId: context.workspaceId, jobInput });
       if (current.alreadyComplete) return { runId: jobInput.runId, status: 'READY', idempotent: true };
       if (options.adapter === undefined) {
-        await failMediaTranscript(deps, { workspaceId: context.workspaceId, jobInput, message: 'ASR 服务尚未配置，原音与已有媒体结果未受影响。' });
+        await failMediaTranscript(deps, { workspaceId: context.workspaceId, jobInput, message: 'ASR 服务尚未配置，原音与已有媒体结果未受影响。', code: MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED });
         throw new Error('ASR_CAPABILITY_UNAVAILABLE');
       }
       const storage = deps.storage;

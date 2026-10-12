@@ -181,6 +181,7 @@ export {
 } from './unified-media-index.js';
 export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage, MediaEvidenceConsumer, MediaEvidenceRequest, MediaEvidenceBundle } from './unified-media-index.js';
 export {
+  MEDIA_ANALYSIS_ERROR_CODES,
   MEDIA_ANALYSIS_STAGES,
   MEDIA_ANALYSIS_STAGE_STATUSES,
   mediaAnalysisStageNameSchema,
@@ -2769,3 +2770,16 @@ export {
   undoChangeResponseSchema,
 } from './studio.js';
 export type { CreateStudioProjectRequest, StudioAnalysisState, StudioFootage, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export {
+  STRATEGY_ERROR_REASONS,
+  STRATEGY_PACK_KINDS,
+  bilingualTextSchema,
+  editingDnaSchema,
+  strategyKnobSchema,
+  strategyKnobValuesSchema,
+  strategyPackKindSchema,
+  strategyPackSchema,
+  strategyPackSummarySchema,
+  styleRubricItemSchema,
+} from './strategy.js';
+export type { BilingualText, EditingDna, StrategyKnob, StrategyKnobValues, StrategyPack, StrategyPackKind, StrategyPackSummary } from './strategy.js';

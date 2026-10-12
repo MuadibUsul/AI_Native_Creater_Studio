@@ -1,24 +1,28 @@
 {
-  "when": "2026-10-12T05:39:37.940Z",
+  "when": "2026-10-12T10:38:23.080Z",
   "director": "SCRIPTED (not a real provider)",
-  "workspaceId": "ws_cbd395fa-62f2-4c66-a2ee-edf8dc0d6905",
-  "projectId": "prj_d5e177b7-d8ae-472f-8058-b1ecef5d8d93",
+  "workspaceId": "ws_f9def4fa-0201-4576-beed-adadde1299c0",
+  "projectId": "prj_01cae744-be41-4a37-b50e-76095fccb34b",
   "results": [
     {
       "name": "新建工程进入共看片室",
-      "detail": "project prj_d5e177b7-d8ae-472f-8058-b1ecef5d8d93"
+      "detail": "project prj_01cae744-be41-4a37-b50e-76095fccb34b"
     },
     {
       "name": "上传 3 段素材并完成探测/代理/索引",
-      "detail": "AI 对语音与画面的理解：未配置 ASR/视觉驱动时如实显示失败"
+      "detail": "AI 对语音与画面的理解：未配置 ASR/视觉驱动时显示“未配置”"
     },
     {
       "name": "AI 第一版成为试改并可播放",
-      "detail": "播放到 1.44 s；版本 4（采用前工程不变）"
+      "detail": "播放到 1.45 s；版本 4（采用前工程不变）"
     },
     {
       "name": "采用试改写入工程",
       "detail": "版本 4 → 版本 5"
+    },
+    {
+      "name": "可选风格随这一轮发送并记录",
+      "detail": "builtin:travel-beat {\"pacing\":\"intense\",\"transitions\":\"hard_cuts\"}"
     },
     {
       "name": "指着时间说一句 → 局部试改预览",

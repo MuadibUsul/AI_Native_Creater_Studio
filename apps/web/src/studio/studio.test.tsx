@@ -64,6 +64,19 @@ const preview = (overrides: Record<string, unknown> = {}) => ({
   segments: { total: 3, reused: 1, rendered: 2 }, renderMs: 900, error: null, createdAt: '2026-10-12T00:00:06.000Z', completedAt: '2026-10-12T00:00:07.000Z',
   ...overrides,
 });
+const beatPack = {
+  id: 'builtin:travel-beat', version: 1, kind: 'BUILT_IN', genre: 'travel', createdAt: null,
+  name: { 'zh-CN': '旅行卡点', en: 'Travel beat edit' },
+  summary: { 'zh-CN': '跟着音乐节拍的快剪。', en: 'A fast cut on the music beat.' },
+  knobs: [{
+    key: 'pacing', label: { 'zh-CN': '节奏', en: 'Pacing' }, defaultValue: 'default',
+    options: [
+      { value: 'calmer', label: { 'zh-CN': '稍缓', en: 'Calmer' }, guidance: 'g' },
+      { value: 'default', label: { 'zh-CN': '默认', en: 'Default' }, guidance: 'g' },
+      { value: 'intense', label: { 'zh-CN': '更密', en: 'More intense' }, guidance: 'g' },
+    ],
+  }],
+};
 const proposal = { proposalId: 'prp_1', status: 'OPEN', operationsHash: 'b'.repeat(64), selectionFingerprint: null, committedRevision: null };
 
 function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown[]; extra?: Record<string, unknown> } = {}) {
@@ -79,7 +92,7 @@ function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown
       adoptProposal,
       discardProposal: vi.fn().mockResolvedValue({ ...proposal, status: 'DISCARDED' }),
     },
-    agent: { listTurns: vi.fn().mockResolvedValue(overrides.turns ?? []), startTurn, createSession: vi.fn(), cancelTurn: vi.fn() },
+    agent: { listTurns: vi.fn().mockResolvedValue(overrides.turns ?? []), startTurn, createSession: vi.fn(), cancelTurn: vi.fn(), strategies: vi.fn().mockResolvedValue([beatPack]) },
     previews: { request: vi.fn().mockResolvedValue(preview()), get: vi.fn().mockResolvedValue(preview()) },
     assets: { uploadResumable: vi.fn() },
     ...overrides.extra,
@@ -160,6 +173,21 @@ describe('V6-1c 共看片室', () => {
     await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '再短一点', pointer: { timeRange: null, clipIds: ['clp_l'] } }, expect.anything()));
     await userEvent.click(screen.getByRole('button', { name: '清除选择' }));
     expect(screen.getByText('未选择 · 作用于整条视频')).toBeTruthy();
+  });
+
+  it('风格（可选）：默认不选；选了风格和旋钮，这一轮对话带上策略包与取值', async () => {
+    const { sdk, startTurn } = client({ turns: [turn()] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const style = await screen.findByLabelText('风格（可选）');
+    expect((style as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('选了风格，AI 会参考它的剪法；不选时 AI 按素材自己判断。')).toBeTruthy();
+    await userEvent.selectOptions(style, 'builtin:travel-beat');
+    expect(screen.getByText('跟着音乐节拍的快剪。')).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText('节奏'), 'intense');
+    await userEvent.type(screen.getByLabelText('告诉 AI 怎么改'), '更有冲击力{Enter}');
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', {
+      message: '更有冲击力', pointer: { timeRange: null, clipIds: [] }, strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'intense' },
+    }, expect.anything()));
   });
 
   it('AI 失败给出原因；进行中的一轮可以停止', async () => {

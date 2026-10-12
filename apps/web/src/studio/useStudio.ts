@@ -130,6 +130,17 @@ export function exportVideoAssetId(run: WorkflowRun | undefined): string | null 
   return rendered?.outputs?.find((output) => output.kind === 'VIDEO')?.assetId ?? null;
 }
 
+/** 用户选用的风格策略（可选）：包 + 旋钮取值。 */
+export interface StudioStrategyChoice {
+  packId: string;
+  knobs: Record<string, string>;
+}
+
+export function useStrategyPacks(workspaceId: string) {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['studio', 'strategies', workspaceId], queryFn: () => client.agent.strategies(workspaceId), staleTime: 5 * 60_000 });
+}
+
 const randomKey = (prefix: string): string => `${prefix}-${globalThis.crypto.randomUUID()}`;
 
 export function useStudioActions(workspaceId: string, projectId: string) {
@@ -141,11 +152,15 @@ export function useStudioActions(workspaceId: string, projectId: string) {
 
   /** 说一句话：会话语言与界面语言不一致时新开会话（AI 按会话语言回应）。 */
   const send = useMutation({
-    mutationFn: async (input: { state: StudioState; message: string; pointer: AgentPointer; locale: AgentLocale }) => {
+    mutationFn: async (input: { state: StudioState; message: string; pointer: AgentPointer; locale: AgentLocale; strategy: StudioStrategyChoice | null }) => {
       const session = input.state.session !== null && input.state.session.locale === input.locale
         ? input.state.session
         : await client.agent.createSession(workspaceId, projectId, { sequenceId: input.state.sequenceId, locale: input.locale }, { idempotencyKey: randomKey('session') });
-      const turn = await client.agent.startTurn(workspaceId, session.id, { message: input.message, pointer: input.pointer }, { idempotencyKey: randomKey('turn') });
+      const turn = await client.agent.startTurn(workspaceId, session.id, {
+        message: input.message,
+        pointer: input.pointer,
+        ...(input.strategy === null ? {} : { strategyPackId: input.strategy.packId, strategyKnobs: input.strategy.knobs }),
+      }, { idempotencyKey: randomKey('turn') });
       return { session, turn };
     },
     onSuccess: async ({ session, turn }) => {

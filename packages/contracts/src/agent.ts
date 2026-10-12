@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { strategyKnobValuesSchema } from './strategy.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import type { ProviderImplementation } from './provider-kind.js';
@@ -228,6 +229,8 @@ export const startAgentTurnRequestSchema = z.object({
   pointer: agentPointerSchema.default({ timeRange: null, clipIds: [] }),
   /** 可选的策略（V6 §6.6）：只作为风格参考进入上下文，不改变工具与编排 */
   strategyPackId: z.string().min(1).max(120).nullable().default(null),
+  /** 选用策略时的旋钮取值（缺省用策略包的默认值） */
+  strategyKnobs: strategyKnobValuesSchema,
 }).strict();
 export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
 
@@ -255,6 +258,9 @@ export const agentTurnSchema = z.object({
   proposalId: opaqueIdSchema.nullable(),
   /** 本轮延续的试改（会话里仍未采用的提案）：草稿从它出发，新提案取代它 */
   continuesProposalId: opaqueIdSchema.nullable(),
+  /** 本轮选用的策略（可选） */
+  strategyPackId: z.string().nullable(),
+  strategyKnobs: z.record(z.string(), z.string()),
   toolCalls: z.array(agentToolCallRecordSchema),
   usage: agentModelUsageSchema,
   /** 本轮模型调用成本（微美元；含未定价模型时为 null） */

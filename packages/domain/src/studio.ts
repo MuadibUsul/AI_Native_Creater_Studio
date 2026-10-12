@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import {
   ApiFailure,
   ERROR_CODES,
+  MEDIA_ANALYSIS_ERROR_CODES,
   MEDIA_INDEX_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
@@ -15,7 +16,7 @@ import {
   type StudioProjectRef,
   type StudioState,
 } from '@ancs/contracts';
-import { agentSessions, assets, assetVersions, mediaIndexRuns, projectSequences, projects } from '@ancs/db';
+import { agentSessions, assets, assetVersions, mediaIndexRuns, mediaTranscriptRuns, projectSequences, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { createAgentSession, getAgentSession, projectAgentCost } from './agent-runtime.js';
 import { createChannel, listChannels } from './channels.js';
@@ -62,15 +63,15 @@ export async function createStudioProject(deps: DomainDeps, input: { workspaceId
   });
 }
 
-const analysisState = (status: string | undefined): StudioAnalysisState => {
-  switch (status) {
+const analysisState = (run: { status: string; errorCode: string | null } | undefined): StudioAnalysisState => {
+  switch (run?.status) {
     case undefined: return 'NONE';
     case 'QUEUED':
     case 'RUNNING': return 'WORKING';
     case 'READY':
     case 'PARTIAL': return 'READY';
     case 'EMPTY': return 'EMPTY';
-    default: return 'FAILED';
+    default: return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED ? 'NOT_CONFIGURED' : 'FAILED';
   }
 };
 
@@ -101,29 +102,34 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     ))
     .orderBy(asc(assets.createdAt));
   const versionIds = rows.map((row) => row.version?.id).filter((id): id is string => id !== undefined);
-  const runs = versionIds.length === 0 ? [] : await deps.db.select({ source: mediaIndexRuns.sourceAssetVersionId, processor: mediaIndexRuns.processorVersion, status: mediaIndexRuns.status })
+  // 镜头索引与视觉理解记在 media_index_runs，语音转写记在 media_transcript_runs
+  const indexRuns = versionIds.length === 0 ? [] : await deps.db.select({ source: mediaIndexRuns.sourceAssetVersionId, processor: mediaIndexRuns.processorVersion, status: mediaIndexRuns.status, errorCode: mediaIndexRuns.errorCode })
     .from(mediaIndexRuns).where(and(eq(mediaIndexRuns.workspaceId, input.workspaceId), inArray(mediaIndexRuns.sourceAssetVersionId, versionIds)));
-  const runStatus = (versionId: string | undefined, processor: string): string | undefined =>
-    runs.find((run) => run.source === versionId && run.processor === processor)?.status;
+  const transcriptRuns = versionIds.length === 0 ? [] : await deps.db.select({ source: mediaTranscriptRuns.sourceAssetVersionId, processor: mediaTranscriptRuns.processorVersion, status: mediaTranscriptRuns.status, errorCode: mediaTranscriptRuns.errorCode })
+    .from(mediaTranscriptRuns).where(and(eq(mediaTranscriptRuns.workspaceId, input.workspaceId), inArray(mediaTranscriptRuns.sourceAssetVersionId, versionIds)));
+  const runOf = (versionId: string | undefined, processor: string) =>
+    [...indexRuns, ...transcriptRuns].find((run) => run.source === versionId && run.processor === processor);
 
   const footage: StudioFootage[] = rows.map(({ asset, version }) => {
     const mime = version?.mimeType ?? String((asset.metadata as { mimeType?: unknown } | null)?.mimeType ?? '');
     const filename = (asset.metadata as { filename?: unknown } | null)?.filename;
-    const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED'
+    // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线
+    const probe = (version?.mediaProbe ?? null) as { status?: unknown } | null;
+    const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED' || (probe !== null && probe.status !== 'READY')
       ? 'FAILED'
-      : asset.status === 'READY' && version?.status === 'READY' ? 'READY' : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
+      : asset.status === 'READY' && version?.status === 'READY' ? (probe === null ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
     return {
       assetId: asset.id,
-      footageId: version?.status === 'READY' ? version.id : null,
+      footageId: status === 'READY' && version !== null ? version.id : null,
       name: typeof filename === 'string' && filename.length > 0 ? filename.slice(0, 200) : asset.id,
       kind: mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'audio' : mime.startsWith('image/') ? 'image' : 'other',
       status,
       duration: version?.durationMs === null || version?.durationMs === undefined ? null
         : mediaTimeToDisplaySecondsText(mediaTimeSchema.parse({ ticks: String(version.durationMs), timebase: { num: 1, den: 1000 } }), 1),
       understanding: {
-        index: analysisState(runStatus(version?.id, MEDIA_INDEX_PROCESSOR_VERSION)),
-        transcript: analysisState(runStatus(version?.id, MEDIA_TRANSCRIPT_PROCESSOR_VERSION)),
-        visual: analysisState(runStatus(version?.id, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION)),
+        index: analysisState(runOf(version?.id, MEDIA_INDEX_PROCESSOR_VERSION)),
+        transcript: analysisState(runOf(version?.id, MEDIA_TRANSCRIPT_PROCESSOR_VERSION)),
+        visual: analysisState(runOf(version?.id, MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION)),
       },
     };
   });

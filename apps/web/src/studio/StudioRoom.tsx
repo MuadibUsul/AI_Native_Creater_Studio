@@ -17,7 +17,7 @@ import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
 import { StudioTimeStrip, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, pointerSecondsText } from './studio-time';
-import { studioKeys, useStudioActions, useStudioPreview, useStudioState, useStudioTimeline, useStudioTurns, useTrialProposal } from './useStudio';
+import { studioKeys, useStrategyPacks, useStudioActions, useStudioPreview, useStudioState, useStudioTimeline, useStudioTurns, useTrialProposal, type StudioStrategyChoice } from './useStudio';
 import styles from './studio.module.css';
 
 /**
@@ -163,6 +163,10 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     ? t.pointer.range(formatClock(selection.range.start), formatClock(selection.range.end))
     : selectedClip !== null ? t.pointer.clip(footageName(selectedClip)) : null;
 
+  // 风格（可选）：默认不选；选择只在本页面内保留
+  const strategies = useStrategyPacks(workspaceId);
+  const [strategy, setStrategy] = useState<StudioStrategyChoice | null>(null);
+
   // 说
   const [notice, setNotice] = useState<'discarded' | 'undone' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -170,7 +174,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     if (state === undefined) return;
     setNotice(null);
     setActionError(null);
-    actions.send.mutate({ state, message, pointer, locale }, { onError: (error) => setActionError(mutationErrorText(error, t)) });
+    actions.send.mutate({ state, message, pointer, locale, strategy }, { onError: (error) => setActionError(mutationErrorText(error, t)) });
   };
   const stop = (turn: AgentTurn) => actions.cancel.mutate(turn, { onError: (error) => setActionError(mutationErrorText(error, t)) });
   const keep = (target: Proposal) => {
@@ -333,6 +337,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           onKeep={keep}
           onDiscard={discard}
           onUndoChange={undoChange}
+          strategies={strategies.data ?? []}
+          strategy={strategy}
+          onStrategyChange={setStrategy}
         />
         {!canEdit ? <p className={styles['meta']}>{t.readOnly}</p> : null}
       </div>

@@ -94,43 +94,30 @@ export async function completeAssetMediaProbe(
       .update(assets)
       .set({ status, currentVersionId: input.assetVersionId, updatedAt: new Date() })
       .where(and(eq(assets.id, input.assetId), eq(assets.workspaceId, input.workspaceId), eq(assets.currentVersionId, input.assetVersionId)));
-    if (status === 'READY') {
-      await scheduleMediaProxyInTx(tx, {
-        workspaceId: input.workspaceId,
-        projectId: row.asset.projectId,
-        sourceAsset: row.asset,
-        sourceVersion: row.version,
-        probe: result,
-      });
-      await scheduleMediaIndexInTx(tx, {
-        workspaceId: input.workspaceId,
-        projectId: row.asset.projectId,
-        sourceAsset: row.asset,
-        sourceVersion: row.version,
-        probe: result,
-      });
-      await scheduleMediaTranscriptInTx(tx, {
-        workspaceId: input.workspaceId,
-        projectId: row.asset.projectId,
-        sourceAsset: row.asset,
-        sourceVersion: row.version,
-        hasAudio: result.streams.some((stream) => stream.type === 'AUDIO'),
-      });
-      await scheduleMediaVisualAnalysisInTx(tx, {
-        workspaceId: input.workspaceId,
-        projectId: row.asset.projectId,
-        sourceAsset: row.asset,
-        sourceVersion: row.version,
-        hasVideo: result.streams.some((stream) => stream.type === 'VIDEO'),
-      });
-      await scheduleMediaAudioAnalysisInTx(tx, {
-        workspaceId: input.workspaceId,
-        projectId: row.asset.projectId,
-        sourceAsset: row.asset,
-        sourceVersion: row.version,
-        hasAudio: result.streams.some((stream) => stream.type === 'AUDIO'),
-      });
-    }
+    if (status === 'READY') await scheduleAnalysisAfterProbeInTx(tx, { workspaceId: input.workspaceId, projectId: row.asset.projectId, sourceAsset: row.asset, sourceVersion: row.version, probe: result });
     return { status, durationMs, width: video?.width ?? null, height: video?.height ?? null };
   });
+}
+
+type ProbeTx = Parameters<typeof scheduleMediaIndexInTx>[0];
+
+/**
+ * 探测就绪后的后续分析（代理、索引、转写、视觉、音频）。上传确认命中去重时也要调用：
+ * 这些分析按版本记录，新版本即使字节相同也需要自己的分析结果（AI 与界面按版本读取）。
+ */
+export async function scheduleAnalysisAfterProbeInTx(tx: ProbeTx, input: {
+  workspaceId: string;
+  projectId: string | null;
+  sourceAsset: typeof assets.$inferSelect;
+  sourceVersion: typeof assetVersions.$inferSelect;
+  probe: SourceMediaProbeResult;
+}): Promise<void> {
+  const hasAudio = input.probe.streams.some((stream) => stream.type === 'AUDIO');
+  const hasVideo = input.probe.streams.some((stream) => stream.type === 'VIDEO');
+  const common = { workspaceId: input.workspaceId, projectId: input.projectId, sourceAsset: input.sourceAsset, sourceVersion: input.sourceVersion };
+  await scheduleMediaProxyInTx(tx, { ...common, probe: input.probe });
+  await scheduleMediaIndexInTx(tx, { ...common, probe: input.probe });
+  await scheduleMediaTranscriptInTx(tx, { ...common, hasAudio });
+  await scheduleMediaVisualAnalysisInTx(tx, { ...common, hasVideo });
+  await scheduleMediaAudioAnalysisInTx(tx, { ...common, hasAudio });
 }

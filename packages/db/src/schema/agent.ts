@@ -45,6 +45,7 @@ export const agentTurns = pgTable(
     message: text('message').notNull(),
     pointer: jsonb('pointer').notNull(),
     strategyPackId: text('strategy_pack_id'),
+    strategyKnobs: jsonb('strategy_knobs').notNull().default({}),
     baseRevision: integer('base_revision').notNull(),
     draftOperations: jsonb('draft_operations').notNull().default([]),
     reply: text('reply'),

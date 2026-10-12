@@ -2,15 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  MEDIA_ANALYSIS_ERROR_CODES,
   MEDIA_INDEX_PROCESSOR_VERSION,
   MEDIA_TRANSCRIPT_PROCESSOR_VERSION,
+  MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
   mediaTimeSchema,
   sourceMediaProbeResultSchema,
   type EditRequest,
 } from '@ancs/contracts';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { assetVersions, assets, createDb, mediaIndexRuns, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { assetVersions, assets, createDb, mediaIndexRuns, mediaTranscriptRuns, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
 import { buildServer } from './server.js';
 
 /**
@@ -104,14 +106,17 @@ describe('V6-1c 共看片室（HTTP + SDK）', () => {
     await seedFootage(workspace.id, ref.projectId, { origin: 'SYSTEM_RENDER', filename: 'final.mp4', ready: true });
     await handle.db.insert(mediaIndexRuns).values([
       { id: `mir_${randomUUID()}`, workspaceId: workspace.id, sourceAssetVersionId: ready, sourceChecksumSha256: 'd'.repeat(64), processorVersion: MEDIA_INDEX_PROCESSOR_VERSION, status: 'READY', coveragePermille: 1000 },
-      { id: `mir_${randomUUID()}`, workspaceId: workspace.id, sourceAssetVersionId: ready, sourceChecksumSha256: 'd'.repeat(64), processorVersion: MEDIA_TRANSCRIPT_PROCESSOR_VERSION, status: 'RUNNING' },
+      // 视觉驱动未配置：失败但带 CAPABILITY_NOT_CONFIGURED → 显示"未配置"而不是"失败"
+      { id: `mir_${randomUUID()}`, workspaceId: workspace.id, sourceAssetVersionId: ready, sourceChecksumSha256: 'd'.repeat(64), processorVersion: MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION, status: 'FAILED', errorCode: MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED },
     ]);
+    // 语音转写在自己的运行表里
+    await handle.db.insert(mediaTranscriptRuns).values({ id: `mtr_${randomUUID()}`, workspaceId: workspace.id, sourceAssetVersionId: ready, sourceChecksumSha256: 'd'.repeat(64), processorVersion: MEDIA_TRANSCRIPT_PROCESSOR_VERSION, status: 'RUNNING' });
     const withFootage = await owner.studio.state(workspace.id, ref.projectId);
     expect(withFootage.footage.map((item) => [item.name, item.status, item.footageId === null])).toEqual([
       ['glacier.mp4', 'READY', false],
       ['road.mp4', 'PROCESSING', true],
     ]);
-    expect(withFootage.footage[0]).toMatchObject({ kind: 'video', duration: '12.5', understanding: { index: 'READY', transcript: 'WORKING', visual: 'NONE' } });
+    expect(withFootage.footage[0]).toMatchObject({ kind: 'video', duration: '12.5', understanding: { index: 'READY', transcript: 'WORKING', visual: 'NOT_CONFIGURED' } });
   }, 60_000);
 
   it('撤销这次修改：一批事件一组撤销，之后可逐条重做；无可撤销 409；VIEWER 403；跨工作区 404', async () => {

@@ -1,62 +1,105 @@
 # ANCS — Creator Video OS
 
-AI Native 视频制作平台：在同一工程内核中制作真实素材剪辑、生成内容和混合视频。文章／研究转长视频保留为其中一个入口。当前增量工程以 v0.4 的 N 系列任务和真实证据推进。
+AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI 一起看同一条视频，用说话、点选和拖选告诉它改哪里，AI 原地试改给你看，你说"就这样"才采用，随时撤销；改哪里只重渲哪里。真实素材剪辑、生成内容和混合视频共用一个工程内核。
 
 ## 文档入口
 
 | 文档 | 用途 |
 |---|---|
-| `docs/V04/ANCS_AI_Native_v0.4.md` | 当前需求权威；冲突优先级见 §1.4 |
-| `docs/V04/ANCS_v0.4_Codex_Start.md` | 接手和增量开发顺序 |
-| `docs/V04/ANCS_v0.4_Task_Backlog.md` · `ANCS_v0.4_Traceability.md` | N 系列任务及需求来源（初始 TODO 不代表仓库实际状态） |
-| `docs/requirements/ai-native-v04-traceability.md` · `ai-native-v04-acceptance-ledger.md` | v0.4 实际状态和验收证据 |
-| `docs/decisions/` | 范围与架构裁决；0009 记录 v0.4 替换关系 |
-| `creator_video_os_spec_v0.2.md` · `ANCS_Plan261004.md` | 历史 V1 规范与 P 系列计划；不再单独指挥当前 N 任务 |
-| `docs/requirements/traceability.md` · `v1-acceptance-ledger.md` | 历史 V1 证据，不用 v0.4 初始 TODO 清零 |
-| `docs/handoffs/` · `docs/verification/` | 任务交接记录与验收证据 |
+| `docs/V06/ANCS_v0.6_Product_Architecture.md` | **唯一权威**：V6 产品架构与里程碑 V6-0—V6-8（裁决 `docs/decisions/0018-v6-adoption.md`） |
+| `docs/V06/milestones/` | 每个里程碑的交付、验收命令与结果、未验证项 |
+| `docs/V06/integration-checklist.md` | **外部能力接入清单**：要配哪些密钥、配在哪、没配时的表现、配好后怎么验证 |
+| `docs/V06/eval/first-cut-rubric.md` | 初剪评测：人工评分标准、自动指标、怎么跑 |
+| `docs/V05/ANCS_v0.5_Architecture.md` · `docs/decisions/0011`—`0017` | 继续有效的架构骨架（纯函数内核、操作日志、RenderPlan、Provider Gateway） |
+| `docs/V04/` | 需求与交互细节参考库（N 系列账本冻结为历史，`pnpm spec:check` 仍校验） |
+| `docs/ops/deployment-runbook.md` | 部署步骤与环境变量校验 |
+| `AGENTS.md` | 代理协作规则与禁止事项（接手前必读） |
+
+## 现在做到哪了（2026-10-12）
+
+| 里程碑 | 内容 | 状态 |
+|---|---|---|
+| V6-0 | 工作流引擎 + FFmpeg 终渲染（素材工程导出） | 已交付，真实 FFmpeg 验证 |
+| V6-1 | 共看片室最小闭环：上传 → AI 剪第一版（风格可选）→ 点选/拖选 + 文字 → 原地试改 → 采用/撤回 → 局部预览 → 导出；中英双语界面；AI 自检；初剪评测框架 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**AI 导演用脚本导演验证，真实 Claude 待密钥** |
+| V6-2 | 流式双语语音 + 共同注意力 | 未开始 |
+| V6-3 | 代码生成特效（模板库 + 沙箱渲染 + 合成） | 未开始 |
+| V6-4 | 批注式审片 + 统一局部重渲（含手机网页审片） | 未开始 |
+| V6-5 — V6-8 | 讲述配音、蒸馏器（参考视频 → 风格）、数字人、生成式特效与视频生成 | 未开始 |
+
+只有带证据的 `VERIFIED` 计入完成；脚本模型 / Mock 通过 ≠ 真实 Provider 通过。各里程碑的"未验证与待办"见 `docs/V06/milestones/`。
+
+## 需要你提供的外部能力
+
+不配任何密钥，平台也能跑起来：剪辑内核、素材探测/代理/镜头切分、预览、导出、共看片室界面都是真实可用的；AI 相关能力会明确显示"未配置"，不会假装成功。要让 AI 真正剪片，至少在 **Worker** 进程配置：
+
+```bash
+ANCS_AGENT_DRIVER=anthropic
+ANTHROPIC_API_KEY=…            # 只放在服务端环境变量 / 密钥管理，不要提交、不要贴到聊天里
+ANCS_VISUAL_ANALYSIS_DRIVER=anthropic   # 可选：素材画面理解
+ANCS_ASR_DRIVER=deepgram       # 可选：素材语音转写
+DEEPGRAM_API_KEY=…
+```
+
+完整清单（每项的作用、没配时的表现、验证方法）见 `docs/V06/integration-checklist.md`。
 
 ## 快速开始
 
-要求：Node ≥ 22、pnpm 9；集成测试需要本地 PostgreSQL（Docker 提供）。
+要求：Node ≥ 22（部署用 24）、pnpm 9、FFmpeg/ffprobe；集成测试需要本地 PostgreSQL 16 与 Redis（Docker 提供）。
 
 ```bash
 pnpm install
-docker compose -f infra/docker-compose.dev.yml up -d   # 本地 PostgreSQL（端口 55432）
-# 先创建独立测试库，并将 ANCS_TEST_DATABASE_URL 显式指向数据库名含 test 的 PostgreSQL URL
-pnpm verify                  # secrets → lint → typecheck → build → arch:check → 全部测试套件（含真实渲染）
-pnpm test:provider-smoke     # 真实 Provider smoke（默认关闭，需显式开启与凭据，会产生费用）
+docker compose -f infra/docker-compose.dev.yml up -d   # 本地 PostgreSQL（55432）与 Redis（56379）
+# 先创建独立测试库，并将 ANCS_TEST_DATABASE_URL 显式指向数据库名含 test 的 PostgreSQL URL（ANCS_TEST_REDIS_URL 同理）
+pnpm verify                  # secrets → spec → lint → typecheck → build → arch → capabilities → 全部测试套件（含真实渲染）
 ```
+
+本地运行（环境变量以 `.env.example` 为模板，步骤与迁移命令见 `docs/ops/deployment-runbook.md`）：
+
+```bash
+pnpm build
+node apps/api/dist/index.js          # API（缺省 3001）
+node apps/worker/dist/main.js        # Worker（在仓库根启动）
+cd apps/web && npx next start -p 3000
+```
+
+登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。
+
+## 验收与评测脚本
+
+| 命令 | 说明 |
+|---|---|
+| `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
+| `node scripts/eval-first-cut.mjs` | 初剪评测冒烟（`evals/first-cut/smoke.json`，脚本导演，只证明框架可用） |
+| `node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export` | 真实模型初剪评测：自动指标 + 人工评分表 + 导出成片（需 `ANTHROPIC_API_KEY`，素材放 `Videos/`，见评分标准文档） |
+| `pnpm test:provider-smoke` / `pnpm provider:verify` | 真实 Provider 探测，默认关闭，需显式开启与凭据，会产生费用 |
 
 ## 验证命令
 
 | 命令 | 说明 |
 |---|---|
-| `pnpm lint` | ESLint（含 TypeScript） |
-| `pnpm secrets:check` | 仓库 Secret 扫描（禁止凭据入库，REQ-43-06） |
-| `pnpm typecheck` | 全工作区严格类型检查 |
-| `pnpm build` | 全工作区构建 |
-| `pnpm arch:check` | 依赖方向强制检查（R1—R8，见 `packages/arch-check`） |
-| `pnpm test:unit` | 单元测试（Vitest；含 Fastify inject 路由测试与 SDK↔API 往返） |
-| `pnpm test:integration` | 真实 PostgreSQL 集成测试（事务/回滚/乐观并发原语） |
-| `pnpm test:render` | 真实 Remotion 渲染（预览静帧 PNG + MP4 元数据校验；本机 Chrome 复用或自动下载 Headless Shell） |
-| `pnpm test:golden` | 金样完整性：结构 / 来源哈希 / 可追溯性 / §80 场景覆盖 / 合成负面用例（Director 与组件回归自 P04/P05 加入） |
-| `pnpm test:contract` / `test:e2e` | 尚未实现的套件以 `[PLANNED]` 显式占位，不伪造通过 |
-| `pnpm test:security` | 现有安全测试；新增 v0.4 攻击面仍须逐项验证 |
-| `pnpm test:provider-smoke` | 真实 Provider smoke，单独开启 |
 | `pnpm verify` | 默认验证入口，不产生真实 Provider 费用 |
+| `pnpm secrets:check` | 仓库 Secret 扫描（禁止凭据入库） |
+| `pnpm spec:check` | 历史账本一致性 |
+| `pnpm lint` / `pnpm typecheck` / `pnpm build` | ESLint、全工作区严格类型检查、构建 |
+| `pnpm arch:check` | 依赖方向与架构规则（含 R11 组合表只经投影器写入、R12 业务包禁读 `process.env`） |
+| `pnpm capabilities:check` | 编辑能力覆盖账本与注册表/测试一致（改动后运行 `pnpm capabilities:generate`） |
+| `pnpm test:unit` / `test:web` / `test:integration` | 单元（含内核纯函数）、Web 组件、真实 PostgreSQL + FFmpeg 集成测试 |
+| `pnpm test:render` / `test:golden` / `test:security` | 真实渲染、金样完整性、安全测试 |
+| `pnpm test:contract` / `test:e2e` | 尚未实现的套件以 `[PLANNED]` 显式占位，不伪造通过 |
 
 ## 目录
 
 ```text
-apps/        web / api / worker / render-worker / motion-worker
-packages/    contracts / domain / db / sdk / providers 等 11 个既有包
-docs/        V04 / decisions / handoffs / requirements / verification / runbooks
-scripts/     仓库级验证脚本和显式占位脚本
+apps/        web（Next.js，共看片室）/ api（Fastify）/ worker（任务与工作流）/ render-worker / motion-worker
+packages/    contracts / kernel（纯函数编辑内核）/ time / domain / db / sdk / providers / arch-check 等
+evals/       评测用例集（初剪金样集模板与冒烟集）
+docs/        V06 / V05 / V04 / decisions / ops / verification / handoffs
+scripts/     验证、验收、评测脚本（scripts/lib：共看片室进程内环境与脚本导演）
 ```
 
 ## ARCHITECTURE RULES
 
-当前规则以 v0.4 §12—§15 和裁决 0009 为准；旧安全、版本、账本、可恢复与多端原则继续生效。任何违反需先改架构裁决，不得绕过。
+V6 不改变以下底线；V5 增加的约束（纯函数内核、操作日志为权威、外部调用只经工作流与 Provider Gateway、AI 导演与调度不得按视频类型分支）见 `AGENTS.md`。任何违反需先改架构裁决，不得绕过。
 
 ```text
 1. ProjectDocument is the sole work-state authority; SemanticPlan and Composition are linked views.
@@ -76,7 +119,3 @@ scripts/     仓库级验证脚本和显式占位脚本
 15. Professional direct editing and AI editing share validated Edit Operations, revisions, and history.
 16. FOOTAGE_EDIT, GENERATIVE, and HYBRID share one kernel; protect originals and confirmed work.
 ```
-
-## 当前状态
-
-截至 2026-10-08，旧 P 系列与 Quiet Frame Web 检查记录保存在 `docs/quiet-frame-rebuild/FINAL_HANDOFF.md` 和 `docs/verification/QUIET-FRAME-REBUILD.md`。用户现已明确要求启动 v0.4 增量工程；新 N 系列进度见 v0.4 活账本和最新 `docs/handoffs/N*.md`。旧 P15/P16 的暂停不等于新 N15/N16 的暂停。只有任务验收与证据齐全的 `VERIFIED` 计入新版本完成；Mock、视觉复拍、接口存在均不能替代真实媒体或 Provider 验收。

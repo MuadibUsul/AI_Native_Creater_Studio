@@ -27,8 +27,8 @@ export const studioProjectRefSchema = z.object({
 }).strict();
 export type StudioProjectRef = z.infer<typeof studioProjectRefSchema>;
 
-/** NONE = 没排队；WORKING = 排队或进行中；READY / EMPTY（分析完但没有内容）/ FAILED。 */
-export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'FAILED'] as const;
+/** NONE = 没排队；WORKING = 排队或进行中；READY / EMPTY（分析完但没有内容）/ NOT_CONFIGURED（驱动未配置，不是分析失败）/ FAILED。 */
+export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'NOT_CONFIGURED', 'FAILED'] as const;
 export const studioAnalysisStateSchema = z.enum(STUDIO_ANALYSIS_STATES);
 export type StudioAnalysisState = z.infer<typeof studioAnalysisStateSchema>;
 

@@ -75,6 +75,8 @@ import {
   createRenderRequestSchema,
   startCompositionFinalRenderRequestSchema,
   agentSessionSchema,
+  strategyPackSchema,
+  strategyPackSummarySchema,
   createStudioProjectRequestSchema,
   studioProjectRefSchema,
   studioStateSchema,
@@ -384,6 +386,8 @@ import {
   type CreateRenderRequest,
   type StartCompositionFinalRenderRequest,
   type AgentSession,
+  type StrategyPack,
+  type StrategyPackSummary,
   type CreateStudioProjectRequest,
   type StudioProjectRef,
   type StudioState,
@@ -1417,6 +1421,9 @@ export interface AncsClient {
     cancelTurn(workspaceId: string, turnId: string, options?: MutationOptions): Promise<AgentTurn>;
     tools(workspaceId: string): Promise<AgentToolDescriptor[]>;
     projectCost(workspaceId: string, projectId: string): Promise<ProjectAgentCost>;
+    /** V6 §6.6：可选的风格策略（内置预设 + 本工作区的包） */
+    strategies(workspaceId: string): Promise<StrategyPackSummary[]>;
+    strategy(workspaceId: string, packId: string): Promise<StrategyPack>;
   };
   /** V6-1c：共看片室（单屏工作台）：新建、状态轮询、撤销这次修改 */
   studio: {
@@ -3013,6 +3020,9 @@ export function createClient(options: ClientOptions): AncsClient {
       tools: async (workspaceId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-tools`, z.object({ items: z.array(agentToolDescriptorSchema) }))).items,
       projectCost: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-cost`, projectAgentCostSchema),
+      strategies: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs`, z.object({ items: z.array(strategyPackSummarySchema) }))).items,
+      strategy: (workspaceId, packId) => request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs/${encodeURIComponent(packId)}`, strategyPackSchema),
     },
 
     studio: {

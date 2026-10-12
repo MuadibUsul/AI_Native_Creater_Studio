@@ -14,6 +14,8 @@ import {
   pageResponseSchema,
   projectAgentCostSchema,
   startAgentTurnRequestSchema,
+  strategyPackSchema,
+  strategyPackSummarySchema,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
 import {
@@ -22,7 +24,9 @@ import {
   defaultAgentToolCatalog,
   getAgentSession,
   getAgentTurn,
+  getStrategyPack,
   listAgentTurns,
+  listStrategyPacks,
   projectAgentCost,
   startAgentTurn,
   type DomainDeps,
@@ -35,7 +39,8 @@ import type { AuthDeps } from '../plugins/auth.js';
  * - POST /workspaces/:id/agent-sessions/:sessionId/turns：说一句话 → 202 轮次（Worker 执行；改动成为提案）；
  * - GET  /workspaces/:id/agent-sessions/:sessionId[/turns]、/agent-turns/:turnId：查询；
  * - POST /workspaces/:id/agent-turns/:turnId/cancel：取消进行中的轮次；
- * - GET  /workspaces/:id/agent-tools：统一工具目录（透明度：AI 能调用哪些组件）。
+ * - GET  /workspaces/:id/agent-tools：统一工具目录（透明度：AI 能调用哪些组件）；
+ * - GET  /workspaces/:id/strategy-packs[/:packId]：可选的风格策略（内置预设 + 本工作区的包，V6 §6.6）。
  * 鉴权：读 project:read，写 project:write；跨工作区 → 404（反枚举）。模型凭据只在 Worker，不经过 API。
  */
 
@@ -118,6 +123,20 @@ export function registerAgentRoutes(app: FastifyInstance, deps: AuthDeps): void 
     await app.requireWorkspace(request, request.params.id, 'project:read');
     await requireProject(request.params.id, request.params.projectId);
     return projectAgentCost(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
+  });
+
+  typed.get('/workspaces/:id/strategy-packs', {
+    schema: { tags: ['agent'], summary: '可选的风格策略（内置预设 + 本工作区的包）', params: workspaceParams, response: { 200: z.object({ items: z.array(strategyPackSummarySchema) }).strict(), ...ERROR_RESPONSES } },
+  }, async (request) => {
+    await app.requireWorkspace(request, request.params.id, 'project:read');
+    return { items: await listStrategyPacks(domain, { workspaceId: request.params.id }) };
+  });
+
+  typed.get('/workspaces/:id/strategy-packs/:packId', {
+    schema: { tags: ['agent'], summary: '风格策略详情（剪辑 DNA、结构建议、给 AI 的要点、风格评分项）', params: workspaceParams.extend({ packId: z.string().min(1).max(120) }), response: { 200: strategyPackSchema, ...ERROR_RESPONSES } },
+  }, async (request) => {
+    await app.requireWorkspace(request, request.params.id, 'project:read');
+    return getStrategyPack(domain, { workspaceId: request.params.id, packId: request.params.packId });
   });
 
   typed.get('/workspaces/:id/agent-tools', {

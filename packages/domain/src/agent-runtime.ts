@@ -38,6 +38,7 @@ import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
+import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
 
 /**
@@ -73,7 +74,8 @@ export interface AgentTurnPorts {
   /** 素材抽帧（Worker 装配）；未装配时 look_at_footage 明确报不可用 */
   frames?: AgentFrameSampler;
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
-  strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; locale: string }) => Promise<string | null>;
+  /** 策略要点（缺省从内置预设与工作区策略包生成，见 strategies.ts） */
+  strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; knobs: Record<string, string>; locale: string }) => Promise<string | null>;
 }
 
 type TurnRow = typeof agentTurns.$inferSelect;
@@ -113,6 +115,8 @@ function toTurn(row: TurnRow): AgentTurn {
     reply: row.reply,
     proposalId: row.proposalId,
     continuesProposalId: row.continuesProposalId,
+    strategyPackId: row.strategyPackId,
+    strategyKnobs: row.strategyKnobs,
     toolCalls: row.toolCalls,
     usage: row.usage,
     costMicros: row.unpricedCalls > 0 ? null : row.costMicros,
@@ -206,6 +210,9 @@ export async function startAgentTurn(deps: DomainDeps, input: {
   idempotencyKey?: string | null;
 }): Promise<AgentTurn> {
   const request = startAgentTurnRequestSchema.parse(input.request);
+  // 可选策略：包必须存在、旋钮必须是包里声明的（在建轮次之前校验，失败不留记录）
+  const strategyKnobs = request.strategyPackId === null ? {}
+    : resolveStrategyKnobs(await getStrategyPack(deps, { workspaceId: input.workspaceId, packId: request.strategyPackId }), request.strategyKnobs);
   const turnId = input.idempotencyKey === null || input.idempotencyKey === undefined
     ? `agt_${randomUUID()}`
     : `agt_${createHash('sha256').update(`${input.sessionId}\u0000${input.idempotencyKey}`).digest('hex').slice(0, 32)}`;
@@ -240,6 +247,7 @@ export async function startAgentTurn(deps: DomainDeps, input: {
       message: request.message,
       pointer: request.pointer,
       strategyPackId: request.strategyPackId,
+      strategyKnobs,
       baseRevision: project[0].revision,
       draftOperations: continues?.operations ?? [],
       continuesProposalId: continues?.id ?? null,
@@ -572,8 +580,11 @@ async function compileTurnContext(
   };
 
   let strategy: { id: string; guidance: string } | null = null;
-  if (turn.strategyPackId !== null && ports.strategyGuidance !== undefined) {
-    const guidance = await ports.strategyGuidance({ workspaceId: turn.workspaceId, strategyPackId: turn.strategyPackId, locale });
+  if (turn.strategyPackId !== null) {
+    const knobs = turn.strategyKnobs as Record<string, string>;
+    const guidance = ports.strategyGuidance !== undefined
+      ? await ports.strategyGuidance({ workspaceId: turn.workspaceId, strategyPackId: turn.strategyPackId, knobs, locale })
+      : await defaultStrategyGuidance(deps, { workspaceId: turn.workspaceId, strategyPackId: turn.strategyPackId, knobs });
     if (guidance !== null) strategy = { id: turn.strategyPackId, guidance: guidance.slice(0, 8000) };
   }
 

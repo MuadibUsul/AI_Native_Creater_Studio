@@ -129,6 +129,11 @@ const zhCN = {
       },
       earlier: '之前的对话',
     },
+    strategy: {
+      label: '风格（可选）',
+      none: '不选风格',
+      hint: '选了风格，AI 会参考它的剪法；不选时 AI 按素材自己判断。',
+    },
     footage: {
       title: '素材',
       add: '添加素材',
@@ -137,7 +142,7 @@ const zhCN = {
       kinds: { video: '视频', audio: '音频', image: '照片', other: '文件' },
       status: { UPLOADING: '上传中', PROCESSING: '处理中', READY: '就绪', FAILED: '处理失败' },
       aspects: { index: '镜头', transcript: '语音', visual: '画面' },
-      understanding: { NONE: '未开始', WORKING: '分析中', READY: '已理解', EMPTY: '无内容', FAILED: '失败' },
+      understanding: { NONE: '未开始', WORKING: '分析中', READY: '已理解', EMPTY: '无内容', NOT_CONFIGURED: '未配置', FAILED: '失败' },
       seconds: (value: string) => `${value} 秒`,
       uploading: (percent: number) => `上传 ${String(percent)}%`,
       uploadFailed: '上传失败',
@@ -286,6 +291,11 @@ const en: Messages = {
       },
       earlier: 'Earlier',
     },
+    strategy: {
+      label: 'Style (optional)',
+      none: 'No style',
+      hint: 'With a style, AI uses it as a reference; without one, AI decides from your footage.',
+    },
     footage: {
       title: 'Footage',
       add: 'Add footage',
@@ -294,7 +304,7 @@ const en: Messages = {
       kinds: { video: 'Video', audio: 'Audio', image: 'Photo', other: 'File' },
       status: { UPLOADING: 'Uploading', PROCESSING: 'Processing', READY: 'Ready', FAILED: 'Failed' },
       aspects: { index: 'Shots', transcript: 'Speech', visual: 'Visuals' },
-      understanding: { NONE: 'Not started', WORKING: 'Analyzing', READY: 'Understood', EMPTY: 'Nothing found', FAILED: 'Failed' },
+      understanding: { NONE: 'Not started', WORKING: 'Analyzing', READY: 'Understood', EMPTY: 'Nothing found', NOT_CONFIGURED: 'Not set up', FAILED: 'Failed' },
       seconds: (value: string) => `${value}s`,
       uploading: (percent: number) => `Uploading ${String(percent)}%`,
       uploadFailed: 'Upload failed',

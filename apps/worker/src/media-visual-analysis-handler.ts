@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MEDIA_VISUAL_ANALYSIS_JOB_TYPE, mediaVisualAnalysisJobInputSchema, type MediaVisualAnalysisAdapter } from '@ancs/contracts';
+import { MEDIA_ANALYSIS_ERROR_CODES, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, mediaVisualAnalysisJobInputSchema, type MediaVisualAnalysisAdapter } from '@ancs/contracts';
 import { beginMediaVisualAnalysis, completeMediaVisualAnalysis, failMediaVisualAnalysis } from '@ancs/domain';
 import type { JobHandler } from './handlers.js';
 
@@ -14,7 +14,7 @@ export function createMediaVisualAnalysisHandler(options: { adapter?: MediaVisua
       const current = await beginMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput });
       if (current.alreadyComplete) return { runId: jobInput.runId, status: 'READY', idempotent: true };
       if (options.adapter === undefined) {
-        await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '视觉分析检测器尚未配置；原视频与基础索引未受影响。' });
+        await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '视觉分析检测器尚未配置；原视频与基础索引未受影响。', code: MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED });
         throw new Error('VISUAL_ANALYSIS_CAPABILITY_UNAVAILABLE');
       }
       const storage = deps.storage;

@@ -147,7 +147,7 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const model = new ScriptedModel([
       (request) => {
         expect(request.system).toBe(AGENT_SYSTEM_PROMPT);
-        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline']);
+        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline']);
         const context = (request.messages[0]!.content[0] as { text: string }).text;
         expect(context).toContain('<request>\n帮我把这些素材剪成一个短片');
         expect(context).toContain(f.beach);
@@ -425,5 +425,75 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     });
     const clips = (await listProjectComposition(deps(), { workspaceId: f.workspaceId, projectId: f.projectId })).clips.filter((clip) => clip.sequenceId === f.sequenceId);
     expect(clips.map((clip) => clip.assetVersionId).sort()).toEqual([f.beach, f.sunset].sort());
+  });
+
+  it('可选风格策略（V6 §6.6）：选用的策略与旋钮作为数据进入上下文；工具目录不变；未知策略/旋钮在建轮次前拒绝', async () => {
+    const f = await fixture();
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '剪一版', strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'intense' } } });
+    expect(turn).toMatchObject({ strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'intense', transitions: 'hard_cuts' } });
+    const model = new ScriptedModel([
+      (request) => {
+        const context = (request.messages[0]!.content[0] as { text: string }).text;
+        expect(context).toContain('<optional_style_strategy>');
+        expect(context).toContain('id: builtin:travel-beat');
+        expect(context).toContain('- pacing = intense');
+        // 工具目录与不选策略时完全一致
+        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline']);
+        expect(request.system).toBe(AGENT_SYSTEM_PROMPT);
+        return reply([{ type: 'text', text: '好。' }], 'end_turn');
+      },
+    ]);
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+
+    const plain = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '再看看' } });
+    expect(plain).toMatchObject({ strategyPackId: null, strategyKnobs: {} });
+    expect(await drive(new ScriptedModel([(request) => {
+      expect((request.messages[0]!.content[0] as { text: string }).text).not.toContain('<optional_style_strategy>');
+      return reply([{ type: 'text', text: '好。' }], 'end_turn');
+    }]), f.workspaceId, plain.workflowRunId!)).toBe('SUCCEEDED');
+
+    const before = (await handle.db.select().from(workflowRuns)).length;
+    await expect(startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: 'x', strategyPackId: 'builtin:nope' } })).rejects.toMatchObject({ httpStatus: 404, details: { reason: 'STRATEGY_PACK_NOT_FOUND' } });
+    await expect(startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: 'x', strategyPackId: 'builtin:travel-beat', strategyKnobs: { pacing: 'warp' } } })).rejects.toMatchObject({ httpStatus: 422, details: { reason: 'STRATEGY_KNOB_INVALID' } });
+    expect((await handle.db.select().from(workflowRuns)).length).toBe(before);
+  });
+
+  it('自检（V6 §6.4）：review_draft 按通用规则检查草稿并说明缺失的分析层；look_at_timeline 看到草稿在时间线上的画面', async () => {
+    const f = await fixture();
+    const sampled: { storageKey: string; times: readonly string[] }[] = [];
+    const frames: AgentFrameSampler = { sample: (input) => { sampled.push(input); return Promise.resolve(input.times.map(() => ({ mediaType: 'image/jpeg' as const, data: '/9j/4AAQ' }))); } };
+    const model = new ScriptedModel([
+      // 放两段，第二段只有 0.2 s（闪帧），并故意不收成片长度（空尾巴）
+      () => reply([{ type: 'tool_use', id: 'e1', name: 'edit_timeline', input: { operations: [
+        { op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '3' },
+        { op: 'place_clip', footageId: f.sunset, sourceStart: '1', sourceEnd: '1.2' },
+        { op: 'set_length', seconds: '5' },
+      ] } }], 'tool_use'),
+      () => reply([
+        { type: 'tool_use', id: 'r1', name: 'review_draft', input: {} },
+        { type: 'tool_use', id: 'l1', name: 'look_at_timeline', input: { times: ['1.5', '3.1', '4.5'] } },
+      ], 'tool_use'),
+      (request) => {
+        const [review, look] = toolResults(request);
+        const findings = JSON.parse(review!.content) as { findings: { kind: string; at: string[] }[]; stats: { videoClips: number; shotSeconds: { min: string } }; notChecked: string[] };
+        expect(findings.findings.map((finding) => finding.kind)).toEqual(['FLASH_CLIP', 'REPEATED_SHOT', 'LENGTH_MISMATCH']);
+        expect(findings.stats).toMatchObject({ videoClips: 2, shotSeconds: { min: '0.200' } });
+        expect(findings.notChecked).toContain('black frames (footage not analyzed)');
+        const looked = JSON.parse(look!.content) as { frames: { at: string; footage: string | null; footageAt: string | null }[] };
+        expect(looked.frames).toEqual([
+          { at: '1.5', clipId: expect.any(String), footage: 'sunset.mp4', footageAt: '1.500' },
+          { at: '3.1', clipId: expect.any(String), footage: 'sunset.mp4', footageAt: '1.100' },
+          { at: '4.5', clipId: null, footage: null, footageAt: null },
+        ]);
+        expect(look!.images).toHaveLength(2);
+        return reply([{ type: 'text', text: '查过了。' }], 'end_turn');
+      },
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '剪一下' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
+    expect(sampled.map((call) => call.times)).toEqual([['1.500'], ['1.100']]);
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    expect(done.toolCalls.map((call) => call.name)).toEqual(['edit_timeline', 'review_draft', 'look_at_timeline']);
+    expect(done.toolCalls[1]!.summary).toBe('review: 2 warnings, 1 notes');
   });
 });

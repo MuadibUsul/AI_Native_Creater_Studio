@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import {
+  sourceMediaProbeResultSchema,
   ApiFailure,
   ASSET_DEFAULT_RETENTION,
   ASSET_RELINK_ERROR_REASONS,
@@ -39,6 +40,7 @@ import {
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, scenes, uploadIntents, uploadParts } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { scheduleAnalysisAfterProbeInTx } from './media-probes.js';
 import { createJobInTx } from './jobs.js';
 import { assertStorageQuota } from './plans.js';
 
@@ -266,7 +268,9 @@ export async function createUploadIntent(
     }
   }
 
-  // workspace 内哈希去重（§26.3）：命中则不创建对象，客户端可直接绑定既有资产
+  // workspace 内哈希去重（§26.3）：命中则不创建对象，客户端可直接绑定既有资产。
+  // 只返回同一项目（或同为不属于项目）的资产：别的项目里的资产在本项目里看不见；跨项目时照常建资产，
+  // 字节在确认阶段复用（confirmUpload 的去重）。
   if (request.checksumSha256 !== undefined && request.relinkTargetVersionId === undefined) {
     const existingRows = await deps.db
       .select({ asset: assets, version: assetVersions })
@@ -275,6 +279,7 @@ export async function createUploadIntent(
       .where(
         and(
           eq(assetVersions.workspaceId, workspaceId),
+          request.projectId === null ? isNull(assets.projectId) : eq(assets.projectId, request.projectId),
           eq(assetVersions.checksumSha256, request.checksumSha256),
           eq(assetVersions.status, 'READY'),
           eq(assets.status, 'READY'),
@@ -753,9 +758,9 @@ export async function confirmUpload(
         checksumSha256: actualSha,
         sizeBytes: probe.sizeBytes,
         mimeType: intent.expectedMimeType,
-        width: probedDimensions?.width ?? input.input.width ?? null,
-        height: probedDimensions?.height ?? input.input.height ?? null,
-        durationMs: input.input.durationMs ?? null,
+        width: probedDimensions?.width ?? duplicate?.version.width ?? input.input.width ?? null,
+        height: probedDimensions?.height ?? duplicate?.version.height ?? input.input.height ?? null,
+        durationMs: duplicate?.version.durationMs ?? input.input.durationMs ?? null,
         storageKey: duplicate ? duplicate.version.storageKey : intent.storageKey,
         metadata: {
           probed: { mimeType: sniffed, ...(probedDimensions ?? {}), sizeBytes: probe.sizeBytes },
@@ -782,6 +787,15 @@ export async function confirmUpload(
       .update(uploadIntents)
       .set({ status: 'COMPLETED', completedAt: now })
       .where(and(eq(uploadIntents.id, intent.id), eq(uploadIntents.workspaceId, workspaceId)));
+    // 命中去重：探测结果已复用，但代理、索引、转写等分析按版本记录，新版本要排上自己的分析
+    const duplicateProbe = duplicate === undefined ? null : sourceMediaProbeResultSchema.safeParse(duplicate.version.mediaProbe);
+    if (requiresMediaProbe && duplicateProbe?.success === true && duplicateProbe.data.status === 'READY') {
+      const [freshAsset] = await tx.select().from(assets).where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId))).limit(1);
+      const [freshVersion] = await tx.select().from(assetVersions).where(and(eq(assetVersions.id, intent.assetVersionId), eq(assetVersions.workspaceId, workspaceId))).limit(1);
+      if (freshAsset !== undefined && freshVersion !== undefined) {
+        await scheduleAnalysisAfterProbeInTx(tx, { workspaceId, projectId: freshAsset.projectId, sourceAsset: freshAsset, sourceVersion: freshVersion, probe: duplicateProbe.data });
+      }
+    }
     if (requiresMediaProbe && duplicate === undefined) {
       await createJobInTx(tx, {
         workspaceId,
