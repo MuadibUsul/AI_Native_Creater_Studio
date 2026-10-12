@@ -146,21 +146,22 @@ export function composeStrategyFromStats(input: { stats: DistilledStats; dna: Ed
     ? { zh: `约 ${pct(stats.beatCutRatio)} 的剪点落在音乐节拍上（随机剪约 ${pct(stats.beatChanceRatio ?? 0)}）`, en: `about ${pct(stats.beatCutRatio)} of cuts land on the music beat (random cutting would give about ${pct(stats.beatChanceRatio ?? 0)})` }
     : null;
   const minutes = Math.round((stats.analyzedSeconds / 60) * 10) / 10;
+  const span = shot === null ? null : shot.min === shot.max ? { zh: `${String(shot.min)} 秒`, en: `${String(shot.min)} s` } : { zh: `${String(shot.min)}–${String(shot.max)} 秒`, en: `${String(shot.min)}–${String(shot.max)} s` };
   const zhParts = [
-    `节奏${pace.zh}：${shot === null ? '' : `镜头中位 ${String(shot.median)} 秒（多在 ${String(shot.min)}–${String(shot.max)} 秒），`}每分钟约 ${String(stats.cutsPerMinute)} 次剪切`,
+    `节奏${pace.zh}：${shot === null ? '' : `镜头中位 ${String(shot.median)} 秒（多在 ${span!.zh}），`}每分钟约 ${String(stats.cutsPerMinute)} 次剪切`,
     beat?.zh ?? null,
     fastOpening(stats) ? '开场剪得最密' : null,
     colorZh(stats.color),
     soundZh(stats),
   ].filter((part): part is string => part !== null && part.length > 0);
   const enParts = [
-    `${pace.en.charAt(0).toUpperCase()}${pace.en.slice(1)} pace: ${shot === null ? '' : `median shot ${String(shot.median)} s (mostly ${String(shot.min)}–${String(shot.max)} s), `}about ${String(stats.cutsPerMinute)} cuts per minute`,
+    `${pace.en.charAt(0).toUpperCase()}${pace.en.slice(1)} pace: ${shot === null ? '' : `median shot ${String(shot.median)} s (mostly ${span!.en}), `}about ${String(stats.cutsPerMinute)} cuts per minute`,
     beat?.en ?? null,
     fastOpening(stats) ? 'the opening is cut fastest' : null,
     dna.colorTendency,
     dna.soundHabits,
   ].filter((part): part is string => part !== null && part.length > 0);
-  const basis = { zh: `基于 ${String(stats.references)} 条参考视频、共 ${String(minutes)} 分钟的测量。`, en: `Measured from ${String(stats.references)} reference video(s), ${String(minutes)} min in total.` };
+  const basis = { zh: `基于 ${String(stats.references)} 条参考视频、共 ${String(minutes)} 分钟的测量。`, en: `Measured from ${String(stats.references)} reference ${stats.references === 1 ? 'video' : 'videos'}, ${String(minutes)} min in total.` };
   const { measured, missing } = measuredList(stats);
   const guidance = [
     `Editing rhythm from the reference: ${enParts.join('; ')}.`,

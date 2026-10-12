@@ -1,6 +1,7 @@
 // 脚本导演（SCRIPTED，不是真实 Provider）：读本轮上下文（素材、时间线、指点、请求），只用统一工具目录里的
 // edit_timeline / review_draft / add_effect / update_effect；审片讨论只回方案，审片执行按批注指着的片段修改；
 // 请求里提到特效（爆炸、光效……）时用模板加在指着的画面区域，提到颜色时改已有特效的颜色。
+// 选了风格时（上下文里的 optional_style_strategy 只是数据）：第一版按风格测得的镜头中位时长切镜头，并在回复里说明。
 // 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
@@ -85,7 +86,23 @@ export class ScriptedDirector {
     const videoTracks = new Set((timeline.tracks ?? []).filter((track) => track.kind === 'VIDEO').map((track) => track.id));
     const videoClips = (timeline.clips ?? []).filter((clip) => videoTracks.has(clip.track) && clip.effect === undefined);
     let operations;
-    if (videoClips.length === 0) {
+    const styleMedian = Number((tag(text, 'optional_style_strategy') ?? '').match(/\(median ([0-9.]+) s\)/)?.[1] ?? NaN);
+    if (videoClips.length === 0 && Number.isFinite(styleMedian) && styleMedian > 0 && styleMedian < 3) {
+      // 风格参考：每条素材取 3 秒，按测得的中位镜头时长切开、素材之间交替
+      const shot = Math.max(0.2, Math.round(styleMedian * 10) / 10);
+      const perItem = Math.min(8, Math.floor(3 / shot));
+      operations = [];
+      for (let index = 0; index < perItem; index += 1) {
+        for (const item of items) {
+          const start = 0.5 + index * shot;
+          operations.push({ op: 'place_clip', footageId: item.footageId, sourceStart: start.toFixed(1), sourceEnd: (start + shot).toFixed(1) });
+        }
+      }
+      operations.push({ op: 'fit_length' });
+      this.pendingReply = zh
+        ? `按参考风格剪了第一版：镜头中位 ${String(styleMedian)} 秒，所以每个镜头 ${String(shot)} 秒、素材交替，共 ${String(operations.length - 1)} 个镜头。`
+        : `First cut in the reference style: median shot ${String(styleMedian)} s, so ${String(shot)} s shots alternating between clips, ${String(operations.length - 1)} shots in total.`;
+    } else if (videoClips.length === 0) {
       operations = [...items.map((item) => ({ op: 'place_clip', footageId: item.footageId, sourceStart: '0.5', sourceEnd: '3.5' })), { op: 'fit_length' }];
       this.pendingReply = zh
         ? `第一版：${items.map((item) => item.name).join(' → ')}，各取 3 秒，共 ${String(items.length * 3)} 秒。`

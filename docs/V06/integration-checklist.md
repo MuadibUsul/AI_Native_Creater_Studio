@@ -17,6 +17,8 @@
 | 语音转写（Deepgram 批量） | 素材里的说话内容，供 AI 找句子、不剪断句子 | Worker | `ANCS_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`；可选 `ANCS_DEEPGRAM_MODEL`、`ANCS_DEEPGRAM_LANGUAGE` | 素材卡显示"语音：未配置"；评测里"句子完整"为"无法评估" | 已在 `docs/verification/provider-real-deepgram.md` 核验过适配器；配好后上传一条有人声的素材，看"语音"变为"已理解" |
 | 实时语音识别（共看片室边看边说） | 麦克风 → Realtime Gateway → 流式识别 → 边说边出的文字、"这个/这里"按说出那一刻绑定 → 一句话说完作为一轮对话发给 AI | Realtime Gateway（`apps/realtime`，新进程） | `ANCS_REALTIME_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`（可与批量转写同一把）；与 API 同一把 `ANCS_VOICE_SESSION_SECRET`（≥32 字符，API 也要配）；`ANCS_ALLOWED_ORIGINS`；可选 `ANCS_DEEPGRAM_LIVE_MODEL_ZH`（缺省 nova-2）/ `_EN`（缺省 nova-3）；反向代理转发 `/realtime/v1/voice` | 没配会话密钥：开麦提示"语音还没配置好"；没配识别：网关连接时回"未配置"并关闭 | 起网关（`node apps/realtime/dist/main.js`，`/health` 显示 deepgram）→ 共看片室点麦克风说"把这里剪短一点"（中文）和一句英文 → 看边说边出的文字、指向标签与生成的试改；记录首段转写延迟 |
 | AI 当场写特效代码（可选，能力探测后开启） | 共看片室里模板不够用时，AI 自己写特效代码（先过四道门禁再渲染）；不开时只用模板库（模板特效无需任何凭据） | Worker | 先接好 AI 导演（上一行）；`ANCS_EFFECT_CODEGEN=enabled` | 缺省 `disabled`：AI 只用模板；写代码会被拒绝并提示用模板 | 用同一组"框选 + 一句话"请求分别走模板与写代码，记录门禁通过率、渲染耗时与人工评分（见 `docs/V06/milestones/V6-3.md`），达标后再开启 |
+| 从参考视频学风格：平台链接（可选） | 在"从参考视频学风格"里直接粘贴平台视频页链接（如 YouTube）；上传文件和直接的视频文件链接不需要这一项 | Worker | `ANCS_REFERENCE_FETCH_CMD`（必须含 `{url}` 与 `{output}`），例：`yt-dlp --no-playlist -f mp4/bestvideo*+bestaudio/best -o {output} {url}`（需在 Worker 机器上安装 yt-dlp 与 FFmpeg）；网络放行该平台的页面与媒体域名（YouTube：`www.youtube.com`、`youtube.com`、`m.youtube.com`、`youtubei.googleapis.com`、`*.googlevideo.com`）；可选 `ANCS_REFERENCE_MAX_MB` | 页面链接明确失败"这个链接是网页，服务端还没配置下载工具……请先把视频下载下来再上传" | ① 本机先试：`ANCS_REFERENCE_FETCH_CMD='…' node scripts/distill-reference.mjs <链接1> <链接2> <链接3> --json style.json`，看每条的剪点、节拍、色彩与合成的风格说明；② 共看片室"风格（可选）"→"从参考视频学风格"粘贴同样的链接。平台可能拒绝数据中心 IP（如 YouTube 要求登录验证），这时在本机下载后上传文件。参考视频的使用须符合平台条款与版权，系统只测量手法、记录来源 |
+| 风格说明由 AI 撰写（可选） | 学风格时 AI 看测量结果和抽帧写说明（补充画面类观察）；数值仍只来自测量 | Worker | 与 AI 导演同一配置（`ANCS_AGENT_DRIVER`、`ANTHROPIC_API_KEY`） | 用规则版说明（结果卡标明"按测量统计自动写的说明（没有 AI 看片）"） | 学同一组参考视频，结果卡显示"AI 看过测量结果和画面后写的说明"；记录模型、用量与成本（工作流输出 `costMicros`） |
 | 音频事件分析（可选） | 笑声、掌声、音乐段落等 | Worker | `ANCS_AUDIO_ANALYSIS_EXECUTABLE`（+ `ANCS_AUDIO_ANALYSIS_ARGS_JSON`）：你自己的子进程，stdout 输出 `GeneratedMediaAudioAnalysis` JSON | 不装配，该层缺失 | 上传素材后看统一索引里出现音频事件层 |
 
 ## 测试素材（可选，只用于本地测试与评测）
@@ -37,6 +39,7 @@
 | 存储签名 | API、Worker | `ANCS_STORAGE_SECRET`（两者同一把）、`ANCS_STORAGE_PUBLIC_BASE_URL` | 当前只有本地磁盘驱动；S3/R2 适配器属后续 |
 | 队列 | Worker | `ANCS_QUEUE_DRIVER=bullmq` + `REDIS_URL` | 缺省为数据库轮询 |
 | 特效渲染（V6-3） | Worker | 无需凭据；需要 Chromium 无头浏览器（`REMOTION_BROWSER_EXECUTABLE`）与 FFmpeg；可选 `ANCS_EFFECT_RENDER_CMD` | 在仓库根启动 Worker 时自动装配；`ANCS_DISABLE_RENDER=1` 时不装配（特效工具明确报不可用）。素材作品缺省不允许程序化特效，由用户在共看片室顶栏开启 |
+| 参考视频测量（V6-6） | Worker | 无需凭据；需要 FFmpeg（镜头、黑场、色彩、响度、节拍全部本地测量） | 缺 FFmpeg 时学风格明确失败"这个部署还没有装好分析工具"。参考视频存为工作区素材库里的草稿资产（30 天保留类，许可证"未知"并记录来源链接） |
 | 浏览器来源 | API | `ANCS_ALLOWED_ORIGINS` | Web 与 API 不同源时列出 Web 的 origin（留空 = `BETTER_AUTH_URL` 的 origin） |
 
 完整变量与校验规则：`packages/contracts/src/env.ts`；部署步骤：`docs/ops/deployment-runbook.md`；示例：`.env.example`。

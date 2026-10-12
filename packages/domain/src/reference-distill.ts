@@ -146,12 +146,12 @@ export async function getReferenceDistill(deps: DomainDeps, input: { workspaceId
 
 const inputOf = (context: WorkflowStepContext) => startDistillRequestSchema.parse(context.run.input);
 
-/** 转写层 → 说话占比、语速（中文按字计）、第一句结束时刻。没有转写层 → null。 */
+/** 转写层 → 说话占比、语速（中文按字计）、第一句结束时刻。没有完成的转写（未配置、失败、仍在进行）→ null（不当作"没有说话"）。 */
 async function speechOf(deps: DomainDeps, workspaceId: string, assetId: string, analyzedSeconds: number): Promise<ReferenceMeasurement['speech']> {
   let page = await listUnifiedMediaIndex(deps, { workspaceId, assetId, query: { kind: 'TRANSCRIPT_SEGMENT', limit: 100 } }).catch(() => null);
   if (page === null) return null;
   const status = page.capabilities.find((item) => item.kind === 'TRANSCRIPT_SEGMENT')?.status;
-  if (status !== 'READY' && status !== 'PARTIAL' && status !== 'EMPTY') return null;
+  if (status !== 'READY' && status !== 'EMPTY') return null;
   const items = [...page.items];
   for (let pages = 1; page.nextCursor !== null && pages < 30; pages += 1) {
     page = await listUnifiedMediaIndex(deps, { workspaceId, assetId, query: { kind: 'TRANSCRIPT_SEGMENT', limit: 100, cursor: Number(page.nextCursor) } });

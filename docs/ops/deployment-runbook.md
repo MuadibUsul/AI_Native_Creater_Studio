@@ -68,6 +68,8 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_ASR_DRIVER` | 有 `ANCS_ASR_EXECUTABLE` 则 `process`，否则不装配 | Worker ASR：`deepgram`（需 `DEEPGRAM_API_KEY`，缺失启动失败）或 `process` |
 | `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动（当前 LLM/TTS/声音克隆/素材搜索/分发均为 Mock）必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告 |
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
+| `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
+| `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
 | `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
 | `ANCS_TRUST_PROXY_HOPS` | `0` | 前置可信代理跳数；为 0 时不信任 `X-Forwarded-For`。部署在负载均衡/反向代理后必须如实设置，否则所有用户共享代理 IP 的限流桶 |
 | `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流（每实例内存）；生产不得为 `off` |
@@ -124,6 +126,14 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - 子进程只继承白名单环境变量（平台启动项 + `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`），硬超时 3 分钟；特效代码在页面里运行时浏览器网络/存储/DOM 能力被遮蔽。
 - AI 当场写特效代码缺省关闭；按评测结果设 `ANCS_EFFECT_CODEGEN=enabled` 开启（代码先过 Custom Motion 四道门禁）。
 - 程序化特效受项目制作规则约束（素材工程缺省关闭），用户在共看片室顶栏开启：`PATCH /api/v1/workspaces/:id/projects/:projectId/production-policy`，写工作区事件 `project.production_policy.updated`。
+
+### 5.3 从参考视频学风格（V6-6）
+
+- Worker 自动装配蒸馏工作流 `REFERENCE_DISTILL`（获取 → 测量 → 撰写 → 保存）：测量全部用本地 FFmpeg（场景切换、黑场、`signalstats` 色彩、`ebur128` 响度、`silencedetect`、单声道 PCM 节拍检测），每条最多分析前 15 分钟，最多 5 条。
+- 链接：直接的视频文件链接由 Worker 下载（拒绝内网/保留地址，逐跳检查重定向，限制大小 `ANCS_REFERENCE_MAX_MB`，缺省 1024）；平台页面链接需要 `ANCS_REFERENCE_FETCH_CMD`（如 `yt-dlp … -o {output} {url}`），命令只继承代理/证书相关的环境变量，硬超时 10 分钟，下载后再按同一上限检查大小。没配置时页面链接明确失败并提示下载后上传。
+- 参考视频存为工作区素材库里的草稿资产（`DRAFT_RENDER_30D`，许可证"未知"并记录来源链接与最终链接）；风格包 id 由工作流 id 派生（重放不会重复保存）。
+- 配置了 AI 导演（`ANCS_AGENT_DRIVER`）时由模型看测量结果与抽帧撰写说明（数值仍只来自测量，模型的画面观察标为推断）；否则用规则版说明。接口：`POST /api/v1/workspaces/:id/strategy-distills`（202，`project:write`，按"昂贵端点"限流）、`GET …/strategy-distills/:runId`、`PATCH …/strategy-packs/:packId`（内置预设 409）。
+- 命令行（不用数据库）：`node scripts/distill-reference.mjs [--json out.json] <文件或链接>…`，与工作流同一套测量与撰写代码。
 
 ## 6. 队列
 
