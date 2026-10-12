@@ -15,6 +15,7 @@ import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanv
 import { StudioConversation } from './StudioConversation';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
+import { StudioDistillDrawer } from './StudioDistillDrawer';
 import { StudioTimeStrip, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, pointerSecondsText } from './studio-time';
 import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
@@ -261,6 +262,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [footageOpen, setFootageOpen] = useState(false);
+  const [distillOpen, setDistillOpen] = useState(false);
   const upload = (files: File[]) => {
     for (const file of files) {
       const id = `${file.name}-${String(file.size)}-${String(file.lastModified)}-${globalThis.crypto.randomUUID()}`;
@@ -339,7 +341,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
             }}
           ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
-          <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => setFootageOpen(!footageOpen)}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
+          <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>
           <button type="button" className="btn primary small" aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)}><QuietIcon name="download" />{t.exportButton}</button>
@@ -420,6 +422,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           strategies={strategies.data ?? []}
           strategy={strategy}
           onStrategyChange={setStrategy}
+          onLearnStrategy={() => { setFootageOpen(false); setDistillOpen(true); }}
           voiceBar={(
             <StudioVoiceBar
               state={voice.state}
@@ -448,6 +451,14 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         aria-hidden="true"
         onChange={(event) => { upload(Array.from(event.target.files ?? [])); event.target.value = ''; }}
       />
+      {distillOpen ? (
+        <StudioDistillDrawer
+          workspaceId={workspaceId}
+          canEdit={canEdit}
+          onClose={() => setDistillOpen(false)}
+          onUse={(pack) => { setStrategy({ packId: pack.id, knobs: Object.fromEntries(pack.knobs.map((knob) => [knob.key, knob.defaultValue])) }); setDistillOpen(false); }}
+        />
+      ) : null}
       {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
       {exportOpen ? (
         <StudioExport

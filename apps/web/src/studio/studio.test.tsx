@@ -247,6 +247,104 @@ describe('V6-1c 共看片室', () => {
     }, expect.anything()));
   });
 
+  it('V6-6 从参考视频学风格：上传文件 + 粘贴链接 → 进度 → 测量结果卡（只列真实测量）→ 改说明 → 选用', async () => {
+    const distilled = {
+      ...beatPack, id: 'stp_ref1', kind: 'DISTILLED', genre: 'reference', version: 1,
+      name: { 'zh-CN': '「a.mp4」等 2 条视频的风格', en: 'Style of “a.mp4” and 1 more' },
+      summary: { 'zh-CN': '镜头很短、卡在节拍上。', en: 'Short shots cut on the beat.' },
+      knobs: [{ ...beatPack.knobs[0], defaultValue: 'calmer' }],
+      agentGuidance: 'Cut on the beat.',
+      editingDna: {
+        shotSeconds: { typical: { min: 0.5, max: 0.8 }, median: 0.5 }, beatCutRatio: 1, shotScaleVariety: null, transitionsPerMinute: 7.5,
+        speedRampsPerMinute: null, zoomsPerMinute: null, hookSeconds: 0.5, captionStyle: null, soundHabits: 'steady beat around 120 BPM', colorTendency: 'a warm cast',
+        cutsPerMinute: 65, pacing: [120, 120, 120, 120, 120, 30, 20, 20, 20, 20], measured: { references: 2, analyzedSeconds: 24, shots: 28 },
+      },
+    };
+    const run = (overrides: Record<string, unknown>) => ({ runId: 'wfr_ref1', status: 'RUNNING', step: 'analyze', references: [], packId: null, composer: null, error: null, createdAt: '2026-10-12T00:00:00.000Z', ...overrides });
+    const uploadResumable = vi.fn().mockResolvedValue({ id: 'ast_ref' });
+    const startDistill = vi.fn().mockResolvedValue(run({ step: 'fetch' }));
+    const getDistill = vi.fn().mockResolvedValueOnce(run({})).mockResolvedValue(run({ status: 'SUCCEEDED', step: 'save', packId: 'stp_ref1', composer: 'RULES' }));
+    const updateStrategy = vi.fn().mockImplementation((_ws: string, _id: string, changes: { summary: Record<string, string> }) => Promise.resolve({ ...distilled, version: 2, summary: changes.summary }));
+    const strategies = vi.fn().mockResolvedValueOnce([beatPack]).mockResolvedValue([beatPack, distilled]);
+    const { sdk, startTurn } = client({ turns: [turn()] });
+    const agent = (sdk as unknown as { agent: Record<string, unknown> }).agent;
+    Object.assign(agent, { strategies, startDistill, getDistill, updateStrategy, strategy: vi.fn().mockResolvedValue(distilled) });
+    Object.assign((sdk as unknown as { assets: Record<string, unknown> }).assets, { uploadResumable });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+
+    await userEvent.click(await screen.findByRole('button', { name: '从参考视频学风格' }));
+    const drawer = screen.getByRole('complementary', { name: '从参考视频学风格' });
+    expect(within(drawer).getByText(/版权由你负责/)).toBeTruthy();
+    const start = within(drawer).getByRole('button', { name: '开始学习' });
+    expect((start as HTMLButtonElement).disabled).toBe(true);
+
+    const fileInput = drawer.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [new File(['x'], 'a.mp4', { type: 'video/mp4' })] } });
+    await waitFor(() => expect(uploadResumable).toHaveBeenCalledWith('ws_1', expect.objectContaining({ assetType: 'USER_UPLOAD', filename: 'a.mp4', contentType: 'video/mp4' }), expect.anything()));
+    expect(await within(drawer).findByText('文件')).toBeTruthy();
+
+    const link = within(drawer).getByLabelText('视频链接');
+    await userEvent.type(link, 'not a link{Enter}');
+    expect(within(drawer).getByRole('alert').textContent).toContain('http://');
+    await userEvent.clear(link);
+    await userEvent.type(link, 'https://www.youtube.com/watch?v=4uQskImIBIY');
+    await userEvent.click(within(drawer).getByRole('button', { name: '添加链接' }));
+    expect(within(drawer).getByText('https://www.youtube.com/watch?v=4uQskImIBIY')).toBeTruthy();
+
+    await userEvent.click(start);
+    await waitFor(() => expect(startDistill).toHaveBeenCalledWith('ws_1', {
+      references: [{ assetId: 'ast_ref' }, { url: 'https://www.youtube.com/watch?v=4uQskImIBIY' }], name: null, locale: 'zh-CN',
+    }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+    expect(await within(drawer).findByText('测量剪辑手法')).toBeTruthy();
+    expect(within(drawer).getByText('测量剪辑手法').getAttribute('aria-current')).toBe('step');
+
+    expect(await within(drawer).findByText('「a.mp4」等 2 条视频的风格', {}, { timeout: 4000 })).toBeTruthy();
+    expect(within(drawer).getByText('按测量统计自动写的说明（没有 AI 看片）')).toBeTruthy();
+    expect(within(drawer).getByText('中位 0.5 秒（多在 0.5–0.8 秒）')).toBeTruthy();
+    expect(within(drawer).getByText('每分钟 65 次')).toBeTruthy();
+    expect(within(drawer).getByText('100% 的剪点在节拍上')).toBeTruthy();
+    expect(within(drawer).getByText('测量依据：2 条视频，共 0.4 分钟，28 个镜头')).toBeTruthy();
+    expect(within(drawer).getByText(/还没测：.*景别.*推拉缩放.*变速.*字幕样式/)).toBeTruthy();
+    expect(within(drawer).queryByText(/卡点（没有稳定的节拍）/)).toBeNull();
+    expect(within(drawer).getByRole('img', { name: /节奏曲线.*120, 120, 120, 120, 120, 30, 20, 20, 20, 20/ })).toBeTruthy();
+
+    await userEvent.click(within(drawer).getByRole('button', { name: '改说明' }));
+    const summary = within(drawer).getByLabelText('说明');
+    await userEvent.clear(summary);
+    await userEvent.type(summary, '短镜头，全部卡点。');
+    await userEvent.click(within(drawer).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(updateStrategy).toHaveBeenCalledWith('ws_1', 'stp_ref1', {
+      summary: { 'zh-CN': '短镜头，全部卡点。', en: 'Short shots cut on the beat.' }, agentGuidance: 'Cut on the beat.',
+    }, expect.anything()));
+    expect(await within(drawer).findByText('已保存。')).toBeTruthy();
+
+    await userEvent.click(within(drawer).getByRole('button', { name: '用这个风格' }));
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: '从参考视频学风格' })).toBeNull());
+    await waitFor(() => expect((screen.getByLabelText('风格（可选）') as HTMLSelectElement).value).toBe('stp_ref1'));
+    await userEvent.type(screen.getByLabelText('告诉 AI 怎么改'), '照这个风格剪{Enter}');
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', expect.objectContaining({ strategyPackId: 'stp_ref1', strategyKnobs: { pacing: 'calmer' } }), expect.anything()));
+  });
+
+  it('V6-6 学风格失败：按原因说明（平台链接未配置下载工具 → 提示下载后上传）', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    Object.assign((sdk as unknown as { agent: Record<string, unknown> }).agent, {
+      startDistill: vi.fn().mockResolvedValue({ runId: 'wfr_ref2', status: 'RUNNING', step: 'fetch', references: [], packId: null, composer: null, error: null, createdAt: '2026-10-12T00:00:00.000Z' }),
+      getDistill: vi.fn().mockResolvedValue({ runId: 'wfr_ref2', status: 'FAILED', step: 'fetch', references: [], packId: null, composer: null, error: { reason: 'REFERENCE_FETCH_NOT_CONFIGURED', message: 'x' }, createdAt: '2026-10-12T00:00:00.000Z' }),
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    await userEvent.click(await screen.findByRole('button', { name: '从参考视频学风格' }));
+    const drawer = screen.getByRole('complementary', { name: '从参考视频学风格' });
+    await userEvent.type(within(drawer).getByLabelText('视频链接'), 'https://www.youtube.com/watch?v=AMCUqgu_cTM{Enter}');
+    await userEvent.click(within(drawer).getByRole('button', { name: '开始学习' }));
+    const alert = await within(drawer).findByRole('alert');
+    expect(alert.textContent).toContain('没能学成这个风格');
+    expect(alert.textContent).toContain('请先把视频下载下来');
+    await userEvent.click(within(alert).getByRole('button', { name: '重新开始' }));
+    expect(within(drawer).getByRole('button', { name: '开始学习' })).toBeTruthy();
+    await userEvent.click(within(drawer).getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('complementary', { name: '从参考视频学风格' })).toBeNull();
+  });
+
   it('AI 失败给出原因；进行中的一轮可以停止', async () => {
     const failed = turn({ status: 'FAILED', proposalId: null, reply: null, toolCalls: [], error: { code: 'NOT_IMPLEMENTED', details: { reason: 'AGENT_MODEL_NOT_CONFIGURED' } } });
     const { sdk } = client({ turns: [failed] });

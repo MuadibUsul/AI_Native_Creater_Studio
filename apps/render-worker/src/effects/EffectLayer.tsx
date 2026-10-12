@@ -40,7 +40,7 @@ function evaluate(code: string, seed: string, params: Record<string, unknown>): 
   };
   const names = [...Object.keys(injected), ...SHADOWED];
   const values = [...Object.values(injected), ...SHADOWED.map(() => undefined)];
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval -- 代码已过四道门禁；这里只在遮蔽了浏览器能力的作用域里执行
+  // 代码已过四道门禁（模板代码在测试里同样过门禁）；这里只在遮蔽了浏览器能力的作用域里执行
   const run = new Function(...names, `"use strict";\n${code}`) as (...args: unknown[]) => void;
   run(...values);
   const registration = registrations.at(-1);

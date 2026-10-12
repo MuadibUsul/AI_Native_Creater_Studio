@@ -46,6 +46,8 @@ export interface ConversationProps {
   strategies: StrategyPackSummary[];
   strategy: StudioStrategyChoice | null;
   onStrategyChange: (value: StudioStrategyChoice | null) => void;
+  /** V6-6：打开"从参考视频学风格" */
+  onLearnStrategy?: () => void;
   /** V6-2 语音：状态行（对话框上方）与麦克风开关（发送按钮旁） */
   voiceBar?: ReactNode;
   voiceToggle?: ReactNode;
@@ -149,7 +151,7 @@ export function StudioConversation(props: ConversationProps) {
           {props.error !== null ? <div className={styles['alert']} role="alert">{props.error}</div> : null}
         </div>
       ) : null}
-      {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} /> : null}
+      {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} {...(props.onLearnStrategy !== undefined ? { onLearn: props.onLearnStrategy } : {})} /> : null}
       {props.voiceBar ?? null}
       <div className={styles['composer']}>
         <div className={styles['composerField']}>

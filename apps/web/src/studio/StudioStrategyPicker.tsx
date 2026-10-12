@@ -3,6 +3,7 @@
 import type { StrategyPackSummary } from '@ancs/contracts';
 import { useId } from 'react';
 import { useI18n } from '@/i18n/I18nProvider';
+import { QuietIcon } from '@/ui/QuietIcon';
 import type { StudioStrategyChoice } from './useStudio';
 import styles from './studio.module.css';
 
@@ -15,6 +16,8 @@ export function StudioStrategyPicker(props: {
   value: StudioStrategyChoice | null;
   disabled: boolean;
   onChange: (value: StudioStrategyChoice | null) => void;
+  /** V6-6：打开"从参考视频学风格"（不传则不显示入口） */
+  onLearn?: () => void;
 }) {
   const { messages, locale } = useI18n();
   const t = messages.studio.strategy;
@@ -49,6 +52,9 @@ export function StudioStrategyPicker(props: {
         </div>
       )) : null}
       <span className={styles['strategyHint']}>{selected === undefined ? t.hint : selected.summary[locale]}</span>
+      {props.onLearn !== undefined ? (
+        <button type="button" className={`btn small ghost ${styles['strategyLearn']}`} disabled={props.disabled} onClick={props.onLearn}><QuietIcon name="spark" />{t.learn}</button>
+      ) : null}
     </div>
   );
 }
