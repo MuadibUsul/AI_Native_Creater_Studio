@@ -61,6 +61,7 @@ import { registerFinalRenderRoutes } from './routes/final-renders.js';
 import { registerAgentRoutes } from './routes/agent.js';
 import { registerPreviewRoutes } from './routes/previews.js';
 import { registerStudioRoutes } from './routes/studio.js';
+import { registerReviewRoutes } from './routes/review.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
@@ -249,6 +250,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAgentRoutes(instance, authDeps);
         registerPreviewRoutes(instance, { ...authDeps, ...(storageDeps === undefined ? {} : { storage: storageDeps }) });
         registerStudioRoutes(instance, authDeps);
+        registerReviewRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
         registerCustomMotionRoutes(instance, authDeps);
         registerNarrationAudioRoutes(instance, authDeps, {

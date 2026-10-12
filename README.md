@@ -23,7 +23,7 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | V6-1 | 共看片室最小闭环：上传 → AI 剪第一版（风格可选）→ 点选/拖选 + 文字 → 原地试改 → 采用/撤回 → 局部预览 → 导出；中英双语界面；AI 自检；初剪评测框架 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**AI 导演用脚本导演验证，真实 Claude 待密钥** |
 | V6-2 | 流式双语语音 + 共同注意力 | 未开始 |
 | V6-3 | 代码生成特效（模板库 + 沙箱渲染 + 合成） | 未开始 |
-| V6-4 | 批注式审片 + 统一局部重渲（含手机网页审片） | 未开始 |
+| V6-4 | 批注式审片：手机或桌面逐处标记（位置 + 一句话 + 可选框选）→ 逐条和 AI 讨论方案 → 一次执行 → 只重渲改动的分段 → 采用；可添加到主屏幕 | 已交付，真实浏览器（手机 + 桌面）+ 真实 FFmpeg 验证；**AI 为脚本导演，真实 Claude 待密钥**；语音批注随 V6-2 |
 | V6-5 — V6-8 | 讲述配音、蒸馏器（参考视频 → 风格）、数字人、生成式特效与视频生成 | 未开始 |
 
 只有带证据的 `VERIFIED` 计入完成；脚本模型 / Mock 通过 ≠ 真实 Provider 通过。各里程碑的"未验证与待办"见 `docs/V06/milestones/`。
@@ -62,15 +62,17 @@ node apps/worker/dist/main.js        # Worker（在仓库根启动）
 cd apps/web && npx next start -p 3000
 ```
 
-登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。
+登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。看完后点顶栏"审片"（`/w/<workspaceId>/review/<projectId>`，手机上可添加到主屏幕）逐处标记问题、和 AI 商量后一次改完。
 
 ## 验收与评测脚本
 
 | 命令 | 说明 |
 |---|---|
 | `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
+| `node scripts/review-browser-check.mjs` | 批注式审片端到端：手机 390×844 触屏 + 桌面，真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-4/` |
 | `node scripts/eval-first-cut.mjs` | 初剪评测冒烟（`evals/first-cut/smoke.json`，脚本导演，只证明框架可用） |
 | `node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export` | 真实模型初剪评测：自动指标 + 人工评分表 + 导出成片（需 `ANTHROPIC_API_KEY`，素材放 `Videos/`，见评分标准文档） |
+| `node scripts/fetch-pexels-footage.mjs --query "iceland road trip"` | 从 Pexels 下载免费测试素材到 `Videos/pexels/`（不入库），同时生成作者署名与可直接使用的评测用例集；需要 `PEXELS_API_KEY`，云端会话还需放行 `api.pexels.com`、`videos.pexels.com` 并加 `NODE_USE_ENV_PROXY=1` |
 | `pnpm test:provider-smoke` / `pnpm provider:verify` | 真实 Provider 探测，默认关闭，需显式开启与凭据，会产生费用 |
 
 ## 验证命令

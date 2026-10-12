@@ -8,12 +8,14 @@ import {
   ApiFailure,
   ERROR_CODES,
   PROPOSAL_ERROR_REASONS,
+  REVIEW_ERROR_REASONS,
   agentContentBlockSchema,
   agentModelCostMicros,
   agentPointerSchema,
   agentSessionSchema,
   agentTurnSchema,
   createAgentSessionRequestSchema,
+  reviewRegionSchema,
   projectAgentCostSchema,
   editOperationSchema,
   isDecimalSecondsText,
@@ -33,7 +35,7 @@ import {
   type StartAgentTurnRequest,
   type WorkflowErrorClass,
 } from '@ancs/contracts';
-import { agentSessions, agentTurnMessages, agentTurns, projectSequences, projects, proposals, workflowRuns, workflowSteps } from '@ancs/db';
+import { agentSessions, agentTurnMessages, agentTurns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
@@ -110,6 +112,9 @@ function toTurn(row: TurnRow): AgentTurn {
     sessionId: row.sessionId,
     workflowRunId: row.workflowRunId,
     status: row.status,
+    purpose: row.purpose,
+    reviewNoteId: row.reviewNoteId,
+    reviewRoundId: row.reviewRoundId,
     message: row.message,
     pointer: row.pointer,
     reply: row.reply,
@@ -198,6 +203,11 @@ export async function projectAgentCost(deps: DomainDeps, input: { workspaceId: s
   });
 }
 
+/** 带幂等键的轮次 id（会话 + 键派生；同一键重放得到同一轮次）。 */
+export function agentTurnIdFor(sessionId: string, idempotencyKey: string): string {
+  return `agt_${createHash('sha256').update(`${sessionId}\u0000${idempotencyKey}`).digest('hex').slice(0, 32)}`;
+}
+
 /**
  * 发起一轮：同会话同一时刻只允许一个进行中的轮次（409）；幂等键 → 同一轮次（轮次 id 由会话 + 键派生）。
  * 轮次行与工作流运行分两步建立：工作流启动失败时轮次立即标为失败（不留悬挂的 RUNNING）。
@@ -206,16 +216,21 @@ export async function startAgentTurn(deps: DomainDeps, input: {
   workspaceId: string;
   sessionId: string;
   request: StartAgentTurnRequest;
+  /** 内部：一次执行一轮审片里已确定的批注（V6-4，由 reviews.applyReview 发起） */
+  review?: { purpose: 'APPLY_REVIEW'; roundId: string; noteIds: string[]; expectedApplyTurnId: string | null };
   createdBy?: string | null;
   idempotencyKey?: string | null;
 }): Promise<AgentTurn> {
   const request = startAgentTurnRequestSchema.parse(input.request);
+  if (request.reviewNoteId !== null && input.review !== undefined) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'a turn either discusses one note or applies a review round', 422);
+  }
   // 可选策略：包必须存在、旋钮必须是包里声明的（在建轮次之前校验，失败不留记录）
   const strategyKnobs = request.strategyPackId === null ? {}
     : resolveStrategyKnobs(await getStrategyPack(deps, { workspaceId: input.workspaceId, packId: request.strategyPackId }), request.strategyKnobs);
   const turnId = input.idempotencyKey === null || input.idempotencyKey === undefined
     ? `agt_${randomUUID()}`
-    : `agt_${createHash('sha256').update(`${input.sessionId}\u0000${input.idempotencyKey}`).digest('hex').slice(0, 32)}`;
+    : agentTurnIdFor(input.sessionId, input.idempotencyKey);
 
   const created = await deps.db.transaction(async (tx) => {
     const sessionRows = await tx.select().from(agentSessions)
@@ -232,20 +247,46 @@ export async function startAgentTurn(deps: DomainDeps, input: {
     const project = await tx.select({ revision: projects.revision }).from(projects)
       .where(and(eq(projects.id, session.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
     if (project[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
-    // 在试改上继续（V6 §5.3）：会话最近一轮的提案仍未采用且基于当前版本 → 本轮草稿从它出发
-    const previous = await tx.select({ proposalId: agentTurns.proposalId }).from(agentTurns)
-      .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'COMPLETED'))).orderBy(desc(agentTurns.createdAt)).limit(1);
-    const trialId = previous[0]?.proposalId ?? null;
-    const trial = trialId === null ? undefined : (await tx.select({ id: proposals.id, status: proposals.status, baseRevision: proposals.baseProjectRevision, operations: proposals.operations })
-      .from(proposals).where(and(eq(proposals.id, trialId), eq(proposals.workspaceId, input.workspaceId))).limit(1))[0];
-    const continues = trial !== undefined && trial.status === 'OPEN' && trial.baseRevision === project[0].revision ? trial : null;
+    // 审片（V6-4）：讨论一条批注 → 指向取自批注、不带试改；一次执行 → 从当前版本出发
+    let review: { purpose: 'DISCUSS_NOTE' | 'APPLY_REVIEW'; noteId: string | null; roundId: string; pointer: unknown } | null = null;
+    if (request.reviewNoteId !== null) {
+      const note = (await tx.select({ id: reviewNotes.id, roundId: reviewNotes.roundId, projectId: reviewNotes.projectId, pointer: reviewNotes.pointer }).from(reviewNotes)
+        .where(and(eq(reviewNotes.id, request.reviewNoteId), eq(reviewNotes.workspaceId, input.workspaceId))).limit(1))[0];
+      if (note === undefined || note.projectId !== session.projectId) {
+        throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'review note not found', 404, { reason: REVIEW_ERROR_REASONS.NOTE_NOT_FOUND });
+      }
+      review = { purpose: 'DISCUSS_NOTE', noteId: note.id, roundId: note.roundId, pointer: note.pointer };
+    } else if (input.review !== undefined) {
+      // 一轮审片同一时刻只登记一次执行（行锁 + 比较上一次的执行轮）；登记与轮次同一事务，Worker 读上下文时批注集合已确定
+      const round = (await tx.select({ id: reviewRounds.id, projectId: reviewRounds.projectId, applyTurnId: reviewRounds.applyTurnId }).from(reviewRounds)
+        .where(and(eq(reviewRounds.id, input.review.roundId), eq(reviewRounds.workspaceId, input.workspaceId))).limit(1).for('update'))[0];
+      if (round === undefined || round.projectId !== session.projectId) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'review round not found', 404);
+      if (round.applyTurnId !== input.review.expectedApplyTurnId) {
+        throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'the review notes are already being applied', 409, { reason: REVIEW_ERROR_REASONS.ROUND_LOCKED, status: 'APPLYING' });
+      }
+      await tx.update(reviewRounds).set({ applyTurnId: turnId, appliedNoteIds: input.review.noteIds }).where(eq(reviewRounds.id, round.id));
+      review = { purpose: 'APPLY_REVIEW', noteId: null, roundId: round.id, pointer: request.pointer };
+    }
+    // 在试改上继续（V6 §5.3）：会话最近一轮（讨论批注的轮次除外）的提案仍未采用且基于当前版本 → 本轮草稿从它出发
+    let continues: { id: string; operations: unknown } | null = null;
+    if (review === null) {
+      const previous = await tx.select({ proposalId: agentTurns.proposalId }).from(agentTurns)
+        .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'COMPLETED'), sql`${agentTurns.purpose} <> 'DISCUSS_NOTE'`)).orderBy(desc(agentTurns.createdAt)).limit(1);
+      const trialId = previous[0]?.proposalId ?? null;
+      const trial = trialId === null ? undefined : (await tx.select({ id: proposals.id, status: proposals.status, baseRevision: proposals.baseProjectRevision, operations: proposals.operations })
+        .from(proposals).where(and(eq(proposals.id, trialId), eq(proposals.workspaceId, input.workspaceId))).limit(1))[0];
+      continues = trial !== undefined && trial.status === 'OPEN' && trial.baseRevision === project[0].revision ? trial : null;
+    }
     const [row] = await tx.insert(agentTurns).values({
       id: turnId,
       sessionId: session.id,
       workspaceId: input.workspaceId,
       projectId: session.projectId,
+      purpose: review?.purpose ?? 'EDIT',
+      reviewNoteId: review?.noteId ?? null,
+      reviewRoundId: review?.roundId ?? null,
       message: request.message,
-      pointer: request.pointer,
+      pointer: review?.pointer ?? request.pointer,
       strategyPackId: request.strategyPackId,
       strategyKnobs,
       baseRevision: project[0].revision,
@@ -454,6 +495,12 @@ export async function runAgentTurnLoop(
         calls.push({ name: use.name, ok: false, summary: 'unknown tool' });
         continue;
       }
+      if (turn.purpose === 'DISCUSS_NOTE' && tool.descriptor.effect !== 'READ') {
+        // 讨论批注只定方案：改动在用户确定全部批注后一次执行（工具目录不变，只是这一步不执行）
+        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'this turn discusses one review note: describe the fix you propose instead of changing anything; the agreed fixes are applied together later' }), isError: true });
+        calls.push({ name: use.name, ok: false, summary: 'discussion only: not applied' });
+        continue;
+      }
       const parsed = tool.input.safeParse(use.input);
       if (!parsed.success) {
         results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'invalid input', issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join('.'), message: issue.message })) }), isError: true });
@@ -588,8 +635,12 @@ async function compileTurnContext(
     if (guidance !== null) strategy = { id: turn.strategyPackId, guidance: guidance.slice(0, 8000) };
   }
 
-  const previous = await deps.db.select().from(agentTurns)
-    .where(and(eq(agentTurns.sessionId, session.id), sql`${agentTurns.id} <> ${turn.id}`, inArray(agentTurns.status, ['COMPLETED', 'FAILED', 'CANCELLED'])))
+  // 最近轮次：讨论批注时只看同一条批注的讨论；一次执行时不需要（方案已在批注里）；普通对话不混入批注讨论
+  const sameThread = turn.purpose === 'DISCUSS_NOTE' && turn.reviewNoteId !== null
+    ? eq(agentTurns.reviewNoteId, turn.reviewNoteId)
+    : sql`${agentTurns.purpose} <> 'DISCUSS_NOTE'`;
+  const previous = turn.purpose === 'APPLY_REVIEW' ? [] : await deps.db.select().from(agentTurns)
+    .where(and(eq(agentTurns.sessionId, session.id), sql`${agentTurns.id} <> ${turn.id}`, inArray(agentTurns.status, ['COMPLETED', 'FAILED', 'CANCELLED']), sameThread))
     .orderBy(desc(agentTurns.createdAt)).limit(5);
   const proposalIds = previous.map((row) => row.proposalId).filter((id): id is string => id !== null);
   const proposalStatus = new Map((proposalIds.length === 0 ? [] : await deps.db.select({ id: proposals.id, status: proposals.status }).from(proposals).where(inArray(proposals.id, proposalIds)))
@@ -600,9 +651,12 @@ async function compileTurnContext(
     outcome: row.status !== 'COMPLETED' ? row.status : row.proposalId === null ? 'NO_CHANGES' : `PROPOSAL_${proposalStatus.get(row.proposalId) ?? 'UNKNOWN'}`,
   }));
 
+  const review = await compileReviewContext(deps, turn, timeline);
+
   return compileAgentContext({
     locale,
     continuesTrial: turn.continuesProposalId !== null,
+    review,
     project: { title: projectRows[0]?.title ?? '', mode: typeof policy['mode'] === 'string' ? policy['mode'] : 'UNKNOWN', ...(constraints.length === 0 ? {} : { disallowed: constraints }) } as { title: string; mode: string },
     timeline,
     footage,
@@ -611,4 +665,37 @@ async function compileTurnContext(
     recentTurns,
     request: turn.message,
   });
+}
+
+/**
+ * 审片上下文（V6-4）：讨论 → 这一条批注（位置、所指片段、框选、已有方案）；
+ * 一次执行 → 这一轮里已确定的全部批注。批注在所审的版本上标记；当前版本不同时如实给出两个版本号。
+ */
+async function compileReviewContext(deps: DomainDeps, turn: TurnRow, timeline: ReturnType<typeof buildAgentTimelineView>): Promise<unknown> {
+  if (turn.purpose === 'EDIT' || turn.reviewRoundId === null) return null;
+  const rounds = await deps.db.select().from(reviewRounds).where(eq(reviewRounds.id, turn.reviewRoundId)).limit(1);
+  const round = rounds[0];
+  if (round === undefined) return null;
+  const project = await deps.db.select({ revision: projects.revision }).from(projects).where(eq(projects.id, turn.projectId)).limit(1);
+  const rows = turn.purpose === 'DISCUSS_NOTE'
+    ? (turn.reviewNoteId === null ? [] : await deps.db.select().from(reviewNotes).where(eq(reviewNotes.id, turn.reviewNoteId)).limit(1))
+    : await deps.db.select().from(reviewNotes).where(and(eq(reviewNotes.roundId, round.id), inArray(reviewNotes.id, round.appliedNoteIds as string[]))).orderBy(reviewNotes.createdAt);
+  const notes = rows.map((row) => {
+    const pointer = agentPointerSchema.parse(row.pointer);
+    const region = row.region === null ? null : reviewRegionSchema.safeParse(row.region);
+    return {
+      id: row.id,
+      note: row.text,
+      at: pointer.timeRange,
+      clips: timeline.clips.filter((clip) => pointer.clipIds.includes(clip.id)).map((clip) => clip.id),
+      ...(region === null || !region.success ? {} : { frameRegion: region.data }),
+      ...(row.plan === null ? {} : { agreedPlan: row.plan }),
+    };
+  });
+  return {
+    mode: turn.purpose,
+    reviewedRevision: round.baseRevision,
+    currentRevision: project[0]?.revision ?? round.baseRevision,
+    ...(turn.purpose === 'DISCUSS_NOTE' ? { note: notes[0] ?? null } : { notes }),
+  };
 }

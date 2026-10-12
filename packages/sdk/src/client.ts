@@ -80,6 +80,12 @@ import {
   createStudioProjectRequestSchema,
   studioProjectRefSchema,
   studioStateSchema,
+  applyReviewResponseSchema,
+  applyReviewRequestSchema,
+  createReviewNoteRequestSchema,
+  updateReviewNoteRequestSchema,
+  reviewNoteSchema,
+  reviewStateSchema,
   undoChangeResponseSchema,
   projectAgentCostSchema,
   requestSequencePreviewSchema,
@@ -391,6 +397,12 @@ import {
   type CreateStudioProjectRequest,
   type StudioProjectRef,
   type StudioState,
+  type ApplyReviewRequest,
+  type ApplyReviewResponse,
+  type CreateReviewNoteRequest,
+  type ReviewNote,
+  type ReviewState,
+  type UpdateReviewNoteRequest,
   type UndoChangeResponse,
   type ProjectAgentCost,
   type RequestSequencePreview,
@@ -1430,6 +1442,17 @@ export interface AncsClient {
     create(workspaceId: string, input: CreateStudioProjectRequest, options?: MutationOptions): Promise<StudioProjectRef>;
     state(workspaceId: string, projectId: string): Promise<StudioState>;
     undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
+  };
+  /** V6-4：批注式审片（标记 → 逐条讨论 → 全部执行 → 采用走 proposals 接口） */
+  review: {
+    state(workspaceId: string, projectId: string): Promise<ReviewState>;
+    addNote(workspaceId: string, projectId: string, input: CreateReviewNoteRequest, options?: MutationOptions): Promise<ReviewNote>;
+    updateNote(workspaceId: string, noteId: string, input: UpdateReviewNoteRequest, options?: MutationOptions): Promise<ReviewNote>;
+    deleteNote(workspaceId: string, noteId: string, options?: MutationOptions): Promise<void>;
+    /** 讨论用 agent.startTurn（带 reviewNoteId）；这里读这条批注的讨论（新→旧） */
+    noteTurns(workspaceId: string, noteId: string): Promise<AgentTurn[]>;
+    /** 202：一次执行已确定的批注（AI 轮次 → 试改提案） */
+    apply(workspaceId: string, projectId: string, input: ApplyReviewRequest, options?: MutationOptions): Promise<ApplyReviewResponse>;
   };
   /** V5-M4：工作流运行（步骤尝试、输出与错误；取消在步骤边界生效） */
   workflowRuns: {
@@ -3035,6 +3058,32 @@ export function createClient(options: ClientOptions): AncsClient {
       state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
       undoChange: (workspaceId, projectId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
+    },
+
+    review: {
+      state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review`, reviewStateSchema),
+      addNote: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review/notes`, reviewNoteSchema, {
+          body: input,
+          bodySchema: createReviewNoteRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      updateNote: (workspaceId, noteId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}`, reviewNoteSchema, {
+          body: input,
+          bodySchema: updateReviewNoteRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      deleteNote: (workspaceId, noteId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
+      noteTurns: async (workspaceId, noteId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}/turns`, listOf(agentTurnSchema))).items,
+      apply: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review/apply`, applyReviewResponseSchema, {
+          body: input,
+          bodySchema: applyReviewRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
     },
 
     workflowRuns: {

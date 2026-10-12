@@ -15,6 +15,30 @@ import type { StorageDeps } from '../plugins/storage.js';
 
 const tokenQuerySchema = z.object({ token: z.string().min(1) });
 
+/**
+ * HTTP 单段字节范围（RFC 9110 §14）：浏览器播放视频时靠它拖动进度（没有范围支持时跳转会回到开头）。
+ * 返回 null = 没有或不支持的范围（多段、非 bytes 单位、格式错误）→ 按整份 200 返回；
+ * 'unsatisfiable' = 起点超出对象大小 → 416。
+ */
+export function parseByteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
+  if (header === undefined) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (match === null) return null;
+  const [, first = '', last = ''] = match;
+  if (first === '' && last === '') return null;
+  if (first === '') {
+    // 后缀范围：最后 N 字节
+    const suffix = Number(last);
+    if (suffix === 0) return 'unsatisfiable';
+    return size === 0 ? 'unsatisfiable' : { start: Math.max(0, size - suffix), end: size - 1 };
+  }
+  const start = Number(first);
+  if (start >= size) return 'unsatisfiable';
+  const end = last === '' ? size - 1 : Math.min(Number(last), size - 1);
+  if (end < start) return null;
+  return { start, end };
+}
+
 export function registerStorageRoutes(app: FastifyInstance, storage: StorageDeps): void {
   const local = storage.local;
   if (local === undefined) return; // 非本地驱动不暴露端点
@@ -82,10 +106,20 @@ export function registerStorageRoutes(app: FastifyInstance, storage: StorageDeps
       return reply.status(404).send(errorEnvelope('NOT_FOUND', '对象不存在', request.id));
     }
     const filename = payload.downloadFilename ?? 'download';
-    return reply
-      .status(200)
+    reply
       .header('content-type', 'application/octet-stream')
       .header('content-disposition', `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, '_')}"`)
-      .send(Buffer.from(data));
+      .header('accept-ranges', 'bytes');
+    const range = parseByteRange(typeof request.headers.range === 'string' ? request.headers.range : undefined, data.byteLength);
+    if (range === 'unsatisfiable') {
+      return reply.status(416).header('content-range', `bytes */${String(data.byteLength)}`).send();
+    }
+    if (range !== null) {
+      return reply
+        .status(206)
+        .header('content-range', `bytes ${String(range.start)}-${String(range.end)}/${String(data.byteLength)}`)
+        .send(Buffer.from(data.subarray(range.start, range.end + 1)));
+    }
+    return reply.status(200).send(Buffer.from(data));
   });
 }

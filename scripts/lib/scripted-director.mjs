@@ -1,5 +1,6 @@
 // 脚本导演（SCRIPTED，不是真实 Provider）：读本轮上下文（素材、时间线、指点、请求），只用统一工具目录里的
-// edit_timeline 与 review_draft。用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑质量要用真实模型评测。
+// edit_timeline 与 review_draft；审片讨论只回方案，审片执行按批注指着的片段修改。用于在没有模型密钥时验证界面、服务端与评测框架的闭环；
+// 真实剪辑质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
 const tag = (text, name) => {
@@ -33,6 +34,27 @@ export class ScriptedDirector {
     const footage = JSON.parse(tag(text, 'footage') ?? '[]');
     const timeline = JSON.parse(tag(text, 'timeline') ?? '{}');
     const pointer = JSON.parse(tag(text, 'pointer') ?? '{}');
+    const review = JSON.parse(tag(text, 'review') ?? 'null');
+    if (review?.mode === 'DISCUSS_NOTE') {
+      // 讨论批注：只给方案，不改时间线
+      return this.#reply(zh ? '把这一段剪短 1 秒，后面的内容跟着前移。' : 'Trim this part by 1 second and move everything after it up.');
+    }
+    if (review?.mode === 'APPLY_REVIEW') {
+      // 一次执行：每条批注找到它指着的画面片段，各剪短 1 秒
+      const videoTrackIds = new Set((timeline.tracks ?? []).filter((track) => track.kind === 'VIDEO').map((track) => track.id));
+      const clips = (timeline.clips ?? []).filter((clip) => videoTrackIds.has(clip.track));
+      const targets = new Set();
+      for (const note of review.notes ?? []) {
+        const middle = note.at === null ? NaN : (Number(note.at.start) + Number(note.at.end)) / 2;
+        const clip = clips.find((candidate) => (note.clips ?? []).includes(candidate.id))
+          ?? clips.find((candidate) => Number(candidate.at[0]) <= middle && middle < Number(candidate.at[1]));
+        if (clip !== undefined) targets.add(clip.id);
+      }
+      if (targets.size === 0) return this.#reply(zh ? '没找到批注指着的片段，没有改动。' : 'I could not find the parts the notes point at, so nothing changed.');
+      this.pendingReply = zh ? `按 ${String(review.notes.length)} 条批注改好了：相关片段各剪短 1 秒。` : `Applied ${String(review.notes.length)} notes: each part was trimmed by 1 second.`;
+      const operations = [...[...targets].map((clipId) => ({ op: 'trim_clip', clipId, trimTail: '1' })), { op: 'fit_length' }];
+      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
+    }
     const items = (Array.isArray(footage) ? footage : footage.footage ?? []).filter((item) => item.kind === 'video').sort((a, b) => a.name.localeCompare(b.name));
     const videoTracks = new Set((timeline.tracks ?? []).filter((track) => track.kind === 'VIDEO').map((track) => track.id));
     const videoClips = (timeline.clips ?? []).filter((clip) => videoTracks.has(clip.track));

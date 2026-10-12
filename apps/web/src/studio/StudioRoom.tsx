@@ -55,7 +55,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const state = stateQuery.data;
   const { timeline } = useStudioTimeline(projectId, state?.sequenceId, state?.project.revision);
   const turnsQuery = useStudioTurns(workspaceId, state?.session?.id ?? null);
-  const turns = useMemo(() => turnsQuery.data ?? [], [turnsQuery.data]);
+  // 审片里对单条批注的讨论不进入共看片室的对话（一次执行的那一轮会进入：它产生的试改可以在这里继续微调）
+  const turns = useMemo(() => (turnsQuery.data ?? []).filter((item) => item.purpose !== 'DISCUSS_NOTE'), [turnsQuery.data]);
   const latest = turns[0];
   // 试改 = 最近一轮带提案的完成轮次的提案（AI 正在继续改它时，仍显示这一版，直到新试改取代它）
   const trialTurn = turns.find((item) => item.status === 'COMPLETED' && item.proposalId !== null);
@@ -267,6 +268,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
           {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
+          <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => setFootageOpen(!footageOpen)}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>

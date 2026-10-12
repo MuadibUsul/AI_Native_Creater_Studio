@@ -2696,6 +2696,7 @@ export {
   AGENT_STOP_REASONS,
   AGENT_TOOL_EFFECTS,
   AGENT_TOOL_PERMISSIONS,
+  AGENT_TURN_PURPOSES,
   AGENT_TURN_STATUSES,
   AGENT_TURN_WORKFLOW,
   AGENT_TURN_WORKFLOW_VERSION,
@@ -2714,6 +2715,7 @@ export {
   agentToolNameSchema,
   agentToolPermissionSchema,
   agentTurnSchema,
+  agentTurnPurposeSchema,
   agentTurnStatusSchema,
   createAgentSessionRequestSchema,
   projectAgentCostSchema,
@@ -2740,6 +2742,7 @@ export type {
   AgentToolDescriptor,
   AgentToolEffect,
   AgentTurn,
+  AgentTurnPurpose,
   AgentTurnStatus,
   CreateAgentSessionRequest,
   ProjectAgentCost,
@@ -2783,3 +2786,19 @@ export {
   styleRubricItemSchema,
 } from './strategy.js';
 export type { BilingualText, EditingDna, StrategyKnob, StrategyKnobValues, StrategyPack, StrategyPackKind, StrategyPackSummary } from './strategy.js';
+export {
+  REVIEW_ERROR_REASONS,
+  REVIEW_NOTE_STATUSES,
+  REVIEW_ROUND_STATUSES,
+  applyReviewRequestSchema,
+  applyReviewResponseSchema,
+  createReviewNoteRequestSchema,
+  reviewNoteSchema,
+  reviewNoteStatusSchema,
+  reviewRegionSchema,
+  reviewRoundSchema,
+  reviewRoundStatusSchema,
+  reviewStateSchema,
+  updateReviewNoteRequestSchema,
+} from './review.js';
+export type { ApplyReviewRequest, ApplyReviewResponse, CreateReviewNoteRequest, ReviewNote, ReviewNoteStatus, ReviewRegion, ReviewRound, ReviewRoundStatus, ReviewState, UpdateReviewNoteRequest } from './review.js';

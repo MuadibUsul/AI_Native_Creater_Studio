@@ -17,6 +17,12 @@
 | 语音转写（Deepgram 批量） | 素材里的说话内容，供 AI 找句子、不剪断句子 | Worker | `ANCS_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`；可选 `ANCS_DEEPGRAM_MODEL`、`ANCS_DEEPGRAM_LANGUAGE` | 素材卡显示"语音：未配置"；评测里"句子完整"为"无法评估" | 已在 `docs/verification/provider-real-deepgram.md` 核验过适配器；配好后上传一条有人声的素材，看"语音"变为"已理解" |
 | 音频事件分析（可选） | 笑声、掌声、音乐段落等 | Worker | `ANCS_AUDIO_ANALYSIS_EXECUTABLE`（+ `ANCS_AUDIO_ANALYSIS_ARGS_JSON`）：你自己的子进程，stdout 输出 `GeneratedMediaAudioAnalysis` JSON | 不装配，该层缺失 | 上传素材后看统一索引里出现音频事件层 |
 
+## 测试素材（可选，只用于本地测试与评测）
+
+| 来源 | 环境变量 | 网络 | 怎么用 |
+|---|---|---|---|
+| Pexels（免费，Pexels License，需署名，不入库） | `PEXELS_API_KEY`（https://www.pexels.com/api/ 免费申请） | 放行 `api.pexels.com`、`videos.pexels.com`；云端会话里 Node 需 `NODE_USE_ENV_PROXY=1` | `NODE_USE_ENV_PROXY=1 node scripts/fetch-pexels-footage.mjs --query "iceland road trip" --count 6` → `Videos/pexels/<查询词>/`（素材、`credits.json`、`eval-set.json`）→ `node scripts/eval-first-cut.mjs --set Videos/pexels/<查询词>/eval-set.json --model anthropic --export` |
+
 替代方案：转写与视觉也可以接你自己的子进程（`ANCS_ASR_EXECUTABLE` / `ANCS_VISUAL_ANALYSIS_EXECUTABLE`，协议见 `packages/contracts/src/env.ts` 注释），适合本地模型或其他供应商。
 
 ## 基础设施（任何部署都要）

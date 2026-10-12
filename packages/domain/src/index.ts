@@ -659,6 +659,7 @@ export {
   listAgentTurns,
   projectAgentCost,
   runAgentTurnLoop,
+  agentTurnIdFor,
   startAgentTurn,
   unconfiguredAgentModel,
 } from './agent-runtime.js';
@@ -686,5 +687,6 @@ export {
 export type { PreviewRenderTask } from './previews.js';
 // V6-1c：共看片室（单屏工作台）的服务端支撑
 export { createStudioProject, getStudioState } from './studio.js';
+export { addReviewNote, applyReview, deleteReviewNote, getReviewState, listReviewNoteTurns, updateReviewNote } from './reviews.js';
 export { BUILT_IN_STRATEGY_PACKS, defaultStrategyGuidance, getStrategyPack, listStrategyPacks, resolveStrategyKnobs, saveStrategyPack, strategyGuidanceText } from './strategies.js';
 export { reviewDraftOperations, scoreFirstCut, type DraftReview, type EvalIndicator, type FirstCutScorecard } from './agent-eval.js';

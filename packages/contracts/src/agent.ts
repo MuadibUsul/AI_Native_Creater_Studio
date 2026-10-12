@@ -231,8 +231,19 @@ export const startAgentTurnRequestSchema = z.object({
   strategyPackId: z.string().min(1).max(120).nullable().default(null),
   /** 选用策略时的旋钮取值（缺省用策略包的默认值） */
   strategyKnobs: strategyKnobValuesSchema,
+  /** 讨论一条审片批注（V6-4）：AI 只给修改方案、不改时间线；指向取自批注 */
+  reviewNoteId: opaqueIdSchema.nullable().default(null),
 }).strict();
 export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
+
+/**
+ * 轮次用途（同一个通用导演、同一个工具目录）：
+ * EDIT = 说一句话改作品；DISCUSS_NOTE = 讨论一条审片批注的修改方案（不改时间线）；
+ * APPLY_REVIEW = 把一轮审片里已确定的批注一次做完（成为一个试改提案）。
+ */
+export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW'] as const;
+export const agentTurnPurposeSchema = z.enum(AGENT_TURN_PURPOSES);
+export type AgentTurnPurpose = z.infer<typeof agentTurnPurposeSchema>;
 
 export const AGENT_TURN_STATUSES = ['RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED'] as const;
 export const agentTurnStatusSchema = z.enum(AGENT_TURN_STATUSES);
@@ -250,6 +261,10 @@ export const agentTurnSchema = z.object({
   sessionId: opaqueIdSchema,
   workflowRunId: opaqueIdSchema.nullable(),
   status: agentTurnStatusSchema,
+  purpose: agentTurnPurposeSchema,
+  /** DISCUSS_NOTE：讨论的批注；APPLY_REVIEW：执行的审片轮 */
+  reviewNoteId: opaqueIdSchema.nullable(),
+  reviewRoundId: opaqueIdSchema.nullable(),
   message: z.string(),
   pointer: agentPointerSchema,
   /** AI 的简短回应（按会话语言） */

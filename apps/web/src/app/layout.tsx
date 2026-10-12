@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { cookies, headers } from 'next/headers';
 import { userAppearancePreferenceSchema } from '@ancs/contracts';
 import './globals.css';
@@ -13,6 +13,16 @@ import { LOCALE_COOKIE, negotiateLocale, parseLocale, type Locale } from '@/i18n
 export const metadata: Metadata = {
   title: 'Creator Studio · ANCS',
   description: '支持素材剪辑、生成与混合制作的视频创作工作台',
+  // V6-4：手机网页审片可添加到主屏幕（manifest 由 app/manifest.ts 生成）
+  appleWebApp: { capable: true, title: 'ANCS', statusBarStyle: 'black-translucent' },
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0A0A0A',
 };
 
 // Runs before visible body content. No cookie or storage data is interpolated into this script.

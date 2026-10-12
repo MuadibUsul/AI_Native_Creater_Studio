@@ -254,5 +254,7 @@ export function StudioShell({ children }: { children: ReactNode }) {
   if (pathname === '/sign-in' || pathname === '/welcome') return <>{children}</>;
   // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏
   if (/^\/w\/[^/]+\/studio\/(?!new$)[^/]+$/.test(pathname)) return <>{children}</>;
+  // V6-4 审片（手机网页优先）：同样是自带顶栏的单屏页面
+  if (/^\/w\/[^/]+\/review\/[^/]+$/.test(pathname)) return <>{children}</>;
   return <PrivateShell pathname={pathname}>{children}</PrivateShell>;
 }

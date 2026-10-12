@@ -5,6 +5,7 @@ import {
   AGENT_ERROR_REASONS,
   AgentModelFailure,
   ApiFailure,
+  REVIEW_ERROR_REASONS,
   legacyMillisecondsToMediaTime,
   sourceMediaProbeResultSchema,
   type AgentContentBlock,
@@ -18,7 +19,13 @@ import { agentTurnMessages, assetVersions, assets, compositionCaptionSpans, crea
 import {
   AGENT_SYSTEM_PROMPT,
   WorkflowRegistry,
+  addReviewNote,
   adoptProposal,
+  applyReview,
+  discardProposal,
+  getReviewState,
+  listReviewNoteTurns,
+  updateReviewNote,
   advanceWorkflow,
   agentTurnWorkflow,
   cancelWorkflow,
@@ -495,5 +502,167 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
     expect(done.toolCalls.map((call) => call.name)).toEqual(['edit_timeline', 'review_draft', 'look_at_timeline']);
     expect(done.toolCalls[1]!.summary).toBe('review: 2 warnings, 1 notes');
+  });
+});
+
+describe('V6-4 批注式审片（真实 PostgreSQL，脚本模型）', () => {
+  const contextOf = (request: AgentModelRequest) => (request.messages[0]!.content[0] as { text: string }).text;
+  interface ReviewNoteView { id: string; note: string; clips: string[]; agreedPlan?: string }
+  const reviewBlock = (request: AgentModelRequest) => JSON.parse(/<review>\n([\s\S]*?)\n<\/review>/.exec(contextOf(request))![1]!) as { mode: string; notes: ReviewNoteView[] } & Record<string, unknown>;
+  const reasonOf = async (promise: Promise<unknown>) => {
+    const error = await promise.then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ApiFailure);
+    return { status: (error as ApiFailure).httpStatus, reason: (error as ApiFailure).details['reason'] };
+  };
+  const adopt = async (workspaceId: string, projectId: string, proposalId: string) => {
+    const proposal = await loadProposalForRead(deps(), { workspaceId, projectId, proposalId });
+    await adoptProposal(deps(), { workspaceId, projectId, proposalId, expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `adopt-${randomUUID()}` });
+  };
+  const run = async (model: AgentModelAdapter, workspaceId: string, turn: { id: string; workflowRunId: string | null }) => {
+    expect(await drive(model, workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+    return getAgentTurn(deps(), { workspaceId, turnId: turn.id });
+  };
+
+  it('标记 → 讨论（只给方案、不改时间线）→ 确定 → 一次执行 → 在试改上微调 → 采用；之后的标记开新一轮', async () => {
+    const f = await fixture();
+    const ws = f.workspaceId;
+    // 先有一版已采用的初剪
+    const cut = await run(new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'c1', name: 'edit_timeline', input: { operations: [
+        { op: 'place_clip', footageId: f.beach, sourceStart: '0', sourceEnd: '4' },
+        { op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '3', withAudio: false },
+        { op: 'fit_length' },
+      ] } }], 'tool_use'),
+      () => reply([{ type: 'text', text: '第一版。' }], 'end_turn'),
+    ]), ws, await startAgentTurn(deps(), { workspaceId: ws, sessionId: f.session.id, request: { message: '剪一版' } }));
+    await adopt(ws, f.projectId, cut.proposalId!);
+    const composition = await listProjectComposition(deps(), { workspaceId: ws, projectId: f.projectId });
+    const videoTracks = new Set(composition.tracks.filter((track) => track.kind === 'VIDEO').map((track) => track.id));
+    const beachClip = composition.clips.find((clip) => clip.assetVersionId === f.beach && videoTracks.has(clip.trackId))!;
+
+    expect((await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId })).round).toBeNull();
+    const note = (text: string, start: string, end: string, extra: Record<string, unknown> = {}) => addReviewNote(deps(), {
+      workspaceId: ws, projectId: f.projectId, request: { sequenceId: f.sequenceId, pointer: { timeRange: { start, end }, clipIds: [] }, text, ...extra },
+    });
+    const noteA = await note('开头太拖', '0', '2', { pointer: { timeRange: { start: '0', end: '2' }, clipIds: [beachClip.id] }, region: { x: 0.1, y: 0.1, width: 0.5, height: 0.4 } });
+    const noteB = await note('日落那段太暗', '4.5', '6');
+    const noteC = await note('结尾要不要加字幕', '6', '7');
+    const marked = await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId });
+    expect(marked.round).toMatchObject({ status: 'OPEN', baseRevision: marked.projectRevision, applyTurnId: null, proposalId: null, applyIssue: null });
+    expect(marked.notes.map((item) => [item.text, item.status])).toEqual([['开头太拖', 'OPEN'], ['日落那段太暗', 'OPEN'], ['结尾要不要加字幕', 'OPEN']]);
+    expect(await reasonOf(applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id } }))).toEqual({ status: 422, reason: REVIEW_ERROR_REASONS.NOTHING_TO_APPLY });
+
+    // 讨论一条批注：同一个导演、同一个工具目录；指向取自批注；改动被拒，只给方案
+    const plan = '把开头那段海边剪掉前 1 秒，直接从浪花开始。';
+    const talk = await startAgentTurn(deps(), { workspaceId: ws, sessionId: f.session.id, request: { message: '这里怎么改好？', reviewNoteId: noteA.id } });
+    expect(talk).toMatchObject({ purpose: 'DISCUSS_NOTE', reviewNoteId: noteA.id, reviewRoundId: marked.round!.id, continuesProposalId: null, pointer: { timeRange: { start: '0', end: '2' }, clipIds: [beachClip.id] } });
+    const talked = await run(new ScriptedModel([
+      (request) => {
+        expect(request.tools.map((tool) => tool.name)).toContain('edit_timeline');
+        expect(reviewBlock(request)).toEqual({
+          mode: 'DISCUSS_NOTE', reviewedRevision: marked.round!.baseRevision, currentRevision: marked.projectRevision,
+          note: { id: noteA.id, note: '开头太拖', at: { start: '0', end: '2' }, clips: [beachClip.id], frameRegion: { x: 0.1, y: 0.1, width: 0.5, height: 0.4 } },
+        });
+        expect(contextOf(request)).not.toContain('<recent_turns>');
+        return reply([{ type: 'tool_use', id: 'd1', name: 'edit_timeline', input: { operations: [{ op: 'trim_clip', clipId: beachClip.id, trimHead: '1' }] } }], 'tool_use');
+      },
+      (request) => {
+        const [result] = toolResults(request);
+        expect(result).toMatchObject({ isError: true });
+        expect(result!.content).toContain('discusses one review note');
+        return reply([{ type: 'text', text: plan }], 'end_turn');
+      },
+    ]), ws, talk);
+    expect(talked).toMatchObject({ status: 'COMPLETED', proposalId: null, reply: plan });
+    expect(talked.toolCalls).toEqual([{ name: 'edit_timeline', ok: false, summary: 'discussion only: not applied' }]);
+    expect((await listReviewNoteTurns(deps(), { workspaceId: ws, noteId: noteA.id })).map((turn) => turn.id)).toEqual([talk.id]);
+    const discussed = (await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId })).notes.find((item) => item.id === noteA.id)!;
+    expect(discussed.discussion).toEqual({ turns: 1, lastReply: plan, running: false });
+
+    // 确定：A 按讨论的方案，B 交给 AI 自己决定，C 不改了
+    await updateReviewNote(deps(), { workspaceId: ws, noteId: noteA.id, request: { status: 'AGREED', plan } });
+    await updateReviewNote(deps(), { workspaceId: ws, noteId: noteB.id, request: { status: 'AGREED' } });
+    await updateReviewNote(deps(), { workspaceId: ws, noteId: noteC.id, request: { status: 'DISMISSED' } });
+
+    // 全部执行：一个轮次、一个提案；执行期间批注锁定；同一幂等键重放得到同一轮次
+    const applied = await applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id }, idempotencyKey: 'apply-1' });
+    expect(applied.round).toMatchObject({ status: 'APPLYING', applyTurnId: applied.turn.id, appliedNoteIds: [noteA.id, noteB.id] });
+    expect(applied.turn).toMatchObject({ purpose: 'APPLY_REVIEW', reviewRoundId: marked.round!.id, reviewNoteId: null, continuesProposalId: null, message: '按审片批注一次修改（2 条）' });
+    expect((await applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id }, idempotencyKey: 'apply-1' })).turn.id).toBe(applied.turn.id);
+    expect(await reasonOf(note('再加一处', '1', '2'))).toEqual({ status: 409, reason: REVIEW_ERROR_REASONS.ROUND_LOCKED });
+    expect(await reasonOf(updateReviewNote(deps(), { workspaceId: ws, noteId: noteC.id, request: { status: 'OPEN' } }))).toEqual({ status: 409, reason: REVIEW_ERROR_REASONS.ROUND_LOCKED });
+    const applyTurn = await run(new ScriptedModel([
+      (request) => {
+        const review = reviewBlock(request);
+        expect(review.mode).toBe('APPLY_REVIEW');
+        expect(review.notes.map((item) => item.id)).toEqual([noteA.id, noteB.id]);
+        expect(review.notes[0]).toMatchObject({ agreedPlan: plan, clips: [beachClip.id] });
+        expect(review.notes[1]).not.toHaveProperty('agreedPlan');
+        expect(contextOf(request)).not.toContain('<recent_turns>');
+        return reply([{ type: 'tool_use', id: 'a1', name: 'edit_timeline', input: { operations: [{ op: 'trim_clip', clipId: beachClip.id, trimHead: '1' }, { op: 'fit_length' }] } }], 'tool_use');
+      },
+      () => reply([{ type: 'text', text: '开头剪掉了 1 秒；日落那段暂时没有调色工具，先保持原样。' }], 'end_turn'),
+    ]), ws, applied.turn);
+    expect(applyTurn.proposalId).not.toBeNull();
+    const ready = await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId });
+    expect(ready.round).toMatchObject({ status: 'READY', proposalId: applyTurn.proposalId });
+    expect(ready.projectRevision).toBe(marked.projectRevision); // 采用前工程不变
+
+    // 在执行的试改上继续微调（共看片室的普通一轮）：新提案取代它，审片轮跟随到最新的试改
+    const refineTurn = await startAgentTurn(deps(), { workspaceId: ws, sessionId: f.session.id, request: { message: '再短一点' } });
+    expect(refineTurn).toMatchObject({ purpose: 'EDIT', continuesProposalId: applyTurn.proposalId });
+    const refined = await run(new ScriptedModel([
+      (request) => {
+        expect(contextOf(request)).toContain('"continuesTrial":true');
+        expect(contextOf(request)).not.toContain('<review>');
+        expect(contextOf(request)).not.toContain('这里怎么改好？'); // 批注讨论不混入普通对话
+        return reply([{ type: 'tool_use', id: 'e1', name: 'edit_timeline', input: { operations: [{ op: 'trim_clip', clipId: beachClip.id, trimTail: '0.5' }, { op: 'fit_length' }] } }], 'tool_use');
+      },
+      () => reply([{ type: 'text', text: '又短了半秒。' }], 'end_turn'),
+    ]), ws, refineTurn);
+    expect((await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId })).round).toMatchObject({ status: 'READY', proposalId: refined.proposalId });
+
+    await adopt(ws, f.projectId, refined.proposalId!);
+    const done = await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId });
+    expect(done.round).toMatchObject({ status: 'APPLIED', proposalId: refined.proposalId, appliedRevision: done.projectRevision });
+    expect(done.notes.map((item) => item.status)).toEqual(['APPLIED', 'APPLIED', 'DISMISSED']);
+    expect((await listProjectComposition(deps(), { workspaceId: ws, projectId: f.projectId })).sequences[0]?.duration).toEqual(mt(5_500));
+    expect(await reasonOf(updateReviewNote(deps(), { workspaceId: ws, noteId: noteA.id, request: { text: '改一下' } }))).toEqual({ status: 409, reason: REVIEW_ERROR_REASONS.ROUND_LOCKED });
+    expect(await reasonOf(applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id } }))).toEqual({ status: 422, reason: REVIEW_ERROR_REASONS.NOTHING_TO_APPLY });
+
+    // 采用后再标记：在新版本上开新一轮
+    const noteD = await note('第二段再亮一点', '3', '4');
+    const next = await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId });
+    expect(next.round).toMatchObject({ status: 'OPEN', baseRevision: done.projectRevision });
+    expect(next.round!.id).not.toBe(marked.round!.id);
+    expect(next.notes.map((item) => item.id)).toEqual([noteD.id]);
+  });
+
+  it('撤回执行的试改 → 回到可改状态并说明；AI 没做改动如实说明；跨工作区/跨工程 404', async () => {
+    const f = await fixture();
+    const ws = f.workspaceId;
+    const noteA = await addReviewNote(deps(), { workspaceId: ws, projectId: f.projectId, request: { sequenceId: f.sequenceId, pointer: { timeRange: { start: '0', end: '1' }, clipIds: [] }, text: '这里放海边的镜头' } });
+    await updateReviewNote(deps(), { workspaceId: ws, noteId: noteA.id, request: { status: 'AGREED' } });
+    const first = await applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id } });
+    const firstTurn = await run(new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'p1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.beach, sourceStart: '0', sourceEnd: '2' }, { op: 'fit_length' }] } }], 'tool_use'),
+      () => reply([{ type: 'text', text: '放好了。' }], 'end_turn'),
+    ]), ws, first.turn);
+    await discardProposal(deps(), { workspaceId: ws, projectId: f.projectId, proposalId: firstTurn.proposalId! });
+    const discarded = await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId });
+    expect(discarded.round).toMatchObject({ status: 'OPEN', proposalId: null, applyIssue: { kind: 'DISCARDED', reply: '放好了。' } });
+    expect(discarded.notes[0]!.status).toBe('AGREED');
+    await updateReviewNote(deps(), { workspaceId: ws, noteId: noteA.id, request: { plan: '用海边最开始的 2 秒' } });
+
+    const second = await applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: f.session.id } });
+    expect(second.round.appliedNoteIds).toEqual([noteA.id]);
+    await run(new ScriptedModel([() => reply([{ type: 'text', text: '这段素材里没有合适的镜头。' }], 'end_turn')]), ws, second.turn);
+    expect((await getReviewState(deps(), { workspaceId: ws, projectId: f.projectId })).round).toMatchObject({ status: 'OPEN', applyIssue: { kind: 'NO_CHANGES', reply: '这段素材里没有合适的镜头。' } });
+
+    const other = await fixture();
+    expect(await reasonOf(getReviewState(deps(), { workspaceId: other.workspaceId, projectId: f.projectId }))).toMatchObject({ status: 404 });
+    expect(await reasonOf(updateReviewNote(deps(), { workspaceId: other.workspaceId, noteId: noteA.id, request: { status: 'OPEN' } }))).toEqual({ status: 404, reason: REVIEW_ERROR_REASONS.NOTE_NOT_FOUND });
+    expect(await reasonOf(startAgentTurn(deps(), { workspaceId: other.workspaceId, sessionId: other.session.id, request: { message: '讨论', reviewNoteId: noteA.id } }))).toEqual({ status: 404, reason: REVIEW_ERROR_REASONS.NOTE_NOT_FOUND });
+    expect(await reasonOf(applyReview(deps(), { workspaceId: ws, projectId: f.projectId, request: { sessionId: other.session.id } }))).toMatchObject({ status: 404 });
   });
 });

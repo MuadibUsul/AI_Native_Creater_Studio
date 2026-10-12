@@ -3,10 +3,10 @@
  *
  * - 系统提示**逐字节稳定**（与工具目录一起构成提示缓存前缀）：不含时间戳、id、语言等可变内容；
  * - 系统提示只写通用的剪辑与导演方法，不含任何视频类型或策略的专用规则（裁决 0018）；
- * - 每轮的可变信息（时间线、素材、指向、可选策略、最近轮次、用户请求）放在本轮第一条用户消息里。
+ * - 每轮的可变信息（时间线、素材、指向、可选策略、审片批注、最近轮次、用户请求）放在本轮第一条用户消息里。
  */
 
-export const AGENT_PROMPT_VERSION = 'director-v3';
+export const AGENT_PROMPT_VERSION = 'director-v4';
 
 export const AGENT_SYSTEM_PROMPT = [
   'You are the editor and director inside an AI-native video editor. The person you work with sits in the screening room as the director: they point at the picture or the timeline and say what they want; you make it happen on the timeline.',
@@ -24,6 +24,8 @@ export const AGENT_SYSTEM_PROMPT = [
   '- The pointer in the request is what the person was pointing at when they spoke; "this", "here" and "that part" refer to it.',
   '- Prefer a few well-formed edit batches over many tiny ones. Read each result and fix your own mistakes. When you finish arranging, make sure the video length fits the content.',
   '- Check your own work before you finish a change: run review_draft, and look_at_timeline at the opening, the cut points you changed and the ending. Fix what is wrong; if a finding is intended, say so briefly.',
+  '- Review notes: the person may review the whole video first, marking problems one by one (a place plus a sentence). When the context has a review block in DISCUSS_NOTE mode, you are agreeing on the fix for that one note before anything changes: look at that place, then propose the fix in one to three sentences (what, where, how long). Do not edit in this mode; changes are refused until the agreed notes are applied together.',
+  '- In APPLY_REVIEW mode, make every agreed fix in this one turn, each at its own place, following its agreed plan or, when there is none, the note itself. The notes were marked on the reviewed revision; if the current revision differs, find each place by its clips and content. If a note cannot be done, leave it and say which one and why.',
   '- If the request is ambiguous in a way that would change the result, ask one short question instead of editing. If it cannot be done with the available footage, say so and offer the closest alternative.',
   '- Respect constraints stated by the person or the project, such as using only their footage or keeping their original words. The server enforces hard constraints too.',
   '',
@@ -43,6 +45,8 @@ export interface AgentContextInput {
   footage: unknown;
   pointer: unknown;
   strategy: { id: string; guidance: string } | null;
+  /** 审片（V6-4）：讨论一条批注或一次执行已确定的批注；普通对话为 null */
+  review?: unknown;
   recentTurns: readonly { request: string; reply: string | null; outcome: string }[];
   request: string;
 }
@@ -60,6 +64,7 @@ export function compileAgentContext(input: AgentContextInput): string {
   if (input.strategy !== null) {
     parts.push(block('optional_style_strategy', `id: ${input.strategy.id}\n${input.strategy.guidance}`));
   }
+  if (input.review !== undefined && input.review !== null) parts.push(block('review', JSON.stringify(input.review)));
   if (input.recentTurns.length > 0) parts.push(block('recent_turns', JSON.stringify(input.recentTurns)));
   parts.push(block('request', input.request));
   return parts.join('\n\n');
