@@ -168,6 +168,15 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'whisper' }).ok).toBe(false);
   });
 
+  it('V6 导演模型驱动显式选择：anthropic 缺密钥 → 启动失败；未知驱动拒绝；不配置则不装配（不回退 Mock）', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'anthropic' });
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['ANTHROPIC_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'anthropic', ANTHROPIC_API_KEY: 'a'.repeat(40), ANCS_AGENT_MODEL: 'claude-opus-5-5' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'mock' }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_AGENT_DRIVER).toBeUndefined();
+  });
+
   it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {
     const blankOptional = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: '', ANCS_STORAGE_SECRET: '  ', ANCS_PLATFORM_PROVIDER_KEYS: '' });
     expect(blankOptional.ok).toBe(true);

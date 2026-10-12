@@ -58,6 +58,7 @@ import { registerAdminMetricsRoutes } from './routes/admin-metrics.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
 import { registerFinalRenderRoutes } from './routes/final-renders.js';
+import { registerAgentRoutes } from './routes/agent.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
@@ -243,6 +244,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerNativeFallbackRoutes(instance, authDeps);
         registerRenderRoutes(instance, authDeps);
         registerFinalRenderRoutes(instance, authDeps);
+        registerAgentRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
         registerCustomMotionRoutes(instance, authDeps);
         registerNarrationAudioRoutes(instance, authDeps, {

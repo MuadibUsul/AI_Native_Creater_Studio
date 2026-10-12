@@ -74,6 +74,11 @@ import {
   rangeEditPlanSchema,
   createRenderRequestSchema,
   startCompositionFinalRenderRequestSchema,
+  agentSessionSchema,
+  agentToolDescriptorSchema,
+  agentTurnSchema,
+  createAgentSessionRequestSchema,
+  startAgentTurnRequestSchema,
   workflowRunSchema,
   directorPlanSchema,
   renderRecordSchema,
@@ -371,6 +376,11 @@ import {
   type NarrativeGenerationResult,
   type CreateRenderRequest,
   type StartCompositionFinalRenderRequest,
+  type AgentSession,
+  type AgentToolDescriptor,
+  type AgentTurn,
+  type CreateAgentSessionRequest,
+  type StartAgentTurnRequest,
   type WorkflowRun,
   type DirectorPlan,
   type RenderRecord,
@@ -1375,6 +1385,17 @@ export interface AncsClient {
     /** 发起（202；同一幂等键返回同一运行） */
     start(workspaceId: string, projectId: string, sequenceId: string, input: StartCompositionFinalRenderRequest, options?: MutationOptions): Promise<WorkflowRun>;
     list(workspaceId: string, projectId: string): Promise<WorkflowRun[]>;
+  };
+  /** V6-1：通用导演 Agent（会话 → 一句话一轮 → 改动成为提案，采用走 proposals 接口） */
+  agent: {
+    createSession(workspaceId: string, projectId: string, input: CreateAgentSessionRequest, options?: MutationOptions): Promise<AgentSession>;
+    getSession(workspaceId: string, sessionId: string): Promise<AgentSession>;
+    /** 202：轮次在 Worker 执行；轮询 getTurn 直到 status 不是 RUNNING */
+    startTurn(workspaceId: string, sessionId: string, input: StartAgentTurnRequest, options?: MutationOptions): Promise<AgentTurn>;
+    listTurns(workspaceId: string, sessionId: string): Promise<AgentTurn[]>;
+    getTurn(workspaceId: string, turnId: string): Promise<AgentTurn>;
+    cancelTurn(workspaceId: string, turnId: string, options?: MutationOptions): Promise<AgentTurn>;
+    tools(workspaceId: string): Promise<AgentToolDescriptor[]>;
   };
   /** V5-M4：工作流运行（步骤尝试、输出与错误；取消在步骤边界生效） */
   workflowRuns: {
@@ -2929,6 +2950,29 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       list: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/final-renders`, listOf(workflowRunSchema))).items,
+    },
+
+    agent: {
+      createSession: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-sessions`, agentSessionSchema, {
+          body: input,
+          bodySchema: createAgentSessionRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      getSession: (workspaceId, sessionId) => request('GET', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}`, agentSessionSchema),
+      startTurn: (workspaceId, sessionId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}/turns`, agentTurnSchema, {
+          body: input,
+          bodySchema: startAgentTurnRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listTurns: async (workspaceId, sessionId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}/turns`, listOf(agentTurnSchema))).items,
+      getTurn: (workspaceId, turnId) => request('GET', `/api/v1/workspaces/${workspaceId}/agent-turns/${turnId}`, agentTurnSchema),
+      cancelTurn: (workspaceId, turnId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/agent-turns/${turnId}/cancel`, agentTurnSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      tools: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-tools`, z.object({ items: z.array(agentToolDescriptorSchema) }))).items,
     },
 
     workflowRuns: {

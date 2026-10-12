@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, runMaintenanceTick } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
@@ -96,9 +97,18 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
     })
     : undefined;
 
+/**
+ * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（anthropic 缺密钥在 env 校验中启动失败）；
+ * 未配置时装配"未配置"端口：AI 轮次明确失败（501），不回退 Mock。密钥只在本进程内存中。
+ */
+const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
+  ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5' })
+  : unconfiguredAgentModel();
+
 /** 装配清单与生产守卫（V5-M3，§11.3）：Worker 当前装配的外部能力驱动均为真实实现或运维配置的子进程。 */
 const providerInventory: ProviderInventoryEntry[] = [
   ...(asrDriver === undefined ? [] : [{ capability: 'asr', driver: asrDriver, implementation: 'REAL' as const }]),
+  ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [{ capability: 'agent_model', driver: config.ANCS_AGENT_DRIVER, implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
@@ -116,10 +126,13 @@ const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === unde
 });
 // V5-M4：工作流定义（素材工程终渲染：FFmpeg 媒体图后端 + 真实输出探测）。不依赖 Remotion/Chromium，
 // 因此 ANCS_DISABLE_RENDER 不影响它；FFmpeg 缺失时推进会显式失败（工作流运行 FAILED，带错误）。
-const workflowRegistry = new WorkflowRegistry().register(compositionFinalRenderWorkflow({
-  executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
-  outputProbe: sourceMediaProbe,
-}));
+const workflowRegistry = new WorkflowRegistry()
+  .register(compositionFinalRenderWorkflow({
+    executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
+    outputProbe: sourceMediaProbe,
+  }))
+  // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
+  .register(agentTurnWorkflow({ model: agentModel }));
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =

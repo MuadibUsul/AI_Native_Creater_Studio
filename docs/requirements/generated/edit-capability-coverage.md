@@ -36,7 +36,7 @@
 | `create_track` | NATIVE | `create_track` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_track` | NATIVE | `move_track` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `delete_track` | NATIVE | `delete_track` | KERNEL | 1 | 2 | PLANNED | — | — |
-| `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 1 | PLANNED | — | — |
+| `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `set_audio_gain` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_fade` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_pan` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |

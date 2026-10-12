@@ -51,6 +51,11 @@ export interface WorkflowDefinition {
   type: string;
   version: number;
   steps: readonly WorkflowStepDefinition[];
+  /**
+   * 运行以失败或取消结束时调用（补偿之后、运行状态落定之前）：让拥有者收尾自己的业务记录
+   * （例如把仍在进行中的 AI 轮次标为失败/取消），即使一个步骤都没有执行过。失败只吞掉不阻断收尾。
+   */
+  onTerminated?(context: { deps: DomainDeps; run: WorkflowStepContext['run']; status: 'FAILED' | 'CANCELLED'; error: Record<string, unknown> | null }): Promise<void>;
 }
 
 export class WorkflowRegistry {
@@ -265,6 +270,13 @@ async function compensateAndFinish(deps: DomainDeps, definition: WorkflowDefinit
       status = 'COMPENSATION_FAILED';
     }
     await deps.db.update(workflowSteps).set({ compensationStatus: status }).where(eq(workflowSteps.id, succeeded.id));
+  }
+  if (definition.onTerminated !== undefined) {
+    try {
+      await definition.onTerminated({ deps, run: runContextOf(run), status: finalStatus, error });
+    } catch {
+      // 收尾钩子失败不阻断运行落定（业务记录可由运维投影发现并修复）
+    }
   }
   const now = new Date();
   await deps.db.update(workflowRuns).set({ status: finalStatus, error, currentStep: null, updatedAt: now, completedAt: now }).where(eq(workflowRuns.id, run.id));

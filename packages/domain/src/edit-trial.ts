@@ -10,7 +10,7 @@ import {
   type EditOperation,
   type ObjectLockKind,
 } from '@ancs/contracts';
-import { isKernelTimelineOperation, type KernelTimelineOperation } from '@ancs/kernel';
+import { isKernelTimelineOperation, type KernelTimelineOperation, type TimelineState } from '@ancs/kernel';
 import { projectObjectLocks, projects, scenes, sequenceClips } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { validateEditOperationCandidate } from './edit-operation-registry.js';
@@ -39,6 +39,8 @@ export interface EditTrialOutcome {
   events: { action: string; objectKind: string | null; objectId: string | null; summary: string }[];
   /** 试改后的全部片段行 */
   clips: ClipRow[];
+  /** KERNEL_MEMORY：试改后的完整内核状态（只读视图用，例如 AI 草稿时间线） */
+  timeline?: TimelineState;
 }
 
 export interface EditTrialInput {
@@ -93,6 +95,7 @@ async function runInMemory(deps: DomainDeps, input: EditTrialInput, operations: 
       revision: project.revision + 1,
       events: simulated.events.map((event) => ({ action: event.action, objectKind: event.objectKind, objectId: event.objectId, summary: summaryOf(event.patch) })),
       clips: simulated.clips,
+      timeline: simulated.state,
     };
   });
 }
@@ -136,6 +139,20 @@ async function runWithRollback(deps: DomainDeps, input: EditTrialInput, operatio
   }
   // 事务未回滚是不可能的（上面必然 throw）；保守 fail-closed
   throw new ApiFailure(ERROR_CODES.INTERNAL, 'edit trial did not roll back', 500);
+}
+
+/** 当前工程时间线的只读内核快照（一致性快照，不取锁、不写库）；供 AI 读取空草稿时的时间线。 */
+export async function readTimelineSnapshot(deps: DomainDeps, input: { workspaceId: string; projectId: string }): Promise<{ revision: number; timeline: TimelineState }> {
+  return deps.db.transaction(async (tx) => {
+    const db = tx as unknown as NodePgDatabase;
+    await db.execute(sql`set transaction isolation level repeatable read read only`);
+    const projectRows = await db.select({ revision: projects.revision }).from(projects)
+      .where(and(eq(projects.id, input.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
+    const project = projectRows[0];
+    if (!project) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    const simulated = await simulateKernelBatch(db, { workspaceId: input.workspaceId, projectId: input.projectId }, []);
+    return { revision: project.revision, timeline: simulated.state };
+  });
 }
 
 export async function runEditTrial(deps: DomainDeps, input: EditTrialInput): Promise<EditTrialOutcome> {

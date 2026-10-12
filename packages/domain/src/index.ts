@@ -649,4 +649,22 @@ export {
 export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';
 // V5-M4（§11.2）：素材工程终渲染工作流（冻结 → 渲染 → 技术 QA）
 export { compositionFinalRenderWorkflow, startCompositionFinalRender } from './composition-final-render.js';
+// V6 §6/§8：通用导演 Agent（统一工具目录 + 可续跑的轮次运行时）
+export {
+  DEFAULT_AGENT_RUNTIME_LIMITS,
+  agentTurnWorkflow,
+  createAgentSession,
+  getAgentSession,
+  getAgentTurn,
+  listAgentTurns,
+  runAgentTurnLoop,
+  startAgentTurn,
+  unconfiguredAgentModel,
+} from './agent-runtime.js';
+export type { AgentRuntimeLimits, AgentTurnPorts } from './agent-runtime.js';
+export { AgentToolCatalog, buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft } from './agent-tools.js';
+export type { AgentDraft, AgentDraftSimulation, AgentTimelineView, AgentToolContext, AgentToolDefinition, AgentToolOutcome } from './agent-tools.js';
+export { agentEditOperationSchema, agentSecondsToTime, sequenceContentEnd, translateAgentEdit } from './agent-operations.js';
+export type { AgentEditContext, AgentEditOperation } from './agent-operations.js';
+export { AGENT_PROMPT_VERSION, AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 export type { CompositionFinalRenderPorts } from './composition-final-render.js';

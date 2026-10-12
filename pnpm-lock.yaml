@@ -258,6 +258,9 @@ importers:
       '@ancs/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@ancs/providers-anthropic':
+        specifier: workspace:*
+        version: link:../../packages/providers/anthropic
       '@ancs/providers-credential-vault-local':
         specifier: workspace:*
         version: link:../../packages/providers/credential-vault-local
