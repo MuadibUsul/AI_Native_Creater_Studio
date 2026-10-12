@@ -250,6 +250,13 @@ export const workerEnvSchema = z.object({
   /** ASR 子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaTranscript JSON。 */
   ANCS_ASR_EXECUTABLE: nonEmpty('ANCS_ASR_EXECUTABLE').optional(),
   ANCS_ASR_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_ASR_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /**
+   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic = 视觉模型逐帧写镜头说明（需 ANTHROPIC_API_KEY）。
+   * 缺省：配置了 ANCS_VISUAL_ANALYSIS_EXECUTABLE 则为 process，否则不装配（视觉分析任务明确失败"未配置"）。
+   */
+  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic' }).optional(),
+  /** 视觉理解模型 id（缺省 claude-haiku-5-5） */
+  ANCS_VISION_MODEL: nonEmpty('ANCS_VISION_MODEL').optional(),
   /** 视觉分析子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaVisualAnalysis JSON。 */
   ANCS_VISUAL_ANALYSIS_EXECUTABLE: nonEmpty('ANCS_VISUAL_ANALYSIS_EXECUTABLE').optional(),
   ANCS_VISUAL_ANALYSIS_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_VISUAL_ANALYSIS_ARGS_JSON 必须是字符串数组 JSON').optional(),
@@ -288,6 +295,12 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_ASR_DRIVER === 'deepgram' && value.DEEPGRAM_API_KEY === undefined) {
     issues.push({ variable: 'DEEPGRAM_API_KEY', message: 'ANCS_ASR_DRIVER=deepgram 时必须配置 DEEPGRAM_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
+    issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'process' && value.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_VISUAL_ANALYSIS_EXECUTABLE', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=process 时必须配置 ANCS_VISUAL_ANALYSIS_EXECUTABLE' });
   }
   if (value.ANCS_AGENT_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_AGENT_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });

@@ -53,10 +53,26 @@ export type AgentToolDescriptor = z.infer<typeof agentToolDescriptorSchema>;
 // 模型端口（供应商无关）
 // ---------------------------------------------------------------------------
 
+/** 图像（base64，JPEG/PNG/WebP）：素材抽帧给模型"看"。单张上限约 1.5 MB（base64 2 MB）。 */
+export const AGENT_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const agentImageSchema = z.object({
+  mediaType: z.enum(AGENT_IMAGE_MEDIA_TYPES),
+  data: z.string().min(1).max(2_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/, 'image data must be base64'),
+}).strict();
+export type AgentImage = z.infer<typeof agentImageSchema>;
+
 export const agentContentBlockSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string().max(200_000) }).strict(),
+  z.object({ type: z.literal('image'), image: agentImageSchema }).strict(),
   z.object({ type: z.literal('tool_use'), id: z.string().min(1).max(200), name: z.string().min(1).max(64), input: z.unknown() }).strict(),
-  z.object({ type: z.literal('tool_result'), toolUseId: z.string().min(1).max(200), content: z.string().max(200_000), isError: z.boolean() }).strict(),
+  z.object({
+    type: z.literal('tool_result'),
+    toolUseId: z.string().min(1).max(200),
+    content: z.string().max(200_000),
+    isError: z.boolean(),
+    /** 工具返回给模型看的图像（如素材抽帧），按顺序跟在文字结果之后 */
+    images: z.array(agentImageSchema).max(16).optional(),
+  }).strict(),
   /** 供应商专有块（思考块等）：原样保存、原序回放，不得修改 */
   z.object({ type: z.literal('opaque'), provider: z.string().min(1).max(64), payload: z.unknown() }).strict(),
 ]);
@@ -137,6 +153,14 @@ export class AgentModelFailure extends Error {
   get retryable(): boolean {
     return this.kind === 'RATE_LIMITED' || this.kind === 'OVERLOADED' || this.kind === 'TRANSIENT';
   }
+}
+
+/**
+ * 素材抽帧端口（V6-1b，Worker 实现：流式物化源/代理文件 + FFmpeg 单帧解码）。
+ * 时间为十进制秒文本（素材内时间）；返回顺序与请求一致。
+ */
+export interface AgentFrameSampler {
+  sample(input: { storageKey: string; times: readonly string[]; maxWidth: number }): Promise<AgentImage[]>;
 }
 
 // ---------------------------------------------------------------------------

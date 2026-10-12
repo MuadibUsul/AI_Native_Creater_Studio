@@ -140,6 +140,24 @@ describe('AnthropicAgentModel（真实 SDK × 本地假服务）', () => {
     }
   });
 
+  it('图像：用户消息里的图像块与工具结果附带的抽帧都按 base64 图像块发送', async () => {
+    const fake = await startFake((_request, response) => { sse(response, thinkingThenToolUse); });
+    const model = new AnthropicAgentModel({ apiKey: FAKE_KEY, model: 'claude-haiku-5-5', baseURL: fake.baseURL, maxRetries: 0 });
+    const image = { mediaType: 'image/jpeg' as const, data: '/9j/4AAQSkZJRg==' };
+    await model.respond({
+      ...baseRequest,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'describe' }, { type: 'image', image }] },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_9', name: 'look', input: {} }] },
+        { role: 'user', content: [{ type: 'tool_result', toolUseId: 'toolu_9', content: '{"frames":1}', isError: false, images: [image] }] },
+      ],
+    });
+    const messages = fake.requests[0]?.body.messages ?? [];
+    const imageBlock = { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: '/9j/4AAQSkZJRg==' } };
+    expect(messages[0]).toEqual({ role: 'user', content: [{ type: 'text', text: 'describe' }, imageBlock] });
+    expect(messages[2]).toEqual({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_9', content: [{ type: 'text', text: '{"frames":1}' }, imageBlock], is_error: false }] });
+  });
+
   it('拒绝回放其他供应商的 opaque 块', async () => {
     const fake = await startFake((_request, response) => { sse(response, thinkingThenToolUse); });
     const model = new AnthropicAgentModel({ apiKey: FAKE_KEY, model: 'claude-opus-5-5', baseURL: fake.baseURL, maxRetries: 0 });

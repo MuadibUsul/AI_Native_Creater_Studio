@@ -175,6 +175,10 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
     expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'mock' }).ok).toBe(false);
     expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_AGENT_DRIVER).toBeUndefined();
+    const vision = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'anthropic' });
+    expect(crossCheckWorkerEnv(vision.value!).map((issue) => issue.variable)).toEqual(['ANTHROPIC_API_KEY']);
+    const processVision = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(processVision.value!).map((issue) => issue.variable)).toEqual(['ANCS_VISUAL_ANALYSIS_EXECUTABLE']);
   });
 
   it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {

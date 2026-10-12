@@ -17,6 +17,8 @@ import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 import { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
 import { createDeepgramSpeechRecognitionAdapter } from './deepgram-speech-recognition.js';
 import { createProcessMediaVisualAnalysisAdapter } from './visual-analysis-process.js';
+import { createStorageFrameSampler } from './frame-sampler-process.js';
+import { createModelVisualAnalysisAdapter } from './model-visual-analysis.js';
 import { createProcessMediaAudioAnalysisAdapter } from './audio-analysis-process.js';
 
 /**
@@ -104,11 +106,16 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
 const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
   ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5' })
   : unconfiguredAgentModel();
+/** V6-1b：AI 导演看素材的抽帧（源/代理文件流式物化 + FFmpeg 单帧解码，进程内 LRU 缓存）。 */
+const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) });
+/** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
+const visualDriver = config.ANCS_VISUAL_ANALYSIS_DRIVER ?? (config.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined ? undefined : 'process');
 
 /** 装配清单与生产守卫（V5-M3，§11.3）：Worker 当前装配的外部能力驱动均为真实实现或运维配置的子进程。 */
 const providerInventory: ProviderInventoryEntry[] = [
   ...(asrDriver === undefined ? [] : [{ capability: 'asr', driver: asrDriver, implementation: 'REAL' as const }]),
   ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [{ capability: 'agent_model', driver: config.ANCS_AGENT_DRIVER, implementation: 'REAL' as const }]),
+  ...(visualDriver === undefined ? [] : [{ capability: 'visual_analysis', driver: visualDriver, implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
@@ -116,10 +123,14 @@ if (inventoryIssues.length > 0) {
   process.exit(1);
 }
 console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
-const mediaVisualAnalysisAdapter = config.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined ? undefined : createProcessMediaVisualAnalysisAdapter({
-  executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,
-  args: config.ANCS_VISUAL_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_VISUAL_ANALYSIS_ARGS_JSON) as string[],
-});
+const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
+  ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5' }), ...ffmpegPaths })
+  : visualDriver === 'process' && config.ANCS_VISUAL_ANALYSIS_EXECUTABLE !== undefined
+    ? createProcessMediaVisualAnalysisAdapter({
+      executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,
+      args: config.ANCS_VISUAL_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_VISUAL_ANALYSIS_ARGS_JSON) as string[],
+    })
+    : undefined;
 const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === undefined ? undefined : createProcessMediaAudioAnalysisAdapter({
   executable: config.ANCS_AUDIO_ANALYSIS_EXECUTABLE,
   args: config.ANCS_AUDIO_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_AUDIO_ANALYSIS_ARGS_JSON) as string[],
@@ -132,7 +143,7 @@ const workflowRegistry = new WorkflowRegistry()
     outputProbe: sourceMediaProbe,
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
-  .register(agentTurnWorkflow({ model: agentModel }));
+  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler }));
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =

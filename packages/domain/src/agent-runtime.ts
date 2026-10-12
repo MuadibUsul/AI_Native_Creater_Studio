@@ -19,6 +19,7 @@ import {
   startAgentTurnRequestSchema,
   type AgentContentBlock,
   type AgentEffort,
+  type AgentFrameSampler,
   type AgentModelAdapter,
   type AgentModelMessage,
   type AgentModelUsage,
@@ -67,6 +68,8 @@ export interface AgentTurnPorts {
   model: AgentModelAdapter;
   catalog?: AgentToolCatalog;
   limits?: Partial<AgentRuntimeLimits>;
+  /** 素材抽帧（Worker 装配）；未装配时 look_at_footage 明确报不可用 */
+  frames?: AgentFrameSampler;
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
   strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; locale: string }) => Promise<string | null>;
 }
@@ -326,6 +329,7 @@ export async function runAgentTurnLoop(
     actorId: loaded.createdBy ?? 'agent',
     locale,
     draft: { baseRevision, operations },
+    ...(ports.frames === undefined ? {} : { frames: ports.frames }),
   });
   let draft = editOperationSchema.array().parse(turn.draftOperations);
   const tools = catalog.descriptors().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }));
@@ -401,7 +405,10 @@ export async function runAgentTurnLoop(
       const outcome = await tool.run(toolContext(draft), parsed.data);
       if (outcome.draftOperations !== undefined && !outcome.isError) draft = outcome.draftOperations;
       if (outcome.baseRevision !== undefined && !outcome.isError) baseRevision = outcome.baseRevision;
-      results.push({ type: 'tool_result', toolUseId: use.id, content: outcome.content, isError: outcome.isError });
+      results.push({
+        type: 'tool_result', toolUseId: use.id, content: outcome.content, isError: outcome.isError,
+        ...(outcome.images === undefined || outcome.images.length === 0 ? {} : { images: outcome.images }),
+      });
       calls.push({ name: use.name, ok: !outcome.isError, summary: outcome.summary.slice(0, 500) });
     }
     const seq = last.seq + 1;

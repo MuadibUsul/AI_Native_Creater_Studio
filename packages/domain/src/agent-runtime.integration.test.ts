@@ -8,12 +8,13 @@ import {
   legacyMillisecondsToMediaTime,
   sourceMediaProbeResultSchema,
   type AgentContentBlock,
+  type AgentFrameSampler,
   type AgentModelAdapter,
   type AgentModelRequest,
   type AgentModelResponse,
   type AgentModelUsage,
 } from '@ancs/contracts';
-import { agentTurnMessages, assetVersions, assets, compositionCaptionSpans, createDb, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workflowRuns, workspaces, type DbHandle } from '@ancs/db';
+import { agentTurnMessages, assetVersions, assets, compositionCaptionSpans, createDb, mediaDerivatives, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, workflowRuns, workspaces, type DbHandle } from '@ancs/db';
 import {
   AGENT_SYSTEM_PROMPT,
   WorkflowRegistry,
@@ -128,8 +129,8 @@ async function fixture() {
   return { workspaceId, projectId: project.id, sequenceId: sequence.id, beach, sunset, session };
 }
 
-async function drive(model: AgentModelAdapter, workspaceId: string, runId: string, limits?: Parameters<typeof agentTurnWorkflow>[0]['limits']) {
-  const registry = new WorkflowRegistry().register(agentTurnWorkflow({ model, ...(limits === undefined ? {} : { limits }) }));
+async function drive(model: AgentModelAdapter, workspaceId: string, runId: string, limits?: Parameters<typeof agentTurnWorkflow>[0]['limits'], frames?: AgentFrameSampler) {
+  const registry = new WorkflowRegistry().register(agentTurnWorkflow({ model, ...(limits === undefined ? {} : { limits }), ...(frames === undefined ? {} : { frames }) }));
   for (let index = 0; index < 10; index += 1) {
     const row = (await handle.db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)))[0]!;
     if (['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(row.status)) return row.status;
@@ -146,7 +147,7 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const model = new ScriptedModel([
       (request) => {
         expect(request.system).toBe(AGENT_SYSTEM_PROMPT);
-        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'search_footage', 'edit_timeline']);
+        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline']);
         const context = (request.messages[0]!.content[0] as { text: string }).text;
         expect(context).toContain('<request>\n帮我把这些素材剪成一个短片');
         expect(context).toContain(f.beach);
@@ -278,6 +279,51 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     expect(await drive(idle, f.workspaceId, cancelled.workflowRunId!)).toBe('CANCELLED');
     expect((await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: cancelled.id })).status).toBe('CANCELLED');
     expect(idle.requests).toHaveLength(0);
+  });
+
+  it('看素材：抽帧优先用就绪的低清代理，图像随工具结果交给模型；未装配抽帧时明确报不可用', async () => {
+    const f = await fixture();
+    // 为 beach 建一个就绪的代理衍生物
+    const proxyAssetId = `ast_${randomUUID()}`;
+    const proxyVersionId = `av_${randomUUID()}`;
+    await handle.db.insert(assets).values({ id: proxyAssetId, workspaceId: f.workspaceId, projectId: null, assetType: 'UPLOADED_VIDEO', origin: 'SYSTEM_RENDER', status: 'READY', retentionClass: 'PROJECT', license: { kind: 'OWNED' }, currentVersionId: proxyVersionId });
+    await handle.db.insert(assetVersions).values({ id: proxyVersionId, assetId: proxyAssetId, workspaceId: f.workspaceId, versionNumber: 1, storageKey: `proxies/${proxyVersionId}.mp4`, mimeType: 'video/mp4', sizeBytes: 512, checksumSha256: 'd'.repeat(64), durationMs: 8_000, width: 960, height: 540, status: 'READY' });
+    await handle.db.insert(mediaDerivatives).values({ id: `mdv_${randomUUID()}`, workspaceId: f.workspaceId, sourceAssetVersionId: f.beach, kind: 'PROXY', profileKey: 'proxy-540p', status: 'READY', derivativeAssetVersionId: proxyVersionId, sourceChecksumSha256: 'b'.repeat(64) });
+
+    const sampled: { storageKey: string; times: readonly string[]; maxWidth: number }[] = [];
+    const frames: AgentFrameSampler = {
+      sample: (input) => { sampled.push(input); return Promise.resolve(input.times.map(() => ({ mediaType: 'image/jpeg' as const, data: '/9j/4AAQ' }))); },
+    };
+    const model = new ScriptedModel([
+      () => reply([
+        { type: 'tool_use', id: 'l1', name: 'look_at_footage', input: { footageId: f.beach, from: '2', to: '6', count: 4 } },
+        { type: 'tool_use', id: 'l2', name: 'look_at_footage', input: { footageId: f.sunset, times: ['1.5', 99] } },
+      ], 'tool_use'),
+      (request) => {
+        const [first, second] = toolResults(request);
+        expect(JSON.parse(first!.content)).toMatchObject({ frames: [{ at: '2.500' }, { at: '3.500' }, { at: '4.500' }, { at: '5.500' }] });
+        expect(first!.images).toHaveLength(4);
+        expect(JSON.parse(second!.content).frames.map((frame: { at: string }) => frame.at)).toEqual(['1.500', '5.999']);
+        return reply([{ type: 'text', text: '看过了。' }], 'end_turn');
+      },
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看海边那段的画面' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
+    expect(sampled.map((call) => call.storageKey)).toEqual([`proxies/${proxyVersionId}.mp4`, `v6-1a/${f.sunset}.mp4`]);
+    expect(sampled.every((call) => call.maxWidth === 512)).toBe(true);
+    // 图像进入日志（重试时原样回放）
+    const logged = await handle.db.select().from(agentTurnMessages).where(eq(agentTurnMessages.turnId, turn.id));
+    expect(JSON.stringify(logged.map((row) => row.content))).toContain('/9j/4AAQ');
+
+    const blind = new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'b1', name: 'look_at_footage', input: { footageId: f.beach } }], 'tool_use'),
+      (request) => {
+        expect(toolResults(request)[0]).toMatchObject({ isError: true });
+        return reply([{ type: 'text', text: '看不了画面。' }], 'end_turn');
+      },
+    ]);
+    const second = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '再看看' } });
+    expect(await drive(blind, f.workspaceId, second.workflowRunId!)).toBe('SUCCEEDED');
   });
 
   it('用户在轮次期间改过工程：草稿在最新版本上仍成立 → 提案建在最新版本上', async () => {

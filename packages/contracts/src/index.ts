@@ -2687,6 +2687,8 @@ export type {
 export {
   AGENT_EFFORTS,
   AGENT_ERROR_REASONS,
+  AGENT_IMAGE_MEDIA_TYPES,
+  agentImageSchema,
   AGENT_LOCALES,
   AGENT_MODEL_FAILURE_KINDS,
   AGENT_MODEL_PRICES,
@@ -2718,6 +2720,8 @@ export {
 export type {
   AgentAbortSignal,
   AgentContentBlock,
+  AgentFrameSampler,
+  AgentImage,
   AgentEffort,
   AgentLocale,
   AgentModelAdapter,

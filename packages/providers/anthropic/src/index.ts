@@ -104,10 +104,22 @@ function toContentBlockParam(block: AgentContentBlock): Anthropic.ContentBlockPa
   switch (block.type) {
     case 'text':
       return { type: 'text', text: block.text };
+    case 'image':
+      return { type: 'image', source: { type: 'base64', media_type: block.image.mediaType, data: block.image.data } };
     case 'tool_use':
       return { type: 'tool_use', id: block.id, name: block.name, input: block.input };
     case 'tool_result':
-      return { type: 'tool_result', tool_use_id: block.toolUseId, content: block.content, is_error: block.isError };
+      return {
+        type: 'tool_result',
+        tool_use_id: block.toolUseId,
+        content: block.images === undefined || block.images.length === 0
+          ? block.content
+          : [
+            { type: 'text', text: block.content },
+            ...block.images.map((image) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: image.mediaType, data: image.data } })),
+          ],
+        is_error: block.isError,
+      };
     case 'opaque':
       if (block.provider !== ANTHROPIC_PROVIDER_ID) {
         throw new AgentModelFailure('BAD_REQUEST', `cannot replay a ${block.provider} block to ${ANTHROPIC_PROVIDER_ID}`);
