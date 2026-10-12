@@ -238,8 +238,11 @@ async function loadTimeline(tx: NodePgDatabase, scope: Scope, operations: readon
 
 // ── 持久化 ───────────────────────────────────────────────
 
+/** 有行缓存的内核实体（序列只有"改时长"一种写入，单独经投影器更新）。 */
+type RowEntity = Exclude<KernelEntity, { entity: 'sequence' }>;
+
 /** 内核实体 → 完整行（以已知行补全租户与时间戳字段；新对象用当前时刻）。 */
-function rowOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: Date): AnyRow {
+function rowOf(known: KnownRows, entity: RowEntity, scope: Scope, now: Date): AnyRow {
   const base = { id: entity.value.id, workspaceId: scope.workspaceId, projectId: scope.projectId, sequenceId: entity.value.sequenceId, createdAt: now, updatedAt: now };
   switch (entity.entity) {
     case 'clip': return { ...base, ...known.clip.get(entity.value.id), ...clipColumns(entity.value) } as ClipRow;
@@ -250,6 +253,8 @@ function rowOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: Date):
 }
 
 function snapshotOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: Date): unknown {
+  // 序列快照只记录可编辑字段（undo/redo 用 before/after.duration 反演）
+  if (entity.entity === 'sequence') return { id: entity.value.id, duration: entity.value.duration };
   const row = rowOf(known, entity, scope, now);
   switch (entity.entity) {
     case 'clip': return clipSnapshot(row as ClipRow);
@@ -261,6 +266,7 @@ function snapshotOf(known: KnownRows, entity: KernelEntity, scope: Scope, now: D
 
 async function applyWrite(projector: CompositionProjector, write: KernelResult['writes'][number], row: AnyRow, now: Date): Promise<AnyRow> {
   const target = write.type === 'delete' ? write.before : write.after;
+  if (target.entity === 'sequence') throw new ApiFailure(ERROR_CODES.INTERNAL, 'sequence writes are persisted separately', 500);
   const id = target.value.id;
   if (write.type === 'insert') {
     switch (target.entity) {
@@ -304,6 +310,12 @@ async function persist(projector: CompositionProjector, known: KnownRows, result
 
   for (const write of result.writes) {
     const target = write.type === 'delete' ? write.before : write.after;
+    if (target.entity === 'sequence') {
+      if (write.type !== 'update') throw new ApiFailure(ERROR_CODES.INTERNAL, 'kernel may only update sequences', 500);
+      const updated = await projector.update('sequence', target.value.id, { duration: target.value.duration, updatedAt: now });
+      if (updated === null) throw new ApiFailure(ERROR_CODES.INTERNAL, `kernel update target sequence:${target.value.id} disappeared`, 500);
+      continue;
+    }
     const row = rowOf(known, target, scope, now);
     const written = await applyWrite(projector, write, row, now);
     if (write.type !== 'delete') (known[target.entity] as Map<string, AnyRow>).set(target.value.id, written);
@@ -352,7 +364,7 @@ export async function simulateKernelBatch(
   tx: NodePgDatabase,
   scope: Scope,
   operations: readonly KernelTimelineOperation[],
-): Promise<{ events: KernelTrialEvent[]; clips: ClipRow[] }> {
+): Promise<{ events: KernelTrialEvent[]; clips: ClipRow[]; state: TimelineState }> {
   const loaded = await loadTimeline(tx, scope, operations);
   let state = loaded.state;
   const clips = new Map(loaded.known.clip);
@@ -389,6 +401,7 @@ export async function simulateKernelBatch(
       events.push({ action: event.action, objectKind: event.objectKind, objectId: event.objectId, patch: event.patch });
     }
   }
-  return { events, clips: [...clips.values()] };
+  // state：试改后的完整内核状态（轨道/片段/音频区域/字幕），供只读视图（如 AI 草稿时间线）使用
+  return { events, clips: [...clips.values()], state };
 }
 

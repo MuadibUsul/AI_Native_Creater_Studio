@@ -5,11 +5,11 @@
 > 原生（NATIVE）= 规范操作 ACTIVE + 编辑内核执行 + 至少一个内核单测与一个集成测试；别名与计划项不计为原生能力（V5 §10.1）。
 > 金样测试列在 RenderPlan IR 与一致性套件（V5-M4）前统一为 PLANNED。
 
-**汇总：** 源操作 43 个 —— NATIVE 23、COMPILED_ALIAS 9、PLANNED 11；编辑内核执行的规范操作 28 个。
+**汇总：** 源操作 44 个 —— NATIVE 24、COMPILED_ALIAS 9、PLANNED 11；编辑内核执行的规范操作 29 个。
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 7 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 11 | PLANNED | — | — |
@@ -36,6 +36,7 @@
 | `create_track` | NATIVE | `create_track` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_track` | NATIVE | `move_track` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `delete_track` | NATIVE | `delete_track` | KERNEL | 1 | 2 | PLANNED | — | — |
+| `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `set_audio_gain` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_fade` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_pan` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |

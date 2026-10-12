@@ -8,3 +8,4 @@
  */
 export * from './media-time.js';
 export * from './fraction.js';
+export * from './decimal-seconds.js';

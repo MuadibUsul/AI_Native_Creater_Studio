@@ -262,6 +262,44 @@ describe('N03-04 多轨、AV 链接与轨道控制（HTTP + SDK）', () => {
     expect(restored.find((track) => track.name === 'C1')!.muted).toBe(false);
   });
 
+  it('set_sequence_duration（V6-1 成片长度）：延长后可插到原终点之后；缩短越过内容 409；撤销/重做按事件恢复', async () => {
+    const client = await newSignedInClient();
+    const project = await makeProject(client, 10_000);
+    const sourceId = await seedSource(project, 20_000);
+    const sequenceDuration = async (): Promise<string> => {
+      const state = await client.projects.state(project.projectId, { schemaVersion: '1.0' });
+      const sequence = state.document.composition.sequences.find((item) => item.id === project.sequenceId);
+      return `${sequence?.duration.ticks ?? '?'}/${String(sequence?.duration.timebase.den ?? '?')}`;
+    };
+    expect(await sequenceDuration()).toBe('10000/1000');
+
+    // 同一批次：先延长，再插入到原终点之后（后续操作读到新时长）
+    const edit = await applyEdits(client, project.projectId, [
+      { op: 'set_sequence_duration', sequenceId: project.sequenceId, duration: mt(30_000) },
+      {
+        op: 'insert_clip', sequenceId: project.sequenceId, trackId: project.videoTrackId, assetVersionId: sourceId, nestedSequenceId: null, sourceStreamId: null,
+        sourceRange: range(0, 8000), mode: 'OVERWRITE', sequenceStart: mt(15_000), linkAudio: false, audioTrackId: null,
+      },
+    ]);
+    expect(edit.editEvents.map((event) => event.action)).toEqual(['UPDATE_SEQUENCE', 'INSERT_CLIP']);
+    expect(await sequenceDuration()).toBe('30000/1000');
+    expect(await clipRanges(client, project.projectId, project.videoTrackId)).toEqual([[15_000, 23_000]]);
+
+    // 缩短越过已有内容：拒绝且不写入
+    await expectApiFailure(applyEdits(client, project.projectId, [{ op: 'set_sequence_duration', sequenceId: project.sequenceId, duration: mt(20_000) }]), { status: 409, reason: 'SEQUENCE_CONTENT_BEYOND_DURATION' });
+    expect(await sequenceDuration()).toBe('30000/1000');
+
+    // 撤销：先撤插入，再撤时长 → 回到 10 秒、无片段；重做两步恢复
+    await client.projects.undo(project.projectId);
+    await client.projects.undo(project.projectId);
+    expect(await sequenceDuration()).toBe('10000/1000');
+    expect(await clipRanges(client, project.projectId, project.videoTrackId)).toEqual([]);
+    await client.projects.redo(project.projectId);
+    await client.projects.redo(project.projectId);
+    expect(await sequenceDuration()).toBe('30000/1000');
+    expect(await clipRanges(client, project.projectId, project.videoTrackId)).toEqual([[15_000, 23_000]]);
+  });
+
   it('delete_track：非空轨默认拒绝；MOVE_CLIPS 迁走片段后删除并重排位置', async () => {
     const client = await newSignedInClient();
     const project = await makeProject(client);

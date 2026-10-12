@@ -41,6 +41,10 @@ export {
   addFractions,
   subtractFractions,
   compareFractions,
+  // V6：AI 工具以十进制秒交流的精确边界
+  parseDecimalSeconds,
+  isDecimalSecondsText,
+  mediaTimeToDisplaySecondsText,
 } from './common/media-time.js';
 export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding, Fraction } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
@@ -908,6 +912,7 @@ export {
   avCutKindSchema,
   splitAvCutOperationSchema,
   createTrackOperationSchema,
+  setSequenceDurationOperationSchema,
   moveTrackOperationSchema,
   NON_EMPTY_TRACK_POLICIES,
   nonEmptyTrackPolicySchema,
@@ -929,7 +934,7 @@ export {
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, SetSequenceDurationOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,
@@ -2679,3 +2684,57 @@ export type {
   PlaybackSyncSample,
   PlaybackSyncVerdict,
 } from './playback-sync-report.js';
+export {
+  AGENT_EFFORTS,
+  AGENT_ERROR_REASONS,
+  AGENT_LOCALES,
+  AGENT_MODEL_FAILURE_KINDS,
+  AGENT_MODEL_PRICES,
+  AGENT_STOP_REASONS,
+  AGENT_TOOL_EFFECTS,
+  AGENT_TOOL_PERMISSIONS,
+  AGENT_TURN_STATUSES,
+  AGENT_TURN_WORKFLOW,
+  AGENT_TURN_WORKFLOW_VERSION,
+  AgentModelFailure,
+  agentContentBlockSchema,
+  agentLocaleSchema,
+  agentModelCostMicros,
+  agentModelMessageSchema,
+  agentModelUsageSchema,
+  agentPointerSchema,
+  agentSessionSchema,
+  agentStopReasonSchema,
+  agentToolCallRecordSchema,
+  agentToolDescriptorSchema,
+  agentToolEffectSchema,
+  agentToolNameSchema,
+  agentToolPermissionSchema,
+  agentTurnSchema,
+  agentTurnStatusSchema,
+  createAgentSessionRequestSchema,
+  startAgentTurnRequestSchema,
+} from './agent.js';
+export type {
+  AgentAbortSignal,
+  AgentContentBlock,
+  AgentEffort,
+  AgentLocale,
+  AgentModelAdapter,
+  AgentModelFailureKind,
+  AgentModelMessage,
+  AgentModelPrice,
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelToolSpec,
+  AgentModelUsage,
+  AgentPointer,
+  AgentSession,
+  AgentStopReason,
+  AgentToolDescriptor,
+  AgentToolEffect,
+  AgentTurn,
+  AgentTurnStatus,
+  CreateAgentSessionRequest,
+  StartAgentTurnRequest,
+} from './agent.js';

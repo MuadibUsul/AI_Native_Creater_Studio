@@ -17,8 +17,9 @@ const samplePath = join(import.meta.dirname, '..', 'fixtures', 'edit-request.sam
 const raw: unknown = JSON.parse(readFileSync(samplePath, 'utf8'));
 
 describe('编辑协议契约（计划 §4.6）', () => {
-  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut，N03-04 增补轨道控制与 AV 链接，N03-05 增补变换/裁切/透明度，N03-06 增补 crossfade，N03-07 增补字幕创建/断句/转写驱动剪辑/删除）', () => {
-    expect(EDIT_OPERATION_TYPES).toHaveLength(43);
+  it('操作类型覆盖 §4.6、对象锁与 N01-08 规范化对象编辑的全部 25 类（N03-01 增补 insert_clip／delete_clip，N03-02 增补 split／trim／move／duplicate／replace_clip_source，N03-03 增补 slip／slide／roll／ripple／split_av_cut，N03-04 增补轨道控制与 AV 链接，N03-05 增补变换/裁切/透明度，N03-06 增补 crossfade，N03-07 增补字幕创建/断句/转写驱动剪辑/删除，V6-1 增补成片长度）', () => {
+    expect(EDIT_OPERATION_TYPES).toHaveLength(44);
+    expect(EDIT_OPERATION_TYPES).toContain('set_sequence_duration');
     expect(EDIT_OPERATION_TYPES).toContain('restore_project_version');
     expect(EDIT_OPERATION_TYPES).toContain('set_scene_lock');
     expect(EDIT_OPERATION_TYPES).toContain('set_object_lock');
@@ -290,7 +291,7 @@ describe('编辑协议契约（计划 §4.6）', () => {
   });
 
   it('N01-11 为 §13.5 的每个来源操作登记输入 schema 和原生／别名／待实现状态', () => {
-    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(43);
+    expect(SOURCE_EDIT_OPERATION_TYPES).toHaveLength(44);
     expect(Object.keys(EDIT_OPERATION_V2_REGISTRY).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     expect(Object.keys(EDIT_OPERATION_V2_INPUT_SCHEMAS).sort()).toEqual([...SOURCE_EDIT_OPERATION_TYPES].sort());
     for (const operation of SOURCE_EDIT_OPERATION_TYPES) {

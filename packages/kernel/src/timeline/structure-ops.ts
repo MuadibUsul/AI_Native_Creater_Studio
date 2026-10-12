@@ -9,7 +9,7 @@ import {
   visualParametersSchema,
   visualTransformSchema,
 } from '@ancs/contracts';
-import { WorkingTimeline, compareFraction, rangeDuration, refs } from './support.js';
+import { WorkingTimeline, compareFraction, exactTicks, mediaTimeOf, rangeDuration, refs, timeFraction } from './support.js';
 import type { KernelClip, KernelContext, KernelEventDraft, KernelTimelineOperation, KernelTrack } from './types.js';
 
 type Op<Name extends KernelTimelineOperation['op']> = Extract<KernelTimelineOperation, { op: Name }>;
@@ -105,6 +105,46 @@ export function deleteTrack(work: WorkingTimeline, operation: Op<'delete_track'>
     action: 'UPDATE_TRACK', objectKind: 'TRACK', objectId: before.id,
     patch: { op: 'update_track', trackId: before.id, changes: { position: after.position } },
   }));
+}
+
+/**
+ * set_sequence_duration（V6-1）：改成片长度。新时长必须为正，并能在序列编辑时基中精确表示；
+ * 缩短时，序列内的片段/字幕/音频区域不得越过新终点（不静默裁掉内容），
+ * 被其他片段作为嵌套序列引用时不得短于被引用的源范围。
+ */
+export function setSequenceDuration(work: WorkingTimeline, operation: Op<'set_sequence_duration'>): void {
+  const sequence = work.sequences.get(operation.sequenceId);
+  if (!sequence) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+  work.assertObjectLockAllows('SEQUENCE', sequence.id, ['DURATION']);
+  const { timebase } = work.sequenceTimebase(sequence.id);
+  const ticks = exactTicks(timeFraction(mediaTimeSchema.parse(operation.duration)), timebase);
+  if (ticks <= 0n) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'sequence duration must be positive', 422, { reason: 'SEQUENCE_DURATION_NOT_POSITIVE' });
+  }
+  const duration = mediaTimeOf(ticks, timebase);
+  const beyond = (objectKind: string, objectId: string): never => {
+    throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'content extends beyond the new sequence duration', 409, {
+      reason: 'SEQUENCE_CONTENT_BEYOND_DURATION', objectKind, objectId,
+    });
+  };
+  for (const clip of work.clips.values()) {
+    if (clip.sequenceId === sequence.id && compareMediaTime(clip.sequenceRange.end, duration) > 0) beyond('CLIP', clip.id);
+    if (clip.nestedSequenceId === sequence.id && compareMediaTime(clip.sourceRange.end, duration) > 0) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'a nested reference uses source time beyond the new duration', 409, {
+        reason: 'NESTED_REFERENCE_BEYOND_DURATION', objectKind: 'CLIP', objectId: clip.id,
+      });
+    }
+  }
+  for (const caption of work.captions.values()) {
+    if (caption.sequenceId === sequence.id && compareMediaTime(caption.sequenceRange.end, duration) > 0) beyond('CAPTION', caption.id);
+  }
+  for (const region of work.audioRegions.values()) {
+    if (region.sequenceId === sequence.id && compareMediaTime(region.sequenceRange.end, duration) > 0) beyond('AUDIO_REGION', region.id);
+  }
+  work.updateSequence(sequence, { ...sequence, duration }, {
+    action: 'UPDATE_SEQUENCE', objectKind: 'SEQUENCE', objectId: sequence.id,
+    patch: { op: 'set_sequence_duration', sequenceId: sequence.id, duration },
+  });
 }
 
 /**
@@ -220,7 +260,7 @@ export function updateClip(work: WorkingTimeline, operation: Op<'update_clip'>):
   const track = work.tracks.get(candidate.trackId);
   if (!track || track.sequenceId !== clip.sequenceId) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip track not found', 404);
   if (track.locked) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'track is locked', 409, { reason: 'TRACK_LOCKED' });
-  const sequence = work.state.sequences.get(clip.sequenceId);
+  const sequence = work.sequences.get(clip.sequenceId);
   if (!sequence) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'clip sequence not found', 404);
   const sequenceRange = mediaRangeSchema.parse(candidate.sequenceRange);
   const sourceRange = mediaRangeSchema.parse(candidate.sourceRange);
@@ -231,7 +271,7 @@ export function updateClip(work: WorkingTimeline, operation: Op<'update_clip'>):
   if (candidate.assetVersionId !== null) {
     work.assertAssetRangeUsable(candidate.assetVersionId, sourceRange);
   } else if (candidate.nestedSequenceId !== null) {
-    const nested = work.state.sequences.get(candidate.nestedSequenceId);
+    const nested = work.sequences.get(candidate.nestedSequenceId);
     if (!nested || compareMediaTime(sourceRange.end, nested.duration) > 0) {
       throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
     }

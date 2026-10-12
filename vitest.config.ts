@@ -27,6 +27,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-youtube': srcAlias('./packages/providers/youtube/src/index.ts'),
   '@ancs/providers-mock-provider': srcAlias('./packages/providers/mock-provider/src/index.ts'),
   '@ancs/providers-mock-llm': srcAlias('./packages/providers/mock-llm/src/index.ts'),
+  '@ancs/providers-anthropic': srcAlias('./packages/providers/anthropic/src/index.ts'),
   '@ancs/providers-mock-tts': srcAlias('./packages/providers/mock-tts/src/index.ts'),
   '@ancs/providers-mock-payments': srcAlias('./packages/providers/mock-payments/src/index.ts'),
   '@ancs/providers-malware-heuristic': srcAlias('./packages/providers/malware-heuristic/src/index.ts'),

@@ -194,6 +194,10 @@ export function computeOperationTargetRefs(operation: OperationLike, options: { 
       if (trackId === null) return [];
       return [ref('TRACK', trackId, hasKey(changes, 'position') ? ['STYLE', 'POSITION'] : ['STYLE'])];
     }
+    case 'set_sequence_duration': {
+      const sequenceId = str(patch['sequenceId']);
+      return sequenceId === null ? [] : [ref('SEQUENCE', sequenceId, ['DURATION'])];
+    }
     case 'set_av_link': {
       const clipIds = Array.isArray(patch['clipIds']) ? patch['clipIds'] : [];
       return clipIds.filter((id): id is string => typeof id === 'string').map((id) => ref('CLIP', id, ['CONTENT']));

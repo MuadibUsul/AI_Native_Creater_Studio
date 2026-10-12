@@ -1,4 +1,4 @@
-import type { LlmAdapter, LlmCompletion, NarrativeGenerationRequest } from '@ancs/contracts';
+import type { AgentModelAdapter, AgentModelRequest, AgentModelResponse, LlmAdapter, LlmCompletion, NarrativeGenerationRequest } from '@ancs/contracts';
 
 /**
  * Mock LLM 适配器（P04-03 / §52；同 P03-07 的 Mock Provider 范式）。
@@ -455,4 +455,36 @@ export class MockLlmAdapter implements LlmAdapter {
       ending: '总结核心结论，并提示下一步关注点。',
     };
   }
+}
+
+/**
+ * V6 Agent Runtime 的脚本模型（SCRIPTED）：按调用序号或按请求内容返回预设响应，用于测试与演示。
+ * 它不做任何理解或剪辑判断；界面与产物按 SCRIPTED 标识（Mock 验证 ≠ 真实 Provider 验证）。
+ */
+export type ScriptedAgentStep = AgentModelResponse | ((request: AgentModelRequest, call: number) => AgentModelResponse);
+
+export class ScriptedAgentModel implements AgentModelAdapter {
+  readonly providerId = 'scripted';
+  readonly implementation = 'SCRIPTED' as const;
+  readonly model: string;
+  readonly requests: AgentModelRequest[] = [];
+  private readonly steps: readonly ScriptedAgentStep[];
+
+  constructor(steps: readonly ScriptedAgentStep[], options: { model?: string } = {}) {
+    this.steps = steps;
+    this.model = options.model ?? 'scripted-director';
+  }
+
+  respond(request: AgentModelRequest): Promise<AgentModelResponse> {
+    const call = this.requests.length;
+    this.requests.push(request);
+    const step = this.steps[call];
+    if (step === undefined) return Promise.reject(new Error(`scripted agent model has no step #${String(call)}`));
+    return Promise.resolve(typeof step === 'function' ? step(request, call) : step);
+  }
+}
+
+/** 构造一个脚本响应（零用量）。 */
+export function scriptedResponse(content: AgentModelResponse['content'], stopReason: AgentModelResponse['stopReason'] = 'end_turn'): AgentModelResponse {
+  return { model: 'scripted-director', content, stopReason, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } };
 }

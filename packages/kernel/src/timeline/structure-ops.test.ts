@@ -213,3 +213,35 @@ describe('CUT_CONTENT 收缝尊重锁（V5-M1 修复：旧实现不检查轨道�
     expect(() => apply(s, cut)).not.toThrow();
   });
 });
+
+describe('序列时长（V6-1 set_sequence_duration）', () => {
+  it('延长与缩短：写入序列实体、记 UPDATE_SEQUENCE（含前后快照）；后续操作看到新时长', () => {
+    const s = state({ clips: [clip('k1', 'v1', r(0, 4000))] });
+    const longer = apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(90_000) });
+    const afterLonger = applyKernelResult(s, longer);
+    expect(afterLonger.sequences.get('seq')?.duration).toEqual(t(90_000));
+    expect(longer.events.map((event) => `${event.action}:${event.objectKind}:${event.objectId}`)).toEqual(['UPDATE_SEQUENCE:SEQUENCE:seq']);
+    expect(longer.events[0]?.snapshots['before']).toEqual({ entity: 'sequence', value: { id: 'seq', duration: t(60_000) } });
+    // 延长后可以插入到原终点之后（同一批次的后续操作读到新时长）
+    const inserted = apply(afterLonger, { op: 'insert_clip', sequenceId: 'seq', trackId: 'v1', assetVersionId: 'av', nestedSequenceId: null, sourceStreamId: null, sourceRange: r(0, 5000), mode: 'OVERWRITE', sequenceStart: t(70_000), linkAudio: false, audioTrackId: null, createdClipId: 'k2' });
+    expect(inserted.writes.some((write) => write.type === 'insert' && write.after.value.id === 'k2')).toBe(true);
+    // 缩短到内容终点：允许；时长换算到序列时基精确保存
+    const shorter = applyKernelResult(s, apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: { ticks: '4', timebase: { num: 1, den: 1 } } }));
+    expect(shorter.sequences.get('seq')?.duration).toEqual(t(4000));
+  });
+
+  it('拒绝：非正时长、序列时基无法精确表示、内容越过新终点、嵌套引用越界、序列被锁', () => {
+    const s = state({
+      sequences: new Map([['seq', { id: 'seq', duration: t(60_000) }], ['inner', { id: 'inner', duration: t(10_000) }]]),
+      clips: [clip('k1', 'v1', r(0, 4000)), clip('nest', 'v1', r(5000, 13_000), { assetVersionId: null, nestedSequenceId: 'inner', sourceRange: r(0, 8000) })],
+      captions: [caption('cap1', r(20_000, 22_000), [word('好', 20_000, 22_000)])],
+    });
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(0) }))).toBe('SEQUENCE_DURATION_NOT_POSITIVE');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: { ticks: '1', timebase: { num: 1, den: 3 } } }))).toBe('TIME_NOT_REPRESENTABLE');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(21_000) }))).toBe('SEQUENCE_CONTENT_BEYOND_DURATION');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'inner', duration: t(6000) }))).toBe('NESTED_REFERENCE_BEYOND_DURATION');
+    const locked = state({ locks: new Map([['SEQUENCE:seq', ['DURATION']]]) });
+    expect(reasonOf(() => apply(locked, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(30_000) }))).toBe('EDIT_IMPACT_LOCKED');
+    expect(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'nope', duration: t(30_000) })).toThrow(ApiFailure);
+  });
+});

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -21,6 +22,9 @@ import {
 import { editEvents, projects, scenes } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { contentToChanges, processEdits, type ProcessEditsResult, type SceneContentSnapshot } from './edits.js';
+
+/** UPDATE_SEQUENCE 事件的前后快照（内核序列实体只记录可编辑字段）。 */
+const sequenceDurationSnapshotSchema = z.object({ id: z.string().min(1), duration: mediaTimeSchema });
 
 /**
  * Undo / Redo（P02-03 / §4.8；规范 §23）。
@@ -377,6 +381,11 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         destinationTrackId: patch.destinationTrackId == null ? null : String(patch.destinationTrackId),
       };
     }
+    case 'UPDATE_SEQUENCE': {
+      // V6-1：成片长度（重做 = 按事件记录的新时长再执行一次）
+      const after = sequenceDurationSnapshotSchema.parse(patch.after);
+      return { op: 'set_sequence_duration', sequenceId: after.id, duration: after.duration };
+    }
     case 'UPDATE_TRACK': {
       const changes = (patch.changes ?? {}) as Record<string, unknown>;
       const before = trackSchema.parse(patch.before);
@@ -666,6 +675,11 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
         track: { kind: before.kind, position: before.position, name: before.name, locked: before.locked, muted: before.muted, hidden: before.hidden, solo: before.solo, syncLocked: before.syncLocked },
         restoreTrackId: before.id,
       }];
+    }
+    case 'UPDATE_SEQUENCE': {
+      // 逆操作：恢复原时长（内核会再次校验内容不越界）
+      const before = sequenceDurationSnapshotSchema.parse(patch.before);
+      return [{ op: 'set_sequence_duration', sequenceId: before.id, duration: before.duration }];
     }
     case 'UPDATE_TRACK': {
       const before = trackSchema.parse(patch.before);

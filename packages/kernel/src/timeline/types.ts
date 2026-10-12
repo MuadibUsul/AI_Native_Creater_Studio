@@ -118,6 +118,7 @@ export interface KernelContext {
 }
 
 export type KernelEntity =
+  | { entity: 'sequence'; value: KernelSequence }
   | { entity: 'clip'; value: KernelClip }
   | { entity: 'track'; value: KernelTrack }
   | { entity: 'audioRegion'; value: KernelAudioRegion }
@@ -135,7 +136,7 @@ export type KernelWrite =
  */
 export interface KernelEventDraft {
   action: string;
-  objectKind: 'CLIP' | 'TRACK' | 'AUDIO_REGION' | 'CAPTION';
+  objectKind: 'SEQUENCE' | 'CLIP' | 'TRACK' | 'AUDIO_REGION' | 'CAPTION';
   objectId: string;
   patch: Record<string, unknown>;
   snapshots: Record<string, KernelEntity>;
@@ -164,6 +165,7 @@ export const KERNEL_TIMELINE_OPERATIONS = [
   'move_track',
   'delete_track',
   'update_track',
+  'set_sequence_duration',
   'set_clip_transform',
   'set_clip_crop',
   'set_clip_opacity',

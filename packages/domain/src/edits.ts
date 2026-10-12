@@ -734,6 +734,7 @@ async function applyEditsInTransaction(
         case 'move_track':
         case 'delete_track':
         case 'update_track':
+        case 'set_sequence_duration':
         case 'set_clip_transform':
         case 'set_clip_crop':
         case 'set_clip_opacity':

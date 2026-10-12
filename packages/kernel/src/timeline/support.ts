@@ -27,6 +27,7 @@ import {
   type KernelEntity,
   type KernelEventDraft,
   type KernelResult,
+  type KernelSequence,
   type KernelTrack,
   type KernelWrite,
   type TimelineState,
@@ -73,6 +74,7 @@ export function identityForwardMapping(clip: KernelClip): boolean {
   return mapping?.direction === 'FORWARD' && (mapping?.rate?.num ?? 1) === 1 && (mapping?.rate?.den ?? 1) === 1;
 }
 
+const sequenceRef = (value: KernelSequence): KernelEntity => ({ entity: 'sequence', value });
 const clipRef = (value: KernelClip): KernelEntity => ({ entity: 'clip', value });
 const trackRef = (value: KernelTrack): KernelEntity => ({ entity: 'track', value });
 const regionRef = (value: KernelAudioRegion): KernelEntity => ({ entity: 'audioRegion', value });
@@ -86,6 +88,7 @@ type EventHead = Omit<KernelEventDraft, 'snapshots'>;
  * 查找语义与旧实现的查询条件一一对应（项目范围 vs 同序列），保证错误码不变。
  */
 export class WorkingTimeline {
+  readonly sequences: Map<string, KernelSequence>;
   readonly clips: Map<string, KernelClip>;
   readonly tracks: Map<string, KernelTrack>;
   readonly audioRegions: Map<string, KernelAudioRegion>;
@@ -94,6 +97,7 @@ export class WorkingTimeline {
   readonly events: KernelEventDraft[] = [];
 
   constructor(readonly state: TimelineState) {
+    this.sequences = new Map(state.sequences);
     this.clips = new Map(state.clips.map((clip) => [clip.id, clip]));
     this.tracks = new Map(state.tracks.map((track) => [track.id, track]));
     this.audioRegions = new Map(state.audioRegions.map((region) => [region.id, region]));
@@ -108,7 +112,7 @@ export class WorkingTimeline {
 
   /** 序列编辑时基与时长（ticks）；不存在 → 404。 */
   sequenceTimebase(sequenceId: string): { durationTicks: bigint; timebase: { num: number; den: number } } {
-    const sequence = this.state.sequences.get(sequenceId);
+    const sequence = this.sequences.get(sequenceId);
     if (!sequence) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
     const duration = mediaTimeSchema.parse(sequence.duration);
     return { durationTicks: exactTicks(timeFraction(duration), duration.timebase), timebase: duration.timebase };
@@ -208,7 +212,7 @@ export class WorkingTimeline {
       return;
     }
     if (input.nestedSequenceId !== null) {
-      const nested = this.state.sequences.get(input.nestedSequenceId);
+      const nested = this.sequences.get(input.nestedSequenceId);
       if (!nested) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'nested sequence not found', 404);
       if (compareMediaTime(input.range.start, mediaTimeOf(0n, input.range.start.timebase)) < 0 || compareMediaTime(input.range.end, nested.duration) > 0) {
         throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
@@ -240,6 +244,12 @@ export class WorkingTimeline {
     this.clips.delete(before.id);
     this.writes.push({ type: 'delete', before: clipRef(before) });
     if (event) this.emit({ ...event, snapshots: { before: clipRef(before) } });
+  }
+
+  updateSequence(before: KernelSequence, after: KernelSequence, event: EventHead | null): void {
+    this.sequences.set(after.id, after);
+    this.writes.push({ type: 'update', before: sequenceRef(before), after: sequenceRef(after) });
+    if (event) this.emit({ ...event, snapshots: { before: sequenceRef(before), after: sequenceRef(after) } });
   }
 
   insertTrack(track: KernelTrack, event: EventHead | null): void {
@@ -285,4 +295,4 @@ export class WorkingTimeline {
   }
 }
 
-export const refs = { clip: clipRef, track: trackRef, audioRegion: regionRef, caption: captionRef };
+export const refs = { sequence: sequenceRef, clip: clipRef, track: trackRef, audioRegion: regionRef, caption: captionRef };
