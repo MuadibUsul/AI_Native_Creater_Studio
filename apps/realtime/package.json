@@ -1,0 +1,24 @@
+{
+  "name": "@ancs/realtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@ancs/contracts": "workspace:*",
+    "@ancs/db": "workspace:*",
+    "@ancs/domain": "workspace:*",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/ws": "8.18.1",
+    "typescript": "6.0.3"
+  }
+}

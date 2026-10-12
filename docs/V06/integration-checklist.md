@@ -15,6 +15,7 @@
 | AI 导演（Claude） | 共看片室的每一轮对话：剪第一版、按指令改、自检 | Worker | `ANCS_AGENT_DRIVER=anthropic`、`ANTHROPIC_API_KEY`；可选 `ANCS_AGENT_MODEL`（缺省 `claude-opus-5-5`） | 轮次失败 `AGENT_MODEL_NOT_CONFIGURED`，界面显示"AI 导演还没配置好" | ① 起 API + Worker + Web，新建作品、放 3 条素材、点"让 AI 剪第一版"；② 初剪评测：`node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export`（见 `docs/V06/eval/first-cut-rubric.md`） |
 | 镜头理解（视觉模型） | 素材"理解"中的画面说明，写入统一索引供 AI 检索 | Worker | `ANCS_VISUAL_ANALYSIS_DRIVER=anthropic`、`ANTHROPIC_API_KEY`；可选 `ANCS_VISION_MODEL`（缺省 `claude-haiku-5-5`） | 素材卡显示"画面：未配置"；AI 仍可用 `look_at_footage` 直接看帧（同样需要导演模型） | 上传一条素材，等"画面"变为"已理解"；在评测报告中查看说明质量与单条成本 |
 | 语音转写（Deepgram 批量） | 素材里的说话内容，供 AI 找句子、不剪断句子 | Worker | `ANCS_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`；可选 `ANCS_DEEPGRAM_MODEL`、`ANCS_DEEPGRAM_LANGUAGE` | 素材卡显示"语音：未配置"；评测里"句子完整"为"无法评估" | 已在 `docs/verification/provider-real-deepgram.md` 核验过适配器；配好后上传一条有人声的素材，看"语音"变为"已理解" |
+| 实时语音识别（共看片室边看边说） | 麦克风 → Realtime Gateway → 流式识别 → 边说边出的文字、"这个/这里"按说出那一刻绑定 → 一句话说完作为一轮对话发给 AI | Realtime Gateway（`apps/realtime`，新进程） | `ANCS_REALTIME_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`（可与批量转写同一把）；与 API 同一把 `ANCS_VOICE_SESSION_SECRET`（≥32 字符，API 也要配）；`ANCS_ALLOWED_ORIGINS`；可选 `ANCS_DEEPGRAM_LIVE_MODEL_ZH`（缺省 nova-2）/ `_EN`（缺省 nova-3）；反向代理转发 `/realtime/v1/voice` | 没配会话密钥：开麦提示"语音还没配置好"；没配识别：网关连接时回"未配置"并关闭 | 起网关（`node apps/realtime/dist/main.js`，`/health` 显示 deepgram）→ 共看片室点麦克风说"把这里剪短一点"（中文）和一句英文 → 看边说边出的文字、指向标签与生成的试改；记录首段转写延迟 |
 | 音频事件分析（可选） | 笑声、掌声、音乐段落等 | Worker | `ANCS_AUDIO_ANALYSIS_EXECUTABLE`（+ `ANCS_AUDIO_ANALYSIS_ARGS_JSON`）：你自己的子进程，stdout 输出 `GeneratedMediaAudioAnalysis` JSON | 不装配，该层缺失 | 上传素材后看统一索引里出现音频事件层 |
 
 ## 测试素材（可选，只用于本地测试与评测）
@@ -42,7 +43,7 @@
 
 | 里程碑 | 能力 | 预计需要 |
 |---|---|---|
-| V6-2 | 流式双语语音对话（边说边识别、AI 语音回应） | 流式 ASR（Deepgram 流式，同一把 `DEEPGRAM_API_KEY`）；语音合成 Provider 的 Key |
+| V6-2（剩余） | AI 用合成语音回应（当前用浏览器自带朗读）；中国大陆可用的实时语音供应商（区域路由） | 语音合成 Provider 的 Key；国内流式识别供应商的 Key（接入同一个 `StreamingSpeechRecognizer` 端口） |
 | V6-5 | 讲述/旁白配音 | TTS Provider 的 Key |
 | V6-7 | 数字人 | 数字人 Provider 的 Key |
 | V6-8 | 生成式特效与视频生成（先报价、后生成） | 视频生成 Provider 的 Key；按次计费，生成前必须展示报价并由用户确认 |

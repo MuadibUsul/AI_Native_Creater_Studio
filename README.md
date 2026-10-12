@@ -21,7 +21,7 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 |---|---|---|
 | V6-0 | 工作流引擎 + FFmpeg 终渲染（素材工程导出） | 已交付，真实 FFmpeg 验证 |
 | V6-1 | 共看片室最小闭环：上传 → AI 剪第一版（风格可选）→ 点选/拖选 + 文字 → 原地试改 → 采用/撤回 → 局部预览 → 导出；中英双语界面；AI 自检；初剪评测框架 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**AI 导演用脚本导演验证，真实 Claude 待密钥** |
-| V6-2 | 流式双语语音 + 共同注意力 | 未开始 |
+| V6-2 | 流式双语语音 + 共同注意力：共看片室里边看边说，边说边出文字，“这个/这里”按说出那一刻绑定，没说完先等后半句；新进程 Realtime Gateway | 已交付，真实浏览器（假麦克风）+ 真实网关验证；**流式识别用本地同协议假服务，真实 Deepgram 待密钥**；AI 语音回应暂用浏览器朗读 |
 | V6-3 | 代码生成特效（模板库 + 沙箱渲染 + 合成） | 未开始 |
 | V6-4 | 批注式审片：手机或桌面逐处标记（位置 + 一句话 + 可选框选）→ 逐条和 AI 讨论方案 → 一次执行 → 只重渲改动的分段 → 采用；可添加到主屏幕 | 已交付，真实浏览器（手机 + 桌面）+ 真实 FFmpeg 验证；**AI 为脚本导演，真实 Claude 待密钥**；语音批注随 V6-2 |
 | V6-5 — V6-8 | 讲述配音、蒸馏器（参考视频 → 风格）、数字人、生成式特效与视频生成 | 未开始 |
@@ -38,6 +38,9 @@ ANTHROPIC_API_KEY=…            # 只放在服务端环境变量 / 密钥管理
 ANCS_VISUAL_ANALYSIS_DRIVER=anthropic   # 可选：素材画面理解
 ANCS_ASR_DRIVER=deepgram       # 可选：素材语音转写
 DEEPGRAM_API_KEY=…
+# 实时语音：API 与 Realtime Gateway 两个进程都配同一把会话密钥（≥32 字符），网关另配识别驱动
+ANCS_VOICE_SESSION_SECRET=…
+ANCS_REALTIME_ASR_DRIVER=deepgram
 ```
 
 完整清单（每项的作用、没配时的表现、验证方法）见 `docs/V06/integration-checklist.md`。
@@ -59,6 +62,7 @@ pnpm verify                  # secrets → spec → lint → typecheck → build
 pnpm build
 node apps/api/dist/index.js          # API（缺省 3001）
 node apps/worker/dist/main.js        # Worker（在仓库根启动）
+node apps/realtime/dist/main.js      # Realtime Gateway（实时语音，可选；缺省 3002，反向代理转发 /realtime/v1/voice）
 cd apps/web && npx next start -p 3000
 ```
 
@@ -69,6 +73,7 @@ cd apps/web && npx next start -p 3000
 | 命令 | 说明 |
 |---|---|
 | `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
+| `node scripts/voice-browser-check.mjs` | 实时语音端到端：Chrome 假麦克风 → AudioWorklet → 网关 → 流式识别（本地同协议假服务）→ 指代绑定 → 试改；中英文；截图写入 `docs/verification/artifacts/v6-2/` |
 | `node scripts/review-browser-check.mjs` | 批注式审片端到端：手机 390×844 触屏 + 桌面，真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-4/` |
 | `node scripts/eval-first-cut.mjs` | 初剪评测冒烟（`evals/first-cut/smoke.json`，脚本导演，只证明框架可用） |
 | `node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export` | 真实模型初剪评测：自动指标 + 人工评分表 + 导出成片（需 `ANTHROPIC_API_KEY`，素材放 `Videos/`，见评分标准文档） |
@@ -92,7 +97,7 @@ cd apps/web && npx next start -p 3000
 ## 目录
 
 ```text
-apps/        web（Next.js，共看片室）/ api（Fastify）/ worker（任务与工作流）/ render-worker / motion-worker
+apps/        web（Next.js，共看片室、审片）/ api（Fastify）/ worker（任务与工作流）/ realtime（实时语音网关）/ render-worker / motion-worker
 packages/    contracts / kernel（纯函数编辑内核）/ time / domain / db / sdk / providers / arch-check 等
 evals/       评测用例集（初剪金样集模板与冒烟集）
 docs/        V06 / V05 / V04 / decisions / ops / verification / handoffs

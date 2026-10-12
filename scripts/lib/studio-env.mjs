@@ -3,6 +3,7 @@
 // 外部能力（导演模型、语音识别、视觉理解）由调用方传入；不传即"未配置"，相应任务如实失败。
 import { randomBytes } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
+import { connect as netConnect } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,9 +21,12 @@ import { createFfmpegRenderPlanExecutor } from '../../apps/worker/dist/render-pl
 import { createStorageFrameSampler } from '../../apps/worker/dist/frame-sampler-process.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
+import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
 
 /**
- * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string }} options
+ * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
+ *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] } }} options
+ *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
 export async function startStudioEnv(options) {
   const db = createDb(resolveTestDatabaseUrl());
@@ -44,7 +48,33 @@ export async function startStudioEnv(options) {
   const baseUrl = `http://127.0.0.1:${String(proxyPort)}`;
   const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl });
   const storage = new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') });
-  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage) });
+  const voiceSecret = randomBytes(32).toString('hex');
+  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret } });
+
+  // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
+  let realtime = null;
+  if (options.voice !== undefined) {
+    const apiKey = randomBytes(16).toString('hex');
+    const fakeAsr = await startFakeDeepgramLive({ apiKey, script: options.voice.script });
+    const recognizer = { ...createDeepgramLiveRecognizer({ apiKey, baseUrl: fakeAsr.url }), providerId: 'deepgram-local-fake', implementation: 'SCRIPTED' };
+    const gateway = createRealtimeGateway({ deps: { db: db.db, voiceSessionSecret: voiceSecret }, recognizer, allowedOrigins: [baseUrl] });
+    const server = createServer((_request, response) => { response.writeHead(404); response.end(); });
+    gateway.attach(server, { exclusive: true });
+    const port = await new Promise((done) => server.listen(0, '127.0.0.1', () => done(server.address().port)));
+    realtime = { gateway, server, port, fakeAsr };
+  }
+  proxy.on('upgrade', (incoming, socket, head) => {
+    if (realtime === null || !incoming.url?.startsWith('/realtime/')) { socket.destroy(); return; }
+    const upstream = netConnect(realtime.port, '127.0.0.1', () => {
+      const lines = [`${incoming.method} ${incoming.url} HTTP/${incoming.httpVersion}`];
+      for (let index = 0; index < incoming.rawHeaders.length; index += 2) lines.push(`${incoming.rawHeaders[index]}: ${incoming.rawHeaders[index + 1]}`);
+      upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
+      if (head.length > 0) upstream.write(head);
+      socket.pipe(upstream).pipe(socket);
+    });
+    upstream.on('error', () => socket.destroy());
+    socket.on('error', () => upstream.destroy());
+  });
   await app.listen({ host: '127.0.0.1', port: 0 });
   apiPort = app.server.address().port;
 
@@ -77,6 +107,8 @@ export async function startStudioEnv(options) {
     db,
     deps,
     workDir,
+    /** 语音：本地假识别服务的连接记录（查询参数、音频字节数等） */
+    voiceAsrConnections: realtime?.fakeAsr.connections ?? [],
     /** 新建内部用户并返回已登录的 SDK 客户端 */
     async signedInClient(email) {
       const password = randomBytes(24).toString('base64url');
@@ -94,6 +126,11 @@ export async function startStudioEnv(options) {
       stopping = true;
       await workerLoop.catch(() => undefined);
       await app.close().catch(() => undefined);
+      if (realtime !== null) {
+        await realtime.gateway.close().catch(() => undefined);
+        await new Promise((done) => realtime.server.close(done));
+        await realtime.fakeAsr.close().catch(() => undefined);
+      }
       await new Promise((done) => proxy.close(done));
       await db.close();
       await rm(workDir, { recursive: true, force: true });

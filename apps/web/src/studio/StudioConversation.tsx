@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { AGENT_ERROR_REASONS, type AgentTurn, type Proposal, type StrategyPackSummary } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
@@ -46,6 +46,9 @@ export interface ConversationProps {
   strategies: StrategyPackSummary[];
   strategy: StudioStrategyChoice | null;
   onStrategyChange: (value: StudioStrategyChoice | null) => void;
+  /** V6-2 语音：状态行（对话框上方）与麦克风开关（发送按钮旁） */
+  voiceBar?: ReactNode;
+  voiceToggle?: ReactNode;
 }
 
 export function StudioConversation(props: ConversationProps) {
@@ -147,6 +150,7 @@ export function StudioConversation(props: ConversationProps) {
         </div>
       ) : null}
       {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} /> : null}
+      {props.voiceBar ?? null}
       <div className={styles['composer']}>
         <div className={styles['composerField']}>
           <span className={`${styles['chip']} ${props.pointerLabel !== null ? styles['chipActive'] : ''}`}>
@@ -167,6 +171,7 @@ export function StudioConversation(props: ConversationProps) {
             onKeyDown={onKeyDown}
           />
         </div>
+        {props.voiceToggle ?? null}
         <button type="button" className="btn primary" disabled={!canSend} onClick={submit}>
           {t.send}<QuietIcon name="arrow" />
         </button>

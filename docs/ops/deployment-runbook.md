@@ -107,6 +107,17 @@ node apps/worker/dist/main.js          # 常驻循环；或 --once 单轮自检
 
 健康检查：`GET /api/v1/health`（无需认证）→ `{ "status": "ok", "service": "ancs-api", ... }`。
 
+### 5.1 Realtime Gateway（V6-2 实时语音，可选）
+
+```bash
+node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { ok, asr: "deepgram" | "NOT_CONFIGURED" }
+```
+
+- 环境：`DATABASE_URL`、与 API **同一把** `ANCS_VOICE_SESSION_SECRET`（网关用它校验浏览器带来的语音会话短期凭证）、`ANCS_ALLOWED_ORIGINS`（Web 的 origin）；
+  流式识别 `ANCS_REALTIME_ASR_DRIVER=deepgram` + `DEEPGRAM_API_KEY`（可选 `ANCS_DEEPGRAM_LIVE_MODEL_ZH` / `_EN`）。没配识别时网关照常启动，连接时明确回"未配置"。
+- 反向代理：把 Web 同源的 `/realtime/v1/voice`（WebSocket 升级）转到网关；或在构建 Web 时设 `NEXT_PUBLIC_ANCS_REALTIME_URL=wss://…/realtime/v1/voice` 并把该 origin 加进 `ANCS_CSP_EXTRA_ORIGINS`。
+- 网关不读写工程、不调用 AI：一句话说完交还浏览器，浏览器把它当作一轮对话发给 API（权限、幂等、预算不变）。
+
 ## 6. 队列
 
 - 默认 `ANCS_QUEUE_DRIVER=db`：队列消息只作"及时性"信号，**权威状态在数据库**；Outbox 保证崩溃后重放；

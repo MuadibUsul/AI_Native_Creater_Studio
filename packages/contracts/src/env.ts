@@ -329,6 +329,41 @@ export const retentionCliEnvSchema = z.object({
 
 export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
 
+/**
+ * V6-2 Realtime Gateway（apps/realtime）：流式语音识别与指代绑定的独立进程。
+ * 只校验语音会话的短期凭证（与 API 同一把 ANCS_VOICE_SESSION_SECRET），不读写工程。
+ */
+export const realtimeEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3002),
+  /** 与 API 相同的语音会话签名密钥（网关用它校验浏览器带来的短期凭证） */
+  ANCS_VOICE_SESSION_SECRET: z.string().min(32, 'ANCS_VOICE_SESSION_SECRET 未配置或过短（≥32 字符）'),
+  /** 浏览器来源白名单（逗号分隔完整 origin）；留空 = BETTER_AUTH_URL 的 origin（非生产另加本地 Web 端口） */
+  ANCS_ALLOWED_ORIGINS: z.string().optional(),
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  /** 流式语音识别驱动：deepgram = 真实 Deepgram（需 DEEPGRAM_API_KEY）；留空 = 不装配（连接时明确报"未配置"） */
+  ANCS_REALTIME_ASR_DRIVER: z.enum(['deepgram'], { message: 'ANCS_REALTIME_ASR_DRIVER 仅支持 deepgram' }).optional(),
+  DEEPGRAM_API_KEY: z.string().min(16, 'DEEPGRAM_API_KEY 过短').optional(),
+  /** 各语言的流式模型（缺省：中文 nova-2，英文 nova-3） */
+  ANCS_DEEPGRAM_LIVE_MODEL_ZH: nonEmpty('ANCS_DEEPGRAM_LIVE_MODEL_ZH').optional(),
+  ANCS_DEEPGRAM_LIVE_MODEL_EN: nonEmpty('ANCS_DEEPGRAM_LIVE_MODEL_EN').optional(),
+  ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1']).optional(),
+});
+
+export type RealtimeEnv = z.infer<typeof realtimeEnvSchema>;
+
+export function crossCheckRealtimeEnv(value: RealtimeEnv): EnvIssue[] {
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_REALTIME_ASR_DRIVER === 'deepgram' && value.DEEPGRAM_API_KEY === undefined) {
+    issues.push({ variable: 'DEEPGRAM_API_KEY', message: 'ANCS_REALTIME_ASR_DRIVER=deepgram 时必须配置 DEEPGRAM_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_ALLOWED_ORIGINS !== undefined && value.ANCS_ALLOWED_ORIGINS.split(',').map((item) => item.trim()).filter((item) => item !== '').some((item) => originOf(item) !== item.replace(/\/+$/, '').toLowerCase())) {
+    issues.push({ variable: 'ANCS_ALLOWED_ORIGINS', message: 'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）' });
+  }
+  return issues;
+}
+
 /** Edge 允许的浏览器来源（V5-M4）：显式配置优先；否则 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 开发端口。 */
 export function resolveAllowedOrigins(value: Pick<ApiEnv, 'ANCS_ALLOWED_ORIGINS' | 'BETTER_AUTH_URL' | 'NODE_ENV' | 'PORT'>): string[] {
   if (value.ANCS_ALLOWED_ORIGINS !== undefined) {

@@ -17,6 +17,9 @@ import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
 import { StudioTimeStrip, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, pointerSecondsText } from './studio-time';
+import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
+import { useReplySpeech } from '@/voice/useReplySpeech';
+import { useVoice } from '@/voice/useVoice';
 import { studioKeys, useStrategyPacks, useStudioActions, useStudioPreview, useStudioState, useStudioTimeline, useStudioTurns, useTrialProposal, type StudioStrategyChoice } from './useStudio';
 import styles from './studio.module.css';
 
@@ -171,12 +174,49 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   // 说
   const [notice, setNotice] = useState<'discarded' | 'undone' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const send = (message: string) => {
+  const voiceTurns = useRef(new Set<string>());
+  const send = (message: string, override?: { pointer: AgentPointer; byVoice: boolean }) => {
     if (state === undefined) return;
     setNotice(null);
     setActionError(null);
-    actions.send.mutate({ state, message, pointer, locale, strategy }, { onError: (error) => setActionError(mutationErrorText(error, t)) });
+    actions.send.mutate({ state, message, pointer: override?.pointer ?? pointer, locale, strategy }, {
+      onSuccess: ({ turn }) => { if (override?.byVoice === true) voiceTurns.current.add(turn.id); },
+      onError: (error) => setActionError(mutationErrorText(error, t)),
+    });
   };
+
+  // 说（V6-2）：语音一句话说完 → 带着按发话时刻绑定的指向，作为一轮对话发出；开口即打断 AI 的朗读
+  const speech = useReplySpeech(locale);
+  const [readAloud, setReadAloud] = useState(true);
+  const voice = useVoice({
+    workspaceId, projectId, locale,
+    onUtterance: ({ text, attention }) => send(text, { pointer: attention.pointer, byVoice: true }),
+    onSpeechStart: speech.stop,
+  });
+  const pointerKey = JSON.stringify(pointer);
+  const playheadSeconds = displaySeconds(playhead);
+  const { notePointer } = voice;
+  useEffect(() => {
+    if (voice.state === 'listening') notePointer(JSON.parse(pointerKey) as AgentPointer, shown === null ? null : playheadSeconds, pointerLabel);
+  }, [voice.state, notePointer, pointerKey, playheadSeconds, pointerLabel, shown]);
+  // 用语音发出的那一轮有了回应 → 朗读（只读一次）
+  const spoken = useRef(new Set<string>());
+  useEffect(() => {
+    for (const turn of turns) {
+      if (!voiceTurns.current.has(turn.id) || spoken.current.has(turn.id) || turn.status === 'RUNNING') continue;
+      spoken.current.add(turn.id);
+      if (readAloud && turn.reply !== null) speech.speak(turn.reply);
+    }
+  }, [turns, readAloud, speech]);
+  const voiceAttentionLabel = (() => {
+    const attention = voice.attention;
+    if (attention === null) return null;
+    if (attention.label !== null) return attention.label;
+    const clip = attention.pointer.clipIds.length > 0 ? strip?.clips.find((item) => item.id === attention.pointer.clipIds[0]) : undefined;
+    if (clip !== undefined) return t.pointer.clip(footageName(clip));
+    const range = attention.pointer.timeRange;
+    return range === null ? null : t.pointer.range(formatClock(frameTimeAtSeconds(Number(range.start), frameRate)), formatClock(frameTimeAtSeconds(Number(range.end), frameRate)));
+  })();
   const stop = (turn: AgentTurn) => actions.cancel.mutate(turn, { onError: (error) => setActionError(mutationErrorText(error, t)) });
   const keep = (target: Proposal) => {
     setActionError(null);
@@ -342,6 +382,20 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           strategies={strategies.data ?? []}
           strategy={strategy}
           onStrategyChange={setStrategy}
+          voiceBar={(
+            <StudioVoiceBar
+              state={voice.state}
+              error={voice.error}
+              partial={voice.partial}
+              held={voice.held}
+              attention={voice.attention}
+              attentionLabel={voiceAttentionLabel}
+              scripted={voice.asr !== null && voice.asr.implementation !== 'REAL'}
+              level={voice.level}
+              readAloud={{ supported: speech.supported, enabled: readAloud, speaking: speech.speaking, onToggle: setReadAloud, onStop: speech.stop }}
+            />
+          )}
+          voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}
         />
         {!canEdit ? <p className={styles['meta']}>{t.readOnly}</p> : null}
       </div>

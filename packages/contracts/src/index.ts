@@ -1247,11 +1247,14 @@ export {
   apiEnvSchema,
   workerEnvSchema,
   crossCheckWorkerEnv,
+  crossCheckRealtimeEnv,
+  originOf,
+  realtimeEnvSchema,
   crossCheckApiEnv,
   resolveAllowedOrigins,
   retentionCliEnvSchema,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv } from './env.js';
 export {
   COMPOSITION_FINAL_RENDER_ERROR_REASONS,
   COMPOSITION_FINAL_RENDER_STEPS,
@@ -2802,3 +2805,27 @@ export {
   updateReviewNoteRequestSchema,
 } from './review.js';
 export type { ApplyReviewRequest, ApplyReviewResponse, CreateReviewNoteRequest, ReviewNote, ReviewNoteStatus, ReviewRegion, ReviewRound, ReviewRoundStatus, ReviewState, UpdateReviewNoteRequest } from './review.js';
+export {
+  REALTIME_ATTENTION_EVIDENCE,
+  REALTIME_CLOSE_CODES,
+  REALTIME_SAMPLE_RATE,
+  REALTIME_VOICE_PATH,
+  realtimeAttentionEvidenceSchema,
+  realtimeAttentionSchema,
+  realtimeClientMessageSchema,
+  realtimePointerSampleSchema,
+  realtimeServerMessageSchema,
+  realtimeWordSchema,
+} from './realtime.js';
+export type {
+  RealtimeAttention,
+  RealtimeAttentionEvidence,
+  RealtimeClientMessage,
+  RealtimePointerSample,
+  RealtimeServerMessage,
+  RealtimeWord,
+  StreamingAsrEvents,
+  StreamingAsrResult,
+  StreamingAsrSession,
+  StreamingSpeechRecognizer,
+} from './realtime.js';

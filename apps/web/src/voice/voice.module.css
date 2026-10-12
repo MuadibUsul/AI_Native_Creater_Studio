@@ -1,0 +1,21 @@
+/* V6-2 语音状态行（共看片室对话栏上方）。只用 ui.* 语义 token。 */
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ui-space-2) var(--ui-space-3);
+  min-height: 32px;
+  font-size: var(--ui-type-metadata);
+  color: var(--ui-fg-secondary);
+}
+.status { display: inline-flex; align-items: center; gap: var(--ui-space-2); color: var(--ui-fg-primary); font-weight: 500; }
+.meter { width: 4px; height: 14px; border-radius: 2px; background: var(--ui-fg-primary); transform-origin: bottom; transition: transform 80ms linear; }
+@media (prefers-reduced-motion: reduce) { .meter { transition: none; } }
+.heard { color: var(--ui-fg-secondary); overflow-wrap: anywhere; }
+.heard b { color: var(--ui-fg-primary); font-weight: 500; }
+.hint { color: var(--ui-fg-muted); }
+.badge { padding: 1px 6px; border-radius: 6px; border: 1px dashed var(--ui-border-control); color: var(--ui-fg-secondary); }
+.error { color: var(--ui-fg-primary); border-left: 3px solid var(--ui-fg-primary); padding-left: var(--ui-space-2); }
+.spacer { flex: 1; }
+.readAloud { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.toggle { flex: none; }

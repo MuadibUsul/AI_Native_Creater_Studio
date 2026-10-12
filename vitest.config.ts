@@ -53,7 +53,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts'],
+          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts', 'apps/realtime/src/**/*.test.ts'],
           exclude: [
             '**/node_modules/**',
             'packages/db/**',
@@ -63,6 +63,7 @@ export default defineConfig({
             'packages/domain/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
             'apps/worker/src/**/*.integration.test.ts',
+            'apps/realtime/src/**/*.integration.test.ts',
             'packages/providers/**/*.integration.test.ts',
             '**/*.security.test.ts',
           ],
@@ -110,6 +111,7 @@ export default defineConfig({
             'packages/domain/**/*.integration.test.ts',
             'apps/api/src/**/*.integration.test.ts',
             'apps/worker/src/**/*.integration.test.ts',
+            'apps/realtime/src/**/*.integration.test.ts',
             'packages/providers/**/*.integration.test.ts',
           ],
           exclude: ['**/node_modules/**'],
