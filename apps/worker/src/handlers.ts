@@ -6,7 +6,7 @@ import {
   runNotificationDispatch,
   runRetentionSweep,
 } from '@ancs/domain';
-import type { MediaAudioAnalysisAdapter, MediaVisualAnalysisAdapter, MotionValidator, RenderExecutor, RenderMediaProbe, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
+import type { MediaAudioAnalysisAdapter, MediaVisualAnalysisAdapter, MotionValidator, RenderExecutor, RenderMediaProbe, RenderPlanExecutor, SourceMediaIndexer, SourceMediaProbe, SourceMediaTranscoder, SpeechRecognitionAdapter } from '@ancs/contracts';
 import { createRenderExecutionHandler } from './render-handler.js';
 import { createMotionGenerationHandler } from './motion-handler.js';
 import { createRenderQaHandler } from './qa-handler.js';
@@ -18,6 +18,7 @@ import { createMediaTranscriptHandler } from './media-transcript-handler.js';
 import { createMediaVisualAnalysisHandler } from './media-visual-analysis-handler.js';
 import { createMediaAudioAnalysisHandler } from './media-audio-analysis-handler.js';
 import { createWorkflowAdvanceHandler } from './workflow-handler.js';
+import { createPreviewRenderHandler } from './preview-render-handler.js';
 
 /**
  * 任务处理器注册表（P03-01）。
@@ -131,6 +132,8 @@ export interface DefaultRegistryOptions {
   mediaAudioAnalysisAdapter?: MediaAudioAnalysisAdapter;
   /** 工作流定义（V5-M4）；提供时注册 WORKFLOW_ADVANCE 推进处理器。未提供则推进任务落入"未知类型"（明确失败）。 */
   workflowRegistry?: WorkflowRegistry;
+  /** 低清预览（V6-1d）：与终渲染同一个 RenderPlan 后端；未提供则预览任务落入"未知类型"（明确失败）。 */
+  previewExecutor?: { executor: RenderPlanExecutor; ffmpegPath?: string };
 }
 
 export function createDefaultRegistry(options: DefaultRegistryOptions = {}): JobHandlerRegistry {
@@ -155,5 +158,6 @@ export function createDefaultRegistry(options: DefaultRegistryOptions = {}): Job
   handlers.push(createMediaVisualAnalysisHandler({ adapter: options.mediaVisualAnalysisAdapter }));
   handlers.push(createMediaAudioAnalysisHandler({ adapter: options.mediaAudioAnalysisAdapter }));
   if (options.workflowRegistry !== undefined) handlers.push(createWorkflowAdvanceHandler({ registry: options.workflowRegistry }));
+  if (options.previewExecutor !== undefined) handlers.push(createPreviewRenderHandler(options.previewExecutor));
   return new JobHandlerRegistry(handlers);
 }

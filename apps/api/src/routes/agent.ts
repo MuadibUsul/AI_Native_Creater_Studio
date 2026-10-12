@@ -12,6 +12,7 @@ import {
   errorEnvelopeSchema,
   opaqueIdSchema,
   pageResponseSchema,
+  projectAgentCostSchema,
   startAgentTurnRequestSchema,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
@@ -22,6 +23,7 @@ import {
   getAgentSession,
   getAgentTurn,
   listAgentTurns,
+  projectAgentCost,
   startAgentTurn,
   type DomainDeps,
 } from '@ancs/domain';
@@ -108,6 +110,14 @@ export function registerAgentRoutes(app: FastifyInstance, deps: AuthDeps): void 
     }
     await cancelWorkflow(domain, { workspaceId: request.params.id, runId: turn.workflowRunId });
     return getAgentTurn(domain, { workspaceId: request.params.id, turnId: request.params.turnId });
+  });
+
+  typed.get('/workspaces/:id/projects/:projectId/agent-cost', {
+    schema: { tags: ['agent'], summary: '这条视频的 AI 用量与成本（含未定价调用时总额为空）', params: projectParams, response: { 200: projectAgentCostSchema, ...ERROR_RESPONSES } },
+  }, async (request) => {
+    await app.requireWorkspace(request, request.params.id, 'project:read');
+    await requireProject(request.params.id, request.params.projectId);
+    return projectAgentCost(domain, { workspaceId: request.params.id, projectId: request.params.projectId });
   });
 
   typed.get('/workspaces/:id/agent-tools', {

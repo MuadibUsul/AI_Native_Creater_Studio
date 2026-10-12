@@ -1,0 +1,72 @@
+import { z } from 'zod';
+import { opaqueIdSchema } from './common/ids.js';
+import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
+
+/**
+ * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
+ *
+ * - 新建：一步建好素材工程（FOOTAGE_EDIT）+ 主序列（帧时基）+ AI 导演会话；
+ * - 状态：一次读取工程、序列、会话、素材（上传/理解进度）与本条视频的 AI 成本，界面据此轮询；
+ * - 撤销这次修改：把最近一次改动（同一版本号产生的全部事件，例如采用一个 AI 提案）作为一组撤销。
+ */
+
+export const STUDIO_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:5'] as const;
+export const studioAspectRatioSchema = z.enum(STUDIO_ASPECT_RATIOS);
+
+export const createStudioProjectRequestSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  aspectRatio: studioAspectRatioSchema.default('16:9'),
+  locale: agentLocaleSchema.default('zh-CN'),
+}).strict();
+export type CreateStudioProjectRequest = z.input<typeof createStudioProjectRequestSchema>;
+
+export const studioProjectRefSchema = z.object({
+  projectId: opaqueIdSchema,
+  sequenceId: opaqueIdSchema,
+  sessionId: opaqueIdSchema,
+}).strict();
+export type StudioProjectRef = z.infer<typeof studioProjectRefSchema>;
+
+/** NONE = 没排队；WORKING = 排队或进行中；READY / EMPTY（分析完但没有内容）/ FAILED。 */
+export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'FAILED'] as const;
+export const studioAnalysisStateSchema = z.enum(STUDIO_ANALYSIS_STATES);
+export type StudioAnalysisState = z.infer<typeof studioAnalysisStateSchema>;
+
+export const studioFootageSchema = z.object({
+  assetId: opaqueIdSchema,
+  /** 当前版本 id（AI 放片段时用的 footageId）；上传未完成时为空 */
+  footageId: opaqueIdSchema.nullable(),
+  name: z.string(),
+  kind: z.enum(['video', 'audio', 'image', 'other']),
+  status: z.enum(['UPLOADING', 'PROCESSING', 'READY', 'FAILED']),
+  /** 时长（十进制秒文本，显示用） */
+  duration: z.string().nullable(),
+  understanding: z.object({
+    index: studioAnalysisStateSchema,
+    transcript: studioAnalysisStateSchema,
+    visual: studioAnalysisStateSchema,
+  }).strict(),
+}).strict();
+export type StudioFootage = z.infer<typeof studioFootageSchema>;
+
+export const studioStateSchema = z.object({
+  project: z.object({
+    id: opaqueIdSchema,
+    title: z.string(),
+    aspectRatio: z.string(),
+    revision: z.number().int().nonnegative(),
+  }).strict(),
+  sequenceId: opaqueIdSchema,
+  /** 该序列最近的 AI 会话；没有时为空（只读读面不代建，界面在第一次说话前经 agent 接口建会话） */
+  session: agentSessionSchema.nullable(),
+  footage: z.array(studioFootageSchema),
+  cost: projectAgentCostSchema,
+}).strict();
+export type StudioState = z.infer<typeof studioStateSchema>;
+
+export const undoChangeResponseSchema = z.object({
+  /** 本次撤销掉的事件数 */
+  undoneEvents: z.number().int().positive(),
+  projectRevision: z.number().int().nonnegative(),
+}).strict();
+export type UndoChangeResponse = z.infer<typeof undoChangeResponseSchema>;

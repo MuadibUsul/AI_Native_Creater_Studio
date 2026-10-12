@@ -183,6 +183,8 @@ export const finalRenderProfileSchema = z.object({
   videoCrf: z.number().int().min(0).max(51).default(18),
   audioBitrateKbps: z.number().int().min(64).max(512).default(192),
   captionDelivery: z.enum(FINAL_RENDER_CAPTION_DELIVERIES).default('SIDECAR'),
+  /** 编码速度档：终渲染 medium（缺省）；预览用 veryfast（V6-1d，换速度不换语义） */
+  encoderPreset: z.enum(['medium', 'veryfast']).default('medium'),
 }).strict();
 export type FinalRenderProfile = z.infer<typeof finalRenderProfileSchema>;
 export type FinalRenderProfileInput = z.input<typeof finalRenderProfileSchema>;

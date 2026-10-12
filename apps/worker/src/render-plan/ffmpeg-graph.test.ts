@@ -21,7 +21,7 @@ const t = (ms: number) => ({ ticks: String(ms), timebase: MS });
 const r = (start: number, end: number): MediaRange => ({ start: t(start), end: t(end) });
 const IDENTITY_TRANSFORM = { position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotationDeg: 0, anchor: { x: 0.5, y: 0.5 } };
 const NO_CROP = { left: 0, top: 0, right: 0, bottom: 0 };
-const PROFILE = { width: 256, height: 128, videoCrf: 18, audioBitrateKbps: 192, captionDelivery: 'SIDECAR' as const };
+const PROFILE = { width: 256, height: 128, videoCrf: 18, audioBitrateKbps: 192, captionDelivery: 'SIDECAR' as const, encoderPreset: 'medium' as const };
 
 const segment = (clipId: string, sequence: MediaRange, source: MediaRange, extra: Partial<RenderPlanVideoSegment> = {}): RenderPlanVideoSegment => ({
   clipId, sourceVersionId: 'avA', sourceStreamId: null, sequenceRange: sequence, sourceRange: source,

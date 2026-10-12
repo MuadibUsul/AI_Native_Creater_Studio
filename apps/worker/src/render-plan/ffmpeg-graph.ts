@@ -260,7 +260,7 @@ export function compileFfmpegMediaGraph(input: {
     '-filter_complex', filterGraph,
     '-map', '[vout]', '-map', '[aout]',
     '-frames:v', frameCount.toString(),
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', String(profile.videoCrf), '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264', '-preset', profile.encoderPreset, '-crf', String(profile.videoCrf), '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', `${String(profile.audioBitrateKbps)}k`, '-ar', String(FINAL_AUDIO_SAMPLE_RATE), '-ac', '2',
     '-map_metadata', '-1', '-movflags', '+faststart',
     FFMPEG_OUTPUT_VIDEO_FILE,

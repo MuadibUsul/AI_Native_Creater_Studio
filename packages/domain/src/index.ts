@@ -51,7 +51,7 @@ export {
   listProjectVersions,
   loadSceneRows,
 } from './versions.js';
-export { redoProject, undoProject } from './undo-redo.js';
+export { redoProject, undoLastChange, undoProject } from './undo-redo.js';
 export {
   generateNarrative,
   getCurrentPlan,
@@ -460,7 +460,7 @@ export { SELECTION_ERROR_REASONS, assertNotFrameHashIdentity, getSelectionAnchor
 export { RANGE_EDIT_PROMPT_VERSION, buildRangeEditPrompts, planRangeEdit } from './range-edit.js';
 export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, compileSequenceRenderPlan, loadRenderPlanInput, playbackSupports, playbackTimeOfFrame } from './playback.js';
 // V5-M4：终渲染后端（apps/worker）经领域层取得内核的后端裁决（R7：worker 不直接依赖内核）
-export { assertRenderPlanSupported, requirementsForDelivery, unsupportedRenderRequirements } from '@ancs/kernel';
+export { assertRenderPlanSupported, audioOnlyRenderPlan, renderPlanWindows, requirementsForDelivery, sliceRenderPlanVideo, unsupportedRenderRequirements } from '@ancs/kernel';
 export type { ServerSynthesisPlan } from './playback.js';
 export type { ClipMixPlan, ClipMixTrackPlan } from './audio-mix.js';
 export type { ProcessEditsV2Input } from './edit-operation-v2.js';
@@ -657,6 +657,7 @@ export {
   getAgentSession,
   getAgentTurn,
   listAgentTurns,
+  projectAgentCost,
   runAgentTurnLoop,
   startAgentTurn,
   unconfiguredAgentModel,
@@ -668,3 +669,20 @@ export { agentEditOperationSchema, agentSecondsToTime, sequenceContentEnd, trans
 export type { AgentEditContext, AgentEditOperation } from './agent-operations.js';
 export { AGENT_PROMPT_VERSION, AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 export type { CompositionFinalRenderPorts } from './composition-final-render.js';
+// V6 §7.4：低清预览（改哪里渲染哪里）
+export {
+  beginPreviewRender,
+  compileProposalRenderPlan,
+  completePreviewRender,
+  failPreviewRender,
+  findPreviewSegment,
+  getSequencePreview,
+  latestSequencePreview,
+  previewProfileFor,
+  recordPreviewSegment,
+  requestSequencePreview,
+  resolvePreviewSourceKeys,
+} from './previews.js';
+export type { PreviewRenderTask } from './previews.js';
+// V6-1c：共看片室（单屏工作台）的服务端支撑
+export { createStudioProject, getStudioState } from './studio.js';

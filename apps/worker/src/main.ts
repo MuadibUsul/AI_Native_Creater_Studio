@@ -144,11 +144,13 @@ const workflowRegistry = new WorkflowRegistry()
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
   .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler }));
+// V6-1d：低清预览（与终渲染同一 FFmpeg 媒体图后端，按时间窗缓存复用）
+const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegPaths), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =
   config.ANCS_DISABLE_RENDER === '1'
-    ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder, sourceMediaIndexer, speechRecognitionAdapter, mediaVisualAnalysisAdapter, mediaAudioAnalysisAdapter, workflowRegistry })
+    ? createDefaultRegistry({ sourceMediaProbe, sourceMediaTranscoder, sourceMediaIndexer, speechRecognitionAdapter, mediaVisualAnalysisAdapter, mediaAudioAnalysisAdapter, workflowRegistry, previewExecutor })
     : createDefaultRegistry({
         renderExecutor: createProcessRenderExecutor(commandOf(config.ANCS_RENDER_EXECUTOR_CMD)),
         motionValidator: createProcessMotionValidator(commandOf(config.ANCS_MOTION_VALIDATOR_CMD)),
@@ -160,6 +162,7 @@ const registry: JobHandlerRegistry =
         mediaVisualAnalysisAdapter,
         mediaAudioAnalysisAdapter,
         workflowRegistry,
+        previewExecutor,
       });
 
 let stopping = false;

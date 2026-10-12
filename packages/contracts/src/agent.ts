@@ -263,6 +263,16 @@ export const agentTurnSchema = z.object({
 }).strict();
 export type AgentTurn = z.infer<typeof agentTurnSchema>;
 
+/** 每条视频的 AI 成本（V6 §10：实测校正估算）。含未定价模型调用时总额为 null（不填零）。 */
+export const projectAgentCostSchema = z.object({
+  projectId: opaqueIdSchema,
+  turns: z.number().int().nonnegative(),
+  usage: agentModelUsageSchema,
+  costMicros: z.number().int().nonnegative().nullable(),
+  unpricedCalls: z.number().int().nonnegative(),
+}).strict();
+export type ProjectAgentCost = z.infer<typeof projectAgentCostSchema>;
+
 export const AGENT_ERROR_REASONS = {
   SESSION_NOT_FOUND: 'AGENT_SESSION_NOT_FOUND',
   TURN_IN_PROGRESS: 'AGENT_TURN_IN_PROGRESS',

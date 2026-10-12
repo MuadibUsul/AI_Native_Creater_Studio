@@ -143,11 +143,26 @@ describe('AI 导演 HTTP 面（V6-1a）', () => {
     const finished = await owner.agent.getTurn(f.workspaceId, turn.id);
     expect(finished).toMatchObject({ status: 'COMPLETED', reply: 'Done: a 5 second teaser from the trail shot.' });
     expect((await owner.agent.listTurns(f.workspaceId, session.id)).map((item) => item.id)).toEqual([turn.id]);
+    // 这条视频的 AI 成本：脚本模型没有价格 → 总额为空（不填零），调用次数如实
+    expect(await owner.agent.projectCost(f.workspaceId, f.projectId)).toMatchObject({ turns: 1, costMicros: null, unpricedCalls: 2 });
+
+    // 低清预览：提案试改预览（202，工程不变）；同计划去重；最新版本预览在请求前 404
+    await expectApiError(owner.previews.latest(f.workspaceId, f.projectId, f.sequenceId), 404);
+    const trialPreview = await owner.previews.request(f.workspaceId, f.projectId, f.sequenceId, { proposalId: finished.proposalId }, { idempotencyKey: `pv-${randomUUID()}` });
+    expect(trialPreview).toMatchObject({ status: 'QUEUED', source: 'PROPOSAL', proposalId: finished.proposalId, width: 960, height: 540, playbackUrl: null });
+    expect((await owner.previews.request(f.workspaceId, f.projectId, f.sequenceId, { proposalId: finished.proposalId }, { idempotencyKey: `pv-${randomUUID()}` })).id).toBe(trialPreview.id);
+    expect((await owner.previews.get(f.workspaceId, trialPreview.id)).id).toBe(trialPreview.id);
 
     const proposal = await owner.projects.proposal(f.workspaceId, f.projectId, finished.proposalId!);
     const preview = await owner.projects.previewProposal(f.workspaceId, f.projectId, proposal.proposalId, { idempotencyKey: `preview-${randomUUID()}` });
     expect(preview.operationsHash).toBe(proposal.operationsHash);
     await owner.projects.adoptProposal(f.workspaceId, f.projectId, proposal.proposalId, { expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `adopt-${randomUUID()}` });
+    // 采用后提案不再 OPEN：再请求它的试改预览 → 409
+    await expectApiError(owner.previews.request(f.workspaceId, f.projectId, f.sequenceId, { proposalId: proposal.proposalId }, { idempotencyKey: `pv-${randomUUID()}` }), 409, 'PREVIEW_PROPOSAL_STALE');
+    const current = await owner.previews.request(f.workspaceId, f.projectId, f.sequenceId, {}, { idempotencyKey: `pv-${randomUUID()}` });
+    // 采用后的当前版本与刚预览过的提案是同一计划 → 命中同一预览（不重渲；记录保留它最初的来源）
+    expect(current.id).toBe(trialPreview.id);
+    expect(current.planHash).toBe(trialPreview.planHash);
     const state = await owner.projects.state(f.projectId, { schemaVersion: '1.0' });
     expect(state.document.composition.sequences.find((item) => item.id === f.sequenceId)?.duration).toEqual(legacyMillisecondsToMediaTime(5_000));
     expect(state.document.composition.clips.map((clip) => [clip.assetVersionId, clip.sequenceRange.start.ticks, clip.sequenceRange.end.ticks])).toEqual([[f.footageId, '0', '5000']]);

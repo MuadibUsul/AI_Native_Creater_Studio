@@ -2715,6 +2715,7 @@ export {
   agentTurnSchema,
   agentTurnStatusSchema,
   createAgentSessionRequestSchema,
+  projectAgentCostSchema,
   startAgentTurnRequestSchema,
 } from './agent.js';
 export type {
@@ -2740,5 +2741,30 @@ export type {
   AgentTurn,
   AgentTurnStatus,
   CreateAgentSessionRequest,
+  ProjectAgentCost,
   StartAgentTurnRequest,
 } from './agent.js';
+export {
+  PREVIEW_ERROR_REASONS,
+  PREVIEW_RENDER_JOB_TYPE,
+  PREVIEW_SEGMENT_SECONDS,
+  PREVIEW_SOURCES,
+  PREVIEW_STATUSES,
+  previewRenderJobInputSchema,
+  previewStatusSchema,
+  requestSequencePreviewSchema,
+  sequencePreviewSchema,
+} from './preview.js';
+export type { PreviewRenderJobInput, PreviewStatus, RequestSequencePreview, SequencePreview } from './preview.js';
+export {
+  STUDIO_ANALYSIS_STATES,
+  STUDIO_ASPECT_RATIOS,
+  createStudioProjectRequestSchema,
+  studioAnalysisStateSchema,
+  studioAspectRatioSchema,
+  studioFootageSchema,
+  studioProjectRefSchema,
+  studioStateSchema,
+  undoChangeResponseSchema,
+} from './studio.js';
+export type { CreateStudioProjectRequest, StudioAnalysisState, StudioFootage, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';

@@ -9,14 +9,14 @@
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 7 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 9 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 11 | PLANNED | — | — |
 | `split_clip` | NATIVE | `split_clip` | KERNEL | 1 | 5 | PLANNED | — | — |
 | `duplicate_clip` | NATIVE | `duplicate_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `replace_clip_source` | NATIVE | `replace_clip_source` | KERNEL | 1 | 2 | PLANNED | — | — |
-| `slip_clip` | NATIVE | `slip_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
+| `slip_clip` | NATIVE | `slip_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `slide_clip` | NATIVE | `slide_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `roll_clip` | NATIVE | `roll_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `ripple_clip` | NATIVE | `ripple_clip` | KERNEL | 1 | 7 | PLANNED | — | — |
@@ -26,7 +26,7 @@
 | `set_clip_transform` | NATIVE | `set_clip_transform` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_clip_crop` | NATIVE | `set_clip_crop` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `set_clip_opacity` | NATIVE | `set_clip_opacity` | KERNEL | 1 | 11 | PLANNED | — | — |
-| `set_clip_speed` | COMPILED_ALIAS | `update_clip` | KERNEL | 1 | 2 | PLANNED | CONSTANT_LINEAR_REVERSE_ONLY | N11-02 |
+| `set_clip_speed` | COMPILED_ALIAS | `update_clip` | KERNEL | 1 | 3 | PLANNED | CONSTANT_LINEAR_REVERSE_ONLY | N11-02 |
 | `add_effect` | PLANNED | — | — | 0 | 0 | PLANNED | NO_EXECUTABLE_HANDLER | N03-05 |
 | `update_effect` | PLANNED | — | — | 0 | 0 | PLANNED | NO_EXECUTABLE_HANDLER | N03-05 |
 | `remove_effect` | PLANNED | — | — | 0 | 0 | PLANNED | NO_EXECUTABLE_HANDLER | N03-05 |
@@ -36,7 +36,7 @@
 | `create_track` | NATIVE | `create_track` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_track` | NATIVE | `move_track` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `delete_track` | NATIVE | `delete_track` | KERNEL | 1 | 2 | PLANNED | — | — |
-| `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 2 | PLANNED | — | — |
+| `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_gain` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_fade` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |
 | `set_audio_pan` | COMPILED_ALIAS | `update_audio_region` | KERNEL | 1 | 3 | PLANNED | — | — |

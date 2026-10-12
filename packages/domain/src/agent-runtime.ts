@@ -14,6 +14,7 @@ import {
   agentSessionSchema,
   agentTurnSchema,
   createAgentSessionRequestSchema,
+  projectAgentCostSchema,
   editOperationSchema,
   isDecimalSecondsText,
   startAgentTurnRequestSchema,
@@ -28,6 +29,7 @@ import {
   type AgentTurn,
   type CreateAgentSessionRequest,
   type EditOperation,
+  type ProjectAgentCost,
   type StartAgentTurnRequest,
   type WorkflowErrorClass,
 } from '@ancs/contracts';
@@ -162,6 +164,33 @@ export async function listAgentTurns(deps: DomainDeps, input: { workspaceId: str
     .where(and(eq(agentTurns.sessionId, input.sessionId), eq(agentTurns.workspaceId, input.workspaceId)))
     .orderBy(desc(agentTurns.createdAt)).limit(Math.min(Math.max(input.limit ?? 50, 1), 200));
   return rows.map(toTurn);
+}
+
+/** 这条视频（工程）全部 AI 轮次的用量与成本汇总。 */
+export async function projectAgentCost(deps: DomainDeps, input: { workspaceId: string; projectId: string }): Promise<ProjectAgentCost> {
+  const rows = await deps.db.select({
+    turns: sql<number>`count(*)::int`,
+    inputTokens: sql<number>`coalesce(sum((${agentTurns.usage}->>'inputTokens')::bigint), 0)::bigint`,
+    outputTokens: sql<number>`coalesce(sum((${agentTurns.usage}->>'outputTokens')::bigint), 0)::bigint`,
+    cacheReadInputTokens: sql<number>`coalesce(sum((${agentTurns.usage}->>'cacheReadInputTokens')::bigint), 0)::bigint`,
+    cacheCreationInputTokens: sql<number>`coalesce(sum((${agentTurns.usage}->>'cacheCreationInputTokens')::bigint), 0)::bigint`,
+    costMicros: sql<number>`coalesce(sum(${agentTurns.costMicros}), 0)::bigint`,
+    unpricedCalls: sql<number>`coalesce(sum(${agentTurns.unpricedCalls}), 0)::int`,
+  }).from(agentTurns).where(and(eq(agentTurns.workspaceId, input.workspaceId), eq(agentTurns.projectId, input.projectId)));
+  const row = rows[0];
+  const unpriced = Number(row?.unpricedCalls ?? 0);
+  return projectAgentCostSchema.parse({
+    projectId: input.projectId,
+    turns: Number(row?.turns ?? 0),
+    usage: {
+      inputTokens: Number(row?.inputTokens ?? 0),
+      outputTokens: Number(row?.outputTokens ?? 0),
+      cacheReadInputTokens: Number(row?.cacheReadInputTokens ?? 0),
+      cacheCreationInputTokens: Number(row?.cacheCreationInputTokens ?? 0),
+    },
+    costMicros: unpriced > 0 ? null : Number(row?.costMicros ?? 0),
+    unpricedCalls: unpriced,
+  });
 }
 
 /**

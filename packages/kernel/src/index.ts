@@ -10,6 +10,7 @@ export * from './timeline/types.js';
 export { applyTimelineOperation, applyKernelResult } from './timeline/apply.js';
 export { CLIP_IDENTITY_MAPPING } from './timeline/support.js';
 export { compileRenderPlan, renderPlanHash, unsupportedRenderRequirements, assertRenderPlanSupported, requirementsForDelivery, renderRangesOverlap } from './render/compile.js';
+export { audioOnlyRenderPlan, renderPlanWindows, sliceRenderPlanVideo } from './render/slice.js';
 export type { RenderPlanInput, RenderSourceFacts } from './render/compile.js';
 export { playbackSnapshotFromRenderPlan, serverSynthesisPlanFromSnapshot } from './render/consumers.js';
 export type { ServerSynthesisPlan } from './render/consumers.js';

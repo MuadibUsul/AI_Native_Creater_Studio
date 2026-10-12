@@ -75,6 +75,13 @@ import {
   createRenderRequestSchema,
   startCompositionFinalRenderRequestSchema,
   agentSessionSchema,
+  createStudioProjectRequestSchema,
+  studioProjectRefSchema,
+  studioStateSchema,
+  undoChangeResponseSchema,
+  projectAgentCostSchema,
+  requestSequencePreviewSchema,
+  sequencePreviewSchema,
   agentToolDescriptorSchema,
   agentTurnSchema,
   createAgentSessionRequestSchema,
@@ -377,6 +384,13 @@ import {
   type CreateRenderRequest,
   type StartCompositionFinalRenderRequest,
   type AgentSession,
+  type CreateStudioProjectRequest,
+  type StudioProjectRef,
+  type StudioState,
+  type UndoChangeResponse,
+  type ProjectAgentCost,
+  type RequestSequencePreview,
+  type SequencePreview,
   type AgentToolDescriptor,
   type AgentTurn,
   type CreateAgentSessionRequest,
@@ -1386,6 +1400,12 @@ export interface AncsClient {
     start(workspaceId: string, projectId: string, sequenceId: string, input: StartCompositionFinalRenderRequest, options?: MutationOptions): Promise<WorkflowRun>;
     list(workspaceId: string, projectId: string): Promise<WorkflowRun[]>;
   };
+  /** V6-1d：低清预览（当前版本或提案试改；按时间窗缓存复用；字幕由浏览器叠加） */
+  previews: {
+    request(workspaceId: string, projectId: string, sequenceId: string, input: RequestSequencePreview, options?: MutationOptions): Promise<SequencePreview>;
+    get(workspaceId: string, previewId: string): Promise<SequencePreview>;
+    latest(workspaceId: string, projectId: string, sequenceId: string): Promise<SequencePreview>;
+  };
   /** V6-1：通用导演 Agent（会话 → 一句话一轮 → 改动成为提案，采用走 proposals 接口） */
   agent: {
     createSession(workspaceId: string, projectId: string, input: CreateAgentSessionRequest, options?: MutationOptions): Promise<AgentSession>;
@@ -1396,6 +1416,13 @@ export interface AncsClient {
     getTurn(workspaceId: string, turnId: string): Promise<AgentTurn>;
     cancelTurn(workspaceId: string, turnId: string, options?: MutationOptions): Promise<AgentTurn>;
     tools(workspaceId: string): Promise<AgentToolDescriptor[]>;
+    projectCost(workspaceId: string, projectId: string): Promise<ProjectAgentCost>;
+  };
+  /** V6-1c：共看片室（单屏工作台）：新建、状态轮询、撤销这次修改 */
+  studio: {
+    create(workspaceId: string, input: CreateStudioProjectRequest, options?: MutationOptions): Promise<StudioProjectRef>;
+    state(workspaceId: string, projectId: string): Promise<StudioState>;
+    undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
   };
   /** V5-M4：工作流运行（步骤尝试、输出与错误；取消在步骤边界生效） */
   workflowRuns: {
@@ -2952,6 +2979,18 @@ export function createClient(options: ClientOptions): AncsClient {
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/final-renders`, listOf(workflowRunSchema))).items,
     },
 
+    previews: {
+      request: (workspaceId, projectId, sequenceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/previews`, sequencePreviewSchema, {
+          body: input,
+          bodySchema: requestSequencePreviewSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      get: (workspaceId, previewId) => request('GET', `/api/v1/workspaces/${workspaceId}/previews/${previewId}`, sequencePreviewSchema),
+      latest: (workspaceId, projectId, sequenceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/previews/latest`, sequencePreviewSchema),
+    },
+
     agent: {
       createSession: (workspaceId, projectId, input, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-sessions`, agentSessionSchema, {
@@ -2973,6 +3012,19 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', `/api/v1/workspaces/${workspaceId}/agent-turns/${turnId}/cancel`, agentTurnSchema, { idempotencyKey: mutation?.idempotencyKey }),
       tools: async (workspaceId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-tools`, z.object({ items: z.array(agentToolDescriptorSchema) }))).items,
+      projectCost: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-cost`, projectAgentCostSchema),
+    },
+
+    studio: {
+      create: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/studio-projects`, studioProjectRefSchema, {
+          body: input,
+          bodySchema: createStudioProjectRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
+      undoChange: (workspaceId, projectId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
     },
 
     workflowRuns: {
