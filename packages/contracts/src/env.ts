@@ -280,6 +280,13 @@ export const workerEnvSchema = z.object({
   ANCS_EFFECT_CODEGEN: z.enum(['disabled', 'enabled'], { message: 'ANCS_EFFECT_CODEGEN 仅支持 disabled / enabled' }).optional(),
   /** 特效图层渲染命令覆盖（缺省：仓库内 apps/render-worker/src/run-effect.ts） */
   ANCS_EFFECT_RENDER_CMD: nonEmpty('ANCS_EFFECT_RENDER_CMD').optional(),
+  /**
+   * V6-6 蒸馏器：平台链接（YouTube、B 站……）的下载命令，占位符 {url} {output}，例如 `yt-dlp -f mp4/best -o {output} {url}`。
+   * 不配置时平台链接明确失败并提示改为上传文件；直接的视频文件链接不需要它。版权由项目所有者负责。
+   */
+  ANCS_REFERENCE_FETCH_CMD: nonEmpty('ANCS_REFERENCE_FETCH_CMD').refine((value) => value.includes('{url}') && value.includes('{output}'), 'ANCS_REFERENCE_FETCH_CMD 必须包含 {url} 与 {output} 占位符').optional(),
+  /** 参考视频大小上限（MB，缺省 1024） */
+  ANCS_REFERENCE_MAX_MB: z.coerce.number().int().min(1).max(8192).optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;

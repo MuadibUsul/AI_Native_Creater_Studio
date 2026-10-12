@@ -1,13 +1,15 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
 import { createProcessEffectRenderer, resolveDefaultEffectRenderCommand } from './effect-renderer-process.js';
+import { createFfmpegReferenceAnalyzer } from './reference-analyzer-process.js';
+import { createReferenceFetcher } from './reference-fetcher.js';
 import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
@@ -159,7 +161,16 @@ const workflowRegistry = new WorkflowRegistry()
     outputProbe: sourceMediaProbe,
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
-  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler, ...(effectPorts === undefined ? {} : { effects: effectPorts }) }));
+  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler, ...(effectPorts === undefined ? {} : { effects: effectPorts }) }))
+  // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
+  // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）
+  .register(referenceDistillWorkflow({
+    analyzer: createFfmpegReferenceAnalyzer(ffmpegPaths),
+    fetcher: createReferenceFetcher(config.ANCS_REFERENCE_FETCH_CMD === undefined ? {} : { downloadCommand: config.ANCS_REFERENCE_FETCH_CMD.trim().split(/\s+/) }),
+    frames: frameSampler,
+    ...(config.ANCS_AGENT_DRIVER === undefined ? {} : { model: agentModel }),
+    ...(config.ANCS_REFERENCE_MAX_MB === undefined ? {} : { maxReferenceBytes: config.ANCS_REFERENCE_MAX_MB * 1024 * 1024 }),
+  }));
 // V6-1d：低清预览（与终渲染同一 FFmpeg 媒体图后端，按时间窗缓存复用）
 const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegPaths), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，

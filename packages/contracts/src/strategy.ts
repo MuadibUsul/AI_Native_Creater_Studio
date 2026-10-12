@@ -58,6 +58,12 @@ export const editingDnaSchema = z.object({
   captionStyle: z.string().max(200).nullable(),
   soundHabits: z.string().max(200).nullable(),
   colorTendency: z.string().max(200).nullable(),
+  /** 平均每分钟剪切次数（蒸馏测量；手写预设可空） */
+  cutsPerMinute: z.number().nonnegative().nullable().default(null),
+  /** 节奏曲线：把视频分成 10 段，每段的每分钟剪切次数（看开场是否最密、是否越剪越快） */
+  pacing: z.array(z.number().nonnegative()).length(10).nullable().default(null),
+  /** 测量依据：参考视频条数、分析总时长（秒）、镜头数（手写预设为空） */
+  measured: z.object({ references: z.number().int().positive(), analyzedSeconds: z.number().positive(), shots: z.number().int().nonnegative() }).strict().nullable().default(null),
 }).strict();
 export type EditingDna = z.infer<typeof editingDnaSchema>;
 

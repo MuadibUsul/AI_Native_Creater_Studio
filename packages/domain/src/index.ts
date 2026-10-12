@@ -695,3 +695,11 @@ export { reviewDraftOperations, scoreFirstCut, type DraftReview, type EvalIndica
 export { EFFECT_TEMPLATES, findEffectTemplate, resolveEffectParams } from './effect-templates.js';
 export { EFFECT_AGENT_TOOLS, effectLayerSize, effectRegionTransform, loadEffectLayers } from './agent-effects.js';
 export type { EffectLayerRef } from './agent-effects.js';
+export { detectBeats, onsetEnvelope } from './audio-beats.js';
+export type { DetectedBeats } from './audio-beats.js';
+export { BEAT_CONFIDENCE_THRESHOLD, BEAT_TOLERANCE_SECONDS, beatCutRatio, describeColor, editPoints, describeSound, distillStats, editingDnaFromStats, pacingCurve, shotDurations } from './distill-dna.js';
+export type { DistilledStats } from './distill-dna.js';
+export { DISTILL_PROMPT_VERSION, composeStrategyFromStats, composeStrategyWithModel } from './distill-compose.js';
+export type { ComposedPack, DistillSource } from './distill-compose.js';
+export { getReferenceDistill, referenceDistillWorkflow, startReferenceDistill, updateStrategyPack } from './reference-distill.js';
+export type { ReferenceDistillPorts } from './reference-distill.js';

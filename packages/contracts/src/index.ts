@@ -2845,3 +2845,29 @@ export {
 export type { AgentEffectPorts, AgentEffectRenderer, EffectCodegenMode, EffectLayerMetadata, EffectParam, EffectRegion, EffectRenderRequest, EffectTemplate } from './effects.js';
 export { frameRegionSchema } from './frame-region.js';
 export type { FrameRegion } from './frame-region.js';
+export {
+  DISTILL_ERROR_REASONS,
+  DISTILL_STEPS,
+  MAX_DISTILL_REFERENCES,
+  MAX_REFERENCE_ANALYSIS_SECONDS,
+  REFERENCE_DISTILL_WORKFLOW,
+  REFERENCE_DISTILL_WORKFLOW_VERSION,
+  REFERENCE_FETCH_FAILURES,
+  ReferenceFetchError,
+  distillReferenceInputSchema,
+  distillRunSchema,
+  distillStepSchema,
+  referenceMeasurementSchema,
+  startDistillRequestSchema,
+  updateStrategyPackRequestSchema,
+} from './distill.js';
+export type {
+  DistillReferenceInput,
+  DistillRun,
+  ReferenceAnalyzer,
+  ReferenceFetchFailure,
+  ReferenceFetcher,
+  ReferenceMeasurement,
+  StartDistillRequest,
+  UpdateStrategyPackRequest,
+} from './distill.js';

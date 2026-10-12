@@ -44,7 +44,7 @@ export interface EdgeOptions {
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** 会调用付费 Provider 或重计算的端点（按路径片段识别；新增此类路由时在此登记） */
-const EXPENSIVE_SEGMENTS = /\/(narrative|narratives|ai-edit|director|scene-generation|narration-audio|multilingual|voice-clones|stock|speech-plan|renders|final-renders|turns|previews|review\/apply|mixdown|output-enhancements)(\/|$)/;
+const EXPENSIVE_SEGMENTS = /\/(narrative|narratives|ai-edit|director|scene-generation|narration-audio|multilingual|voice-clones|stock|speech-plan|renders|final-renders|turns|previews|review\/apply|strategy-distills|mixdown|output-enhancements)(\/|$)/;
 const EXEMPT_PREFIXES = ['/api/v1/health', '/api/v1/webhooks/'];
 const ALLOWED_REQUEST_HEADERS = ['content-type', 'idempotency-key', 'x-client-type', 'x-client-version', 'x-request-id', 'authorization', 'x-voice-session-token'];
 const MAX_BUCKETS = 50_000;

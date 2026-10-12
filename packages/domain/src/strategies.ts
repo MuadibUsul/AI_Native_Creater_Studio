@@ -193,6 +193,9 @@ export function strategyGuidanceText(pack: StrategyPack, knobs: Record<string, s
     dna.captionStyle === null ? null : `captions: ${dna.captionStyle}`,
     dna.soundHabits === null ? null : `sound: ${dna.soundHabits}`,
     dna.colorTendency === null ? null : `color: ${dna.colorTendency}`,
+    dna.cutsPerMinute === null ? null : `about ${String(dna.cutsPerMinute)} cuts per minute on average`,
+    dna.pacing === null ? null : `pacing curve (cuts per minute in each tenth of the video): ${dna.pacing.map((value) => String(value)).join(', ')}`,
+    dna.measured === null ? null : `measured from ${String(dna.measured.references)} reference video(s), ${String(Math.round(dna.measured.analyzedSeconds))} s, ${String(dna.measured.shots)} shots`,
   ].filter((line): line is string => line !== null);
   const knobLines = pack.knobs.map((knob) => {
     const value = knobs[knob.key] ?? knob.defaultValue;

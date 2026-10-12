@@ -544,6 +544,12 @@ import {
   updateProductionPolicyRequestSchema,
   type ProductionPolicy,
   type UpdateProductionPolicyRequest,
+  distillRunSchema,
+  startDistillRequestSchema,
+  updateStrategyPackRequestSchema,
+  type DistillRun,
+  type StartDistillRequest,
+  type UpdateStrategyPackRequest,
 } from '@ancs/contracts';
 
 /**
@@ -1440,6 +1446,11 @@ export interface AncsClient {
     /** V6 §6.6：可选的风格策略（内置预设 + 本工作区的包） */
     strategies(workspaceId: string): Promise<StrategyPackSummary[]>;
     strategy(workspaceId: string, packId: string): Promise<StrategyPack>;
+    /** V6-6：编辑蒸馏/用户的策略包文字（版本 +1） */
+    updateStrategy(workspaceId: string, packId: string, changes: UpdateStrategyPackRequest, options?: MutationOptions): Promise<StrategyPack>;
+    /** V6-6：从参考视频蒸馏风格（202；Worker 执行） */
+    startDistill(workspaceId: string, request: StartDistillRequest, options?: MutationOptions): Promise<DistillRun>;
+    getDistill(workspaceId: string, runId: string): Promise<DistillRun>;
   };
   /** V6-1c：共看片室（单屏工作台）：新建、状态轮询、撤销这次修改 */
   studio: {
@@ -3052,6 +3063,19 @@ export function createClient(options: ClientOptions): AncsClient {
       strategies: async (workspaceId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs`, z.object({ items: z.array(strategyPackSummarySchema) }))).items,
       strategy: (workspaceId, packId) => request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs/${encodeURIComponent(packId)}`, strategyPackSchema),
+      updateStrategy: (workspaceId, packId, changes, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/strategy-packs/${encodeURIComponent(packId)}`, strategyPackSchema, {
+          body: changes,
+          bodySchema: updateStrategyPackRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      startDistill: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/strategy-distills`, distillRunSchema, {
+          body: input,
+          bodySchema: startDistillRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      getDistill: (workspaceId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/strategy-distills/${runId}`, distillRunSchema),
     },
 
     studio: {

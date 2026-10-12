@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
+import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
 import { createDefaultRegistry } from '../../apps/worker/dist/handlers.js';
@@ -21,13 +21,16 @@ import { createFfmpegRenderPlanExecutor } from '../../apps/worker/dist/render-pl
 import { createStorageFrameSampler } from '../../apps/worker/dist/frame-sampler-process.js';
 import { createProcessEffectRenderer } from '../../apps/worker/dist/effect-renderer-process.js';
 import { createProcessMotionValidator } from '../../apps/worker/dist/motion-validator-process.js';
+import { createFfmpegReferenceAnalyzer } from '../../apps/worker/dist/reference-analyzer-process.js';
+import { createReferenceFetcher } from '../../apps/worker/dist/reference-fetcher.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
 
 /**
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
- *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' } }} options
+ *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
+ *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] } }} options
  *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
 export async function startStudioEnv(options) {
@@ -90,6 +93,13 @@ export async function startStudioEnv(options) {
       ...(options.effects === undefined ? {} : {
         effects: { renderer: createProcessEffectRenderer({ probe }), validator: createProcessMotionValidator(), codegen: options.effects.codegen ?? 'disabled' },
       }),
+    }))
+    // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
+    .register(referenceDistillWorkflow({
+      analyzer: createFfmpegReferenceAnalyzer(),
+      fetcher: createReferenceFetcher({ allowPrivateNetwork: options.distill?.allowPrivateNetwork === true, ...(options.distill?.downloadCommand === undefined ? {} : { downloadCommand: options.distill.downloadCommand }) }),
+      frames: createStorageFrameSampler({ storage }),
+      ...(options.distill?.model === undefined ? {} : { model: options.distill.model }),
     }));
   const registry = createDefaultRegistry({
     sourceMediaProbe: probe,
