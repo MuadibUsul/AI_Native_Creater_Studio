@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { frameRateSchema, mediaTimeSchema } from './common/media-time.js';
+import { frameRateSchema, mediaRangeSchema, mediaTimeSchema } from './common/media-time.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { renderPlanCaptionSchema } from './render-plan.js';
 
@@ -27,6 +27,15 @@ export const requestSequencePreviewSchema = z.object({
 }).strict();
 export type RequestSequencePreview = z.input<typeof requestSequencePreviewSchema>;
 
+export const previewClipSchema = z.object({
+  clipId: opaqueIdSchema,
+  trackId: opaqueIdSchema,
+  kind: z.enum(['VIDEO', 'AUDIO']),
+  sourceVersionId: opaqueIdSchema,
+  sequenceRange: mediaRangeSchema,
+}).strict();
+export type PreviewClip = z.infer<typeof previewClipSchema>;
+
 export const sequencePreviewSchema = z.object({
   id: opaqueIdSchema,
   workspaceId: opaqueIdSchema,
@@ -43,6 +52,8 @@ export const sequencePreviewSchema = z.object({
   duration: mediaTimeSchema,
   /** 浏览器叠加的字幕（与计划同源） */
   captions: z.array(renderPlanCaptionSchema),
+  /** 这份预览里的片段（与计划同源；试改预览时即试改后的时间线，供时间带显示与指认） */
+  clips: z.array(previewClipSchema),
   /** READY 时的短期签名播放地址（不是永久文件地址） */
   playbackUrl: z.string().url().nullable(),
   segments: z.object({

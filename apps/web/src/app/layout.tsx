@@ -8,6 +8,7 @@ import './ui-tokens.css';
 import { Providers } from '@/app/providers';
 import { StudioShell } from '@/ui/StudioShell';
 import { APPEARANCE_COOKIE, initialAppearance, type AppearanceMode } from '@/lib/appearance';
+import { LOCALE_COOKIE, negotiateLocale, parseLocale, type Locale } from '@/i18n/locale';
 
 export const metadata: Metadata = {
   title: 'Creator Studio · ANCS',
@@ -34,14 +35,21 @@ async function serverAppearance(): Promise<AppearanceMode> {
   }
 }
 
+/** 双语界面的首屏语言：本设备明确选择 → 浏览器语言。旧页面仍是中文，所以 <html lang> 只跟随明确选择，双语区域自行标注 lang。 */
+async function serverLocale(): Promise<{ locale: Locale; explicit: boolean }> {
+  const chosen = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
+  return chosen === null ? { locale: negotiateLocale((await headers()).get('accept-language')), explicit: false } : { locale: chosen, explicit: true };
+}
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const mode = await serverAppearance();
+  const { locale, explicit } = await serverLocale();
   return (
-    <html lang="zh-CN">
+    <html lang={explicit ? locale : 'zh-CN'}>
       <body data-appearance-mode={mode} className={mode === 'dark' ? 'theme-dark' : undefined} suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: appearanceBootScript }} />
         <a className="skiplink" href="#main">跳到主要内容</a>
-        <Providers>
+        <Providers locale={locale}>
           <StudioShell>{children}</StudioShell>
         </Providers>
       </body>

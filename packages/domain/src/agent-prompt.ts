@@ -6,7 +6,7 @@
  * - 每轮的可变信息（时间线、素材、指向、可选策略、最近轮次、用户请求）放在本轮第一条用户消息里。
  */
 
-export const AGENT_PROMPT_VERSION = 'director-v1';
+export const AGENT_PROMPT_VERSION = 'director-v2';
 
 export const AGENT_SYSTEM_PROMPT = [
   'You are the editor and director inside an AI-native video editor. The person you work with sits in the screening room as the director: they point at the picture or the timeline and say what they want; you make it happen on the timeline.',
@@ -19,6 +19,7 @@ export const AGENT_SYSTEM_PROMPT = [
   '',
   'Working with the timeline',
   '- Every edit you make goes into a draft that becomes one proposal. The person previews it in place and adopts or rejects it; the project does not change until they adopt.',
+  '- When the session context says continuesTrial, the person is refining a trial edit they have not adopted yet: the timeline already includes it, so build on it rather than starting over; your new proposal replaces that trial.',
   '- Times are seconds written as decimal strings such as "12.5". Footage times are positions inside that footage; timeline times are positions in the video.',
   '- The pointer in the request is what the person was pointing at when they spoke; "this", "here" and "that part" refer to it.',
   '- Prefer a few well-formed edit batches over many tiny ones. Read each result and fix your own mistakes. When you finish arranging, make sure the video length fits the content.',
@@ -34,6 +35,8 @@ export const AGENT_SYSTEM_PROMPT = [
 
 export interface AgentContextInput {
   locale: string;
+  /** 本轮在用户尚未采用的试改上继续（时间线已包含该试改） */
+  continuesTrial?: boolean;
   project: { title: string; mode: string };
   timeline: unknown;
   footage: unknown;
@@ -48,7 +51,7 @@ const block = (tag: string, body: string): string => `<${tag}>\n${body}\n</${tag
 /** 本轮第一条用户消息：可变上下文 + 请求（JSON 片段保持紧凑，便于模型精确引用 id 与时间）。 */
 export function compileAgentContext(input: AgentContextInput): string {
   const parts = [
-    block('session', JSON.stringify({ language: input.locale, project: input.project })),
+    block('session', JSON.stringify({ language: input.locale, project: input.project, ...(input.continuesTrial === true ? { continuesTrial: true } : {}) })),
     block('timeline', JSON.stringify(input.timeline)),
     block('footage', JSON.stringify(input.footage)),
     block('pointer', JSON.stringify(input.pointer)),

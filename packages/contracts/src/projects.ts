@@ -52,6 +52,8 @@ export const projectSchema = z.object({
   title: z.string().min(1).max(200),
   sourceType: projectSourceTypeSchema,
   status: projectStatusSchema,
+  /** 制作模式（素材剪辑 / 生成 / 混合；V6-1c 起素材工程在共看片室打开） */
+  mode: projectModeSchema.optional(),
   /** 服务器维护的聚合 revision（任何编辑 +1，§4.1） */
   revision: revisionSchema,
   aspectRatio: z.string().min(1),

@@ -1,4 +1,4 @@
-import { sceneSchema, type Project, type Scene } from '@ancs/contracts';
+import { projectModeSchema, sceneSchema, type Project, type Scene } from '@ancs/contracts';
 import type { projects, scenes } from '@ancs/db';
 
 /** 行 → DTO 映射（projects 与 edits 处理器共用；出口一律经契约校验）。 */
@@ -13,6 +13,7 @@ export const toProjectDto = (row: ProjectRow): Project => ({
   title: row.title,
   sourceType: row.sourceType as Project['sourceType'],
   status: row.status as Project['status'],
+  mode: projectModeSchema.catch('GENERATIVE').parse((row.productionPolicy as { mode?: unknown } | null)?.mode),
   revision: row.revision,
   aspectRatio: row.aspectRatio,
   resolution: row.resolution,

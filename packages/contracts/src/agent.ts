@@ -253,6 +253,8 @@ export const agentTurnSchema = z.object({
   reply: z.string().nullable(),
   /** 本轮改动形成的提案（无改动为 null）；采用/撤回走提案接口 */
   proposalId: opaqueIdSchema.nullable(),
+  /** 本轮延续的试改（会话里仍未采用的提案）：草稿从它出发，新提案取代它 */
+  continuesProposalId: opaqueIdSchema.nullable(),
   toolCalls: z.array(agentToolCallRecordSchema),
   usage: agentModelUsageSchema,
   /** 本轮模型调用成本（微美元；含未定价模型时为 null） */

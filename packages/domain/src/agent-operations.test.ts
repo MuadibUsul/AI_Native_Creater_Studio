@@ -72,6 +72,11 @@ describe('translateAgentEdit', () => {
     expect(translateAgentEdit({ op: 'trim_clip', clipId: 'k1', trimHead: '0.5', closeGap: false }, context(state))).toEqual([
       { op: 'trim_clip', clipId: 'k1', sourceRange: { start: mt(2500), end: mt(6000) }, sequenceRange: { start: mt(1500), end: mt(5000) } },
     ]);
+    // 带关联声音：收缝覆盖全部轨道，画面与声音一起缩短
+    const linked = { tracks: [track('v1', 'VIDEO', 0), track('a1', 'AUDIO', 1)], clips: [{ ...clip('k1', 'v1', range(1000, 5000), range(2000, 6000)), avGroupId: 'g1' }, { ...clip('k2', 'a1', range(1000, 5000), range(2000, 6000)), avGroupId: 'g1' }] };
+    expect(translateAgentEdit({ op: 'trim_clip', clipId: 'k1', trimTail: '1' }, context(linked))).toEqual([
+      { op: 'ripple_clip', clipId: 'k1', action: 'TRIM_TAIL', amount: mt(1000), closeAcrossTracks: true },
+    ]);
     expect(() => translateAgentEdit({ op: 'trim_clip', clipId: 'k1' }, context(state))).toThrow(ApiFailure);
     expect(() => translateAgentEdit({ op: 'trim_clip', clipId: 'missing', trimHead: '1' }, context(state))).toThrow(ApiFailure);
   });

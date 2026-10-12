@@ -49,6 +49,8 @@ export const agentTurns = pgTable(
     draftOperations: jsonb('draft_operations').notNull().default([]),
     reply: text('reply'),
     proposalId: text('proposal_id').references(() => proposals.id, { onDelete: 'set null' }),
+    /** V6-1c：本轮延续的试改（会话里仍 OPEN 的提案）；草稿从它的操作出发 */
+    continuesProposalId: text('continues_proposal_id').references(() => proposals.id, { onDelete: 'set null' }),
     toolCalls: jsonb('tool_calls').notNull().default([]),
     usage: jsonb('usage').notNull(),
     costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),

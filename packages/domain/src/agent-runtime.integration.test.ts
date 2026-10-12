@@ -344,4 +344,86 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const proposal = await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: finished.proposalId! });
     expect(proposal.baseProjectRevision).toBe(project.revision + 1);
   });
+
+  it('在试改上继续（V6-1c）：下一轮从未采用的试改出发，新提案取代它；没有再改则沿用；采用后的新一轮从头开始', async () => {
+    const f = await fixture();
+    const say = async (message: string, model: AgentModelAdapter) => {
+      const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message } });
+      expect(await drive(model, f.workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+      return getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    };
+    const firstCut = await say('剪一版', new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'a1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '4' }, { op: 'fit_length' }] } }], 'tool_use'),
+      () => reply([{ type: 'text', text: '第一版。' }], 'end_turn'),
+    ]));
+    expect(firstCut.continuesProposalId).toBeNull();
+    const trial = await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: firstCut.proposalId! });
+    const projectBefore = await getProject(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+
+    // 继续：上下文标明在试改上继续，时间线已含试改的片段
+    const refined = await say('再短一点', new ScriptedModel([
+      (request) => {
+        const context = (request.messages[0]!.content[0] as { text: string }).text;
+        expect(context).toContain('"continuesTrial":true');
+        const clipId = /"id":"(clp_[^"]+)"/.exec(context)?.[1];
+        expect(clipId).toBeDefined();
+        return reply([{ type: 'tool_use', id: 'b1', name: 'edit_timeline', input: { operations: [{ op: 'trim_clip', clipId, trimTail: '1' }, { op: 'fit_length' }] } }], 'tool_use');
+      },
+      () => reply([{ type: 'text', text: '短了一秒。' }], 'end_turn'),
+    ]));
+    expect(refined.continuesProposalId).toBe(trial.proposalId);
+    const replacement = await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: refined.proposalId! });
+    expect(replacement.operations.slice(0, trial.operations.length)).toEqual(trial.operations);
+    expect(replacement.operations.length).toBeGreaterThan(trial.operations.length);
+    expect(replacement.baseProjectRevision).toBe(projectBefore.revision);
+    expect((await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: trial.proposalId })).status).toBe('SUPERSEDED');
+
+    // 只回答、不再改：沿用当前试改
+    const question = await say('这样可以吗', new ScriptedModel([() => reply([{ type: 'text', text: '可以。' }], 'end_turn')]));
+    expect(question.continuesProposalId).toBe(replacement.proposalId);
+    expect(question.proposalId).toBe(replacement.proposalId);
+    expect((await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: replacement.proposalId })).status).toBe('OPEN');
+
+    // 采用后，新一轮从工程当前版本出发
+    await adoptProposal(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, proposalId: replacement.proposalId,
+      expectedOperationsHash: replacement.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `adopt-${randomUUID()}`,
+    });
+    const fresh = await say('看看', new ScriptedModel([() => reply([{ type: 'text', text: '好。' }], 'end_turn')]));
+    expect(fresh.continuesProposalId).toBeNull();
+    expect(fresh.proposalId).toBeNull();
+    const clips = (await listProjectComposition(deps(), { workspaceId: f.workspaceId, projectId: f.projectId })).clips;
+    expect(clips.filter((clip) => clip.sequenceId === f.sequenceId)).toHaveLength(1);
+  });
+
+  it('在试改上继续时用户先采用了原试改：只把本轮新增的改动建成新提案（基于采用后的版本）', async () => {
+    const f = await fixture();
+    const first = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '剪一版' } });
+    expect(await drive(new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'a1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '4' }, { op: 'fit_length' }] } }], 'tool_use'),
+      () => reply([{ type: 'text', text: '第一版。' }], 'end_turn'),
+    ]), f.workspaceId, first.workflowRunId!)).toBe('SUCCEEDED');
+    const trial = await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: (await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: first.id })).proposalId! });
+
+    const second = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '后面再接一段' } });
+    expect(second.continuesProposalId).toBe(trial.proposalId);
+    const adopted = await adoptProposal(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, proposalId: trial.proposalId,
+      expectedOperationsHash: trial.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `adopt-${randomUUID()}`,
+    });
+    expect(await drive(new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'b1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.beach, sourceStart: '1', sourceEnd: '3', withAudio: false }, { op: 'fit_length' }] } }], 'tool_use'),
+      () => reply([{ type: 'text', text: '接上了。' }], 'end_turn'),
+    ]), f.workspaceId, second.workflowRunId!)).toBe('SUCCEEDED');
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: second.id });
+    const added = await loadProposalForRead(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, proposalId: done.proposalId! });
+    expect(added.baseProjectRevision).toBe(adopted.projectRevision);
+    expect(JSON.stringify(added.operations)).not.toContain(f.sunset);
+    await adoptProposal(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, proposalId: added.proposalId,
+      expectedOperationsHash: added.operationsHash, expectedSelectionFingerprint: null, idempotencyKey: `adopt-${randomUUID()}`,
+    });
+    const clips = (await listProjectComposition(deps(), { workspaceId: f.workspaceId, projectId: f.projectId })).clips.filter((clip) => clip.sequenceId === f.sequenceId);
+    expect(clips.map((clip) => clip.assetVersionId).sort()).toEqual([f.beach, f.sunset].sort());
+  });
 });

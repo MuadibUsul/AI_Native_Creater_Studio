@@ -105,6 +105,14 @@ async function toPreview(deps: DomainDeps, row: PreviewRow): Promise<SequencePre
     frameRate: plan.frameRate,
     duration: plan.duration,
     captions: plan.captions,
+    clips: [
+      ...plan.videoLayers.flatMap((layer) => layer.segments.map((segment) => ({
+        clipId: segment.clipId, trackId: layer.trackId, kind: 'VIDEO' as const, sourceVersionId: segment.sourceVersionId, sequenceRange: segment.sequenceRange,
+      }))),
+      ...plan.audio.filter((entry) => entry.kind === 'CLIP_AUDIO').map((entry) => ({
+        clipId: entry.id, trackId: entry.trackId, kind: 'AUDIO' as const, sourceVersionId: entry.sourceVersionId, sequenceRange: entry.sequenceRange,
+      })),
+    ],
     playbackUrl,
     segments: { total: row.segmentsTotal, reused: row.segmentsReused, rendered: row.segmentsRendered },
     renderMs: row.renderMs,

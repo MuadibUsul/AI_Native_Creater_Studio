@@ -252,5 +252,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
 export function StudioShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
   if (pathname === '/sign-in' || pathname === '/welcome') return <>{children}</>;
+  // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏
+  if (/^\/w\/[^/]+\/studio\/(?!new$)[^/]+$/.test(pathname)) return <>{children}</>;
   return <PrivateShell pathname={pathname}>{children}</PrivateShell>;
 }

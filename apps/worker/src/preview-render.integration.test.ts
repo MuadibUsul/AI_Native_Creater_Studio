@@ -115,6 +115,11 @@ describe('低清预览：时间窗缓存（真实 FFmpeg）', () => {
     const fx = await fixture();
     const first = await requestSequencePreview(deps(), { workspaceId: fx.workspaceId, projectId: fx.projectId, sequenceId: fx.sequenceId, request: {} });
     expect(first).toMatchObject({ status: 'QUEUED', source: 'REVISION', width: 960, height: 540, playbackUrl: null });
+    // 预览带着它所播放的那一版的片段（两段画面 + 两段关联声音），时间带据此显示与指认
+    expect(first.clips.map((clip) => [clip.kind, clip.sequenceRange.start.ticks, clip.sourceVersionId])).toEqual([
+      ['VIDEO', expect.any(String), fx.assetVersionId], ['VIDEO', expect.any(String), fx.assetVersionId],
+      ['AUDIO', expect.any(String), fx.assetVersionId], ['AUDIO', expect.any(String), fx.assetVersionId],
+    ]);
     expect((await requestSequencePreview(deps(), { workspaceId: fx.workspaceId, projectId: fx.projectId, sequenceId: fx.sequenceId, request: {} })).id).toBe(first.id);
 
     const result = await renderPreview(fx.workspaceId, first.id);

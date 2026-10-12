@@ -10,6 +10,7 @@ import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StateBlock } from '@/ui/StateBlock';
 import { useWorkspaceSelection } from '@/ui/StudioShell';
+import { useI18n } from '@/i18n/I18nProvider';
 import styles from './dashboard.module.css';
 
 const stageLabel: Record<string, string> = {
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   const session = useSession();
   const workspaces = useWorkspaces();
   const selection = useWorkspaceSelection();
+  const { messages, locale } = useI18n();
   const [localWorkspaceId, setLocalWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
@@ -127,13 +129,18 @@ export default function DashboardPage() {
           <button type="button" className="btn primary" onClick={() => start()}>开始创作 <QuietIcon name="arrow" /></button>
         </div>
       </div>
+      <div className={styles['studioEntry']} lang={locale}>
+        <QuietIcon name="film" />
+        <div className="grow"><strong>{messages.home.studioTitle}</strong><p className="small muted">{messages.home.studioBody}</p></div>
+        <Link className="btn small" href={`/w/${effectiveWorkspaceId}/studio/new`}>{messages.home.studioAction}<QuietIcon name="arrow" /></Link>
+      </div>
       <div className="homeflow"><QuietIcon name="shield" /><span>先看脚本与草稿，再确认付费生成</span><span>导入内容</span><QuietIcon name="chevron" /><span>确认脚本</span><QuietIcon name="chevron" /><span>分镜与成片</span></div>
       <section className="mt40" aria-label="继续创作">
         <div className="sectionhead"><div className="row gap16"><h2>继续创作</h2>{projects.data ? <span className="badge">{projects.data.length} 个作品</span> : null}</div><div className="row gap8"><button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? '最近编辑' : '最早编辑'} <QuietIcon name="down" /></button><Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />新建作品</Link></div></div>
         {projects.isPending ? <StateBlock variant="loading" title="正在加载项目…" /> : null}
         {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title="加载项目失败" description={describeError(projects.error).message} action={{ label: '重试', onClick: () => void projects.refetch() }} /> : null}
         {projects.data?.length === 0 ? <StateBlock variant="empty" title="该工作区还没有项目" description="新建作品后，可以导入素材或内容，再决定如何剪辑与生成。"><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label="项目标题" placeholder="例如：利率周报视频" value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn primary" type="submit" disabled={createProject.isPending}>创建项目</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
-        <div className="project-grid">{ordered.map((project) => <Link className="project-card" href={`/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
+        <div className="project-grid">{ordered.map((project) => <Link className="project-card" href={project.mode === 'FOOTAGE_EDIT' ? `/w/${effectiveWorkspaceId}/studio/${project.id}` : `/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
           <div className={styles['projectPreview']} aria-hidden="true"><span className={styles['previewLabel']}>PROJECT</span><strong className={styles['previewTitle']}>{project.title}</strong><span className={styles['previewNote']}>尚无封面</span></div>
           <h3>{project.title}</h3><div className="project-meta"><span>目标 {projectDuration(project.targetDurationMs ?? null)} · {project.aspectRatio}</span><span className="badge">{stageLabel[project.status] ?? project.status}</span></div>
           <div className="muted" style={{ fontSize: 10, marginTop: 8 }}>{project.updatedAt ? editedAt(project.updatedAt) : '更新时间未知'}</div>

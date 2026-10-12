@@ -12,7 +12,7 @@
 | `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 9 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
-| `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 11 | PLANNED | — | — |
+| `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 12 | PLANNED | — | — |
 | `split_clip` | NATIVE | `split_clip` | KERNEL | 1 | 5 | PLANNED | — | — |
 | `duplicate_clip` | NATIVE | `duplicate_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `replace_clip_source` | NATIVE | `replace_clip_source` | KERNEL | 1 | 2 | PLANNED | — | — |

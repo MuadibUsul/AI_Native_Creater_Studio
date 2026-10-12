@@ -37,7 +37,7 @@ import { agentSessions, agentTurnMessages, agentTurns, projectSequences, project
 import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
-import { createProposalBranch } from './proposals.js';
+import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
 
 /**
@@ -112,6 +112,7 @@ function toTurn(row: TurnRow): AgentTurn {
     pointer: row.pointer,
     reply: row.reply,
     proposalId: row.proposalId,
+    continuesProposalId: row.continuesProposalId,
     toolCalls: row.toolCalls,
     usage: row.usage,
     costMicros: row.unpricedCalls > 0 ? null : row.costMicros,
@@ -224,6 +225,13 @@ export async function startAgentTurn(deps: DomainDeps, input: {
     const project = await tx.select({ revision: projects.revision }).from(projects)
       .where(and(eq(projects.id, session.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
     if (project[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    // 在试改上继续（V6 §5.3）：会话最近一轮的提案仍未采用且基于当前版本 → 本轮草稿从它出发
+    const previous = await tx.select({ proposalId: agentTurns.proposalId }).from(agentTurns)
+      .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'COMPLETED'))).orderBy(desc(agentTurns.createdAt)).limit(1);
+    const trialId = previous[0]?.proposalId ?? null;
+    const trial = trialId === null ? undefined : (await tx.select({ id: proposals.id, status: proposals.status, baseRevision: proposals.baseProjectRevision, operations: proposals.operations })
+      .from(proposals).where(and(eq(proposals.id, trialId), eq(proposals.workspaceId, input.workspaceId))).limit(1))[0];
+    const continues = trial !== undefined && trial.status === 'OPEN' && trial.baseRevision === project[0].revision ? trial : null;
     const [row] = await tx.insert(agentTurns).values({
       id: turnId,
       sessionId: session.id,
@@ -233,6 +241,8 @@ export async function startAgentTurn(deps: DomainDeps, input: {
       pointer: request.pointer,
       strategyPackId: request.strategyPackId,
       baseRevision: project[0].revision,
+      draftOperations: continues?.operations ?? [],
+      continuesProposalId: continues?.id ?? null,
       usage: ZERO_USAGE,
       createdBy: input.createdBy ?? null,
     }).returning();
@@ -363,6 +373,16 @@ export async function runAgentTurnLoop(
   let draft = editOperationSchema.array().parse(turn.draftOperations);
   const tools = catalog.descriptors().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }));
 
+  const reconcile = async (): Promise<void> => {
+    const reconciled = await reconcileContinuedTrial(deps, turn, draft, baseRevision);
+    if (reconciled === null) return;
+    draft = reconciled.draft;
+    baseRevision = reconciled.baseRevision;
+    const [updated] = await deps.db.update(agentTurns).set({ draftOperations: draft, baseRevision }).where(eq(agentTurns.id, turn.id)).returning();
+    if (updated !== undefined) turn = updated;
+  };
+  await reconcile();
+
   const log = await loadLog(deps, turn.id);
   if (log.length === 0) {
     const context = await compileTurnContext(deps, ports, turn, session, locale, toolContext(draft));
@@ -409,6 +429,7 @@ export async function runAgentTurnLoop(
     }
     const toolUses = last.content.filter((block): block is Extract<AgentContentBlock, { type: 'tool_use' }> => block.type === 'tool_use');
     if (toolUses.length === 0) return finishTurn(deps, turn, draft, textOf(last.content), null);
+    await reconcile();
 
     const results: AgentContentBlock[] = [];
     const calls: { name: string; ok: boolean; summary: string }[] = [];
@@ -458,21 +479,33 @@ export async function runAgentTurnLoop(
 /** 收尾：草稿非空 → 提案（基线过期时在当前 revision 上重验后再建）；轮次标为完成。 */
 async function finishTurn(deps: DomainDeps, turn: TurnRow, draft: EditOperation[], reply: string, error: Record<string, unknown> | null): Promise<Record<string, unknown>> {
   let proposalId: string | null = null;
-  if (draft.length > 0) {
+  const reconciled = await reconcileContinuedTrial(deps, turn, draft, turn.baseRevision);
+  const operations = reconciled?.draft ?? draft;
+  const baseRevision = reconciled?.baseRevision ?? turn.baseRevision;
+  const continued = turn.continuesProposalId === null ? null : await loadContinuedProposal(deps, turn.continuesProposalId);
+  const unchangedTrial = continued !== null && continued.status === 'OPEN' && sameOperations(operations, editOperationSchema.array().parse(continued.operations));
+  if (unchangedTrial) {
+    // 本轮没有在试改上再改：沿用原试改（仍由用户采用或撤回）
+    proposalId = continued.id;
+  } else if (operations.length > 0) {
     const create = (baseProjectRevision: number) => createProposalBranch(deps, {
       workspaceId: turn.workspaceId,
       projectId: turn.projectId,
       ...(turn.createdBy === null ? {} : { actorId: turn.createdBy }),
-      request: { baseProjectRevision, selectionAnchorId: null, intentRevisionId: null, operations: draft },
+      request: { baseProjectRevision, selectionAnchorId: null, intentRevisionId: null, operations },
     });
     try {
-      proposalId = (await create(turn.baseRevision)).proposalId;
+      proposalId = (await create(baseRevision)).proposalId;
     } catch (caught) {
       if (!(caught instanceof ApiFailure) || caught.details['reason'] !== PROPOSAL_ERROR_REASONS.STALE_BASE) throw caught;
       // 用户在本轮期间改过工程：草稿必须在最新版本上仍然成立才建提案，否则明确失败（不悄悄覆盖用户的改动）
       const current = Number(caught.details['currentRevision']);
-      await simulateAgentDraft({ deps, workspaceId: turn.workspaceId, projectId: turn.projectId, actorId: turn.createdBy ?? 'agent' }, { baseRevision: current, operations: draft });
+      await simulateAgentDraft({ deps, workspaceId: turn.workspaceId, projectId: turn.projectId, actorId: turn.createdBy ?? 'agent' }, { baseRevision: current, operations });
       proposalId = (await create(current)).proposalId;
+    }
+    // 新试改包含旧试改的全部改动：仍未采用的旧试改被取代（采用时只能采用最新的这一份）
+    if (continued !== null) {
+      await supersedeProposal(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId, proposalId: continued.id, byProposalId: proposalId });
     }
   }
   await deps.db.update(agentTurns).set({
@@ -482,8 +515,34 @@ async function finishTurn(deps: DomainDeps, turn: TurnRow, draft: EditOperation[
     error,
     completedAt: new Date(),
   }).where(and(eq(agentTurns.id, turn.id), eq(agentTurns.status, 'RUNNING')));
-  return { turnId: turn.id, proposalId, operations: draft.length };
+  return { turnId: turn.id, proposalId, operations: operations.length };
 }
+
+/**
+ * 延续的试改在本轮期间被用户处理了：采用 → 草稿去掉已落地的那部分、基线移到采用后的版本；
+ * 撤回/取消/被取代 → 用户不要它了，草稿不再带上它、基线移到工程当前版本。无需调整时返回 null。
+ */
+async function reconcileContinuedTrial(deps: DomainDeps, turn: TurnRow, draft: EditOperation[], baseRevision: number): Promise<{ draft: EditOperation[]; baseRevision: number } | null> {
+  if (turn.continuesProposalId === null) return null;
+  const continued = await loadContinuedProposal(deps, turn.continuesProposalId);
+  if (continued === null || continued.status === 'OPEN') return null;
+  const carried = editOperationSchema.array().parse(continued.operations);
+  if (draft.length < carried.length || !sameOperations(draft.slice(0, carried.length), carried)) return null;
+  if (continued.status === 'COMMITTED' && continued.committedRevision !== null) {
+    return { draft: draft.slice(carried.length), baseRevision: continued.committedRevision };
+  }
+  const project = await deps.db.select({ revision: projects.revision }).from(projects).where(eq(projects.id, turn.projectId)).limit(1);
+  return { draft: draft.slice(carried.length), baseRevision: project[0]?.revision ?? baseRevision };
+}
+
+async function loadContinuedProposal(deps: DomainDeps, proposalId: string) {
+  const rows = await deps.db.select({ id: proposals.id, status: proposals.status, operations: proposals.operations, committedRevision: proposals.committedRevision })
+    .from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+  return rows[0] ?? null;
+}
+
+const sameOperations = (left: readonly EditOperation[], right: readonly EditOperation[]): boolean =>
+  left.length === right.length && JSON.stringify(left) === JSON.stringify(right);
 
 // ---------------------------------------------------------------------------
 // 上下文编译
@@ -532,6 +591,7 @@ async function compileTurnContext(
 
   return compileAgentContext({
     locale,
+    continuesTrial: turn.continuesProposalId !== null,
     project: { title: projectRows[0]?.title ?? '', mode: typeof policy['mode'] === 'string' ? policy['mode'] : 'UNKNOWN', ...(constraints.length === 0 ? {} : { disallowed: constraints }) } as { title: string; mode: string },
     timeline,
     footage,

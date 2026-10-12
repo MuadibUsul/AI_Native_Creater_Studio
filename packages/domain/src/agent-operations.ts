@@ -62,7 +62,7 @@ export const agentEditOperationSchema = z.discriminatedUnion('op', [
     clipId: idSchema,
     trimHead: secondsSchema.optional().describe('Seconds to remove from the start.'),
     trimTail: secondsSchema.optional().describe('Seconds to remove from the end.'),
-    closeGap: z.boolean().optional().describe('Ripple: shift later material on the same track to close the gap (default true).'),
+    closeGap: z.boolean().optional().describe('Ripple: shift later material to close the gap (default true). Linked audio is trimmed with the clip and all tracks shift together to stay in sync; otherwise only the same track shifts.'),
   }).strict(),
   z.object({
     op: z.literal('move_clip').describe('Move a clip to a new timeline start (duration unchanged).'),
@@ -228,9 +228,11 @@ export function translateAgentEdit(operation: AgentEditOperation, context: Agent
       const zero = zeroAt(timebase);
       if (compareMediaTime(head, zero) === 0 && compareMediaTime(tail, zero) === 0) fail('trim_clip needs trimHead or trimTail');
       if (operation.closeGap !== false) {
+        // 带关联声音的片段：收缝覆盖全部轨道，画面与声音一起缩短、保持同步（与 remove_clip 的默认一致）
+        const closeAcrossTracks = clip.avGroupId !== null;
         const out: EditOperation[] = [];
-        if (compareMediaTime(head, zero) > 0) out.push({ op: 'ripple_clip', clipId: clip.id, action: 'TRIM_HEAD', amount: head, closeAcrossTracks: false });
-        if (compareMediaTime(tail, zero) > 0) out.push({ op: 'ripple_clip', clipId: clip.id, action: 'TRIM_TAIL', amount: tail, closeAcrossTracks: false });
+        if (compareMediaTime(head, zero) > 0) out.push({ op: 'ripple_clip', clipId: clip.id, action: 'TRIM_HEAD', amount: head, closeAcrossTracks });
+        if (compareMediaTime(tail, zero) > 0) out.push({ op: 'ripple_clip', clipId: clip.id, action: 'TRIM_TAIL', amount: tail, closeAcrossTracks });
         return out;
       }
       const sequenceRange = range(inBase(addMediaTime(clip.sequenceRange.start, head)), inBase(subtractMediaTime(clip.sequenceRange.end, tail)));

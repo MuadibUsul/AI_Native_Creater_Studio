@@ -1008,6 +1008,20 @@ export async function discardProposal(deps: DomainDeps, input: {
   return toProposal(await loadProposalRow(deps, input));
 }
 
+/** V6-1c：在试改上继续后，新提案取代被延续的旧提案（只对仍 OPEN 的生效；已采用/已撤回保持原状态）。 */
+export async function supersedeProposal(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  proposalId: string;
+  byProposalId: string;
+}): Promise<boolean> {
+  const now = new Date();
+  const rows = await deps.db.update(proposals).set({ status: 'SUPERSEDED', supersededByProposalId: input.byProposalId, supersededAt: now, updatedAt: now })
+    .where(and(eq(proposals.id, input.proposalId), eq(proposals.workspaceId, input.workspaceId), eq(proposals.projectId, input.projectId), eq(proposals.status, 'OPEN')))
+    .returning({ id: proposals.id });
+  return rows.length > 0;
+}
+
 /** 同一选区/意图的新候选取代旧候选（旧候选只能被丢弃或标记 SUPERSEDED，并记录取代者）。 */
 export async function supersedeProposals(deps: DomainDeps, input: {
   workspaceId: string;

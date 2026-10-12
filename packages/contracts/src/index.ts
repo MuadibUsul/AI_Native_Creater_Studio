@@ -2750,12 +2750,13 @@ export {
   PREVIEW_SEGMENT_SECONDS,
   PREVIEW_SOURCES,
   PREVIEW_STATUSES,
+  previewClipSchema,
   previewRenderJobInputSchema,
   previewStatusSchema,
   requestSequencePreviewSchema,
   sequencePreviewSchema,
 } from './preview.js';
-export type { PreviewRenderJobInput, PreviewStatus, RequestSequencePreview, SequencePreview } from './preview.js';
+export type { PreviewClip, PreviewRenderJobInput, PreviewStatus, RequestSequencePreview, SequencePreview } from './preview.js';
 export {
   STUDIO_ANALYSIS_STATES,
   STUDIO_ASPECT_RATIOS,
