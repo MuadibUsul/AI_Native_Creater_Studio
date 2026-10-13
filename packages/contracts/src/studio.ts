@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
+import { projectArticleSchema } from './narration.js';
 
 /**
  * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
@@ -17,7 +18,13 @@ export const createStudioProjectRequestSchema = z.object({
   title: z.string().trim().min(1).max(120),
   aspectRatio: studioAspectRatioSchema.default('16:9'),
   locale: agentLocaleSchema.default('zh-CN'),
-}).strict();
+  /**
+   * V6-5 从文章开始：文章原文（可选）。有文章时建图文工程（HYBRID：允许程序化图解与字幕，不允许生成画面），
+   * `narration` 为真时同时允许 AI 合成配音讲述（用户在新建时明确选择）。
+   */
+  article: projectArticleSchema.optional(),
+  narration: z.boolean().optional(),
+}).strict().refine((value) => value.narration === undefined || value.article !== undefined, { message: 'narration is chosen together with an article', path: ['narration'] });
 export type CreateStudioProjectRequest = z.input<typeof createStudioProjectRequestSchema>;
 
 export const studioProjectRefSchema = z.object({
@@ -60,6 +67,16 @@ export const studioEffectSchema = z.object({
 }).strict();
 export type StudioEffect = z.infer<typeof studioEffectSchema>;
 
+/** 时间线上的讲述音频（V6-5）：AI 合成的配音；时间带据此给讲述片段标名，不出现在素材列表里。 */
+export const studioNarrationSchema = z.object({
+  /** 讲述音频的资产版本 id（片段引用的 footageId） */
+  footageId: opaqueIdSchema,
+  text: z.string(),
+  voice: z.string(),
+  engine: z.string(),
+}).strict();
+export type StudioNarration = z.infer<typeof studioNarrationSchema>;
+
 export const studioStateSchema = z.object({
   project: z.object({
     id: opaqueIdSchema,
@@ -68,12 +85,17 @@ export const studioStateSchema = z.object({
     revision: z.number().int().nonnegative(),
     /** 项目制作规则是否允许程序化特效（素材工程默认关闭，用户可显式开启） */
     allowEffects: z.boolean(),
+    /** 项目制作规则是否允许 AI 合成配音讲述（V6-5） */
+    allowNarration: z.boolean(),
+    /** 从文章开始的工程：文章概况（原文在工程简报里） */
+    article: z.object({ title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative() }).strict().nullable(),
   }).strict(),
   sequenceId: opaqueIdSchema,
   /** 该序列最近的 AI 会话；没有时为空（只读读面不代建，界面在第一次说话前经 agent 接口建会话） */
   session: agentSessionSchema.nullable(),
   footage: z.array(studioFootageSchema),
   effects: z.array(studioEffectSchema),
+  narration: z.array(studioNarrationSchema),
   cost: projectAgentCostSchema,
 }).strict();
 export type StudioState = z.infer<typeof studioStateSchema>;

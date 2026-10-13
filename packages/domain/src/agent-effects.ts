@@ -6,6 +6,9 @@ import {
   ApiFailure,
   EFFECT_ERROR_REASONS,
   ERROR_CODES,
+  MAX_EFFECT_SECONDS,
+  MAX_EFFECT_TEXT_PARAM,
+  projectBriefSchema,
   compareMediaTime,
   effectLayerMetadataSchema,
   frameRegionSchema,
@@ -25,6 +28,7 @@ import { agentSecondsToTime } from './agent-operations.js';
 import { simulateAgentDraft, type AgentToolContext, type AgentToolDefinition, type AgentToolOutcome } from './agent-tools.js';
 import { EFFECT_TEMPLATES, findEffectTemplate, resolveEffectParams } from './effect-templates.js';
 import { assertProjectGenerationAllowed } from './project-document.js';
+import { numbersMissingFromSource } from './source-numbers.js';
 
 /**
  * V6-3 代码生成特效的导演工具（V6 §7.2）：`list_effects` / `add_effect` / `update_effect`。
@@ -49,7 +53,7 @@ const CANVAS: Readonly<Record<string, { width: number; height: number }>> = {
 const MAX_LAYER_SIDE = 960;
 const MIN_LAYER_SIDE = 16;
 const MIN_SECONDS = 0.2;
-const MAX_SECONDS = 20;
+const MAX_SECONDS = MAX_EFFECT_SECONDS;
 const CODE_DEFAULT_SECONDS = 2;
 const FULL_FRAME: FrameRegion = { x: 0, y: 0, width: 1, height: 1 };
 const CENTER_REGION: FrameRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
@@ -215,7 +219,7 @@ function placeLayerOperations(input: {
 // ---------------------------------------------------------------------------
 
 const secondsSchema = z.union([z.string().max(20), z.number().nonnegative().max(1e6)]).describe('Seconds as a decimal string, e.g. "12.5".');
-const paramsSchema = z.record(z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/), z.union([z.string().max(40), z.number().finite()]));
+const paramsSchema = z.record(z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/), z.union([z.string().max(MAX_EFFECT_TEXT_PARAM), z.number().finite()]));
 const regionInputSchema = frameRegionSchema.describe('Part of the picture, 0–1 from the top-left: { x, y, width, height }.');
 
 const CODE_CONTRACT = [
@@ -236,6 +240,28 @@ function templateView(template: EffectTemplate) {
   };
 }
 
+/** 工程的来源文字（V6-5：从文章开始的工程的文章标题与正文）；没有时为 null。 */
+export async function projectSourceText(context: Pick<AgentToolContext, 'deps' | 'projectId'>): Promise<string | null> {
+  const rows = await context.deps.db.select({ brief: projects.brief }).from(projects).where(eq(projects.id, context.projectId)).limit(1);
+  const article = projectBriefSchema.safeParse(rows[0]?.brief ?? {}).data?.article ?? null;
+  return article === null ? null : `${article.title}\n${article.text}`;
+}
+
+/** 数据图解（numbersFromSource）：参数里的每个数字都必须出自来源文字；不满足时返回给 AI 的错误。 */
+async function checkNumbersFromSource(context: AgentToolContext, template: EffectTemplate | undefined, params: Record<string, string | number>): Promise<AgentToolOutcome | null> {
+  if (template?.numbersFromSource !== true) return null;
+  const texts = template.params.filter((param) => param.kind === 'text').map((param) => String(params[param.key] ?? ''));
+  const source = await projectSourceText(context);
+  if (source === null) {
+    return fail('data charts can only show numbers taken from the source text, and this project has no article; describe the point in words or use key-points instead', EFFECT_ERROR_REASONS.NUMBERS_NOT_IN_SOURCE);
+  }
+  const missing = numbersMissingFromSource(texts, source);
+  if (missing.length > 0) {
+    return fail(`these numbers are not in the article: ${missing.join(', ')}. Use numbers exactly as the article states them; do not compute, round or estimate`, EFFECT_ERROR_REASONS.NUMBERS_NOT_IN_SOURCE, { missing });
+  }
+  return null;
+}
+
 async function projectAspectRatio(context: AgentToolContext): Promise<string> {
   const rows = await context.deps.db.select({ aspectRatio: projects.aspectRatio }).from(projects).where(eq(projects.id, context.projectId)).limit(1);
   return rows[0]?.aspectRatio ?? '16:9';
@@ -244,7 +270,7 @@ async function projectAspectRatio(context: AgentToolContext): Promise<string> {
 const listEffectsTool: AgentToolDefinition<Record<string, never>> = {
   descriptor: {
     name: 'list_effects', capability: 'effects.list', effect: 'READ', permission: 'project:read', metered: false,
-    description: 'List the visual effects you can add (explosions, glows, sparkles, light leaks, confetti and more), each with its parameters, and the effects already on your draft timeline. Says whether the project rules allow effects and whether you may write your own effect code.',
+    description: 'List the visual effects and diagram cards you can add (explosions, glows, sparkles, light leaks, confetti; title cards, key points, bar charts, big numbers, steps, quotes), each with its parameters, and the effects already on your draft timeline. Says whether the project rules allow effects, whether you may write your own effect code, and whether the project has source text for data charts.',
   },
   input: z.object({}).strict(),
   async run(context) {
@@ -263,6 +289,7 @@ const listEffectsTool: AgentToolDefinition<Record<string, never>> = {
         allowedByProjectRules: policy,
         ...(policy ? {} : { note: 'The project rules do not allow procedural effects. Tell the person they can turn effects on for this project, then ask again.' }),
         rendering: context.effects === undefined ? 'unavailable in this deployment' : 'available',
+        sourceTextForDataCharts: (await projectSourceText(context)) === null ? 'none: data charts (bar-chart, big-number) cannot be used' : 'the article: every number in a data chart must appear in it',
         codeWriting,
         ...(codeWriting === 'enabled' ? { codeContract: CODE_CONTRACT, exampleCode: findEffectTemplate('glow')?.code } : {}),
         templates: EFFECT_TEMPLATES.map(templateView),
@@ -416,6 +443,8 @@ const addEffectTool: AgentToolDefinition<z.infer<typeof addEffectInput>> = {
       return fail('writing effect code is turned off in this deployment; use a template from list_effects', EFFECT_ERROR_REASONS.CODEGEN_DISABLED);
     }
     const resolved = template === undefined ? { params: input.params ?? {}, issues: [] as string[] } : resolveEffectParams(template, input.params ?? {});
+    const unsourced = await checkNumbersFromSource(context, template, resolved.params);
+    if (unsourced !== null) return unsourced;
     const duration = parseSeconds(input.seconds, template?.defaultSeconds ?? CODE_DEFAULT_SECONDS);
     if (duration === null) return fail(`invalid seconds ${JSON.stringify(input.seconds)}`, 'AGENT_EDIT_INVALID');
     const region = input.region ?? context.pointer?.frameRegion ?? (template?.coverage === 'FULL_FRAME' ? FULL_FRAME : CENTER_REGION);
@@ -457,6 +486,8 @@ const updateEffectTool: AgentToolDefinition<z.infer<typeof updateEffectInput>> =
     const template = current.templateId === null ? undefined : findEffectTemplate(current.templateId);
     const merged = { ...current.params, ...input.params };
     const resolved = template === undefined ? { params: merged, issues: [] as string[] } : resolveEffectParams(template, merged);
+    const unsourced = await checkNumbersFromSource(context, template, resolved.params);
+    if (unsourced !== null) return unsourced;
     const currentSeconds = current.render.durationInFrames / current.render.fps;
     const duration = parseSeconds(input.seconds, currentSeconds);
     if (duration === null) return fail(`invalid seconds ${JSON.stringify(input.seconds)}`, 'AGENT_EDIT_INVALID');

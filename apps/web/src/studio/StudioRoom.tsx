@@ -99,6 +99,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const trialView = trial !== null && targetPreview !== null && targetPreview.proposalId === trial.proposalId ? targetPreview : null;
   // 特效图层（V6-3）：资产版本 → 特效名；时间带给特效轨与片段标名
   const effectNames = useMemo(() => new Map((state?.effects ?? []).map((effect) => [effect.footageId, effect.name])), [state?.effects]);
+  // 讲述配音（V6-5）：资产版本 → 讲述稿开头；时间带给讲述轨与片段标名
+  const narrationTexts = useMemo(() => new Map((state?.narration ?? []).map((item) => [item.footageId, item.text.length > 40 ? `${item.text.slice(0, 39)}…` : item.text])), [state?.narration]);
   const strip = useMemo(() => {
     if (timeline === null) return null;
     const lanes: StripLane[] = [
@@ -118,12 +120,13 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     for (const lane of lanes) {
       const laneClips = clips.filter((clip) => clip.trackId === lane.trackId);
       if (lane.kind === 'VIDEO' && laneClips.length > 0 && laneClips.every((clip) => clip.assetVersionId !== null && effectNames.has(clip.assetVersionId))) lane.effect = true;
+      if (lane.kind === 'AUDIO' && laneClips.length > 0 && laneClips.every((clip) => clip.assetVersionId !== null && narrationTexts.has(clip.assetVersionId))) lane.narration = true;
     }
-    // 自上而下：特效轨（叠在画面上）→ 画面 → 声音
-    const rank = (lane: StripLane): number => (lane.effect === true ? 0 : lane.kind === 'VIDEO' ? 1 : 2);
+    // 自上而下：特效轨（叠在画面上）→ 画面 → 讲述 → 声音
+    const rank = (lane: StripLane): number => (lane.effect === true ? 0 : lane.kind === 'VIDEO' ? 1 : lane.narration === true ? 2 : 3);
     lanes.sort((left, right) => rank(left) - rank(right));
     return { duration: trialView?.duration ?? timeline.duration, frameRate: timeline.frameRate, lanes, clips };
-  }, [timeline, trialView, effectNames]);
+  }, [timeline, trialView, effectNames, narrationTexts]);
 
   // 播放
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -163,8 +166,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   // 指：时间带选择 → 交给 AI 的 pointer
   const [selection, setSelection] = useState<StudioSelection>({ range: null, clipId: null });
-  const footageName = useCallback((clip: StripClip): string => (clip.assetVersionId === null ? undefined : effectNames.get(clip.assetVersionId))
-    ?? state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage, effectNames]);
+  const footageName = useCallback((clip: StripClip): string => (clip.assetVersionId === null ? undefined : effectNames.get(clip.assetVersionId) ?? narrationTexts.get(clip.assetVersionId))
+    ?? state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage, effectNames, narrationTexts]);
   // 指画面（V6-3）：在画面上框出一块区域，和时间选择一起交给 AI；框的是哪一刻的画面也记下（没选时间时以它为"这里"的时间）
   const [framed, setFramed] = useState<{ region: FrameRegion; at: MediaTime } | null>(null);
   const frameRegion = framed?.region ?? null;
@@ -314,7 +317,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   const readyFootage = state.footage.some((item) => item.status === 'READY');
   const busyFootage = state.footage.some((item) => item.status === 'UPLOADING' || item.status === 'PROCESSING') || uploads.some((item) => !item.failed);
-  const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : 'empty';
+  const article = state.project.article;
+  const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : article !== null ? 'article' : 'empty';
   const running = latest?.status === 'RUNNING';
   const cost = state.cost;
 
@@ -340,6 +344,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
               actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
             }}
           ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
+          <button
+            type="button"
+            className="btn small ghost"
+            aria-pressed={state.project.allowNarration}
+            title={state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff}
+            disabled={!canEdit || actions.setNarrationAllowed.isPending}
+            onClick={() => {
+              setActionError(null);
+              actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
+            }}
+          ><QuietIcon name="voice" />{state.project.allowNarration ? t.narration.on : t.narration.off}</button>
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
@@ -362,7 +377,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         firstCutBusy={running || actions.send.isPending}
         onAddFootage={() => fileInput.current?.click()}
         onDropFiles={upload}
-        onFirstCut={() => send(t.canvas.firstCutPrompt)}
+        onFirstCut={() => send(article !== null ? t.canvas.articleFirstCutPrompt : t.canvas.firstCutPrompt)}
+        articleParagraphs={article?.paragraphs ?? 0}
         onRetryPreview={preview.retry}
         onVideoError={() => { reloadRef.current = true; preview.refresh(); }}
         onTimeUpdate={syncFromVideo}

@@ -137,6 +137,9 @@
 }
 .onMatteButton:disabled { opacity: .55; }
 .onMatteButton:focus-visible { outline: 2px solid var(--studio-on-matte); outline-offset: 3px; }
+.emptyActions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ui-space-2); }
+.onMatteButtonQuiet { display: inline-flex; align-items: center; gap: var(--ui-space-2); min-height: var(--ui-control-height); padding: 8px 16px; border-radius: var(--ui-radius-control); border: 1px solid var(--studio-on-matte-muted); background: transparent; color: var(--studio-on-matte); font-weight: 500; }
+.onMatteButtonQuiet:focus-visible { outline: 2px solid var(--studio-on-matte); outline-offset: 3px; }
 .uploadList { width: 100%; display: flex; flex-direction: column; gap: var(--ui-space-2); margin-top: var(--ui-space-2); text-align: left; }
 .uploadRow { display: flex; justify-content: space-between; gap: var(--ui-space-3); font-size: var(--ui-type-metadata); color: var(--studio-on-matte-muted); }
 .uploadRow strong { color: var(--studio-on-matte); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -271,6 +274,14 @@
 .aspect { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: var(--ui-space-3) var(--ui-space-2); border: 1px solid var(--ui-border-control); border-radius: var(--ui-radius-control); background: var(--ui-bg-elevated); color: var(--ui-fg-primary); font-size: var(--ui-type-metadata); }
 .aspect[aria-checked="true"] { outline: 2px solid var(--ui-fg-primary); outline-offset: 1px; background: var(--ui-selection-bg); }
 .aspectShape { border: 1.5px solid currentColor; border-radius: 3px; }
+/* V6-5 起点：素材 / 文章 */
+.starts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
+.start { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: var(--ui-space-3); border: 1px solid var(--ui-border-control); border-radius: var(--ui-radius-control); background: var(--ui-bg-elevated); color: var(--ui-fg-primary); text-align: left; }
+.start strong { font-weight: 500; }
+.start span { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.start[aria-checked="true"] { outline: 2px solid var(--ui-fg-primary); outline-offset: 1px; background: var(--ui-selection-bg); }
+.checkRow { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
+.checkRow input { width: 16px; height: 16px; }
 
 @media (max-width: 900px) {
   .title { max-width: 40vw; }
@@ -323,3 +334,7 @@
 .laneEffect .laneLabel { font-weight: 600; }
 .clipEffect { background: var(--ui-bg-subtle); border: 1px dashed var(--ui-fg-secondary); color: var(--ui-fg-primary); }
 .clipEffect::before { content: '✦ '; }
+/* V6-5：讲述轨（AI 合成的配音）：比普通声音轨高，片段上显示讲述稿开头 */
+.laneNarration { height: 26px; }
+.laneNarration .laneLabel { font-weight: 600; }
+.clipNarration { background: var(--ui-selection-bg); color: var(--ui-fg-primary); font-size: var(--ui-type-metadata); }

@@ -695,6 +695,10 @@ export { reviewDraftOperations, scoreFirstCut, type DraftReview, type EvalIndica
 export { EFFECT_TEMPLATES, findEffectTemplate, resolveEffectParams } from './effect-templates.js';
 export { EFFECT_AGENT_TOOLS, effectLayerSize, effectRegionTransform, loadEffectLayers } from './agent-effects.js';
 export type { EffectLayerRef } from './agent-effects.js';
+export { NARRATION_AGENT_TOOLS, loadNarrations, narrationLanguage, splitNarrationSentences } from './agent-narration.js';
+export type { NarrationRef } from './agent-narration.js';
+export { ARTICLE_AGENT_TOOLS, ARTICLE_CONTEXT_CHARS, articleContextView, articleParagraphs, projectArticle } from './agent-article.js';
+export { numbersIn, numbersMissingFromSource } from './source-numbers.js';
 export { detectBeats, onsetEnvelope } from './audio-beats.js';
 export type { DetectedBeats } from './audio-beats.js';
 export { BEAT_CONFIDENCE_THRESHOLD, BEAT_TOLERANCE_SECONDS, beatCutRatio, describeColor, editPoints, describeSound, distillStats, editingDnaFromStats, pacingCurve, shotDurations } from './distill-dna.js';

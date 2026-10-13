@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { STUDIO_ASPECT_RATIOS, type CreateStudioProjectRequest } from '@ancs/contracts';
+import { MAX_ARTICLE_CHARS, STUDIO_ASPECT_RATIOS, type CreateStudioProjectRequest } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { queryKeys } from '@/lib/queries';
@@ -16,7 +16,10 @@ const SHAPES: Record<AspectRatio, { width: number; height: number }> = {
   '16:9': { width: 32, height: 18 }, '9:16': { width: 14, height: 25 }, '1:1': { width: 22, height: 22 }, '4:5': { width: 20, height: 25 },
 };
 
-/** V6-1c 新建：标题 + 画幅 → 一步建好素材工程、主序列与 AI 会话，然后进入共看片室。 */
+/**
+ * 新建：标题 + 画幅 → 一步建好工程、主序列与 AI 会话，然后进入共看片室。
+ * 起点二选一（V6-5）：从素材开始（素材工程）；从文章开始（贴文章，可选"AI 配音讲述"，建图文工程）。
+ */
 export default function NewStudioProjectPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const router = useRouter();
@@ -26,6 +29,9 @@ export default function NewStudioProjectPage() {
   const t = messages.studioNew;
   const [title, setTitle] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
+  const [start, setStart] = useState<'footage' | 'article'>('footage');
+  const [article, setArticle] = useState('');
+  const [narration, setNarration] = useState(true);
   const [touched, setTouched] = useState(false);
   const create = useMutation({
     mutationFn: (input: CreateStudioProjectRequest) => client.studio.create(workspaceId, input, { idempotencyKey: `studio-${globalThis.crypto.randomUUID()}` }),
@@ -38,9 +44,15 @@ export default function NewStudioProjectPage() {
     event.preventDefault();
     setTouched(true);
     if (title.trim().length === 0) return;
+    if (start === 'article') {
+      if (article.trim().length === 0) return;
+      create.mutate({ title: title.trim(), aspectRatio, locale, article: { title: title.trim(), text: article.trim() }, narration });
+      return;
+    }
     create.mutate({ title: title.trim(), aspectRatio, locale });
   };
   const missing = touched && title.trim().length === 0;
+  const articleMissing = touched && start === 'article' && article.trim().length === 0;
 
   return (
     <div className={styles['newPage']} lang={locale}>
@@ -64,6 +76,40 @@ export default function NewStudioProjectPage() {
           />
           {missing ? <span id="studio-title-error" className="small" role="alert">{t.nameRequired}</span> : null}
         </div>
+        <div className="col" style={{ gap: 8 }}>
+          <span id="studio-start-label">{t.startLabel}</span>
+          <div className={styles['starts']} role="radiogroup" aria-labelledby="studio-start-label">
+            {(['footage', 'article'] as const).map((option) => (
+              <button key={option} type="button" role="radio" aria-checked={start === option} className={styles['start']} onClick={() => setStart(option)}>
+                <strong>{option === 'footage' ? t.startFootage : t.startArticle}</strong>
+                <span>{option === 'footage' ? t.startFootageHint : t.startArticleHint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {start === 'article' ? (
+          <div className="col" style={{ gap: 8 }}>
+            <label htmlFor="studio-article">{t.articleLabel}</label>
+            <textarea
+              id="studio-article"
+              className="field"
+              rows={10}
+              value={article}
+              maxLength={MAX_ARTICLE_CHARS}
+              placeholder={t.articlePlaceholder}
+              aria-invalid={articleMissing}
+              aria-describedby={`studio-article-count${articleMissing ? ' studio-article-error' : ''}`}
+              onChange={(event) => setArticle(event.target.value)}
+            />
+            <span id="studio-article-count" className="small muted">{t.articleCount(article.length, MAX_ARTICLE_CHARS)}</span>
+            {articleMissing ? <span id="studio-article-error" className="small" role="alert">{t.articleRequired}</span> : null}
+            <label className={styles['checkRow']}>
+              <input type="checkbox" checked={narration} onChange={(event) => setNarration(event.target.checked)} aria-describedby="studio-narration-hint" />
+              <span>{t.narrationLabel}</span>
+            </label>
+            <span id="studio-narration-hint" className="small muted">{t.narrationHint}</span>
+          </div>
+        ) : null}
         <div className="col" style={{ gap: 8 }}>
           <span id="studio-aspect-label">{t.aspectLabel}</span>
           <div className={styles['aspects']} role="radiogroup" aria-labelledby="studio-aspect-label">

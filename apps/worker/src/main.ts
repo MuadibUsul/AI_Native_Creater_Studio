@@ -3,7 +3,7 @@ import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -14,6 +14,7 @@ import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -120,11 +121,29 @@ const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(conf
 /** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
 const visualDriver = config.ANCS_VISUAL_ANALYSIS_DRIVER ?? (config.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined ? undefined : 'process');
 
+/**
+ * V6-5：讲述配音的语音合成。flite = FFmpeg 内置本地英文语音（无需密钥）；process = 部署方接入的供应商子进程。
+ * 未配置时讲述工具明确报"没有配置配音"。合成不自动重试（失败如实交还 AI）。
+ */
+const narrationDriver = config.ANCS_NARRATION_DRIVER;
+const narrationSynthesizer = narrationDriver === 'flite'
+  ? createFliteNarrationSynthesizer({ probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) })
+  : narrationDriver === 'process' && config.ANCS_NARRATION_EXECUTABLE !== undefined && config.ANCS_NARRATION_VOICES_JSON !== undefined
+    ? createProcessNarrationSynthesizer({
+      executable: config.ANCS_NARRATION_EXECUTABLE,
+      args: config.ANCS_NARRATION_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_NARRATION_ARGS_JSON) as string[],
+      voices: narrationVoiceSchema.array().parse(JSON.parse(config.ANCS_NARRATION_VOICES_JSON)),
+      probe: sourceMediaProbe,
+      ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+    })
+    : undefined;
+
 /** 装配清单与生产守卫（V5-M3，§11.3）：Worker 当前装配的外部能力驱动均为真实实现或运维配置的子进程。 */
 const providerInventory: ProviderInventoryEntry[] = [
   ...(asrDriver === undefined ? [] : [{ capability: 'asr', driver: asrDriver, implementation: 'REAL' as const }]),
   ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [{ capability: 'agent_model', driver: config.ANCS_AGENT_DRIVER, implementation: 'REAL' as const }]),
   ...(visualDriver === undefined ? [] : [{ capability: 'visual_analysis', driver: visualDriver, implementation: 'REAL' as const }]),
+  ...(narrationSynthesizer === undefined || narrationDriver === undefined ? [] : [{ capability: 'narration', driver: narrationDriver, implementation: narrationSynthesizer.implementation }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
@@ -161,7 +180,12 @@ const workflowRegistry = new WorkflowRegistry()
     outputProbe: sourceMediaProbe,
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
-  .register(agentTurnWorkflow({ model: agentModel, frames: frameSampler, ...(effectPorts === undefined ? {} : { effects: effectPorts }) }))
+  .register(agentTurnWorkflow({
+    model: agentModel,
+    frames: frameSampler,
+    ...(effectPorts === undefined ? {} : { effects: effectPorts }),
+    ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
+  }))
   // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
   // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）
   .register(referenceDistillWorkflow({

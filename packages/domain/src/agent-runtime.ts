@@ -22,6 +22,7 @@ import {
   startAgentTurnRequestSchema,
   type AgentContentBlock,
   type AgentEffectPorts,
+  type AgentNarrationPorts,
   type AgentEffort,
   type AgentFrameSampler,
   type AgentModelAdapter,
@@ -39,8 +40,8 @@ import {
 import { agentSessions, agentTurnMessages, agentTurns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
-import { buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
-import { effectLayersOnTimeline } from './agent-effects.js';
+import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
+import { articleContextView, projectArticle } from './agent-article.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
@@ -79,6 +80,8 @@ export interface AgentTurnPorts {
   frames?: AgentFrameSampler;
   /** 特效渲染（V6-3，Worker 装配）；未装配时特效工具明确报不可用 */
   effects?: AgentEffectPorts;
+  /** 讲述配音（V6-5，Worker 装配）；未装配时讲述工具明确报"没有配置配音" */
+  narration?: AgentNarrationPorts;
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
   /** 策略要点（缺省从内置预设与工作区策略包生成，见 strategies.ts） */
   strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; knobs: Record<string, string>; locale: string }) => Promise<string | null>;
@@ -423,6 +426,7 @@ export async function runAgentTurnLoop(
     draft: { baseRevision, operations },
     ...(ports.frames === undefined ? {} : { frames: ports.frames }),
     ...(ports.effects === undefined ? {} : { effects: ports.effects }),
+    ...(ports.narration === undefined ? {} : { narration: ports.narration }),
     pointer: agentPointerSchema.parse(loaded.pointer),
   });
   let draft = editOperationSchema.array().parse(turn.draftOperations);
@@ -621,7 +625,8 @@ async function compileTurnContext(
   const policy = (projectRows[0]?.productionPolicy ?? {}) as Record<string, unknown>;
   const constraints = Object.entries(policy).filter(([key, value]) => key.startsWith('allow') && value === false).map(([key]) => key);
   const { timeline: state } = await simulateAgentDraft(context, context.draft);
-  const timeline = buildAgentTimelineView(state, session.sequenceId, await effectLayersOnTimeline(context, state, session.sequenceId));
+  const { view: timeline } = await agentTimelineViewOf(context, state, session.sequenceId);
+  const article = await projectArticle(deps, turn.projectId);
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const footageTool = catalog.get('list_footage');
   const footage = footageTool === undefined ? null : JSON.parse((await footageTool.run(context, {})).content) as unknown;
@@ -668,6 +673,7 @@ async function compileTurnContext(
     timeline,
     footage,
     pointer: pointerView,
+    ...(article === null ? {} : { article: articleContextView(article) }),
     strategy,
     recentTurns,
     request: turn.message,
@@ -678,7 +684,7 @@ async function compileTurnContext(
  * 审片上下文（V6-4）：讨论 → 这一条批注（位置、所指片段、框选、已有方案）；
  * 一次执行 → 这一轮里已确定的全部批注。批注在所审的版本上标记；当前版本不同时如实给出两个版本号。
  */
-async function compileReviewContext(deps: DomainDeps, turn: TurnRow, timeline: ReturnType<typeof buildAgentTimelineView>): Promise<unknown> {
+async function compileReviewContext(deps: DomainDeps, turn: TurnRow, timeline: AgentTimelineView): Promise<unknown> {
   if (turn.purpose === 'EDIT' || turn.reviewRoundId === null) return null;
   const rounds = await deps.db.select().from(reviewRounds).where(eq(reviewRounds.id, turn.reviewRoundId)).limit(1);
   const round = rounds[0];

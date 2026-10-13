@@ -5,6 +5,7 @@ import { frameRateSchema, mediaRangeSchema, mediaTimeSchema } from './common/med
 import { revisionSchema } from './common/revision.js';
 import { identitySnapshotSchema, sceneGraphSchema, sourceReferenceSchema } from './scene-graph.js';
 import { privacyTierSchema } from './workspaces.js';
+import { projectArticleSchema } from './narration.js';
 import { clipSchema, sequenceSchema, trackSchema } from './composition.js';
 import {
   animationBindingSchema,
@@ -27,6 +28,8 @@ export const projectBriefSchema = z.object({
   audience: z.string().max(1_000).default(''),
   language: z.string().max(40).nullable().default(null),
   notes: z.string().max(8_000).default(''),
+  /** V6-5：从文章开始的工程，文章原文（AI 的参考数据；图解里的数字只能出自这里） */
+  article: projectArticleSchema.nullable().default(null),
 });
 export type ProjectBrief = z.infer<typeof projectBriefSchema>;
 

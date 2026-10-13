@@ -210,5 +210,11 @@ export function useStudioActions(workspaceId: string, projectId: string) {
     onSuccess: invalidateProject,
   });
 
-  return { send, cancel, adopt, discard, undoChange, startExport, setEffectsAllowed, invalidateProject };
+  /** 项目制作规则：开/关 AI 合成配音讲述（V6-5；用户显式操作，服务端记事件） */
+  const setNarrationAllowed = useMutation({
+    mutationFn: (allowed: boolean) => client.studio.updateProductionPolicy(workspaceId, projectId, { allowGeneratedSpeech: allowed }, { idempotencyKey: randomKey('policy') }),
+    onSuccess: invalidateProject,
+  });
+
+  return { send, cancel, adopt, discard, undoChange, startExport, setEffectsAllowed, setNarrationAllowed, invalidateProject };
 }

@@ -11,7 +11,8 @@ import styles from './studio.module.css';
  * 视频保持原色；试改预览有明确标记，采用前工程不变。
  */
 
-export type CanvasMode = 'empty' | 'processing' | 'noCut' | 'video';
+/** article（V6-5）：从文章开始的工程，还没有素材也还没有剪辑 */
+export type CanvasMode = 'empty' | 'processing' | 'noCut' | 'article' | 'video';
 
 export interface UploadProgress {
   id: string;
@@ -85,6 +86,8 @@ export function StudioCanvas(props: {
   uploads: UploadProgress[];
   canEdit: boolean;
   firstCutBusy: boolean;
+  /** 从文章开始的工程：文章段数（article 状态显示） */
+  articleParagraphs?: number;
   onAddFootage: () => void;
   onDropFiles: (files: File[]) => void;
   onFirstCut: () => void;
@@ -153,6 +156,20 @@ export function StudioCanvas(props: {
         <span className={styles['spinner']} aria-hidden="true" />
         <h2>{t.processingTitle}</h2>
         <p>{t.processingBody}</p>
+        {uploadsList}
+      </div>
+    );
+  } else if (props.mode === 'article') {
+    content = (
+      <div className={styles['empty']}>
+        <h2>{t.articleTitle(props.articleParagraphs ?? 0)}</h2>
+        <p>{t.articleBody}</p>
+        {props.canEdit ? (
+          <div className={styles['emptyActions']}>
+            <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.articleFirstCut}</button>
+            <button type="button" className={styles['onMatteButtonQuiet']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button>
+          </div>
+        ) : null}
         {uploadsList}
       </div>
     );

@@ -30,11 +30,12 @@ const footage = (name: string, footageId: string) => ({
   understanding: { index: 'READY', transcript: 'WORKING', visual: 'FAILED' },
 });
 const studioState = (overrides: Record<string, unknown> = {}) => ({
-  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5, allowEffects: false },
+  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5, allowEffects: false, allowNarration: false, article: null },
   sequenceId: 'seq_1',
   session: { id: 'ses_1', workspaceId: 'ws_1', projectId: 'prj_1', sequenceId: 'seq_1', locale: 'zh-CN', createdBy: null, createdAt: '2026-10-12T00:00:00.000Z' },
   footage: [footage('glacier.mp4', 'av_g'), footage('lake.mp4', 'av_l')],
   effects: [],
+  narration: [],
   cost: { projectId: 'prj_1', turns: 1, usage: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 120_000, unpricedCalls: 0 },
   ...overrides,
 });
@@ -230,6 +231,54 @@ describe('V6-1c 共看片室', () => {
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
     expect(await screen.findByRole('button', { name: /^片段 特效 Sparkles，00:00\.2 到 00:00\.7$/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^片段 glacier\.mp4/ })).toBeTruthy();
+  });
+
+  it('V6-5 从文章开始：还没剪时显示文章已就绪，一键让 AI 讲成视频；配音开关显式修改项目规则', async () => {
+    const { sdk, startTurn } = client({ state: studioState({ footage: [], project: { id: 'prj_1', title: '淡水', aspectRatio: '16:9', revision: 1, allowEffects: true, allowNarration: false, article: { title: '淡水', characters: 120, paragraphs: 3 } } }) });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('文章已就绪（3 段）')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: /配音：关/ });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(toggle);
+    await waitFor(() => expect(sdk.studio.updateProductionPolicy).toHaveBeenCalledWith('ws_1', 'prj_1', { allowGeneratedSpeech: true }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+    await userEvent.click(screen.getByRole('button', { name: '让 AI 讲成视频' }));
+    await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', expect.objectContaining({ message: '根据文章做出第一版解说视频。' }), expect.anything()));
+  });
+
+  it('V6-5 讲述轨：讲述片段标出讲述稿开头，排在画面下面', async () => {
+    const narrationText = 'Water covers about 71 percent of the surface of the Earth, and most of it is salt water.';
+    const { sdk } = client({
+      turns: [],
+      state: studioState({ narration: [{ footageId: 'av_vo', text: narrationText, voice: 'flite-slt', engine: 'flite' }] }),
+      clips: [
+        { id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sequenceRange: range(0, 90) },
+        { id: 'clp_vo', sequenceId: 'seq_1', trackId: 'trk_vo', assetVersionId: 'av_vo', sequenceRange: range(0, 150) },
+      ],
+      extra: {
+        projects: {
+          state: vi.fn().mockResolvedValue({
+            document: {
+              projectRevision: 5,
+              composition: {
+                sequences: [{ id: 'seq_1', duration: mt(150), frameRate: { num: 30, den: 1 } }],
+                tracks: [{ id: 'trk_v', sequenceId: 'seq_1', kind: 'VIDEO', position: 0 }, { id: 'trk_a', sequenceId: 'seq_1', kind: 'AUDIO', position: 1 }, { id: 'trk_vo', sequenceId: 'seq_1', kind: 'AUDIO', position: 2 }],
+                clips: [
+                  { id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sequenceRange: range(0, 90) },
+                  { id: 'clp_vo', sequenceId: 'seq_1', trackId: 'trk_vo', assetVersionId: 'av_vo', sequenceRange: range(0, 150) },
+                ],
+              },
+            },
+          }),
+          proposal: vi.fn().mockResolvedValue(proposal),
+          adoptProposal: vi.fn(),
+          discardProposal: vi.fn(),
+        },
+      },
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const clip = await screen.findByRole('button', { name: /^片段 讲述「Water covers about 71 percent of the su…」，00:00\.0 到 00:05\.0$/ });
+    expect(clip.textContent).toBe('Water covers about 71 percent of the su…');
+    expect(screen.getByText('讲述')).toBeTruthy();
   });
 
   it('风格（可选）：默认不选；选了风格和旋钮，这一轮对话带上策略包与取值', async () => {

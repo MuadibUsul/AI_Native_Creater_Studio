@@ -136,6 +136,60 @@ export const BUILT_IN_STRATEGY_PACKS: readonly StrategyPack[] = [
     ],
     source: null,
   }),
+  strategyPackSchema.parse({
+    id: 'builtin:explainer',
+    version: 1,
+    kind: 'BUILT_IN',
+    genre: 'explainer',
+    name: { 'zh-CN': '知识解说', en: 'Explainer' },
+    summary: {
+      'zh-CN': '讲述带着走的知识解说：开头一句话抛出问题，每个要点配一张图解卡（要点、步骤、数据图），关键词上屏，节奏跟着讲述，结尾一句话收住结论。',
+      en: 'A narration-led explainer: open with the question in one sentence, give each point its own diagram card (key points, steps, data), put key words on screen, let the narration set the pace, close with a one-line takeaway.',
+    },
+    knobs: [
+      {
+        key: 'density', label: { 'zh-CN': '信息密度', en: 'Density' }, defaultValue: 'default',
+        options: [
+          { value: 'lighter', label: { 'zh-CN': '更轻松', en: 'Lighter' }, guidance: 'Fewer points, one idea per card, more breathing room between parts.' },
+          { value: 'default', label: { 'zh-CN': '默认', en: 'Default' }, guidance: 'One card per point of the script.' },
+          { value: 'denser', label: { 'zh-CN': '更紧凑', en: 'Denser' }, guidance: 'Shorter sentences and a new card every one or two sentences.' },
+        ],
+      },
+      {
+        key: 'cards', label: { 'zh-CN': '图解', en: 'Cards' }, defaultValue: 'mixed',
+        options: [
+          { value: 'mixed', label: { 'zh-CN': '图文混合', en: 'Mixed' }, guidance: 'Mix key-point, steps, quote and data cards as the content suggests.' },
+          { value: 'data_first', label: { 'zh-CN': '多用数据', en: 'Data first' }, guidance: 'Prefer bar charts and big numbers wherever the source gives numbers.' },
+        ],
+      },
+    ],
+    editingDna: {
+      shotSeconds: { typical: { min: 4, max: 10 }, median: 6 },
+      beatCutRatio: null,
+      shotScaleVariety: null,
+      transitionsPerMinute: 2,
+      speedRampsPerMinute: 0,
+      zoomsPerMinute: null,
+      hookSeconds: 5,
+      captionStyle: 'Sentence captions for the narration; key words as large text on cards',
+      soundHabits: 'Narration leads; light music underneath when available',
+      colorTendency: 'Clean, high-contrast cards with one accent color',
+    },
+    structureHints: [
+      'Hook (0-5 s): the question or surprising fact, as a title card',
+      'Context: why it matters, in one or two sentences',
+      'Points: each point narrated with its own card (key points, steps, a data chart when the source gives numbers)',
+      'Takeaway: one sentence that answers the opening question',
+    ],
+    agentGuidance: 'Style reference chosen by the user: narration-led explainer. Write a short spoken script from the source (plain words, short sentences), narrate it part by part, and give each part one diagram card timed to its sentences; use data cards only with numbers stated in the source. Keep one accent color across cards. Footage, when present, illustrates what is being said.',
+    styleRubric: [
+      { key: 'clear_hook', criterion: 'The first five seconds state the question or the surprising fact.', weight: 2 },
+      { key: 'one_idea_per_card', criterion: 'Each card carries one idea and appears while that idea is being narrated.', weight: 2 },
+      { key: 'sourced_numbers', criterion: 'Every number shown appears in the source text.', weight: 2 },
+      { key: 'takeaway', criterion: 'The ending states the takeaway in one sentence.', weight: 1 },
+    ],
+    source: null,
+  }),
 ];
 
 const summaryOf = (pack: StrategyPack, createdAt: Date | null): StrategyPackSummary => strategyPackSummarySchema.parse({

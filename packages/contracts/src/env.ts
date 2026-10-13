@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { narrationVoiceSchema } from './narration.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -287,6 +288,18 @@ export const workerEnvSchema = z.object({
   ANCS_REFERENCE_FETCH_CMD: nonEmpty('ANCS_REFERENCE_FETCH_CMD').refine((value) => value.includes('{url}') && value.includes('{output}'), 'ANCS_REFERENCE_FETCH_CMD 必须包含 {url} 与 {output} 占位符').optional(),
   /** 参考视频大小上限（MB，缺省 1024） */
   ANCS_REFERENCE_MAX_MB: z.coerce.number().int().min(1).max(8192).optional(),
+  /**
+   * V6-5 讲述配音（AI 合成讲述音频）：flite = FFmpeg 内置的本地英文语音（无需密钥、音质基础，FFmpeg 需带 libflite）；
+   * process = 部署方接入的语音合成子进程（任意供应商；协议：stdin 一行 JSON {text, voice, speed}，stdout 输出 FFmpeg 可解码的音频）。
+   * 不配置时讲述工具明确报"本部署没有配置配音"。
+   */
+  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process' }).optional(),
+  ANCS_NARRATION_EXECUTABLE: nonEmpty('ANCS_NARRATION_EXECUTABLE').optional(),
+  ANCS_NARRATION_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_NARRATION_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /** process 驱动提供的声音列表（JSON 数组：{ id, name, languages: ["zh","en"], description }） */
+  ANCS_NARRATION_VOICES_JSON: z.string().refine((value) => {
+    try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => narrationVoiceSchema.safeParse(item).success); } catch { return false; }
+  }, 'ANCS_NARRATION_VOICES_JSON 必须是声音数组 JSON：[{ "id": "zh-female-1", "name": "…", "languages": ["zh"], "description": "…" }]').optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
@@ -320,6 +333,12 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_ASR_DRIVER === 'process' && value.ANCS_ASR_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_ASR_EXECUTABLE', message: 'ANCS_ASR_DRIVER=process 时必须配置 ANCS_ASR_EXECUTABLE' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_EXECUTABLE', message: 'ANCS_NARRATION_DRIVER=process 时必须配置 ANCS_NARRATION_EXECUTABLE' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=process 时必须用 ANCS_NARRATION_VOICES_JSON 声明可用的声音与语言' });
   }
   if (value.ANCS_WORKER_HEARTBEAT_MS !== undefined && value.ANCS_WORKER_HEARTBEAT_MS >= value.ANCS_WORKER_LEASE_SECONDS * 1000) {
     issues.push({ variable: 'ANCS_WORKER_HEARTBEAT_MS', message: '心跳间隔必须小于租约时长（否则租约会在两次心跳之间过期）' });

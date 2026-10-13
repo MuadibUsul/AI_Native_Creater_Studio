@@ -42,6 +42,8 @@ export interface StripLane {
   kind: 'VIDEO' | 'AUDIO';
   /** 特效轨（V6-3）：轨上是特效图层 */
   effect?: boolean;
+  /** 讲述轨（V6-5）：轨上是 AI 合成的讲述配音 */
+  narration?: boolean;
 }
 
 const DRAG_THRESHOLD_PX = 4;
@@ -159,7 +161,13 @@ export function StudioTimeStrip(props: {
     const left = xAtSequenceTime(viewport, range.start);
     return { left, width: Math.max(2, xAtSequenceTime(viewport, range.end) - left) };
   };
-  const lanes = props.lanes.map((lane) => ({ trackId: lane.trackId, label: lane.effect === true ? t.effects : lane.kind === 'VIDEO' ? t.video : t.audio, audio: lane.kind === 'AUDIO', effect: lane.effect === true }));
+  const lanes = props.lanes.map((lane) => ({
+    trackId: lane.trackId,
+    label: lane.effect === true ? t.effects : lane.narration === true ? t.narration : lane.kind === 'VIDEO' ? t.video : t.audio,
+    audio: lane.kind === 'AUDIO',
+    effect: lane.effect === true,
+    narration: lane.narration === true,
+  }));
   const playheadX = viewport === null || props.clips.length === 0 || compareMediaTime(props.playhead, props.duration) > 0 ? null : xAtSequenceTime(viewport, props.playhead);
 
   return (
@@ -190,7 +198,7 @@ export function StudioTimeStrip(props: {
       </div>
       <div className={styles['lanes']} aria-label={t.selectArea} onPointerDown={onLanesDown} onPointerMove={onLanesMove} onPointerUp={onLanesUp} onPointerCancel={onLanesUp}>
         {props.clips.length === 0 ? <p className={styles['stripEmpty']}>{t.empty}</p> : lanes.map((lane) => (
-          <div key={lane.trackId} className={`${styles['lane']} ${lane.audio ? styles['laneAudio'] : ''} ${lane.effect ? styles['laneEffect'] : ''}`}>
+          <div key={lane.trackId} className={`${styles['lane']} ${lane.audio ? styles['laneAudio'] : ''} ${lane.effect ? styles['laneEffect'] : ''} ${lane.narration ? styles['laneNarration'] : ''}`}>
             <span className={styles['laneLabel']}>{lane.label}</span>
             {props.clips.filter((clip) => clip.trackId === lane.trackId).map((clip) => {
               const box = span(clip.sequenceRange);
@@ -201,10 +209,10 @@ export function StudioTimeStrip(props: {
                   key={clip.id}
                   type="button"
                   data-clip-id={clip.id}
-                  className={`${styles['clip']} ${lane.audio ? styles['clipAudio'] : ''} ${lane.effect ? styles['clipEffect'] : ''} ${selected ? styles['clipSelected'] : ''}`}
+                  className={`${styles['clip']} ${lane.audio ? styles['clipAudio'] : ''} ${lane.effect ? styles['clipEffect'] : ''} ${lane.narration ? styles['clipNarration'] : ''} ${selected ? styles['clipSelected'] : ''}`}
                   style={{ left: `${String(box.left)}px`, width: `${String(box.width)}px` }}
                   aria-pressed={selected}
-                  aria-label={t.clip(lane.effect ? t.effect(label) : label, formatClock(clip.sequenceRange.start), formatClock(clip.sequenceRange.end))}
+                  aria-label={t.clip(lane.effect ? t.effect(label) : lane.narration ? t.narrationClip(label) : label, formatClock(clip.sequenceRange.start), formatClock(clip.sequenceRange.end))}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
@@ -212,7 +220,7 @@ export function StudioTimeStrip(props: {
                     }
                   }}
                 >
-                  {lane.audio ? '' : label}
+                  {lane.audio && !lane.narration ? '' : label}
                 </button>
               );
             })}

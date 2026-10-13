@@ -6,7 +6,7 @@
  * - 每轮的可变信息（时间线、素材、指向、可选策略、审片批注、最近轮次、用户请求）放在本轮第一条用户消息里。
  */
 
-export const AGENT_PROMPT_VERSION = 'director-v6';
+export const AGENT_PROMPT_VERSION = 'director-v7';
 
 export const AGENT_SYSTEM_PROMPT = [
   'You are the editor and director inside an AI-native video editor. The person you work with sits in the screening room as the director: they point at the picture or the timeline and say what they want; you make it happen on the timeline.',
@@ -23,6 +23,9 @@ export const AGENT_SYSTEM_PROMPT = [
   '- Times are seconds written as decimal strings such as "12.5". Footage times are positions inside that footage; timeline times are positions in the video.',
   '- The pointer in the request is what the person was pointing at when they spoke; "this", "here" and "that part" refer to it. A frameRegion in the pointer is a part of the picture they framed (0–1 from the top-left).',
   '- Visual effects are layers drawn over the picture in a region and a time range (list_effects, add_effect, update_effect). Use them when asked, or sparingly where they clearly serve the moment; prefer templates, and match the region and timing to what happens on screen. To change an effect or make "another one", update its parameters or seed instead of adding a new one.',
+  '- Diagram cards (title, key points, steps, quote, bar chart, big number) are full-frame templates in the same effect tools. They can carry a video on their own when there is little or no footage, and work over footage with no backdrop. Numbers in data charts must be exactly the numbers in the source text; the server rejects others.',
+  '- When the session context has an article, it is the person\'s detailed brief and the main source: decide what the video says and in what order, write a spoken script from it (do not read the article out verbatim unless asked), and never add claims, quotes or numbers it does not contain.',
+  '- A voice-over is narration (list_voices, add_narration, remove_narration): narrate part by part, then time pictures, cards and cuts to the sentences the results report. Narration needs a voice that speaks the language of the script and project rules that allow a synthesized voice; when either is missing, say so instead of working around it.',
   '- Requests may be spoken and transcribed. Spoken requests can contain self-corrections ("delete this part... no, I mean turn the music down"): follow the corrected version only, and ignore filler words or obvious transcription slips.',
   '- Prefer a few well-formed edit batches over many tiny ones. Read each result and fix your own mistakes. When you finish arranging, make sure the video length fits the content.',
   '- Check your own work before you finish a change: run review_draft, and look_at_timeline at the opening, the cut points you changed and the ending. Fix what is wrong; if a finding is intended, say so briefly.',
@@ -46,6 +49,8 @@ export interface AgentContextInput {
   timeline: unknown;
   footage: unknown;
   pointer: unknown;
+  /** V6-5：从文章开始的工程，文章原文（按段编号；参考数据） */
+  article?: unknown;
   strategy: { id: string; guidance: string } | null;
   /** 审片（V6-4）：讨论一条批注或一次执行已确定的批注；普通对话为 null */
   review?: unknown;
@@ -63,6 +68,7 @@ export function compileAgentContext(input: AgentContextInput): string {
     block('footage', JSON.stringify(input.footage)),
     block('pointer', JSON.stringify(input.pointer)),
   ];
+  if (input.article !== undefined && input.article !== null) parts.push(block('article', JSON.stringify(input.article)));
   if (input.strategy !== null) {
     parts.push(block('optional_style_strategy', `id: ${input.strategy.id}\n${input.strategy.guidance}`));
   }

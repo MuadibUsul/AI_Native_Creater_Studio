@@ -16,7 +16,12 @@ import { frameRegionSchema } from './frame-region.js';
  * - 能力探测：AI 写特效代码默认关闭，部署方按评测结果开启（`ANCS_EFFECT_CODEGEN=enabled`）；关闭时用模板库。
  */
 
-export const EFFECT_PARAM_KINDS = ['color', 'number', 'choice'] as const;
+/** text（V6-5 图解）：标题、要点、图表数据等文字；多项用换行或 | 分隔，长度受 maxLength 限制。 */
+export const EFFECT_PARAM_KINDS = ['color', 'number', 'choice', 'text'] as const;
+/** 文字参数的最大长度上限（单个参数） */
+export const MAX_EFFECT_TEXT_PARAM = 600;
+/** 特效图层的最长时长（秒）：图解卡片常常要配满一段讲述 */
+export const MAX_EFFECT_SECONDS = 30;
 
 export const effectParamSchema = z.object({
   key: z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/),
@@ -28,6 +33,8 @@ export const effectParamSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   options: z.array(z.string().min(1).max(32)).max(8).optional(),
+  /** text 参数的最大长度 */
+  maxLength: z.number().int().positive().max(MAX_EFFECT_TEXT_PARAM).optional(),
 }).strict();
 export type EffectParam = z.infer<typeof effectParamSchema>;
 
@@ -40,11 +47,16 @@ export const effectTemplateSchema = z.object({
   description: z.string().min(1).max(400),
   params: z.array(effectParamSchema).max(8),
   /** 建议时长（秒） */
-  defaultSeconds: z.number().positive().max(20),
+  defaultSeconds: z.number().positive().max(MAX_EFFECT_SECONDS),
   /** 建议作用范围：画面里的一块区域，或整个画面 */
   coverage: z.enum(EFFECT_COVERAGE),
   /** 特效代码（与 Custom Motion 同一契约） */
   code: z.string().min(20).max(20_000),
+  /**
+   * 数据图解（V6-5）：参数里出现的每个数字都必须能在本工程的来源文字（文章）里找到，
+   * 服务端在渲染前校验（数据图表不得使用虚构数值）。
+   */
+  numbersFromSource: z.boolean().default(false),
 }).strict();
 export type EffectTemplate = z.infer<typeof effectTemplateSchema>;
 
@@ -110,4 +122,6 @@ export const EFFECT_ERROR_REASONS = {
   RENDERER_UNAVAILABLE: 'EFFECT_RENDERER_UNAVAILABLE',
   RENDER_FAILED: 'EFFECT_RENDER_FAILED',
   NOT_AN_EFFECT: 'EFFECT_CLIP_NOT_EFFECT',
+  /** 图解里的数字在来源文字里找不到（或工程没有来源文字） */
+  NUMBERS_NOT_IN_SOURCE: 'EFFECT_NUMBERS_NOT_IN_SOURCE',
 } as const;

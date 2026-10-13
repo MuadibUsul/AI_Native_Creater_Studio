@@ -2773,12 +2773,13 @@ export {
   studioAnalysisStateSchema,
   studioAspectRatioSchema,
   studioEffectSchema,
+  studioNarrationSchema,
   studioFootageSchema,
   studioProjectRefSchema,
   studioStateSchema,
   undoChangeResponseSchema,
 } from './studio.js';
-export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
 export {
   STRATEGY_ERROR_REASONS,
   STRATEGY_PACK_KINDS,
@@ -2837,6 +2838,8 @@ export {
   EFFECT_COVERAGE,
   EFFECT_ERROR_REASONS,
   EFFECT_PARAM_KINDS,
+  MAX_EFFECT_SECONDS,
+  MAX_EFFECT_TEXT_PARAM,
   effectLayerMetadataSchema,
   effectParamSchema,
   effectRegionSchema,
@@ -2845,6 +2848,24 @@ export {
 export type { AgentEffectPorts, AgentEffectRenderer, EffectCodegenMode, EffectLayerMetadata, EffectParam, EffectRegion, EffectRenderRequest, EffectTemplate } from './effects.js';
 export { frameRegionSchema } from './frame-region.js';
 export type { FrameRegion } from './frame-region.js';
+export {
+  MAX_ARTICLE_CHARS,
+  MAX_NARRATION_CHARS,
+  NARRATION_ERROR_REASONS,
+  NARRATION_TRACK_PREFIX,
+  narrationMetadataSchema,
+  narrationVoiceSchema,
+  projectArticleSchema,
+} from './narration.js';
+export type {
+  AgentNarrationPorts,
+  NarrationMetadata,
+  NarrationSynthesisRequest,
+  NarrationSynthesisResult,
+  NarrationSynthesizer,
+  NarrationVoice,
+  ProjectArticle,
+} from './narration.js';
 export {
   DISTILL_ERROR_REASONS,
   DISTILL_STEPS,
