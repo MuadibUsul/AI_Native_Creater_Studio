@@ -21,6 +21,8 @@ export const studioKeys = {
   previewRequest: (projectId: string, sequenceId: string, target: string) => ['studio', 'preview-request', projectId, sequenceId, target] as const,
   preview: (workspaceId: string, previewId: string) => ['studio', 'preview', workspaceId, previewId] as const,
   exportRun: (workspaceId: string, runId: string) => ['studio', 'export', workspaceId, runId] as const,
+  /** 这条视频的导出运行列表（任务中心只读） */
+  exports: (workspaceId: string, projectId: string) => ['studio', 'exports', workspaceId, projectId] as const,
 };
 
 const footageBusy = (state: StudioState | undefined): boolean =>
@@ -204,6 +206,8 @@ export function useStudioActions(workspaceId: string, projectId: string) {
   const startExport = useMutation({
     mutationFn: (input: { sequenceId: string; width: number; height: number; revision: number }) =>
       client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision }, { idempotencyKey: randomKey('export') }),
+    // 任务中心的导出列表随之刷新（进行中时它自己每 5 秒轮询到结束）
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: studioKeys.exports(workspaceId, projectId) }),
   });
 
   /** 项目制作规则：开/关程序化特效（V6-3；用户显式操作，服务端记事件） */

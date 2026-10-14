@@ -29,8 +29,6 @@ let page;
 try {
   await mkdir(evidenceDir, { recursive: true });
   env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v64-' });
-  const { client, password } = await env.signedInClient(email);
-
   // 1. 准备：一条已采用的第一版（真实上传 → 真实 FFmpeg 处理 → AI 一轮 → 采用）
   const footageDir = join(env.workDir, 'footage');
   await mkdir(footageDir, { recursive: true });
@@ -39,6 +37,8 @@ try {
     execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `${video}:duration=6`, '-f', 'lavfi', '-i', `sine=frequency=${String(tone)}:duration=6`,
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', join(footageDir, name)]);
   }
+  // 先编码素材再登录：编码耗时数秒，登录后的空闲连接会被服务端 keep-alive 超时关掉（复用时 ECONNRESET）
+  const { client, password } = await env.signedInClient(email);
   const workspace = await client.workspaces.create({ name: '审片验收' });
   const ref = await client.studio.create(workspace.id, { title: '冰岛环岛 · 审片', aspectRatio: '16:9', locale: 'zh-CN' }, { idempotencyKey: `s-${randomUUID()}` });
   for (const [name] of sources) {

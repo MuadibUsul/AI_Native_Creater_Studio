@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import {
   compareMediaTime,
   mediaTimeSchema,
@@ -21,7 +21,20 @@ import styles from './studio.module.css';
 /**
  * 共看片室时间带：标尺拖动定位播放头；片段区拖动选一段时间（有理时间，按帧网格吸附），点击选中片段。
  * 选择本身不改工程，只交给对话作为"指着哪里"。
+ * 缩放（界面精修第三阶段）：zoom > 1 时内容按倍数加宽、横向滚动；坐标换算仍走 contracts 的有理视口（widthPx = 可见宽 × zoom），
+ * Ctrl/⌘ + 滚轮以指针处为锚点缩放，其余方式以播放头为锚点；播放头移出可见区时自动跟随。
+ * 试改改动：changes 来自服务端 A/B 对照（真实片段区间），只画在标尺下沿，不改选区。
  */
+
+/** 时间带缩放档位（1 = 适合宽度） */
+export const STRIP_ZOOM_LEVELS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16] as const;
+
+/** 下一档缩放（direction 1 放大，-1 缩小），到头不变 */
+export function nextStripZoom(current: number, direction: 1 | -1): number {
+  const levels: readonly number[] = STRIP_ZOOM_LEVELS;
+  if (direction > 0) return levels.find((level) => level > current + 1e-9) ?? levels[levels.length - 1]!;
+  return [...levels].reverse().find((level) => level < current - 1e-9) ?? levels[0]!;
+}
 
 export interface StudioSelection {
   range: MediaRange | null;
@@ -63,13 +76,13 @@ function useWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   return [ref, width];
 }
 
-/** 标尺刻度：按可用宽度选 1/2/5/10/15/30/60 秒间隔。 */
-function tickTimes(duration: MediaTime, widthPx: number): MediaTime[] {
-  const total = (Number(duration.ticks) * duration.timebase.num) / duration.timebase.den;
+/** 标尺刻度：按内容宽度选间隔（以 0.1 秒为单位：0.1/0.2/0.5/1/2/5/10/15/30/60… 秒），刻度时间是有理的十分之一秒。 */
+function tickTimes(duration: MediaTime, widthPx: number): { time: MediaTime; tenths: boolean }[] {
+  const totalTenths = (Number(duration.ticks) * duration.timebase.num * 10) / duration.timebase.den;
   const maxTicks = Math.max(2, Math.floor(widthPx / 90));
-  const step = [1, 2, 5, 10, 15, 30, 60, 120, 300].find((candidate) => total / candidate <= maxTicks) ?? 600;
-  const ticks: MediaTime[] = [];
-  for (let second = 0; second < total; second += step) ticks.push(mediaTimeSchema.parse({ ticks: String(second), timebase: { num: 1, den: 1 } }));
+  const step = [1, 2, 5, 10, 20, 50, 100, 150, 300, 600, 1200, 3000].find((candidate) => totalTenths / candidate <= maxTicks) ?? 6000;
+  const ticks: { time: MediaTime; tenths: boolean }[] = [];
+  for (let tenth = 0; tenth < totalTenths; tenth += step) ticks.push({ time: mediaTimeSchema.parse({ ticks: String(tenth), timebase: { num: 1, den: 10 } }), tenths: step < 10 });
   return ticks;
 }
 
@@ -83,21 +96,48 @@ export function StudioTimeStrip(props: {
   selection: StudioSelection;
   onSeek: (time: MediaTime) => void;
   onSelectionChange: (selection: StudioSelection) => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+  /** 试改相对当前版本内容有改动的序列区间（来自服务端对照） */
+  changes?: MediaRange[];
 }) {
   const { messages } = useI18n();
   const t = messages.studio.strip;
   const [ref, width] = useWidth();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const zoom = props.zoom ?? 1;
+  const contentWidth = width * zoom;
+  const onZoomChange = props.onZoomChange;
+  // 缩放锚点：滚轮缩放记下指针处的内容比例，缩放后把同一位置放回指针下
+  const pendingAnchor = useRef<{ fraction: number; offset: number } | null>(null);
   const [drag, setDrag] = useState<{ anchorX: number; focusX: number; clipId: string | null; moved: boolean } | null>(null);
   const scrubbing = useRef(false);
   const hasDuration = Number(props.duration.ticks) > 0;
   const viewport: TimelineViewport | null = width > 0 && hasDuration
-    ? { start: mediaTimeSchema.parse({ ticks: '0', timebase: props.duration.timebase }), end: props.duration, widthPx: width }
+    ? { start: mediaTimeSchema.parse({ ticks: '0', timebase: props.duration.timebase }), end: props.duration, widthPx: contentWidth }
     : null;
 
   const xOf = (event: { clientX: number }): number => {
-    const rect = ref.current?.getBoundingClientRect();
-    return rect === undefined ? 0 : Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+    const rect = (contentRef.current ?? ref.current)?.getBoundingClientRect();
+    return rect === undefined ? 0 : Math.min(Math.max(event.clientX - rect.left, 0), contentWidth);
   };
+
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null || onZoomChange === undefined) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const next = nextStripZoom(zoom, event.deltaY < 0 ? 1 : -1);
+      if (next === zoom) return;
+      const outer = element.getBoundingClientRect();
+      const offset = event.clientX - outer.left;
+      pendingAnchor.current = { fraction: contentWidth > 0 ? (element.scrollLeft + offset) / contentWidth : 0, offset };
+      onZoomChange(next);
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [ref, zoom, contentWidth, onZoomChange]);
   const timeAt = (x: number): MediaTime | null => (viewport === null ? null : sequenceTimeAtX(viewport, x, { frameRate: props.frameRate }));
 
   const onRulerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -170,8 +210,27 @@ export function StudioTimeStrip(props: {
   }));
   const playheadX = viewport === null || props.clips.length === 0 || compareMediaTime(props.playhead, props.duration) > 0 ? null : xAtSequenceTime(viewport, props.playhead);
 
+  // 缩放后：滚轮缩放保持指针处不动；其余方式让播放头留在可见区（靠左四分之一处）
+  const lastZoom = useRef(zoom);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    const anchor = pendingAnchor.current;
+    pendingAnchor.current = null;
+    if (anchor !== null) element.scrollLeft = Math.max(0, anchor.fraction * contentWidth - anchor.offset);
+    else if (lastZoom.current !== zoom && playheadX !== null) element.scrollLeft = Math.max(0, playheadX - width / 4);
+    lastZoom.current = zoom;
+  }, [ref, zoom, contentWidth, width, playheadX]);
+  // 播放头移出可见区（播放或跳转）时跟随
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null || zoom <= 1 || playheadX === null) return;
+    if (playheadX < element.scrollLeft + 8 || playheadX > element.scrollLeft + width - 8) element.scrollLeft = Math.max(0, playheadX - width / 4);
+  }, [ref, zoom, width, playheadX]);
+
   return (
-    <div className={styles['strip']} ref={ref} role="group" aria-label={t.label} tabIndex={-1} onKeyDown={onKeyDown}>
+    <div className={styles['strip']} ref={ref} role="group" aria-label={t.label} tabIndex={-1} onKeyDown={onKeyDown} data-zoomed={zoom > 1 ? 'true' : undefined}>
+      <div className={styles['stripContent']} ref={contentRef} style={zoom > 1 ? { width: `${String(contentWidth)}px` } : undefined}>
       <div
         className={styles['ruler']}
         role="slider"
@@ -192,8 +251,11 @@ export function StudioTimeStrip(props: {
           props.onSeek(stepFrames({ time: props.playhead, frameRate: props.frameRate, delta, bounds: { start: viewport.start, end: viewport.end } }));
         }}
       >
-        {viewport !== null ? tickTimes(props.duration, width).map((time) => (
-          <span key={time.ticks} className={styles['tick']} style={{ left: `${String(xAtSequenceTime(viewport, time))}px` }}>{formatClock(time).replace(/\.\d$/, '')}</span>
+        {viewport !== null ? tickTimes(props.duration, contentWidth).map(({ time, tenths }) => (
+          <span key={time.ticks} className={styles['tick']} style={{ left: `${String(xAtSequenceTime(viewport, time))}px` }}>{tenths ? formatClock(time) : formatClock(time).replace(/\.\d$/, '')}</span>
+        )) : null}
+        {viewport !== null ? (props.changes ?? []).map((range) => (
+          <span key={`${range.start.ticks}/${range.start.timebase.den}-${range.end.ticks}`} className={styles['change']} title={t.changed} style={{ left: `${String(span(range).left)}px`, width: `${String(span(range).width)}px` }} />
         )) : null}
       </div>
       <div className={styles['lanes']} aria-label={t.selectArea} onPointerDown={onLanesDown} onPointerMove={onLanesMove} onPointerUp={onLanesUp} onPointerCancel={onLanesUp}>
@@ -229,6 +291,7 @@ export function StudioTimeStrip(props: {
         {shownRange !== null && viewport !== null ? <div className={styles['selection']} style={{ left: `${String(span(shownRange).left)}px`, width: `${String(span(shownRange).width)}px` }} /> : null}
       </div>
       {playheadX !== null ? <div className={styles['playhead']} style={{ left: `${String(playheadX)}px` }} aria-hidden="true" /> : null}
+      </div>
     </div>
   );
 }

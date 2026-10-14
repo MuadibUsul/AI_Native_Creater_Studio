@@ -27,6 +27,11 @@ export function frameTimeAtSeconds(seconds: number, frameRate: FrameRate): Media
   return mediaTimeSchema.parse({ ticks: String(frames), timebase: { num: frameRate.den, den: frameRate.num } });
 }
 
+/** 一秒约合多少帧（Shift+方向键按秒移动用；29.97 取 30）。 */
+export function framesPerSecond(frameRate: FrameRate): number {
+  return Math.max(1, Math.round(frameRate.num / frameRate.den));
+}
+
 /** MediaTime → 浮点秒（仅用于设置 <video>.currentTime）。 */
 export function displaySeconds(time: MediaTime): number {
   return (Number(time.ticks) * time.timebase.num) / time.timebase.den;

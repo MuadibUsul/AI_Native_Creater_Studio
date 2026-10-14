@@ -26,7 +26,7 @@
   min-height: 52px;
   padding: 0 var(--ui-space-3);
   border-bottom: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-elevated);
+  background: var(--ui-bg-canvas);
   min-width: 0;
 }
 .titleGroup { display: flex; flex-direction: column; min-width: 0; }
@@ -37,14 +37,17 @@
 .body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .watch { display: flex; flex-direction: column; scroll-margin-top: 52px; }
 
-/* 看片区 */
+/* 看片区：与共看片室一致，是四周留边的内嵌"屏幕"（垫底仍为 media matte，不改视频像素） */
 .stage {
   display: flex;
   justify-content: center;
   background: var(--ui-media-matte);
-  padding: var(--ui-space-3);
+  padding: var(--ui-space-2);
+  margin: var(--ui-space-2) var(--ui-space-2) 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
 }
-.frame { position: relative; width: 100%; max-height: var(--review-stage-height); background: #000; touch-action: manipulation; }
+.frame { position: relative; width: 100%; max-height: var(--review-stage-height); background: #000; touch-action: manipulation; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
 .video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .stageStatus {
   position: absolute;
@@ -61,9 +64,10 @@
   position: absolute;
   top: var(--ui-space-2);
   left: var(--ui-space-2);
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: var(--ui-radius-pill);
   font-size: var(--ui-type-metadata);
+  font-weight: 500;
   background: rgba(10, 10, 10, .72);
   color: var(--review-on-matte);
   border: 1px solid var(--review-matte-line);
@@ -86,7 +90,7 @@
 .drawLayer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; outline: 2px dashed var(--review-on-matte); outline-offset: -4px; }
 
 /* 批注位置条 */
-.markers { position: relative; height: 10px; margin: 0 var(--ui-space-3); background: var(--ui-bg-subtle); border-radius: 5px; overflow: hidden; }
+.markers { position: relative; height: 10px; margin: var(--ui-space-2) var(--ui-space-3) 0; background: var(--ui-bg-subtle); border-radius: 5px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--ui-border-subtle); }
 .marker { position: absolute; top: 0; bottom: 0; min-width: 4px; background: var(--ui-fg-secondary); opacity: .75; border-radius: 3px; }
 .markerAGREED { background: var(--ui-fg-primary); opacity: 1; }
 .markerDISMISSED { opacity: .3; }
@@ -94,7 +98,7 @@
 .markersPlayhead { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ui-fg-primary); transform: translateX(-1px); z-index: 1; }
 
 .markRow { display: flex; align-items: center; gap: var(--ui-space-3); padding: var(--ui-space-3); flex-wrap: wrap; }
-.clock { font-variant-numeric: tabular-nums; font-weight: 600; }
+.clock { font-family: var(--ui-font-mono); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -.01em; }
 .hint { flex: 1; min-width: 160px; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
 
 /* 标记表单 */
@@ -107,6 +111,7 @@
   border: 1px solid var(--ui-border-control);
   border-radius: var(--ui-radius-overlay);
   background: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-2);
 }
 .composerHead { display: flex; align-items: center; gap: var(--ui-space-2); flex-wrap: wrap; }
 .composerRegion { display: flex; gap: var(--ui-space-2); flex-wrap: wrap; }
@@ -128,10 +133,12 @@
   border: 1px solid var(--ui-border-subtle);
   border-radius: var(--ui-radius-overlay);
   background: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-1);
 }
 .noteMuted { opacity: .65; }
 .noteHead { display: flex; align-items: center; gap: var(--ui-space-2); flex-wrap: wrap; }
 .timeChip {
+  font-family: var(--ui-font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--ui-type-metadata);
   padding: 3px 8px;
@@ -140,7 +147,8 @@
   background: var(--ui-bg-canvas);
   color: var(--ui-fg-primary);
 }
-button.timeChip { cursor: pointer; min-height: 28px; }
+button.timeChip { cursor: pointer; min-height: 28px; border-color: var(--ui-border-control); transition: background-color var(--ui-motion-feedback) var(--ui-ease-standard); }
+button.timeChip:hover { background: var(--ui-bg-hover); }
 .statusChip { font-size: var(--ui-type-metadata); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--ui-border-subtle); color: var(--ui-fg-secondary); }
 .statusAGREED, .statusAPPLIED { border-color: var(--ui-fg-primary); color: var(--ui-fg-primary); font-weight: 500; }
 .noteMeta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
@@ -167,7 +175,7 @@ button.timeChip { cursor: pointer; min-height: 28px; }
   padding: var(--ui-space-3);
   padding-bottom: calc(var(--ui-space-3) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-elevated);
+  background: var(--ui-bg-canvas);
 }
 .applyBar:empty { display: none; }
 .applyRow { display: flex; align-items: center; gap: var(--ui-space-2); flex-wrap: wrap; }
@@ -193,6 +201,6 @@ button.timeChip { cursor: pointer; min-height: 28px; }
   .room { --review-stage-height: calc(100dvh - 300px); }
   .body { flex-direction: row; align-items: flex-start; }
   .watch { flex: 1 1 auto; min-width: 0; position: sticky; top: 52px; }
-  .stage { padding: var(--ui-space-4); }
+  .stage { padding: var(--ui-space-4); margin: var(--ui-space-3) var(--ui-space-3) 0; border-radius: var(--ui-radius-overlay); }
   .notesPanel { width: 420px; flex: none; border-left: 1px solid var(--ui-border-subtle); min-height: calc(100dvh - 52px); padding-bottom: var(--ui-space-6); }
 }

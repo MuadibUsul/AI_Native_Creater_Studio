@@ -169,6 +169,8 @@ export function StudioConversation(props: ConversationProps) {
           <textarea
             rows={1}
             aria-label={t.inputLabel}
+            aria-keyshortcuts="/"
+            data-composer-input
             value={draft}
             disabled={!props.canEdit}
             placeholder={props.pointerLabel !== null ? t.placeholderSelected : t.placeholder}

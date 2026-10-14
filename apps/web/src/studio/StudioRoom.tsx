@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
@@ -17,8 +17,11 @@ import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCar
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
 import { StudioDistillDrawer } from './StudioDistillDrawer';
-import { StudioTimeStrip, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
-import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, pointerSecondsText } from './studio-time';
+import { StudioRuleGroup } from './StudioRuleGroup';
+import { STRIP_ZOOM_LEVELS, StudioTimeStrip, nextStripZoom, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
+import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
+import { StudioShortcuts } from './StudioShortcuts';
+import { StudioTasks, studioTaskRows, useStudioExports } from './StudioTasks';
 import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
 import { useReplySpeech } from '@/voice/useReplySpeech';
 import { useVoice } from '@/voice/useVoice';
@@ -32,6 +35,16 @@ import styles from './studio.module.css';
  */
 
 const ZERO: MediaTime = mediaTimeSchema.parse({ ticks: '0', timebase: { num: 1, den: 30 } });
+
+/** 键盘处理读取的最新状态（每次渲染更新，监听只绑定一次） */
+interface StudioKeyboardState {
+  playhead: MediaTime;
+  duration: MediaTime | null;
+  canMark: boolean;
+  overlayOpen: boolean;
+  toggleMark: () => void;
+  clearPointer: () => void;
+}
 const EDIT_ROLES = new Set(['OWNER', 'ADMIN', 'EDITOR']);
 
 function uploadAssetType(file: File): 'SOURCE_IMAGE' | 'VOICE_AUDIO' | 'USER_UPLOAD' {
@@ -115,6 +128,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   // 时间带显示的就是正在看的那一版：试改时取试改预览的计划（片段 id 与采用后一致），否则取工程当前版本
   const trialView = trial !== null && targetPreview !== null && targetPreview.proposalId === trial.proposalId ? targetPreview : null;
+  // 试改改了哪里：服务端 A/B 对照（真实片段与区间，只读）；只标内容 / 素材 / 时长有变化的片段，单纯被挤后的位移不算
+  const compareQuery = useQuery({
+    queryKey: ['studio', 'compare', workspaceId, projectId, trial?.proposalId ?? 'none'],
+    queryFn: () => client.projects.compareProposal(workspaceId, projectId, trial?.proposalId ?? '', { againstProposalId: null, axes: ['CONTENT', 'ASSET', 'DURATION'] }),
+    enabled: trialView !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const trialChanges = useMemo(() => (trialView === null ? [] : (compareQuery.data?.diffs ?? [])
+    .filter((diff) => diff.objectKind === 'CLIP' && (diff.change === 'ADDED' || diff.change === 'CHANGED') && diff.afterSequenceRange !== null)
+    .map((diff) => diff.afterSequenceRange as MediaRange)), [trialView, compareQuery.data]);
   // 特效图层（V6-3）：资产版本 → 特效名；时间带给特效轨与片段标名
   const effectNames = useMemo(() => new Map((state?.effects ?? []).map((effect) => [effect.footageId, effect.name])), [state?.effects]);
   // 讲述配音（V6-5）：资产版本 → 讲述稿开头；时间带给讲述轨与片段标名
@@ -171,16 +195,104 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     if (video.paused) void video.play().catch(() => undefined);
     else video.pause();
   }, []);
+  // 键盘（V6 界面精修第二阶段）：空格播放、方向键逐帧 / Shift 按秒、Home/End、M 框选、/ 跟 AI 说、Esc 清除、? 快捷键列表；
+  // 按住 Ctrl / ⌘ 半秒显示快捷键（松开即收起）。正在输入、浮层打开或组合键时不接管。每次渲染把最新状态放进 ref，监听只绑一次。
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [zoom, setZoom] = useState<number>(STRIP_ZOOM_LEVELS[0]);
+  const [shortcutsHeld, setShortcutsHeld] = useState(false);
+  const keyboard = useRef<StudioKeyboardState>({ playhead: ZERO, duration: null, canMark: false, overlayOpen: false, toggleMark: () => undefined, clearPointer: () => undefined });
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (event.key !== ' ' || target?.closest('input, textarea, button, select, [role="slider"], [contenteditable="true"]')) return;
-      event.preventDefault();
-      togglePlay();
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    const stopHold = () => {
+      if (holdTimer !== null) clearTimeout(holdTimer);
+      holdTimer = null;
+      setShortcutsHeld(false);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [togglePlay]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Control' || event.key === 'Meta') {
+        if (!event.repeat && holdTimer === null) holdTimer = setTimeout(() => setShortcutsHeld(true), 500);
+        return;
+      }
+      stopHold();
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [role="slider"], [contenteditable="true"]')) return;
+      const state = keyboard.current;
+      if (event.key === 'Escape') {
+        if (!state.overlayOpen) state.clearPointer();
+        setShortcutsOpen(false);
+        return;
+      }
+      if (event.key === '?') {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+        return;
+      }
+      if (state.overlayOpen) return;
+      const moveTo = (time: MediaTime) => {
+        event.preventDefault();
+        videoRef.current?.pause();
+        seek(time);
+      };
+      switch (event.key) {
+        case ' ':
+          if (target?.closest('button, a')) return;
+          event.preventDefault();
+          togglePlay();
+          return;
+        case 'ArrowLeft':
+        case 'ArrowRight': {
+          const frames = event.shiftKey ? framesPerSecond(frameRate) : 1;
+          moveTo(stepFrames({ time: state.playhead, frameRate, delta: event.key === 'ArrowLeft' ? -frames : frames, ...(state.duration === null ? {} : { bounds: { start: ZERO, end: state.duration } }) }));
+          return;
+        }
+        case 'Home':
+          moveTo(ZERO);
+          return;
+        case 'End':
+          if (state.duration !== null) moveTo(stepFrames({ time: state.duration, frameRate, delta: 0, bounds: { start: ZERO, end: state.duration } }));
+          return;
+        case 'm':
+        case 'M':
+          if (!state.canMark) return;
+          event.preventDefault();
+          state.toggleMark();
+          return;
+        case '+':
+        case '=':
+          event.preventDefault();
+          setZoom((current) => nextStripZoom(current, 1));
+          return;
+        case '-':
+        case '_':
+          event.preventDefault();
+          setZoom((current) => nextStripZoom(current, -1));
+          return;
+        case '0':
+          event.preventDefault();
+          setZoom(STRIP_ZOOM_LEVELS[0]);
+          return;
+        case '/': {
+          const input = document.querySelector<HTMLTextAreaElement>('[data-composer-input]');
+          if (input === null || input.disabled) return;
+          event.preventDefault();
+          input.focus();
+          return;
+        }
+        default:
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => { if (event.key === 'Control' || event.key === 'Meta') stopHold(); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', stopHold);
+    return () => {
+      if (holdTimer !== null) clearTimeout(holdTimer);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', stopHold);
+    };
+  }, [togglePlay, seek, frameRate]);
 
   // 指：时间带选择 → 交给 AI 的 pointer
   const [selection, setSelection] = useState<StudioSelection>({ range: null, clipId: null });
@@ -304,6 +416,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [footageOpen, setFootageOpen] = useState(false);
   const [distillOpen, setDistillOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const exportsQuery = useStudioExports(workspaceId, projectId);
   const upload = (files: File[]) => {
     for (const file of files) {
       const id = `${file.name}-${String(file.size)}-${String(file.lastModified)}-${globalThis.crypto.randomUUID()}`;
@@ -328,6 +442,15 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     applyAppearance(next);
     const userId = session.data?.user?.id;
     if (userId) saveDeviceAppearance(userId, next);
+  };
+
+  keyboard.current = {
+    playhead,
+    duration: strip?.duration ?? null,
+    canMark: shown !== null && canEdit,
+    overlayOpen: exportOpen || footageOpen || distillOpen || tasksOpen,
+    toggleMark: () => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); },
+    clearPointer: () => { setSelection({ range: null, clipId: null }); setFramed(null); setDrawing(false); },
   };
 
   if (stateQuery.isPending) {
@@ -359,6 +482,16 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : article !== null ? 'article' : 'empty';
   const running = latest?.status === 'RUNNING';
   const cost = state.cost;
+  const taskRows = studioTaskRows({
+    footage: state.footage,
+    generations: state.generations,
+    exports: exportsQuery.data ?? [],
+    turn: latest,
+    t,
+    formatTime: (iso) => new Date(iso).toLocaleString(locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
+  });
+  const activeTasks = taskRows.filter((row) => row.status === 'running').length;
+  const failedTasks = taskRows.filter((row) => row.status === 'failed').length;
 
   return (
     <div className={styles['room']} lang={locale}>
@@ -371,44 +504,51 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
           {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
-          <div className={styles['ruleGroup']} role="group" aria-label={t.rulesLabel}>
-            <button
-              type="button"
-              className="btn small ghost"
-              aria-pressed={state.project.allowEffects}
-              title={state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff}
-              disabled={!canEdit || actions.setEffectsAllowed.isPending}
-              onClick={() => {
-                setActionError(null);
-                actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
-              }}
-            ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
-            <button
-              type="button"
-              className="btn small ghost"
-              aria-pressed={state.project.allowNarration}
-              title={state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff}
-              disabled={!canEdit || actions.setNarrationAllowed.isPending}
-              onClick={() => {
-                setActionError(null);
-                actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
-              }}
-            ><QuietIcon name="voice" />{state.project.allowNarration ? t.narration.on : t.narration.off}</button>
-            <button
-              type="button"
-              className="btn small ghost"
-              aria-pressed={state.project.allowGeneratedVideo}
-              title={state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff}
-              disabled={!canEdit || actions.setGenerationAllowed.isPending}
-              onClick={() => {
-                setActionError(null);
-                actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
-              }}
-            ><QuietIcon name="film" />{state.project.allowGeneratedVideo ? t.generation.on : t.generation.off}</button>
-          </div>
+          <StudioRuleGroup
+            label={t.rulesLabel}
+            rules={[
+              {
+                key: 'effects',
+                pressed: state.project.allowEffects,
+                disabled: !canEdit || actions.setEffectsAllowed.isPending,
+                title: state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff,
+                icon: <QuietIcon name="spark" />,
+                label: state.project.allowEffects ? t.effects.on : t.effects.off,
+                onToggle: () => {
+                  setActionError(null);
+                  actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
+                },
+              },
+              {
+                key: 'narration',
+                pressed: state.project.allowNarration,
+                disabled: !canEdit || actions.setNarrationAllowed.isPending,
+                title: state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff,
+                icon: <QuietIcon name="voice" />,
+                label: state.project.allowNarration ? t.narration.on : t.narration.off,
+                onToggle: () => {
+                  setActionError(null);
+                  actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
+                },
+              },
+              {
+                key: 'generation',
+                pressed: state.project.allowGeneratedVideo,
+                disabled: !canEdit || actions.setGenerationAllowed.isPending,
+                title: state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff,
+                icon: <QuietIcon name="film" />,
+                label: state.project.allowGeneratedVideo ? t.generation.on : t.generation.off,
+                onToggle: () => {
+                  setActionError(null);
+                  actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
+                },
+              },
+            ]}
+          />
           <span className={styles['divider']} aria-hidden="true" />
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
-          <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
+          <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
+          <button type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>
@@ -446,17 +586,27 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
       <div className={styles['dock']}>
         <div className={styles['transport']}>
-          <button type="button" className={`btn icononly small ${styles['play']}`} aria-label={playing ? t.transport.pause : t.transport.play} disabled={shown === null} onClick={togglePlay}>
+          <button type="button" className={`btn icononly small ${styles['play']}`} aria-label={playing ? t.transport.pause : t.transport.play} title={t.transport.playHint} aria-keyshortcuts="Space" disabled={shown === null} onClick={togglePlay}>
             <QuietIcon name={playing ? 'pause' : 'play'} />
           </button>
           <span className={styles['clock']} aria-label={t.transport.position}>{formatClock(playhead)} <span>/ {strip === null ? '--:--.-' : formatClock(strip.duration)}</span></span>
           {shown !== null && canEdit ? (
-            <button type="button" className="btn small ghost" aria-pressed={drawing} title={t.canvas.markAreaHint} onClick={() => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); }}>
+            <button type="button" className="btn small ghost" aria-pressed={drawing} title={t.canvas.markAreaHint} aria-keyshortcuts="M" onClick={() => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); }}>
               <QuietIcon name="expand" />{drawing ? t.canvas.markAreaActive : t.canvas.markArea}
             </button>
           ) : null}
           <span className={styles['spacer']} />
           {shown !== null && shown.segments.reused > 0 ? <span className={styles['meta']}>{t.canvas.reused(shown.segments.reused, shown.segments.total)}</span> : null}
+          {trialChanges.length > 0 ? <span className={styles['meta']}>{t.strip.changes(trialChanges.length)}</span> : null}
+          {strip !== null ? (
+            <div className={styles['zoom']} role="group" aria-label={t.strip.zoomLevel}>
+              <button type="button" className="btn small ghost" aria-label={t.strip.zoomOut} aria-keyshortcuts="-" disabled={zoom <= STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(nextStripZoom(zoom, -1))}>−</button>
+              <span className={styles['zoomLevel']} aria-live="polite">{`${String(zoom)}×`}</span>
+              <button type="button" className="btn small ghost" aria-label={t.strip.zoomIn} aria-keyshortcuts="+" disabled={zoom >= STRIP_ZOOM_LEVELS[STRIP_ZOOM_LEVELS.length - 1]!} onClick={() => setZoom(nextStripZoom(zoom, 1))}>+</button>
+              <button type="button" className="btn small ghost" aria-keyshortcuts="0" disabled={zoom === STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(STRIP_ZOOM_LEVELS[0])}>{t.strip.zoomFit}</button>
+            </div>
+          ) : null}
+          <button type="button" className={`textbtn small ${styles['shortcutsButton']}`} aria-expanded={shortcutsOpen} aria-keyshortcuts="Shift+?" title={t.shortcuts.openHint} onClick={() => setShortcutsOpen(!shortcutsOpen)}>{t.shortcuts.open}</button>
         </div>
         {strip !== null ? (
           <StudioTimeStrip
@@ -469,6 +619,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
             selection={selection}
             onSeek={seek}
             onSelectionChange={setSelection}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            changes={trialChanges}
           />
         ) : null}
         <StudioConversation
@@ -493,7 +646,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           strategies={strategies.data ?? []}
           strategy={strategy}
           onStrategyChange={setStrategy}
-          onLearnStrategy={() => { setFootageOpen(false); setDistillOpen(true); }}
+          onLearnStrategy={() => { setFootageOpen(false); setTasksOpen(false); setDistillOpen(true); }}
           generationCards={(
             <StudioGenerationCards
               generations={visibleGenerations(state.generations)}
@@ -542,7 +695,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           onUse={(pack) => { setStrategy({ packId: pack.id, knobs: Object.fromEntries(pack.knobs.map((knob) => [knob.key, knob.defaultValue])) }); setDistillOpen(false); }}
         />
       ) : null}
+      {tasksOpen ? <StudioTasks rows={taskRows} loadFailed={exportsQuery.isError} onClose={() => setTasksOpen(false)} /> : null}
       {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
+      <StudioShortcuts open={shortcutsOpen} held={shortcutsHeld} onClose={() => setShortcutsOpen(false)} />
       {exportOpen ? (
         <StudioExport
           workspaceId={workspaceId}

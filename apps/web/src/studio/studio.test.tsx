@@ -5,7 +5,7 @@ import { apiError, mockClient, renderWithClient } from '@/test-utils';
 import { MESSAGES } from '@/i18n/messages';
 import { StudioRoom } from './StudioRoom';
 import { exportSize } from './StudioExport';
-import { formatClock, frameTimeAtSeconds, pointerSecondsText } from './studio-time';
+import { formatClock, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 
 /**
  * V6-1c 共看片室（组件层，脚本化 SDK）：状态画面、试改的就地预览与采用、时间带指认进入对话、AI 失败原因、中英切换。
@@ -20,6 +20,9 @@ beforeAll(() => {
     unobserve(): void {}
     disconnect(): void {}
   } as unknown as typeof ResizeObserver;
+  // jsdom 没有媒体播放：键盘逐帧会先暂停视频
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, width: 900, height: 40, right: 900, bottom: 40, toJSON: () => ({}) });
 });
 
@@ -82,6 +85,15 @@ const beatPack = {
   }],
 };
 const proposal = { proposalId: 'prp_1', status: 'OPEN', operationsHash: 'b'.repeat(64), selectionFingerprint: null, committedRevision: null };
+const clipDiff = (objectId: string, change: string, after: ReturnType<typeof range> | null) => ({
+  objectKind: 'CLIP', objectId, label: null, change, axes: ['CONTENT'], beforeAssetVersionId: null, afterAssetVersionId: null,
+  beforeTrackId: 'trk_v', afterTrackId: 'trk_v', beforeSequenceRange: after, afterSequenceRange: after, alignedBy: 'CLIP_ID',
+});
+const compareReport = {
+  proposalId: 'prp_1', workspaceId: 'ws_1', projectId: 'prj_1', comparedAgainst: { kind: 'CURRENT', ref: null }, leftLabel: 'r5', rightLabel: 'prp_1', alignment: 'CLIP_ID',
+  diffs: [clipDiff('clp_g', 'UNCHANGED', range(0, 90)), clipDiff('clp_l', 'CHANGED', range(90, 150)), clipDiff('clp_x', 'REMOVED', null)],
+  unchangedCount: 1, addedCount: 0, removedCount: 1, changedCount: 1, anchorMatchedCount: 0, unmatchedAnchors: [], assetVersionIds: [],
+};
 
 function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown[]; extra?: Record<string, unknown> } = {}) {
   const adoptProposal = vi.fn().mockResolvedValue({ proposal: { ...proposal, status: 'COMMITTED', committedRevision: 6 }, projectRevision: 6, adopted: true });
@@ -95,9 +107,11 @@ function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown
       proposal: vi.fn().mockResolvedValue(proposal),
       adoptProposal,
       discardProposal: vi.fn().mockResolvedValue({ ...proposal, status: 'DISCARDED' }),
+      compareProposal: vi.fn().mockResolvedValue(compareReport),
     },
     agent: { listTurns: vi.fn().mockResolvedValue(overrides.turns ?? []), startTurn, createSession: vi.fn(), cancelTurn: vi.fn(), strategies: vi.fn().mockResolvedValue([beatPack]) },
     previews: { request: vi.fn().mockResolvedValue(preview()), get: vi.fn().mockResolvedValue(preview()) },
+    finalRenders: { list: vi.fn().mockResolvedValue([{ id: 'wfr_1', status: 'SUCCEEDED', createdAt: '2026-10-14T08:00:00.000Z' }]) },
     assets: { uploadResumable: vi.fn() },
     ...overrides.extra,
   });
@@ -125,6 +139,12 @@ describe('V6-1c 共看片室', () => {
     expect(pointerSecondsText(mt(100))).toBe('3.333');
     expect(exportSize('9:16')).toEqual({ width: 1080, height: 1920 });
     expect(exportSize('16:9')).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it('按秒移动：一秒约合的帧数（29.97 取 30）', () => {
+    expect(framesPerSecond({ num: 30, den: 1 })).toBe(30);
+    expect(framesPerSecond({ num: 30000, den: 1001 })).toBe(30);
+    expect(framesPerSecond({ num: 24000, den: 1001 })).toBe(24);
   });
 
   it('空作品：放入素材的引导；没有试改时不请求预览', async () => {
@@ -164,6 +184,90 @@ describe('V6-1c 共看片室', () => {
     await waitFor(() => expect(adoptProposal).toHaveBeenCalledWith('ws_1', 'prj_1', 'prp_1', {
       expectedOperationsHash: 'b'.repeat(64), expectedSelectionFingerprint: null, idempotencyKey: expect.any(String),
     }));
+  });
+
+  it('快捷键：方向键逐帧 / Shift 按秒、Home/End、M 框选、/ 跟 AI 说、? 与按住 Ctrl 显示列表、Esc 收起；输入框里不接管', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('试改预览 · 还没采用')).toBeTruthy();
+    const clock = () => screen.getByLabelText('播放位置').textContent ?? '';
+    expect(clock()).toMatch(/^00:00\.0/);
+    await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
+    expect(clock()).toMatch(/^00:01\.0/);
+    for (let index = 0; index < 3; index += 1) await userEvent.keyboard('{ArrowRight}');
+    expect(clock()).toMatch(/^00:01\.1/);
+    await userEvent.keyboard('{End}');
+    expect(clock()).toMatch(/^00:06\.0 \/ 00:06\.0/);
+    await userEvent.keyboard('{Home}');
+    expect(clock()).toMatch(/^00:00\.0/);
+
+    const mark = screen.getByRole('button', { name: '框选画面' });
+    expect(mark.getAttribute('aria-keyshortcuts')).toBe('M');
+    await userEvent.keyboard('m');
+    expect(screen.getByRole('button', { name: '拖动框选…' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: '框选画面' }).getAttribute('aria-pressed')).toBe('false');
+
+    const composer = screen.getByLabelText('告诉 AI 怎么改') as HTMLTextAreaElement;
+    await userEvent.keyboard('/');
+    expect(document.activeElement).toBe(composer);
+    expect(composer.value).toBe('');
+    // 输入框里打字时方向键与问号不接管
+    await userEvent.keyboard('{ArrowRight}?');
+    expect(composer.value).toBe('?');
+    expect(clock()).toMatch(/^00:00\.0/);
+    expect(screen.queryByRole('region', { name: '快捷键' })).toBeNull();
+    composer.blur();
+
+    await userEvent.keyboard('?');
+    const list = screen.getByRole('region', { name: '快捷键' });
+    expect(within(list).getByText('后退 / 前进一帧')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('region', { name: '快捷键' })).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Control' });
+    expect(await screen.findByRole('region', { name: '快捷键' }, { timeout: 1500 })).toBeTruthy();
+    expect(screen.getByText('松开 Ctrl / ⌘ 即收起')).toBeTruthy();
+    fireEvent.keyUp(window, { key: 'Control' });
+    expect(screen.queryByRole('region', { name: '快捷键' })).toBeNull();
+  });
+
+  it('时间带：试改改动的位置来自服务端对照（只标内容有改动的片段）；缩放按钮与 + / - / 0', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('试改改了 1 处')).toBeTruthy();
+    expect(sdk.projects.compareProposal).toHaveBeenCalledWith('ws_1', 'prj_1', 'prp_1', { againstProposalId: null, axes: ['CONTENT', 'ASSET', 'DURATION'] });
+    expect(screen.getAllByTitle('试改在这里改了内容')).toHaveLength(1);
+
+    const zoom = screen.getByRole('group', { name: '时间带缩放' });
+    expect(within(zoom).getByText('1×')).toBeTruthy();
+    expect((within(zoom).getByRole('button', { name: '缩小时间带' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(within(zoom).getByRole('button', { name: '放大时间带' }));
+    expect(within(zoom).getByText('1.5×')).toBeTruthy();
+    expect(screen.getByRole('group', { name: '时间带' }).getAttribute('data-zoomed')).toBe('true');
+    await userEvent.keyboard('++');
+    expect(within(zoom).getByText('3×')).toBeTruthy();
+    await userEvent.keyboard('-');
+    expect(within(zoom).getByText('2×')).toBeTruthy();
+    await userEvent.keyboard('0');
+    expect(within(zoom).getByText('1×')).toBeTruthy();
+    expect(screen.getByRole('group', { name: '时间带' }).getAttribute('data-zoomed')).toBeNull();
+  });
+
+  it('任务中心：顶栏按钮写明进行中数量；抽屉按组列出素材、导出与 AI 这一轮（只读服务端状态）', async () => {
+    const { sdk } = client({ turns: [turn({ status: 'RUNNING', proposalId: null, reply: null, toolCalls: [] })] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    // 两段素材仍在理解语音（transcript WORKING）+ AI 这一轮进行中 = 3 项
+    const button = await screen.findByRole('button', { name: '任务：3 项进行中' });
+    expect(button.textContent).toContain('任务 3');
+    await userEvent.click(button);
+    const panel = screen.getByRole('complementary', { name: '任务' });
+    expect(within(within(panel).getByRole('region', { name: 'AI 这一轮' })).getByText('进行中')).toBeTruthy();
+    expect(within(within(panel).getByRole('region', { name: '素材处理' })).getByText('2 段素材已就绪')).toBeTruthy();
+    expect(within(within(panel).getByRole('region', { name: '导出' })).getByText('完成')).toBeTruthy();
+    expect(sdk.finalRenders.list).toHaveBeenCalledWith('ws_1', 'prj_1');
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('complementary', { name: '任务' })).toBeNull();
   });
 
   it('指：点选时间带上的片段 → 对话带上指认的片段', async () => {

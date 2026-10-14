@@ -50,7 +50,9 @@ try {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(`${page.url()}: ${error.message}`));
   page.on('console', (message) => { if (message.type() === 'error' && /hydrat|did not match/i.test(message.text())) pageErrors.push(`console: ${message.text()}`); });
-  const shot = async (name) => { await page.screenshot({ path: resolve(evidenceDir, `${name}.png`) }); };
+  // 截图前等有限时长的进场动画结束（无限循环的"处理中"脉冲不等），避免拍到抽屉半透明的中间帧
+  const settle = () => page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity), undefined, { timeout: 2_000 }).catch(() => undefined);
+  const shot = async (name) => { await settle(); await page.screenshot({ path: resolve(evidenceDir, `${name}.png`) }); };
 
   // 1. 登录 → 建工作区 → 首页入口 → 新建
   await page.goto(`${baseUrl}/sign-in`, { waitUntil: 'networkidle' });
@@ -62,6 +64,13 @@ try {
   await page.getByRole('button', { name: '创建工作区' }).click();
   await page.getByRole('link', { name: '进入共看片室' }).waitFor({ timeout: 20_000 });
   await shot('01-home-entry');
+  // 首页与侧栏/顶栏也是中英双语：切到英文看一眼再切回
+  await page.getByRole('button', { name: '切换为英文界面' }).click();
+  await page.getByRole('heading', { name: 'Turn ideas into finished work.' }).waitFor({ timeout: 10_000 });
+  await page.getByRole('navigation', { name: 'Main navigation' }).or(page.getByRole('complementary', { name: 'Main navigation' })).waitFor({ timeout: 10_000 });
+  await shot('01b-home-english');
+  await page.getByRole('button', { name: 'Switch the interface to Chinese' }).click();
+  await page.getByRole('link', { name: '进入共看片室' }).waitFor({ timeout: 10_000 });
   await page.getByRole('link', { name: '进入共看片室' }).click();
   await page.getByRole('heading', { name: '新建一条视频' }).waitFor({ timeout: 20_000 });
   await page.getByRole('button', { name: '开始' }).click();
@@ -142,8 +151,12 @@ try {
   pass('可选风格随这一轮发送并记录', `${styledTurn.strategyPackId} ${JSON.stringify(styledTurn.strategyKnobs)}`);
   const reuse = await page.getByText(/^复用 \d+\/\d+ 段$/).textContent();
   if (/^复用 0\//.test(reuse)) throw new Error(`expected reused preview segments, got "${reuse}"`);
+  // 试改改了哪里：服务端对照给出的真实区间，标在标尺下沿
+  const changed = await page.getByText(/^试改改了 \d+ 处$/).textContent({ timeout: 20_000 });
+  const changeMarks = await page.getByTitle('试改在这里改了内容').count();
+  if (changeMarks < 1) throw new Error('local trial: no change marks on the ruler');
   await shot('09-local-trial');
-  pass('指着时间说一句 → 局部试改预览', `选区 ${chip}；${reuse}`);
+  pass('指着时间说一句 → 局部试改预览', `选区 ${chip}；${reuse}；${changed}（标尺 ${String(changeMarks)} 处标记）`);
 
   // 6. 不采用，点选试改里的片段再说一句 → 在试改上继续（新试改取代旧试改）
   await page.getByText('/ 00:08.0').waitFor({ timeout: 20_000 });
@@ -179,6 +192,16 @@ try {
   pass('导出并下载成片', `${String(finalVideo.width)}×${String(finalVideo.height)}，${Number(probed.format.duration).toFixed(2)} s，${String((await stat(downloaded)).size)} 字节`);
   await page.getByRole('button', { name: '关闭' }).click();
 
+  // 8b. 任务中心：导出记录由服务端保存，刷新前后都在这里（只读）
+  await page.getByRole('button', { name: /^任务：/ }).click();
+  const tasks = page.getByRole('complementary', { name: '任务' });
+  await tasks.getByRole('region', { name: '导出' }).getByText('完成').first().waitFor({ timeout: 20_000 });
+  await tasks.getByRole('region', { name: '素材处理' }).getByText('3 段素材已就绪').waitFor({ timeout: 10_000 });
+  await shot('12b-tasks');
+  await page.keyboard.press('Escape');
+  await tasks.waitFor({ state: 'detached', timeout: 10_000 });
+  pass('任务中心', '导出记录"完成"、3 段素材已就绪；Esc 收起');
+
   // 9. 英文界面、深色、1280×800
   await page.getByRole('button', { name: '切换为英文界面' }).click();
   await page.getByText('Current version').waitFor();
@@ -200,7 +223,30 @@ try {
   await page.getByText('当前版本').waitFor({ timeout: 60_000 });
   pass('刷新后状态保持', '语言、工程版本与预览恢复');
 
-  // 10. 手机宽度：顶栏的每个操作都要够得着（导出不能被挤出屏幕）
+  // 10. 键盘：Home → Shift+→ 前进一秒；? 打开快捷键列表、Esc 收起
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.getByLabel('播放位置').getByText(/^00:01\.0/).waitFor({ timeout: 10_000 }).catch(async () => {
+    throw new Error(`keyboard: Shift+ArrowRight did not move to 00:01.0 (clock "${await page.getByLabel('播放位置').textContent()}")`);
+  });
+  await page.keyboard.press('Shift+Slash');
+  await page.getByRole('region', { name: '快捷键' }).waitFor({ timeout: 10_000 });
+  await shot('18-shortcuts');
+  await page.keyboard.press('Escape');
+  await page.getByRole('region', { name: '快捷键' }).waitFor({ state: 'detached', timeout: 10_000 });
+  // 时间带缩放：+ 两次 → 2×，内容加宽并可横向滚动；0 回到适合宽度
+  await page.keyboard.press('Equal');
+  await page.keyboard.press('Equal');
+  const zoomGroup = page.getByRole('group', { name: '时间带缩放' });
+  await zoomGroup.getByText('2×', { exact: true }).waitFor({ timeout: 10_000 });
+  const scrollable = await page.getByRole('group', { name: '时间带', exact: true }).evaluate((element) => element.scrollWidth - element.clientWidth);
+  if (scrollable < 100) throw new Error(`zoom: the timeline did not widen (scrollable ${String(scrollable)} px)`);
+  await shot('18b-zoom');
+  await page.keyboard.press('Digit0');
+  await zoomGroup.getByText('1×', { exact: true }).waitFor({ timeout: 10_000 });
+  pass('键盘', `Shift+→ 前进一秒到 00:01.0；? 打开快捷键列表，Esc 收起；+ 两次缩放到 2×（可横向滚动 ${String(scrollable)} px），0 恢复`);
+
+  // 11. 手机宽度：顶栏的每个操作都要够得着（导出不能被挤出屏幕）
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(400);
   await shot('17-phone');

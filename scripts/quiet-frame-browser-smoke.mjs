@@ -65,7 +65,7 @@ try {
   await app.listen({ host: '127.0.0.1', port: 0 });
   apiPort = app.server.address().port;
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, ...(process.env.ANCS_BROWSER_EXECUTABLE ? { executablePath: process.env.ANCS_BROWSER_EXECUTABLE } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
   page = await context.newPage();
   const pageErrors = [];
@@ -110,8 +110,8 @@ try {
     ['settings', `${workspacePath}/settings`, '保持掌控，也保持简单。'],
     ['team', `${workspacePath}/team`, '团队与隐私', '暂无邀请。'],
     ['billing', `${workspacePath}/billing`, '额度与账单', '暂无 Credits 流水（充值/赠送/使用后在此展示）。'],
-    ['analytics', `${projectPath}/analytics`, '看见作品，如何被理解。', '暂无可绘制的留存数据。平台未返回的数据保持未知。'],
-    ['history', `${projectPath}/history`, 'History'],
+    ['analytics', `${projectPath}/analytics`, '看见作品，如何被理解。', '暂无可绘制的采样值；缺失值保持未知。'],
+    ['history', `${projectPath}/history`, '版本历史'],
     ['render', `${projectPath}/render`, '最后一遍，由你把关。', '还没有渲染。建议先运行预检。'],
     ['publish', `${projectPath}/publish`, '作品准备好了。选择下一站。', '尚无发布记录。'],
   ];

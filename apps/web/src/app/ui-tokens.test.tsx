@@ -71,20 +71,18 @@ function effectDebt(path: string, source: string): string[] {
 }
 
 const legacyCss = 'apps/web/src/app/quiet-frame.css';
-const knownLegacyEffects = [
-  '.little-frames .frame', '.little-frames .frame:nth-child(2)', '.little-frames .frame:nth-child(3)',
-  '.viewer.graph', '.voice-hero', '.voice-sphere',
-].map((selector) => `${legacyCss}|${selector}|gradient`).concat([
-  '.prompt-dock', '.modal-backdrop', '.topbar',
-].map((selector) => `${legacyCss}|${selector}|blur`));
+// 2026-10 界面精修第三阶段：旧 Quiet Frame 的装饰渐变 / 背景模糊已全部移除，颜色已迁到 ui.* 语义 token（docs/design/ui-refresh-2026-10.md）。
+// 媒体内容（.cover / .art-* 等）的颜色与渐变属于内容例外，不计入。
+const knownLegacyEffects: string[] = [];
 
 const legacyHexBudgets: Record<string, number> = {
   'apps/web/src/app/globals.css': 0,
-  'apps/web/src/app/quiet-frame.css': 249,
-  'apps/web/src/components/quiet-frame/workspace.css': 3,
-  'apps/web/src/components/quiet-frame/workflow.css': 14,
-  'apps/web/src/components/quiet-frame/legacy.module.css': 2,
-  'apps/web/src/components/quiet-frame/delivery.module.css': 8,
+  'apps/web/src/app/quiet-frame.css': 0,
+  'apps/web/src/components/quiet-frame/workspace.css': 0,
+  'apps/web/src/components/quiet-frame/workflow.css': 0,
+  'apps/web/src/components/quiet-frame/legacy.module.css': 0,
+  // 看片区垫底上的固定浅色文字（与共看片室 --studio-on-matte 同理）
+  'apps/web/src/components/quiet-frame/delivery.module.css': 2,
   'apps/web/src/ui/finance-workspace.module.css': 0,
 };
 
@@ -135,7 +133,8 @@ describe('v0.4 UI token foundation', () => {
       return false;
     });
     expect(unexpected).toEqual([]);
-    expect(actual).toContain(`${legacyCss}|.voice-hero|gradient`);
+    expect(actual).toEqual([]);
+    expect(effectDebt(legacyCss, `${read(legacyCss)}\n.voice-hero { background: radial-gradient(#ffffff, #000000); }`)).toContain(`${legacyCss}|.voice-hero|gradient`);
     expect(effectDebt('apps/web/src/app/ui-tokens.css', `${css}\n.btn { backdrop-filter: blur(12px); }`))
       .toContain('apps/web/src/app/ui-tokens.css|.btn|blur');
     expect(effectDebt('content.css', '.media-content { background: linear-gradient(#ff0000, #0000ff); }')).toEqual([]);

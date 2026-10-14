@@ -170,13 +170,21 @@
   padding: var(--ui-space-2) var(--ui-space-4) var(--ui-space-3);
   background: var(--ui-bg-canvas);
 }
-.transport { display: flex; align-items: center; gap: var(--ui-space-3); min-height: 40px; }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--ui-space-3); min-height: 40px; }
 .play { width: 36px; min-width: 36px; padding: 0; border-radius: 50%; border-color: var(--ui-border-control); }
 .clock { font-family: var(--ui-font-mono); font-variant-numeric: tabular-nums; font-size: 13px; letter-spacing: -.01em; }
 .clock span { color: var(--ui-fg-secondary); }
 
 /* 时间带 */
 .strip { position: relative; user-select: none; touch-action: none; }
+.strip[data-zoomed='true'] { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding-bottom: 4px; }
+.stripContent { position: relative; min-width: 100%; }
+/* 试改改动的位置：标尺下沿的实心条（与选区的浅底区分；只画服务端对照给出的真实区间） */
+.change { position: absolute; bottom: -1px; height: 3px; min-width: 3px; border-radius: 2px; background: var(--ui-fg-primary); pointer-events: auto; }
+/* 时间带缩放 */
+.zoom { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--ui-radius-control); border: 1px solid var(--ui-border-subtle); background: var(--ui-bg-subtle); }
+.zoom :global(.btn.small) { min-height: 26px; min-width: 26px; padding: 0 8px; border-radius: 7px; font-family: var(--ui-font-mono); }
+.zoomLevel { min-width: 40px; text-align: center; font-family: var(--ui-font-mono); font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); font-variant-numeric: tabular-nums; }
 .strip:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; border-radius: 4px; }
 .ruler { position: relative; height: 20px; cursor: ew-resize; border-bottom: 1px solid var(--ui-border-subtle); }
 .tick { position: absolute; top: 1px; font-family: var(--ui-font-mono); font-size: 10.5px; color: var(--ui-fg-secondary); font-variant-numeric: tabular-nums; transform: translateX(-50%); white-space: nowrap; }
@@ -397,6 +405,54 @@
 .laneNarration .laneLabel { font-weight: 600; }
 .clipNarration { background: var(--ui-selection-bg); color: var(--ui-fg-primary); font-size: var(--ui-type-metadata); }
 
+/* 快捷键列表（按 ? 固定打开 / 按住 Ctrl、⌘ 临时显示）：浮在看片屏幕左上，浮层层级 */
+.shortcutsButton { color: var(--ui-fg-secondary); text-decoration: none; }
+.shortcutsButton:hover { color: var(--ui-fg-primary); text-decoration: underline; }
+.shortcuts {
+  position: absolute;
+  top: calc(var(--studio-topbar-h) + var(--ui-space-6));
+  left: var(--ui-space-8);
+  width: min(320px, calc(100vw - 48px));
+  padding: var(--ui-space-3) var(--ui-space-4) var(--ui-space-4);
+  background: var(--ui-bg-elevated);
+  color: var(--ui-fg-primary);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-overlay);
+  box-shadow: var(--ui-shadow-3);
+  z-index: 35;
+  animation: enterUp var(--ui-motion-popover) var(--ui-ease-enter);
+}
+.shortcuts[data-held='true'] { pointer-events: none; }
+.shortcutsHead { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-2); min-height: 32px; margin-bottom: var(--ui-space-2); }
+.shortcutsHead h2 { font-size: var(--ui-type-control); font-weight: 600; letter-spacing: 0; }
+.shortcutsHint { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.shortcutsList { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.shortcutsList > div { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: var(--ui-space-3); }
+.shortcutsList dt { display: flex; flex-wrap: wrap; gap: 4px; }
+.shortcutsList dd { margin: 0; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.shortcutsList kbd {
+  min-width: 22px; height: 22px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--ui-font-mono); font-size: 11px; color: var(--ui-fg-primary);
+  background: var(--ui-bg-subtle); border: 1px solid var(--ui-border-control); border-radius: 5px;
+  box-shadow: inset 0 -1px 0 var(--ui-border-subtle);
+}
+
+/* 任务中心（界面精修第三阶段）：状态用文字胶囊（不只靠颜色）——进行中浅底、要你处理实线主色、没成功反相、完成次级 */
+.tasksButtonDot { width: 6px; height: 6px; border-radius: 50%; background: var(--ui-fg-primary); }
+.tasksNote { margin: var(--ui-space-2) 0 var(--ui-space-3); font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.taskGroup { padding: var(--ui-space-3) 0; border-top: 1px solid var(--ui-border-subtle); }
+.taskGroup h3 { margin: 0 0 var(--ui-space-2); font-size: var(--ui-type-metadata); font-weight: 600; color: var(--ui-fg-secondary); letter-spacing: 0; }
+.taskGroup ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ui-space-2); }
+.taskRow { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 2px var(--ui-space-2); }
+.taskStatus { grid-row: span 2; align-self: start; padding: 1px 8px; border-radius: var(--ui-radius-pill); border: 1px solid var(--ui-border-control); font-size: 11px; font-weight: 600; white-space: nowrap; color: var(--ui-fg-primary); }
+.taskRow[data-status='running'] .taskStatus { background: var(--ui-selection-bg); }
+.taskRow[data-status='attention'] .taskStatus { border-color: var(--ui-fg-primary); }
+.taskRow[data-status='failed'] .taskStatus { background: var(--ui-action-primary-bg); border-color: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); }
+.taskRow[data-status='done'] .taskStatus { border-color: var(--ui-border-subtle); color: var(--ui-fg-secondary); font-weight: 500; }
+.taskTitle { overflow-wrap: anywhere; }
+.taskDetail { grid-column: 2; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+
 /* 手机宽度：顶栏分两行——返回 / 标题 / 导出在第一行，其余操作在第二行横向滚动；抽屉全屏、导出面板从底部升起 */
 @media (max-width: 760px) {
   .room { grid-template-rows: auto minmax(0, 1fr) auto; }
@@ -410,4 +466,6 @@
   .drawer { top: 0; width: 100vw; border-left: 0; z-index: 40; }
   .popover { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 85vh; overflow-y: auto; border-radius: var(--ui-radius-overlay) var(--ui-radius-overlay) 0 0; transform-origin: bottom center; z-index: 40; }
   .strategyHint { flex-basis: 100%; white-space: normal; }
+  .shortcutsButton { display: none; }
+  .zoom :global(.btn.small:last-child) { display: none; }
 }

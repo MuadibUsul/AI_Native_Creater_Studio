@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import DashboardPage from './page.js';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
@@ -89,6 +90,26 @@ describe('Dashboard', () => {
     expect(projectLink.getAttribute('href')).toBe('/w/ws_1/p/prj_1/script');
     expect(screen.getByText('草稿')).toBeTruthy();
     expect(screen.getByText(/目标 时长待定 · 16:9/)).toBeTruthy();
+  });
+
+  it('英文界面：首页文案、阶段与时长都随语言切换', async () => {
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list: vi.fn().mockResolvedValue([workspace('ws_1', 'Market Watch')]) },
+      projects: {
+        list: vi.fn().mockResolvedValue([
+          { id: 'prj_1', title: 'Weekly rates', status: 'DRAFT', revision: 3, aspectRatio: '16:9', fps: 30, targetDurationMs: 90_000 },
+        ]),
+      },
+    });
+    renderWithClient(<I18nProvider initialLocale="en"><DashboardPage /></I18nProvider>, client);
+    expect(await screen.findByRole('link', { name: /Weekly rates/ })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Turn ideas into finished work.' })).toBeTruthy();
+    expect(screen.getByText('Draft')).toBeTruthy();
+    expect(screen.getByText('Target 1 min 30 s · 16:9')).toBeTruthy();
+    expect(screen.getByText('1 project')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /New project/ })).toBeTruthy();
+    expect(screen.queryByText(/[一-龥]/)).toBeNull();
   });
 
   it('失败：错误块可重试（重新调用 SDK）', async () => {
