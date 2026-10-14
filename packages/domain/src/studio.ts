@@ -29,6 +29,7 @@ import { createChannel, listChannels } from './channels.js';
 import { createSequence, createTrack } from './composition.js';
 import { createProject } from './projects.js';
 import { articleParagraphs } from './agent-article.js';
+import { generationBudget, listProjectGenerations } from './paid-generation-quote.js';
 
 /**
  * 共看片室（V6-1c）的服务端支撑：一步建好素材工程、读取工作台状态。
@@ -172,6 +173,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
       id: project.id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision,
       allowEffects: policy?.allowProceduralGraphics === true,
       allowNarration: policy?.allowGeneratedSpeech === true,
+      allowGeneratedVideo: policy?.allowGeneratedVideo === true,
       article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length },
     },
     sequenceId: sequence.id,
@@ -179,6 +181,8 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     footage,
     effects,
     narration,
+    generations: await listProjectGenerations(deps, { workspaceId: input.workspaceId, projectId: input.projectId, limit: 20 }),
+    generationBudget: await generationBudget(deps, { workspaceId: input.workspaceId }),
     cost: await projectAgentCost(deps, input),
   });
 }

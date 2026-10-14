@@ -43,7 +43,8 @@ export const agentTurns = pgTable(
     projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
     workflowRunId: text('workflow_run_id').references(() => workflowRuns.id, { onDelete: 'set null' }),
     status: text('status').notNull().default('RUNNING'),
-    /** V6-4：EDIT（说一句话改作品）/ DISCUSS_NOTE（讨论一条审片批注，不改时间线）/ APPLY_REVIEW（一次执行已确定的批注） */
+    /** V6-4：EDIT（说一句话改作品）/ DISCUSS_NOTE（讨论一条审片批注，不改时间线）/ APPLY_REVIEW（一次执行已确定的批注）；
+     *  V6-7/V6-8：GENERATE（用户确认的一次付费生成，结果放进试改） */
     purpose: text('purpose').notNull().default('EDIT'),
     reviewNoteId: text('review_note_id').references(() => reviewNotes.id, { onDelete: 'set null' }),
     reviewRoundId: text('review_round_id').references(() => reviewRounds.id, { onDelete: 'set null' }),
@@ -70,7 +71,7 @@ export const agentTurns = pgTable(
     uniqueIndex('agent_turns_one_running_uq').on(table.sessionId).where(sql`${table.status} = 'RUNNING'`),
     index('agent_turns_session_idx').on(table.sessionId, table.createdAt),
     index('agent_turns_review_note_idx').on(table.reviewNoteId, table.createdAt),
-    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW')`),
+    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW','GENERATE')`),
     check('agent_turns_status_ck', sql`${table.status} in ('RUNNING','COMPLETED','FAILED','CANCELLED')`),
     check('agent_turns_cost_ck', sql`${table.costMicros} >= 0 and ${table.unpricedCalls} >= 0`),
   ],

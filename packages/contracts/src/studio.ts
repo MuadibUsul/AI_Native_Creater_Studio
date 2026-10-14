@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
 import { projectArticleSchema } from './narration.js';
+import { generationBudgetSchema, generationSchema } from './paid-generation.js';
 
 /**
  * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
@@ -87,6 +88,8 @@ export const studioStateSchema = z.object({
     allowEffects: z.boolean(),
     /** 项目制作规则是否允许 AI 合成配音讲述（V6-5） */
     allowNarration: z.boolean(),
+    /** 项目制作规则是否允许付费生成画面（数字人出镜、生成镜头、选区重绘；V6-7/V6-8） */
+    allowGeneratedVideo: z.boolean(),
     /** 从文章开始的工程：文章概况（原文在工程简报里） */
     article: z.object({ title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative() }).strict().nullable(),
   }).strict(),
@@ -96,6 +99,10 @@ export const studioStateSchema = z.object({
   footage: z.array(studioFootageSchema),
   effects: z.array(studioEffectSchema),
   narration: z.array(studioNarrationSchema),
+  /** 付费生成（报价、进行中、结果；新的在前，最多 20 条） */
+  generations: z.array(generationSchema),
+  /** 工作区生成预算（确认生成前展示；未设置时确认会被拒绝） */
+  generationBudget: generationBudgetSchema,
   cost: projectAgentCostSchema,
 }).strict();
 export type StudioState = z.infer<typeof studioStateSchema>;

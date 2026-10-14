@@ -154,7 +154,7 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const model = new ScriptedModel([
       (request) => {
         expect(request.system).toBe(AGENT_SYSTEM_PROMPT);
-        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline', 'list_effects', 'add_effect', 'update_effect', 'list_voices', 'add_narration', 'remove_narration', 'read_article']);
+        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline', 'list_effects', 'add_effect', 'update_effect', 'list_voices', 'add_narration', 'remove_narration', 'read_article', 'list_generation_options', 'quote_generation']);
         const context = (request.messages[0]!.content[0] as { text: string }).text;
         expect(context).toContain('<request>\n帮我把这些素材剪成一个短片');
         expect(context).toContain(f.beach);
@@ -445,7 +445,7 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
         expect(context).toContain('id: builtin:travel-beat');
         expect(context).toContain('- pacing = intense');
         // 工具目录与不选策略时完全一致
-        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline', 'list_effects', 'add_effect', 'update_effect', 'list_voices', 'add_narration', 'remove_narration', 'read_article']);
+        expect(request.tools.map((tool) => tool.name)).toEqual(['get_timeline', 'list_footage', 'inspect_footage', 'look_at_footage', 'search_footage', 'edit_timeline', 'review_draft', 'look_at_timeline', 'list_effects', 'add_effect', 'update_effect', 'list_voices', 'add_narration', 'remove_narration', 'read_article', 'list_generation_options', 'quote_generation']);
         expect(request.system).toBe(AGENT_SYSTEM_PROMPT);
         return reply([{ type: 'text', text: '好。' }], 'end_turn');
       },

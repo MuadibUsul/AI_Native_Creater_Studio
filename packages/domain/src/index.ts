@@ -662,6 +662,9 @@ export {
   runAgentTurnLoop,
   agentTurnIdFor,
   startAgentTurn,
+  startGenerationTurn,
+  completeGenerationTurn,
+  failGenerationTurn,
   unconfiguredAgentModel,
 } from './agent-runtime.js';
 export type { AgentRuntimeLimits, AgentTurnPorts } from './agent-runtime.js';
@@ -699,6 +702,21 @@ export { NARRATION_AGENT_TOOLS, loadNarrations, narrationLanguage, splitNarratio
 export type { NarrationRef } from './agent-narration.js';
 export { ARTICLE_AGENT_TOOLS, ARTICLE_CONTEXT_CHARS, articleContextView, articleParagraphs, projectArticle } from './agent-article.js';
 export { numbersIn, numbersMissingFromSource } from './source-numbers.js';
+export { GENERATION_AGENT_TOOLS } from './agent-generation.js';
+export { estimateSpeechSeconds, formatMicros, generationBudget, generationCanvas, listProjectGenerations, quoteGeneration, toGeneration } from './paid-generation-quote.js';
+export type { GenerationQuote } from './paid-generation-quote.js';
+export { acceptGeneration, countGenerationsNeedingReconciliation, declineGeneration, generationPlacementOperations, paidGenerationWorkflow } from './paid-generation.js';
+export type { PaidGenerationPorts } from './paid-generation.js';
+export {
+  createIdentityProfile,
+  getIdentityProfile,
+  grantIdentityConsent,
+  identityConsentStatementSha256,
+  identityForGeneration,
+  listIdentityProfiles,
+  revokeIdentityConsent,
+  setIdentityReference,
+} from './identity-profiles.js';
 export { detectBeats, onsetEnvelope } from './audio-beats.js';
 export type { DetectedBeats } from './audio-beats.js';
 export { BEAT_CONFIDENCE_THRESHOLD, BEAT_TOLERANCE_SECONDS, beatCutRatio, describeColor, editPoints, describeSound, distillStats, editingDnaFromStats, pacingCurve, shotDurations } from './distill-dna.js';

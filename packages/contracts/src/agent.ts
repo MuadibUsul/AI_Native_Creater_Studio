@@ -242,9 +242,10 @@ export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
 /**
  * 轮次用途（同一个通用导演、同一个工具目录）：
  * EDIT = 说一句话改作品；DISCUSS_NOTE = 讨论一条审片批注的修改方案（不改时间线）；
- * APPLY_REVIEW = 把一轮审片里已确定的批注一次做完（成为一个试改提案）。
+ * APPLY_REVIEW = 把一轮审片里已确定的批注一次做完（成为一个试改提案）；
+ * GENERATE = 用户确认的一次付费生成（V6-7/V6-8）：不调用模型，生成结果放进试改（在当前试改上继续）。
  */
-export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW'] as const;
+export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE'] as const;
 export const agentTurnPurposeSchema = z.enum(AGENT_TURN_PURPOSES);
 export type AgentTurnPurpose = z.infer<typeof agentTurnPurposeSchema>;
 

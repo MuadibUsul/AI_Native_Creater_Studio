@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -15,6 +15,7 @@ import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
+import { UNCONFIGURED_GENERATION_EXECUTOR, createPaidGenerationExecutor, createProcessGenerationProvider } from './paid-generation.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -138,12 +139,30 @@ const narrationSynthesizer = narrationDriver === 'flite'
     })
     : undefined;
 
+/**
+ * V6-7/V6-8：付费生成（数字人出镜、生成镜头、选区重绘）。只有 process 驱动（部署方接入的供应商子进程）；
+ * 测试替身不经环境变量装配。未配置时报价工具明确报"本部署没有配置"。每次生成只调用一次，结果不明 → 待对账。
+ */
+const generationProvider = config.ANCS_GENERATION_DRIVER === 'process' && config.ANCS_GENERATION_EXECUTABLE !== undefined && config.ANCS_GENERATION_OFFERS_JSON !== undefined
+  ? createProcessGenerationProvider({
+    executable: config.ANCS_GENERATION_EXECUTABLE,
+    args: config.ANCS_GENERATION_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_GENERATION_ARGS_JSON) as string[],
+    offers: generationOfferSchema.array().parse(JSON.parse(config.ANCS_GENERATION_OFFERS_JSON)),
+    ...(config.ANCS_GENERATION_TIMEOUT_SECONDS === undefined ? {} : { timeoutMs: config.ANCS_GENERATION_TIMEOUT_SECONDS * 1000 }),
+    passEnv: (config.ANCS_GENERATION_PASS_ENV ?? '').split(',').map((name) => name.trim()).filter((name) => name.length > 0),
+  })
+  : undefined;
+const generationExecutor = generationProvider === undefined || deps.storage === undefined ? undefined : createPaidGenerationExecutor({
+  provider: generationProvider, storage: deps.storage, probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+});
+
 /** 装配清单与生产守卫（V5-M3，§11.3）：Worker 当前装配的外部能力驱动均为真实实现或运维配置的子进程。 */
 const providerInventory: ProviderInventoryEntry[] = [
   ...(asrDriver === undefined ? [] : [{ capability: 'asr', driver: asrDriver, implementation: 'REAL' as const }]),
   ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [{ capability: 'agent_model', driver: config.ANCS_AGENT_DRIVER, implementation: 'REAL' as const }]),
   ...(visualDriver === undefined ? [] : [{ capability: 'visual_analysis', driver: visualDriver, implementation: 'REAL' as const }]),
   ...(narrationSynthesizer === undefined || narrationDriver === undefined ? [] : [{ capability: 'narration', driver: narrationDriver, implementation: narrationSynthesizer.implementation }]),
+  ...(generationExecutor === undefined ? [] : [{ capability: 'paid_generation', driver: 'process', implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
@@ -185,6 +204,7 @@ const workflowRegistry = new WorkflowRegistry()
     frames: frameSampler,
     ...(effectPorts === undefined ? {} : { effects: effectPorts }),
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
+    ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
   }))
   // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
   // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）
@@ -195,6 +215,8 @@ const workflowRegistry = new WorkflowRegistry()
     ...(config.ANCS_AGENT_DRIVER === undefined ? {} : { model: agentModel }),
     ...(config.ANCS_REFERENCE_MAX_MB === undefined ? {} : { maxReferenceBytes: config.ANCS_REFERENCE_MAX_MB * 1024 * 1024 }),
   }));
+// V6-7/V6-8：付费生成（用户确认后的一次生成；未配置供应商时没有报价依据，万一有运行到达则明确失败并释放预留）
+workflowRegistry.register(paidGenerationWorkflow({ executor: generationExecutor ?? UNCONFIGURED_GENERATION_EXECUTOR }));
 // V6-1d：低清预览（与终渲染同一 FFmpeg 媒体图后端，按时间窗缓存复用）
 const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegPaths), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { narrationVoiceSchema } from './narration.js';
+import { generationOfferSchema } from './paid-generation.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -300,6 +301,25 @@ export const workerEnvSchema = z.object({
   ANCS_NARRATION_VOICES_JSON: z.string().refine((value) => {
     try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => narrationVoiceSchema.safeParse(item).success); } catch { return false; }
   }, 'ANCS_NARRATION_VOICES_JSON 必须是声音数组 JSON：[{ "id": "zh-female-1", "name": "…", "languages": ["zh"], "description": "…" }]').optional(),
+  /**
+   * V6-7/V6-8 付费生成（数字人出镜、生成镜头、选区重绘）：process = 部署方接入的生成子进程（任意供应商；
+   * 协议见 docs/V06/integration-checklist.md 与 scripts/generation-process-example.mjs）。不配置时报价工具明确报"本部署没有配置"。
+   * 每次生成只调用一次（不自动重试）；结果不明 → 待对账。
+   */
+  ANCS_GENERATION_DRIVER: z.enum(['process'], { message: 'ANCS_GENERATION_DRIVER 仅支持 process' }).optional(),
+  ANCS_GENERATION_EXECUTABLE: nonEmpty('ANCS_GENERATION_EXECUTABLE').optional(),
+  ANCS_GENERATION_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_GENERATION_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /** 供应商报价依据（JSON 数组：{ kind, providerId, implementation: "REAL", model, perSecondMicros: { min, max }, maxSeconds, languages }） */
+  ANCS_GENERATION_OFFERS_JSON: z.string().refine((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => { const offer = generationOfferSchema.safeParse(item); return offer.success && offer.data.implementation === 'REAL'; });
+    } catch { return false; }
+  }, 'ANCS_GENERATION_OFFERS_JSON 必须是报价数组 JSON：[{ "kind": "VIDEO_SHOT", "providerId": "vendor-x", "implementation": "REAL", "model": "…", "perSecondMicros": { "min": 50000, "max": 400000 }, "maxSeconds": 8 }]').optional(),
+  /** 传给生成子进程的额外环境变量名（逗号分隔，例如供应商密钥 VENDOR_API_KEY）；子进程只拿到白名单 + 这里列出的变量 */
+  ANCS_GENERATION_PASS_ENV: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*$/, 'ANCS_GENERATION_PASS_ENV 必须是逗号分隔的环境变量名').optional(),
+  /** 单次生成子进程超时（秒，缺省 1200）；超时按"结果不明"处理（待对账，不重试） */
+  ANCS_GENERATION_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(7200).optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
@@ -339,6 +359,12 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
     issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=process 时必须用 ANCS_NARRATION_VOICES_JSON 声明可用的声音与语言' });
+  }
+  if (value.ANCS_GENERATION_DRIVER === 'process' && value.ANCS_GENERATION_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_GENERATION_EXECUTABLE', message: 'ANCS_GENERATION_DRIVER=process 时必须配置 ANCS_GENERATION_EXECUTABLE' });
+  }
+  if (value.ANCS_GENERATION_DRIVER === 'process' && value.ANCS_GENERATION_OFFERS_JSON === undefined) {
+    issues.push({ variable: 'ANCS_GENERATION_OFFERS_JSON', message: 'ANCS_GENERATION_DRIVER=process 时必须用 ANCS_GENERATION_OFFERS_JSON 声明支持的生成类型与价格（报价依据）' });
   }
   if (value.ANCS_WORKER_HEARTBEAT_MS !== undefined && value.ANCS_WORKER_HEARTBEAT_MS >= value.ANCS_WORKER_LEASE_SECONDS * 1000) {
     issues.push({ variable: 'ANCS_WORKER_HEARTBEAT_MS', message: '心跳间隔必须小于租约时长（否则租约会在两次心跳之间过期）' });

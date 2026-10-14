@@ -550,7 +550,28 @@ import {
   type DistillRun,
   type StartDistillRequest,
   type UpdateStrategyPackRequest,
+  acceptGenerationRequestSchema,
+  createIdentityProfileRequestSchema,
+  generationSchema,
+  grantIdentityConsentRequestSchema,
+  identityProfileSchema,
+  revokeIdentityConsentRequestSchema,
+  setIdentityReferenceRequestSchema,
+  type AcceptGenerationRequest,
+  type Generation,
+  type GrantIdentityConsentRequest,
+  type IdentityConsentKind,
+  type IdentityProfile,
+  type SetIdentityReferenceRequest,
 } from '@ancs/contracts';
+
+const generationListSchema = z.object({ items: z.array(generationSchema) });
+const identityProfileListSchema = z.object({ items: z.array(identityProfileSchema) });
+const identityConsentStatementSchema = z.object({
+  version: z.string(),
+  statements: z.object({ LIKENESS: z.object({ 'zh-CN': z.string(), en: z.string() }), VOICE: z.object({ 'zh-CN': z.string(), en: z.string() }) }),
+});
+export type IdentityConsentStatement = z.infer<typeof identityConsentStatementSchema>;
 
 /**
  * ANCS SDK（P01-05 基线）：
@@ -1459,6 +1480,22 @@ export interface AncsClient {
     undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
     /** 显式修改项目制作规则的"允许"开关（V6-3：例如素材工程开启程序化特效）；返回修改后的规则 */
     updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
+  };
+  /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
+  generations: {
+    list(workspaceId: string, projectId: string): Promise<Generation[]>;
+    /** 确认：带上界面展示的报价上限（与报价不一致 → 409） */
+    accept(workspaceId: string, projectId: string, generationId: string, input: AcceptGenerationRequest, options?: MutationOptions): Promise<Generation>;
+    decline(workspaceId: string, projectId: string, generationId: string, options?: MutationOptions): Promise<Generation>;
+  };
+  /** V6-7：我的形象与声音（参考素材 + 只增不改的授权记录） */
+  identities: {
+    list(workspaceId: string): Promise<IdentityProfile[]>;
+    create(workspaceId: string, name: string, options?: MutationOptions): Promise<IdentityProfile>;
+    consentStatement(workspaceId: string): Promise<IdentityConsentStatement>;
+    setReference(workspaceId: string, identityId: string, input: SetIdentityReferenceRequest, options?: MutationOptions): Promise<IdentityProfile>;
+    grantConsent(workspaceId: string, identityId: string, input: GrantIdentityConsentRequest, options?: MutationOptions): Promise<IdentityProfile>;
+    revokeConsent(workspaceId: string, identityId: string, kind: IdentityConsentKind, options?: MutationOptions): Promise<IdentityProfile>;
   };
   /** V6-4：批注式审片（标记 → 逐条讨论 → 全部执行 → 采用走 proposals 接口） */
   review: {
@@ -3092,6 +3129,48 @@ export function createClient(options: ClientOptions): AncsClient {
         request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-policy`, productionPolicySchema, {
           body: input,
           bodySchema: updateProductionPolicyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    generations: {
+      list: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations`, generationListSchema)).items,
+      accept: (workspaceId, projectId, generationId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations/${generationId}/accept`, generationSchema, {
+          body: input,
+          bodySchema: acceptGenerationRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      decline: (workspaceId, projectId, generationId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations/${generationId}/decline`, generationSchema, { idempotencyKey: mutation?.idempotencyKey }),
+    },
+
+    identities: {
+      list: async (workspaceId) => (await request('GET', `/api/v1/workspaces/${workspaceId}/identity-profiles`, identityProfileListSchema)).items,
+      create: (workspaceId, name, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles`, identityProfileSchema, {
+          body: { name },
+          bodySchema: createIdentityProfileRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      consentStatement: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/identity-consent-statement`, identityConsentStatementSchema),
+      setReference: (workspaceId, identityId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/reference`, identityProfileSchema, {
+          body: input,
+          bodySchema: setIdentityReferenceRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      grantConsent: (workspaceId, identityId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/consents`, identityProfileSchema, {
+          body: input,
+          bodySchema: grantIdentityConsentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revokeConsent: (workspaceId, identityId, kind, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/consents/revoke`, identityProfileSchema, {
+          body: { kind },
+          bodySchema: revokeIdentityConsentRequestSchema,
           idempotencyKey: mutation?.idempotencyKey,
         }),
     },

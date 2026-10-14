@@ -48,6 +48,8 @@ export interface ConversationProps {
   onStrategyChange: (value: StudioStrategyChoice | null) => void;
   /** V6-6：打开"从参考视频学风格" */
   onLearnStrategy?: () => void;
+  /** V6-7/V6-8：付费生成的报价卡（确认/放弃/进行中/结果） */
+  generationCards?: ReactNode;
   /** V6-2 语音：状态行（对话框上方）与麦克风开关（发送按钮旁） */
   voiceBar?: ReactNode;
   voiceToggle?: ReactNode;
@@ -94,7 +96,7 @@ export function StudioConversation(props: ConversationProps) {
                 <div className={styles['lineBody']}>
                   {running ? (
                     <div className={styles['actions']} style={{ marginTop: 0 }}>
-                      <span role="status">{t.working}</span>
+                      <span role="status">{latest.purpose === 'GENERATE' ? t.generating : t.working}</span>
                       <button type="button" className="btn small" disabled={props.cancelling} onClick={() => props.onStop(latest)}>
                         {props.cancelling ? t.stopping : t.stop}
                       </button>
@@ -151,6 +153,7 @@ export function StudioConversation(props: ConversationProps) {
           {props.error !== null ? <div className={styles['alert']} role="alert">{props.error}</div> : null}
         </div>
       ) : null}
+      {props.generationCards ?? null}
       {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} {...(props.onLearnStrategy !== undefined ? { onLearn: props.onLearnStrategy } : {})} /> : null}
       {props.voiceBar ?? null}
       <div className={styles['composer']}>

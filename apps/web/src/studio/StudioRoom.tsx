@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AGENT_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, type AgentPointer, type AgentTurn, type FrameRegion, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
@@ -13,6 +13,7 @@ import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanvas';
 import { StudioConversation } from './StudioConversation';
+import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
 import { StudioDistillDrawer } from './StudioDistillDrawer';
@@ -44,6 +45,23 @@ function mutationErrorText(error: unknown, t: Messages['studio']): string {
   if (reason === AGENT_ERROR_REASONS.TURN_IN_PROGRESS) return t.chat.errors.busy;
   if (reason === PROPOSAL_ERROR_REASONS.STALE_BASE || reason === PROPOSAL_ERROR_REASONS.HASH_MISMATCH) return t.chat.stale;
   return described.code === null ? t.chat.errors.generic : `${t.chat.errors.generic} (${described.code})`;
+}
+
+function generationErrorText(error: unknown, t: Messages['studio']): string {
+  const described = describeError(error);
+  if (described.kind === 'forbidden') return t.readOnly;
+  const errors = t.generation.errors;
+  switch (described.details['reason']) {
+    case GENERATION_ERROR_REASONS.BUDGET_NOT_SET: return errors.budgetNotSet;
+    case BUDGET_REJECTION_REASONS.BUDGET_EXCEEDED:
+    case BUDGET_REJECTION_REASONS.PER_JOB_LIMIT: return errors.budgetExceeded;
+    case GENERATION_ERROR_REASONS.QUOTE_EXPIRED: return errors.expired;
+    case GENERATION_ERROR_REASONS.ESTIMATE_CHANGED:
+    case GENERATION_ERROR_REASONS.QUOTE_NOT_PENDING: return errors.changed;
+    case GENERATION_ERROR_REASONS.CONSENT_REQUIRED: return errors.consent;
+    case AGENT_ERROR_REASONS.TURN_IN_PROGRESS: return errors.busy;
+    default: return errors.generic;
+  }
 }
 
 export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; projectId: string }) {
@@ -166,8 +184,10 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
   // 指：时间带选择 → 交给 AI 的 pointer
   const [selection, setSelection] = useState<StudioSelection>({ range: null, clipId: null });
-  const footageName = useCallback((clip: StripClip): string => (clip.assetVersionId === null ? undefined : effectNames.get(clip.assetVersionId) ?? narrationTexts.get(clip.assetVersionId))
-    ?? state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage, effectNames, narrationTexts]);
+  // 付费生成的片段（V6-7/V6-8）按类型标名（"数字人出镜"等）
+  const generatedNames = useMemo(() => new Map((state?.generations ?? []).flatMap((item) => (item.footageId === null ? [] : [[item.footageId, t.generation.kinds[item.kind]] as const]))), [state?.generations, t]);
+  const footageName = useCallback((clip: StripClip): string => (clip.assetVersionId === null ? undefined : effectNames.get(clip.assetVersionId) ?? narrationTexts.get(clip.assetVersionId) ?? generatedNames.get(clip.assetVersionId))
+    ?? state?.footage.find((item) => item.footageId === clip.assetVersionId)?.name ?? clip.id.slice(-6), [state?.footage, effectNames, narrationTexts, generatedNames]);
   // 指画面（V6-3）：在画面上框出一块区域，和时间选择一起交给 AI；框的是哪一刻的画面也记下（没选时间时以它为"这里"的时间）
   const [framed, setFramed] = useState<{ region: FrameRegion; at: MediaTime } | null>(null);
   const frameRegion = framed?.region ?? null;
@@ -197,6 +217,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   // 说
   const [notice, setNotice] = useState<'discarded' | 'undone' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [pendingGeneration, setPendingGeneration] = useState<string | null>(null);
   const voiceTurns = useRef(new Set<string>());
   const send = (message: string, override?: { pointer: AgentPointer; byVoice: boolean }) => {
     if (state === undefined) return;
@@ -241,6 +263,22 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     return range === null ? null : t.pointer.range(formatClock(frameTimeAtSeconds(Number(range.start), frameRate)), formatClock(frameTimeAtSeconds(Number(range.end), frameRate)));
   })();
   const stop = (turn: AgentTurn) => actions.cancel.mutate(turn, { onError: (error) => setActionError(mutationErrorText(error, t)) });
+  const acceptGeneration = (generation: Generation) => {
+    setGenerationError(null);
+    setPendingGeneration(generation.id);
+    actions.acceptGeneration.mutate(generation, {
+      onError: (error) => setGenerationError(generationErrorText(error, t)),
+      onSettled: () => setPendingGeneration(null),
+    });
+  };
+  const declineGeneration = (generation: Generation) => {
+    setGenerationError(null);
+    setPendingGeneration(generation.id);
+    actions.declineGeneration.mutate(generation, {
+      onError: (error) => setGenerationError(generationErrorText(error, t)),
+      onSettled: () => setPendingGeneration(null),
+    });
+  };
   const keep = (target: Proposal) => {
     setActionError(null);
     actions.adopt.mutate(target, { onError: (error) => setActionError(mutationErrorText(error, t)) });
@@ -355,6 +393,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
               actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
             }}
           ><QuietIcon name="voice" />{state.project.allowNarration ? t.narration.on : t.narration.off}</button>
+          <button
+            type="button"
+            className="btn small ghost"
+            aria-pressed={state.project.allowGeneratedVideo}
+            title={state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff}
+            disabled={!canEdit || actions.setGenerationAllowed.isPending}
+            onClick={() => {
+              setActionError(null);
+              actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
+            }}
+          ><QuietIcon name="film" />{state.project.allowGeneratedVideo ? t.generation.on : t.generation.off}</button>
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
@@ -439,6 +488,18 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           strategy={strategy}
           onStrategyChange={setStrategy}
           onLearnStrategy={() => { setFootageOpen(false); setDistillOpen(true); }}
+          generationCards={(
+            <StudioGenerationCards
+              generations={visibleGenerations(state.generations)}
+              budget={state.generationBudget}
+              workspaceId={workspaceId}
+              canEdit={canEdit}
+              pendingId={pendingGeneration}
+              error={generationError}
+              onAccept={acceptGeneration}
+              onDecline={declineGeneration}
+            />
+          )}
           voiceBar={(
             <StudioVoiceBar
               state={voice.state}
@@ -475,7 +536,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           onUse={(pack) => { setStrategy({ packId: pack.id, knobs: Object.fromEntries(pack.knobs.map((knob) => [knob.key, knob.defaultValue])) }); setDistillOpen(false); }}
         />
       ) : null}
-      {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
+      {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
       {exportOpen ? (
         <StudioExport
           workspaceId={workspaceId}

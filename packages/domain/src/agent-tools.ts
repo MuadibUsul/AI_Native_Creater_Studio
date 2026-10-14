@@ -12,6 +12,7 @@ import {
   sourceMediaProbeResultSchema,
   type AgentEffectPorts,
   type AgentNarrationPorts,
+  type AgentGenerationPorts,
   type AgentFrameSampler,
   type AgentImage,
   type AgentPointer,
@@ -32,6 +33,7 @@ import { reviewTimeline, type ReviewFootage } from './agent-review.js';
 import { EFFECT_AGENT_TOOLS, effectLayersOnTimeline, type EffectLayerRef } from './agent-effects.js';
 import { NARRATION_AGENT_TOOLS, narrationsOnTimeline, type NarrationRef } from './agent-narration.js';
 import { ARTICLE_AGENT_TOOLS } from './agent-article.js';
+import { GENERATION_AGENT_TOOLS } from './agent-generation.js';
 
 /**
  * 统一工具目录（V6 §6.3）：AI 通过同一形状的工具读取素材与时间线、改动草稿。
@@ -62,6 +64,11 @@ export interface AgentToolContext {
   effects?: AgentEffectPorts;
   /** 讲述配音（V6-5，Worker 装配；未装配时讲述工具明确报"没有配置配音"） */
   narration?: AgentNarrationPorts;
+  /** 付费生成的报价依据（V6-7/V6-8，Worker 装配；未装配时报价工具明确报"本部署没有配置"） */
+  generation?: AgentGenerationPorts;
+  /** 本轮所在的会话与轮次（报价记录来源用） */
+  sessionId?: string;
+  turnId?: string;
   /** 本轮的指向（工具缺省参数用：例如特效默认放在框出的区域、所指时间） */
   pointer?: AgentPointer;
 }
@@ -685,5 +692,7 @@ export function defaultAgentToolCatalog(): AgentToolCatalog {
     .register(NARRATION_AGENT_TOOLS[0])
     .register(NARRATION_AGENT_TOOLS[1])
     .register(NARRATION_AGENT_TOOLS[2])
-    .register(ARTICLE_AGENT_TOOLS[0]);
+    .register(ARTICLE_AGENT_TOOLS[0])
+    .register(GENERATION_AGENT_TOOLS[0])
+    .register(GENERATION_AGENT_TOOLS[1]);
 }

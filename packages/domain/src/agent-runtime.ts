@@ -23,6 +23,7 @@ import {
   type AgentContentBlock,
   type AgentEffectPorts,
   type AgentNarrationPorts,
+  type AgentGenerationPorts,
   type AgentEffort,
   type AgentFrameSampler,
   type AgentModelAdapter,
@@ -82,6 +83,8 @@ export interface AgentTurnPorts {
   effects?: AgentEffectPorts;
   /** 讲述配音（V6-5，Worker 装配）；未装配时讲述工具明确报"没有配置配音" */
   narration?: AgentNarrationPorts;
+  /** 付费生成的报价依据（V6-7/V6-8，Worker 装配）；未装配时报价工具明确报"本部署没有配置" */
+  generation?: AgentGenerationPorts;
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
   /** 策略要点（缺省从内置预设与工作区策略包生成，见 strategies.ts） */
   strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; knobs: Record<string, string>; locale: string }) => Promise<string | null>;
@@ -275,15 +278,7 @@ export async function startAgentTurn(deps: DomainDeps, input: {
       review = { purpose: 'APPLY_REVIEW', noteId: null, roundId: round.id, pointer: request.pointer };
     }
     // 在试改上继续（V6 §5.3）：会话最近一轮（讨论批注的轮次除外）的提案仍未采用且基于当前版本 → 本轮草稿从它出发
-    let continues: { id: string; operations: unknown } | null = null;
-    if (review === null) {
-      const previous = await tx.select({ proposalId: agentTurns.proposalId }).from(agentTurns)
-        .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'COMPLETED'), sql`${agentTurns.purpose} <> 'DISCUSS_NOTE'`)).orderBy(desc(agentTurns.createdAt)).limit(1);
-      const trialId = previous[0]?.proposalId ?? null;
-      const trial = trialId === null ? undefined : (await tx.select({ id: proposals.id, status: proposals.status, baseRevision: proposals.baseProjectRevision, operations: proposals.operations })
-        .from(proposals).where(and(eq(proposals.id, trialId), eq(proposals.workspaceId, input.workspaceId))).limit(1))[0];
-      continues = trial !== undefined && trial.status === 'OPEN' && trial.baseRevision === project[0].revision ? trial : null;
-    }
+    const continues = review === null ? await trialToContinue(tx, { workspaceId: input.workspaceId, sessionId: session.id, revision: project[0].revision }) : null;
     const [row] = await tx.insert(agentTurns).values({
       id: turnId,
       sessionId: session.id,
@@ -325,6 +320,106 @@ export async function startAgentTurn(deps: DomainDeps, input: {
       .where(and(eq(agentTurns.id, turnId), eq(agentTurns.status, 'RUNNING')));
     throw error;
   }
+}
+
+type RuntimeTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];
+
+/** 会话里仍可继续的试改：最近一轮（讨论批注的轮次除外）的提案仍未采用且基于当前版本。 */
+async function trialToContinue(tx: RuntimeTx, input: { workspaceId: string; sessionId: string; revision: number }): Promise<{ id: string; operations: unknown } | null> {
+  const previous = await tx.select({ proposalId: agentTurns.proposalId }).from(agentTurns)
+    .where(and(eq(agentTurns.sessionId, input.sessionId), eq(agentTurns.status, 'COMPLETED'), sql`${agentTurns.purpose} <> 'DISCUSS_NOTE'`)).orderBy(desc(agentTurns.createdAt)).limit(1);
+  const trialId = previous[0]?.proposalId ?? null;
+  const trial = trialId === null ? undefined : (await tx.select({ id: proposals.id, status: proposals.status, baseRevision: proposals.baseProjectRevision, operations: proposals.operations })
+    .from(proposals).where(and(eq(proposals.id, trialId), eq(proposals.workspaceId, input.workspaceId))).limit(1))[0];
+  return trial !== undefined && trial.status === 'OPEN' && trial.baseRevision === input.revision ? { id: trial.id, operations: trial.operations } : null;
+}
+
+/**
+ * 付费生成的一轮（V6-7/V6-8，purpose = GENERATE）：用户确认报价后由 paid-generation 发起；不调用模型。
+ * 与普通轮次同一套约束：同会话同一时刻只有一个进行中的轮次（409）、在试改上继续、结果成为提案（采用前工程不变）。
+ * 由调用方给出工作流（PAID_GENERATION）；工作流启动失败时轮次立即标为失败。
+ */
+export async function startGenerationTurn(deps: DomainDeps, input: {
+  workspaceId: string;
+  sessionId: string;
+  message: string;
+  workflow: { type: string; version: number; input: Record<string, unknown> };
+  createdBy: string | null;
+  idempotencyKey: string;
+}): Promise<AgentTurn> {
+  const turnId = agentTurnIdFor(input.sessionId, input.idempotencyKey);
+  const created = await deps.db.transaction(async (tx) => {
+    const sessionRows = await tx.select().from(agentSessions)
+      .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.workspaceId, input.workspaceId))).limit(1).for('update');
+    const session = sessionRows[0];
+    if (session === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'agent session not found', 404, { reason: AGENT_ERROR_REASONS.SESSION_NOT_FOUND });
+    const existing = await tx.select().from(agentTurns).where(eq(agentTurns.id, turnId)).limit(1);
+    if (existing[0] !== undefined) return { row: existing[0], fresh: false };
+    const running = await tx.select({ id: agentTurns.id }).from(agentTurns)
+      .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'RUNNING'))).limit(1);
+    if (running[0] !== undefined) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'another turn is still running in this session', 409, { reason: AGENT_ERROR_REASONS.TURN_IN_PROGRESS, turnId: running[0].id });
+    }
+    const project = await tx.select({ revision: projects.revision }).from(projects)
+      .where(and(eq(projects.id, session.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
+    if (project[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    const continues = await trialToContinue(tx, { workspaceId: input.workspaceId, sessionId: session.id, revision: project[0].revision });
+    const [row] = await tx.insert(agentTurns).values({
+      id: turnId,
+      sessionId: session.id,
+      workspaceId: input.workspaceId,
+      projectId: session.projectId,
+      purpose: 'GENERATE',
+      message: input.message.slice(0, 4000),
+      pointer: agentPointerSchema.parse({}),
+      baseRevision: project[0].revision,
+      draftOperations: continues?.operations ?? [],
+      continuesProposalId: continues?.id ?? null,
+      usage: ZERO_USAGE,
+      createdBy: input.createdBy,
+    }).returning();
+    if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'agent turn insert failed', 500);
+    return { row, fresh: true };
+  });
+  if (!created.fresh) return toTurn(created.row);
+  try {
+    const run = await startWorkflow(deps, {
+      workspaceId: input.workspaceId,
+      projectId: created.row.projectId,
+      type: input.workflow.type,
+      version: input.workflow.version,
+      subjectRef: `agent-turn:${turnId}`,
+      input: { ...input.workflow.input, turnId },
+      idempotencyKey: `agent-turn:${turnId}`,
+      createdBy: input.createdBy,
+    });
+    const [row] = await deps.db.update(agentTurns).set({ workflowRunId: run.id }).where(eq(agentTurns.id, turnId)).returning();
+    return toTurn(row ?? created.row);
+  } catch (error) {
+    await deps.db.update(agentTurns).set({ status: 'FAILED', error: { reason: 'WORKFLOW_START_FAILED' }, completedAt: new Date() })
+      .where(and(eq(agentTurns.id, turnId), eq(agentTurns.status, 'RUNNING')));
+    throw error;
+  }
+}
+
+/**
+ * 收尾一轮付费生成：草稿 = 延续的试改 + 放置生成结果的操作 → 提案（与普通轮次同一规则：基线过期时在最新版本上重验，旧试改被取代）。
+ * 返回提案 id（没有新操作时为 null 或沿用原试改）。
+ */
+export async function completeGenerationTurn(deps: DomainDeps, input: { turnId: string; operations: readonly EditOperation[]; reply: string; error?: Record<string, unknown> | null }): Promise<{ proposalId: string | null }> {
+  const rows = await deps.db.select().from(agentTurns).where(eq(agentTurns.id, input.turnId)).limit(1);
+  const turn = rows[0];
+  if (turn === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'agent turn not found', 404);
+  if (turn.status !== 'RUNNING') return { proposalId: turn.proposalId };
+  const draft = [...editOperationSchema.array().parse(turn.draftOperations), ...input.operations];
+  const result = await finishTurn(deps, turn, draft, input.reply, input.error ?? null);
+  return { proposalId: typeof result['proposalId'] === 'string' ? result['proposalId'] : null };
+}
+
+/** 一轮付费生成失败/取消：轮次标为失败（或取消），回复说明发生了什么与费用情况。 */
+export async function failGenerationTurn(deps: DomainDeps, input: { turnId: string; status: 'FAILED' | 'CANCELLED'; reply: string; error: Record<string, unknown> }): Promise<void> {
+  await deps.db.update(agentTurns).set({ status: input.status, reply: input.reply.slice(0, 4000), error: input.error, completedAt: new Date() })
+    .where(and(eq(agentTurns.id, input.turnId), eq(agentTurns.status, 'RUNNING')));
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +522,9 @@ export async function runAgentTurnLoop(
     ...(ports.frames === undefined ? {} : { frames: ports.frames }),
     ...(ports.effects === undefined ? {} : { effects: ports.effects }),
     ...(ports.narration === undefined ? {} : { narration: ports.narration }),
+    ...(ports.generation === undefined ? {} : { generation: ports.generation }),
+    sessionId: session.id,
+    turnId: loaded.id,
     pointer: agentPointerSchema.parse(loaded.pointer),
   });
   let draft = editOperationSchema.array().parse(turn.draftOperations);

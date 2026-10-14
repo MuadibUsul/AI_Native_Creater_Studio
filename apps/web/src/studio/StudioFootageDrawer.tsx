@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import type { StudioFootage } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -12,6 +13,8 @@ export function StudioFootageDrawer(props: {
   footage: StudioFootage[];
   uploads: UploadProgress[];
   canEdit: boolean;
+  /** V6-7：我的形象与声音（数字人出镜用的照片与声音样本） */
+  identityHref?: string;
   onAdd: () => void;
   onClose: () => void;
 }) {
@@ -44,6 +47,9 @@ export function StudioFootageDrawer(props: {
           </div>
         ))}
         {props.footage.length === 0 && pending.length === 0 ? <p className="muted mt16">{t.empty}</p> : null}
+        {props.identityHref !== undefined ? (
+          <Link className="textbtn small" href={props.identityHref}><QuietIcon name="image" />{messages.studio.generation.identityLink}</Link>
+        ) : null}
         {props.footage.map((item) => (
           <div key={item.assetId} className={styles['footageItem']}>
             <div className={styles['footageName']}>

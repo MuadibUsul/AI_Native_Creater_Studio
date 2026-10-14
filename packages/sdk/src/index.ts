@@ -9,4 +9,5 @@ export type {
   UploadDataSource,
   BatchUploadResult,
   PkcePair,
+  IdentityConsentStatement,
 } from './client.js';

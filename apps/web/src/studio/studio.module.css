@@ -202,6 +202,20 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); margin-top: 4px; }
 .alert { border-left: 2px solid var(--ui-fg-primary); padding-left: var(--ui-space-2); }
 .earlier { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+/* 付费生成的报价卡（V6-7/V6-8）：与对话同一层级，确认前把价格与预算说清楚 */
+.generations { display: flex; gap: var(--ui-space-2); overflow-x: auto; padding-bottom: 2px; }
+.generationCard {
+  flex: 1 1 260px; min-width: 240px; max-width: 420px;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-control);
+}
+.generationCard[data-status='QUOTED'] { border-color: var(--ui-fg-secondary); }
+.generationCard p { margin: 0; }
+.generationHead { display: flex; align-items: center; gap: var(--ui-space-2); }
+.generationBadge { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); border: 1px solid var(--ui-border-subtle); border-radius: 999px; padding: 0 8px; }
+.generationSummary { overflow-wrap: anywhere; }
+
 .earlier summary { cursor: pointer; }
 .earlier ol { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 
@@ -274,6 +288,14 @@
 .aspect { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: var(--ui-space-3) var(--ui-space-2); border: 1px solid var(--ui-border-control); border-radius: var(--ui-radius-control); background: var(--ui-bg-elevated); color: var(--ui-fg-primary); font-size: var(--ui-type-metadata); }
 .aspect[aria-checked="true"] { outline: 2px solid var(--ui-fg-primary); outline-offset: 1px; background: var(--ui-selection-bg); }
 .aspectShape { border: 1.5px solid currentColor; border-radius: 3px; }
+/* V6-7 我的形象与声音 */
+.identityCard { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-4); border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-overlay); }
+.identityCard h2 { font-size: var(--ui-type-section-title); margin: 0; }
+.identityParts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-3); }
+.identityPart { display: flex; flex-direction: column; gap: 6px; padding: var(--ui-space-3); border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-control); min-width: 0; }
+.identityPart p { margin: 0; overflow-wrap: anywhere; }
+.identityStatement { margin: 0; padding-left: var(--ui-space-2); border-left: 2px solid var(--ui-border-control); font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+@media (max-width: 640px) { .identityParts { grid-template-columns: minmax(0, 1fr); } }
 /* V6-5 起点：素材 / 文章 */
 .starts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-2); }
 .start { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: var(--ui-space-3); border: 1px solid var(--ui-border-control); border-radius: var(--ui-radius-control); background: var(--ui-bg-elevated); color: var(--ui-fg-primary); text-align: left; }

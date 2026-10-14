@@ -30,12 +30,14 @@ const footage = (name: string, footageId: string) => ({
   understanding: { index: 'READY', transcript: 'WORKING', visual: 'FAILED' },
 });
 const studioState = (overrides: Record<string, unknown> = {}) => ({
-  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5, allowEffects: false, allowNarration: false, article: null },
+  project: { id: 'prj_1', title: '冰岛环岛', aspectRatio: '16:9', revision: 5, allowEffects: false, allowNarration: false, allowGeneratedVideo: false, article: null },
   sequenceId: 'seq_1',
   session: { id: 'ses_1', workspaceId: 'ws_1', projectId: 'prj_1', sequenceId: 'seq_1', locale: 'zh-CN', createdBy: null, createdAt: '2026-10-12T00:00:00.000Z' },
   footage: [footage('glacier.mp4', 'av_g'), footage('lake.mp4', 'av_l')],
   effects: [],
   narration: [],
+  generations: [],
+  generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
   cost: { projectId: 'prj_1', turns: 1, usage: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 120_000, unpricedCalls: 0 },
   ...overrides,
 });
@@ -234,7 +236,7 @@ describe('V6-1c 共看片室', () => {
   });
 
   it('V6-5 从文章开始：还没剪时显示文章已就绪，一键让 AI 讲成视频；配音开关显式修改项目规则', async () => {
-    const { sdk, startTurn } = client({ state: studioState({ footage: [], project: { id: 'prj_1', title: '淡水', aspectRatio: '16:9', revision: 1, allowEffects: true, allowNarration: false, article: { title: '淡水', characters: 120, paragraphs: 3 } } }) });
+    const { sdk, startTurn } = client({ state: studioState({ footage: [], project: { id: 'prj_1', title: '淡水', aspectRatio: '16:9', revision: 1, allowEffects: true, allowNarration: false, allowGeneratedVideo: false, article: { title: '淡水', characters: 120, paragraphs: 3 } } }) });
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
     expect(await screen.findByText('文章已就绪（3 段）')).toBeTruthy();
     const toggle = screen.getByRole('button', { name: /配音：关/ });
@@ -407,6 +409,57 @@ describe('V6-1c 共看片室', () => {
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, running.sdk);
     await userEvent.click(await screen.findByRole('button', { name: '停止' }));
     await waitFor(() => expect(cancelTurn).toHaveBeenCalled());
+  });
+
+  const quote = (overrides: Record<string, unknown> = {}) => ({
+    id: 'gen_1', projectId: 'prj_1', sessionId: 'ses_1', kind: 'VIDEO_REGION', status: 'QUOTED',
+    request: { kind: 'VIDEO_REGION', prompt: 'sunset sky', clipId: 'clp_g', start: mt(30), end: mt(90), region: { x: 0.5, y: 0, width: 0.5, height: 0.5 } },
+    summary: '把右上角的天空换成晚霞', providerId: 'vendor', implementation: 'REAL', model: 'video-x', estimatedSeconds: '2',
+    estimate: { minMicros: 100_000, maxMicros: 800_000 }, reserveCredits: 80, expiresAt: '2099-01-01T00:00:00.000Z', createdAt: '2026-10-14T00:00:00.000Z',
+    acceptedAt: null, completedAt: null, chargedMicros: null, costSource: null, quoteTurnId: 'agt_1', turnId: null, proposalId: null, footageId: null,
+    outsideRegionChange: null, error: null, ...overrides,
+  });
+
+  it('V6-7/V6-8 报价卡：说明价格与预算；确认时带上看到的报价上限；放弃；生成开关显式修改项目规则', async () => {
+    const accept = vi.fn().mockResolvedValue(quote({ status: 'RUNNING', turnId: 'agt_9', acceptedAt: '2026-10-14T00:01:00.000Z' }));
+    const decline = vi.fn().mockResolvedValue(quote({ status: 'DECLINED' }));
+    const { sdk } = client({
+      turns: [turn({ proposalId: null, reply: '重绘这块约 2 秒，预计 $0.10–$0.80，确认后开始。' })],
+      state: studioState({ generations: [quote()], generationBudget: { configured: true, period: 'MONTHLY', limitMicros: 5_000_000, spentMicros: 1_000_000, reservedMicros: 0 } }),
+      extra: { generations: { accept, decline, list: vi.fn() } },
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const card = await screen.findByRole('article', { name: '重绘框出的区域 · 把右上角的天空换成晚霞' });
+    expect(within(card).getByText('约 2 秒 · 预计 $0.10–$0.80 · 供应商模型 video-x')).toBeTruthy();
+    expect(within(card).getByText('确认后先从生成预算预留上限；本期还剩 $4.00')).toBeTruthy();
+    await userEvent.click(within(card).getByRole('button', { name: '确认生成（最多 $0.80）' }));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith('ws_1', 'prj_1', 'gen_1', { expectedMaxMicros: 800_000 }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+    await userEvent.click(within(card).getByRole('button', { name: '不要了' }));
+    await waitFor(() => expect(decline).toHaveBeenCalledWith('ws_1', 'prj_1', 'gen_1', expect.anything()));
+
+    const toggle = screen.getByRole('button', { name: /生成：关/ });
+    await userEvent.click(toggle);
+    await waitFor(() => expect(sdk.studio.updateProductionPolicy).toHaveBeenCalledWith('ws_1', 'prj_1', { allowGeneratedVideo: true }, expect.anything()));
+  });
+
+  it('V6-7/V6-8 报价卡：没设预算如实提示；确认被拒说明原因；进行中、待对账、测试替身都标明', async () => {
+    const accept = vi.fn().mockRejectedValue(apiError(409, 'PRECONDITION_FAILED', 'no budget', { reason: 'GENERATION_BUDGET_NOT_SET' }));
+    const { sdk } = client({
+      state: studioState({ generations: [
+        quote({ implementation: 'SCRIPTED' }),
+        quote({ id: 'gen_2', kind: 'AVATAR_CLIP', summary: '我出镜说开场白', status: 'RUNNING', request: { kind: 'AVATAR_CLIP', identityId: 'cid_1', script: 'Hi', language: 'en', at: mt(0), framing: 'CORNER' } }),
+        quote({ id: 'gen_3', summary: '换天空', status: 'NEEDS_RECONCILIATION' }),
+      ] }),
+      extra: { generations: { accept, decline: vi.fn(), list: vi.fn() } },
+    });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const card = await screen.findByRole('article', { name: '重绘框出的区域 · 把右上角的天空换成晚霞' });
+    expect(within(card).getByText('测试替身')).toBeTruthy();
+    expect(within(card).getByText(/工作区还没有设置生成预算/)).toBeTruthy();
+    await userEvent.click(within(card).getByRole('button', { name: /确认生成/ }));
+    expect(await screen.findByText('工作区还没有设置生成预算，不能确认。')).toBeTruthy();
+    expect(within(screen.getByRole('article', { name: '数字人出镜 · 我出镜说开场白' })).getByText('正在生成…只调用一次，不会自动重试。')).toBeTruthy();
+    expect(within(screen.getByRole('article', { name: '重绘框出的区域 · 换天空' })).getByRole('alert').textContent).toContain('结果不明');
   });
 
   it('中英切换：界面文案即时切换，Cookie 记住本设备的选择', async () => {

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentLocale, AgentPointer, AgentTurn, Clip, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
+import type { AgentLocale, AgentPointer, AgentTurn, Clip, Generation, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 
 /**
@@ -26,13 +26,15 @@ export const studioKeys = {
 const footageBusy = (state: StudioState | undefined): boolean =>
   state?.footage.some((item) => item.status === 'UPLOADING' || item.status === 'PROCESSING'
     || Object.values(item.understanding).some((value) => value === 'WORKING')) ?? false;
+/** 付费生成进行中（V6-7/V6-8）：轮询到结果出来 */
+const generationBusy = (state: StudioState | undefined): boolean => state?.generations.some((item) => item.status === 'RUNNING') ?? false;
 
 export function useStudioState(workspaceId: string, projectId: string) {
   const client = useAncsClient();
   return useQuery({
     queryKey: studioKeys.state(workspaceId, projectId),
     queryFn: () => client.studio.state(workspaceId, projectId),
-    refetchInterval: (query) => (footageBusy(query.state.data) ? 2500 : false),
+    refetchInterval: (query) => (footageBusy(query.state.data) || generationBusy(query.state.data) ? 2500 : false),
   });
 }
 
@@ -216,5 +218,25 @@ export function useStudioActions(workspaceId: string, projectId: string) {
     onSuccess: invalidateProject,
   });
 
-  return { send, cancel, adopt, discard, undoChange, startExport, setEffectsAllowed, setNarrationAllowed, invalidateProject };
+  /** 项目制作规则：开/关付费生成画面（V6-7/V6-8；每次生成仍需确认报价） */
+  const setGenerationAllowed = useMutation({
+    mutationFn: (allowed: boolean) => client.studio.updateProductionPolicy(workspaceId, projectId, { allowGeneratedVideo: allowed }, { idempotencyKey: randomKey('policy') }),
+    onSuccess: invalidateProject,
+  });
+
+  /** 确认报价：带上卡片上展示的报价上限；开始后出现一轮"确认生成"，结果作为试改回来 */
+  const acceptGeneration = useMutation({
+    mutationFn: (generation: Generation) => client.generations.accept(workspaceId, projectId, generation.id, { expectedMaxMicros: generation.estimate.maxMicros }, { idempotencyKey: randomKey('generation') }),
+    onSuccess: async (generation) => {
+      await invalidateProject();
+      if (generation.sessionId !== null) await queryClient.invalidateQueries({ queryKey: studioKeys.turns(workspaceId, generation.sessionId) });
+    },
+  });
+
+  const declineGeneration = useMutation({
+    mutationFn: (generation: Generation) => client.generations.decline(workspaceId, projectId, generation.id, { idempotencyKey: randomKey('generation-decline') }),
+    onSuccess: invalidateProject,
+  });
+
+  return { send, cancel, adopt, discard, undoChange, startExport, setEffectsAllowed, setNarrationAllowed, setGenerationAllowed, acceptGeneration, declineGeneration, invalidateProject };
 }
