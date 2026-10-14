@@ -61,7 +61,7 @@ export function createArkHttp(options: ArkHttpOptions): ArkHttp {
       response = await doFetch(url, { ...init, signal: AbortSignal.timeout(ms) });
     } catch (error) {
       const name = error instanceof Error ? error.name : '';
-      throw new ArkHttpError(`Ark ${name === 'TimeoutError' ? `gave no response within ${String(Math.round(ms / 1000))} s` : 'connection failed'}`, null);
+      throw new ArkHttpError(`Ark ${name === 'TimeoutError' ? `gave no response within ${String(Math.round(ms / 1000))} s` : 'connection failed'} (${new URL(url).host})`, null);
     }
     if (!response.ok) throw await failure(response);
     return response;

@@ -143,6 +143,8 @@ describe('GeminiAgentModel', () => {
     await expect(limitedModel.respond(request())).rejects.toMatchObject({ kind: 'RATE_LIMITED', status: 429, retryable: true });
     expect(limited.requests).toHaveLength(2);
 
+    const badKey = await startFake((_request, response) => json(response, 400, { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } }));
+    await expect(new GeminiAgentModel({ apiKey: FAKE_KEY, model: 'm', baseUrl: badKey.baseUrl, wait: noWait }).respond(request())).rejects.toMatchObject({ kind: 'AUTH', status: 400, message: 'model credentials rejected' });
     for (const [status, kind] of [[401, 'AUTH'], [400, 'BAD_REQUEST']] as const) {
       const failing = await startFake((_request, response) => json(response, status, { error: { code: status, message: `bad thing ${String(status)}` } }));
       const error = await new GeminiAgentModel({ apiKey: FAKE_KEY, model: 'm', baseUrl: failing.baseUrl, wait: noWait }).respond(request()).catch((caught: unknown) => caught);

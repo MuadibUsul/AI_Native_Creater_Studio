@@ -113,13 +113,16 @@ if (process.env.GEMINI_API_KEY) {
     const configured = process.env.ANCS_VEO_OFFER_JSON ? JSON.parse(process.env.ANCS_VEO_OFFER_JSON) : null;
     const offer = configured ?? { kind: 'VIDEO_SHOT', providerId: 'veo', implementation: 'REAL', model: 'veo-3.1-fast-generate-preview', perSecondMicros: { min: 0, max: 1 }, maxSeconds: 8, languages: [], durationOptions: [4, 6, 8] };
     await step(`Veo 生成镜头 ${offer.model}`, async () => {
-      const provider = createVeoGenerationProvider({ veo: createGeminiVeo({ apiKey, model: offer.model }), offer });
+      const veo = createGeminiVeo({ apiKey, model: offer.model });
+      const hosts = [];
+      const traced = { model: veo.model, start: (request) => veo.start(request), poll: (job) => veo.poll(job), download: (uri) => { hosts.push(new URL(uri).host); return veo.download(uri); } };
+      const provider = createVeoGenerationProvider({ veo: traced, offer });
       const outputPath = join(out, 'veo-shot.mp4');
       const result = await provider.generate({
         kind: 'VIDEO_SHOT', providerId: offer.providerId, prompt: 'A calm mountain lake at dawn, slow aerial push-in, soft mist over the water', script: null, language: null,
         seconds: 4, maxSeconds: 4, width: 1280, height: 720, fps: 30, outputPath, likenessPath: null, voicePath: null, sourcePath: null, region: null,
       });
-      return `任务 ${String(result.providerJobId)}，${seconds(outputPath).toFixed(2)} 秒 → ${outputPath}`;
+      return `任务 ${String(result.providerJobId)}，${seconds(outputPath).toFixed(2)} 秒 → ${outputPath}（成片链接主机 ${hosts.join('、')}）`;
     });
   }
 } else {
@@ -147,7 +150,7 @@ if (seedanceFlag !== -1) {
         model,
         start: async (request) => { const id = await seedance.start(request); marks.push(`提交 ${String(Date.now() - started)} ms（任务 ${id}）`); return id; },
         poll: async (id) => { const state = await seedance.poll(id); if (state.done) marks.push(`完成 ${String(Math.round((Date.now() - started) / 1000))} s${state.tokens === null ? '' : `，用量 ${String(state.tokens)} tokens`}`); return state; },
-        download: async (uri) => { const bytes = await seedance.download(uri); marks.push(`下载 ${String(bytes.byteLength)} 字节`); return bytes; },
+        download: async (uri) => { marks.push(`成片链接主机 ${new URL(uri).host}`); const bytes = await seedance.download(uri); marks.push(`下载 ${String(bytes.byteLength)} 字节`); return bytes; },
       };
       const outputPath = join(out, 'seedance-shot.mp4');
       try {

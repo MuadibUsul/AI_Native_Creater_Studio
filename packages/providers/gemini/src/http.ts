@@ -92,7 +92,8 @@ export function createGeminiHttp(options: GeminiHttpOptions): GeminiHttp {
     } catch (error) {
       const name = error instanceof Error ? error.name : '';
       const what = name === 'TimeoutError' ? `no response within ${String(Math.round(timeoutMs / 1000))} s` : name === 'AbortError' ? 'request aborted' : 'connection failed';
-      throw new GeminiHttpError(`Gemini ${what}`, null);
+      // 带上主机名（不含路径与查询串）：下载跳转到的主机被网络策略拦下时，一眼看出要放行哪个域名
+      throw new GeminiHttpError(`Gemini ${what} (${new URL(url).host})`, null);
     }
     const redirected = init.redirect === 'manual' && response.status >= 300 && response.status < 400;
     if (!response.ok && !redirected) throw await failure(response);

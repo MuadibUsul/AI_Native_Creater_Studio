@@ -189,7 +189,8 @@ export function classifyGeminiError(error: unknown): AgentModelFailure {
     if (status === null) return new AgentModelFailure('TRANSIENT', truncate(error.message));
     if (status === 429) return new AgentModelFailure('RATE_LIMITED', 'model rate limited or out of quota', 429);
     if (status === 503) return new AgentModelFailure('OVERLOADED', 'model overloaded', 503);
-    if (status === 401 || status === 403) return new AgentModelFailure('AUTH', 'model credentials rejected', status);
+    // Google 对无效密钥回 400 INVALID_ARGUMENT（"API key not valid"），按鉴权失败处理（2026-10-14 真实回应）
+    if (status === 401 || status === 403 || /API key not valid|API_KEY_INVALID/i.test(error.message)) return new AgentModelFailure('AUTH', 'model credentials rejected', status);
     if (status >= 500) return new AgentModelFailure('TRANSIENT', `model server error ${String(status)}`, status);
     if (/token count|too many tokens|exceeds the maximum number of tokens|context (window|length)/i.test(error.message)) {
       return new AgentModelFailure('CONTEXT_TOO_LONG', truncate(error.message), status);
