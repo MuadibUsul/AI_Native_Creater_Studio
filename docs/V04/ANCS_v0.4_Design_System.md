@@ -42,19 +42,22 @@ Apple文档要求分别检查两种外观的可读性，并使用随外观适配
 | Token | 浅色 | 深色 | 使用约束 |
 |---|---|---|---|
 | `ui.bg.canvas` | `#FFFFFF` | `#0A0A0A` | 工作区背景 |
-| `ui.bg.subtle` | `#F5F5F5` | `#141414` | 轻分区、列表底层 |
-| `ui.bg.elevated` | `#FFFFFF` | `#1C1C1C` | 弹层／抽屉／局部浮层 |
-| `ui.bg.hover` | `#EFEFEF` | `#262626` | hover，不作为唯一可点击提示 |
-| `ui.fg.primary` | `#171717` | `#F5F5F5` | 主文字、图标 |
+| `ui.bg.subtle` | `#F5F5F5` | `#111111` | 轻分区、列表底层 |
+| `ui.bg.elevated` | `#FFFFFF` | `#171717` | 弹层／抽屉／局部浮层 |
+| `ui.bg.hover` | `#EFEFEF` | `#222222` | hover，不作为唯一可点击提示 |
+| `ui.fg.primary` | `#171717` | `#EDEDED` | 主文字、图标 |
 | `ui.fg.secondary` | `#595959` | `#B3B3B3` | 说明、次级文字，不能另叠opacity减弱 |
 | `ui.fg.muted` | `#666666` | `#A3A3A3` | 有意义的辅助文字；仍需对比度验证 |
-| `ui.border.subtle` | `#E5E5E5` | `#333333` | 仅装饰分隔，不独自承担输入框／焦点边界 |
+| `ui.border.subtle` | `#E5E5E5` | `#262626` | 仅装饰分隔，不独自承担输入框／焦点边界 |
 | `ui.border.control` | `#737373` | `#8C8C8C` | 必需辨认的边界／控件 |
-| `ui.action.primary.bg` | `#171717` | `#F5F5F5` | 主操作实色底 |
+| `ui.action.primary.bg` | `#171717` | `#EDEDED` | 主操作实色底 |
 | `ui.action.primary.fg` | `#FFFFFF` | `#171717` | 主操作文字 |
-| `ui.selection.bg` | `#E8E8E8` | `#303030` | 列表选中底，另加线条／勾选／文字 |
-| `ui.focus.ring` | `#171717` | `#F5F5F5` | 焦点边界；相邻颜色不足时使用双层环 |
+| `ui.action.primary.hover` | `#383838` | `#FFFFFF` | 主操作悬停底（2026-10-14 界面精修新增） |
+| `ui.selection.bg` | `#E8E8E8` | `#2A2A2A` | 列表选中底，另加线条／勾选／文字 |
+| `ui.focus.ring` | `#171717` | `#EDEDED` | 焦点边界；相邻颜色不足时使用双层环 |
 | `ui.media.matte` | `#0A0A0A` | `#0A0A0A` | 看片区域外垫底，不改变视频像素 |
+
+> 2026-10-14 界面精修：深色层级加深（subtle/elevated/hover/border/selection），新增主操作悬停、阴影层级、缓动与等宽字体 token；取值以 `ANCS_v0.4_Design_Tokens.json` 为准，说明见 `docs/design/ui-refresh-2026-10.md`。
 
 普通有意义文字对实际相邻背景的对比度至少4.5:1；关键操作、控件辨识和必要图形边界按适用规则至少3:1；重要正文优先更高对比。不能把`border.subtle`当成唯一输入框边界。WCAG关于文字、非文字和不单独依赖颜色的要求分别见[D03]—[D05]。实际控件还需浏览器检查，token计算通过不等于整个产品已达无障碍标准。
 

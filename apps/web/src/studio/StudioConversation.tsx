@@ -96,7 +96,7 @@ export function StudioConversation(props: ConversationProps) {
                 <div className={styles['lineBody']}>
                   {running ? (
                     <div className={styles['actions']} style={{ marginTop: 0 }}>
-                      <span role="status">{latest.purpose === 'GENERATE' ? t.generating : t.working}</span>
+                      <span role="status" className={styles['working']}>{latest.purpose === 'GENERATE' ? t.generating : t.working}</span>
                       <button type="button" className="btn small" disabled={props.cancelling} onClick={() => props.onStop(latest)}>
                         {props.cancelling ? t.stopping : t.stop}
                       </button>

@@ -33,28 +33,31 @@
       "ui.border.control": "#737373",
       "ui.action.primary.bg": "#171717",
       "ui.action.primary.fg": "#FFFFFF",
+      "ui.action.primary.hover": "#383838",
       "ui.selection.bg": "#E8E8E8",
       "ui.focus.ring": "#171717",
       "ui.media.matte": "#0A0A0A"
     },
     "dark": {
       "ui.bg.canvas": "#0A0A0A",
-      "ui.bg.subtle": "#141414",
-      "ui.bg.elevated": "#1C1C1C",
-      "ui.bg.hover": "#262626",
-      "ui.fg.primary": "#F5F5F5",
+      "ui.bg.subtle": "#111111",
+      "ui.bg.elevated": "#171717",
+      "ui.bg.hover": "#222222",
+      "ui.fg.primary": "#EDEDED",
       "ui.fg.secondary": "#B3B3B3",
       "ui.fg.muted": "#A3A3A3",
-      "ui.border.subtle": "#333333",
+      "ui.border.subtle": "#262626",
       "ui.border.control": "#8C8C8C",
-      "ui.action.primary.bg": "#F5F5F5",
+      "ui.action.primary.bg": "#EDEDED",
       "ui.action.primary.fg": "#171717",
-      "ui.selection.bg": "#303030",
-      "ui.focus.ring": "#F5F5F5",
+      "ui.action.primary.hover": "#FFFFFF",
+      "ui.selection.bg": "#2A2A2A",
+      "ui.focus.ring": "#EDEDED",
       "ui.media.matte": "#0A0A0A"
     }
   },
   "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+  "fontFamilyMono": "ui-monospace, \"SF Mono\", SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace",
   "fontFilesIncluded": false,
   "spacingPx": [
     4,
@@ -69,7 +72,8 @@
   "radiiPx": {
     "smallControl": 8,
     "control": 10,
-    "overlay": 16
+    "overlay": 16,
+    "pill": 999
   },
   "controlHeightPx": {
     "default": 40,
@@ -130,6 +134,25 @@
       180,
       220
     ]
+  },
+  "motionEasing": {
+    "standard": "cubic-bezier(0.2, 0, 0, 1)",
+    "enter": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "exit": "cubic-bezier(0.4, 0, 1, 1)",
+    "rule": "Feedback uses standard; overlays enter with enter and leave with exit; reduced motion keeps opacity/colour changes and drops transforms."
+  },
+  "elevation": {
+    "light": {
+      "1": "0 1px 2px rgba(0, 0, 0, .06)",
+      "2": "0 1px 2px rgba(0, 0, 0, .04), 0 4px 12px rgba(0, 0, 0, .06)",
+      "3": "0 2px 8px rgba(0, 0, 0, .06), 0 16px 40px rgba(0, 0, 0, .14)"
+    },
+    "dark": {
+      "1": "0 1px 2px rgba(0, 0, 0, .5)",
+      "2": "inset 0 1px 0 rgba(255, 255, 255, .04), 0 1px 2px rgba(0, 0, 0, .5), 0 4px 12px rgba(0, 0, 0, .35)",
+      "3": "inset 0 1px 0 rgba(255, 255, 255, .05), 0 2px 8px rgba(0, 0, 0, .5), 0 16px 48px rgba(0, 0, 0, .55)"
+    },
+    "rule": "1 = resting controls and cards, 2 = raised/selected items and the media frame, 3 = popovers, drawers and dialogs. Neutral black only; elevation never replaces a 3:1 control boundary."
   },
   "contrastPairs": [
     {
@@ -213,6 +236,11 @@
       "minimum": 4.5
     },
     {
+      "foreground": "ui.action.primary.fg",
+      "background": "ui.action.primary.hover",
+      "minimum": 4.5
+    },
+    {
       "foreground": "ui.border.control",
       "background": "ui.bg.canvas",
       "minimum": 3.0
@@ -258,5 +286,11 @@
     "Static color checks are not browser/component/WCAG conformance validation.",
     "Integrate appearance initialization and persistence in the existing app.",
     "Never embed/distribute proprietary font files."
+  ],
+  "revisions": [
+    {
+      "date": "2026-10-14",
+      "change": "UI refresh: deeper dark layering (subtle/elevated/hover/border/selection), primary hover token, elevation, easing, mono font and pill radius; see docs/design/ui-refresh-2026-10.md"
+    }
   ]
 }

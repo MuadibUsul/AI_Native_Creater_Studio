@@ -371,43 +371,49 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
           {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
-          <button
-            type="button"
-            className="btn small ghost"
-            aria-pressed={state.project.allowEffects}
-            title={state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff}
-            disabled={!canEdit || actions.setEffectsAllowed.isPending}
-            onClick={() => {
-              setActionError(null);
-              actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
-            }}
-          ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
-          <button
-            type="button"
-            className="btn small ghost"
-            aria-pressed={state.project.allowNarration}
-            title={state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff}
-            disabled={!canEdit || actions.setNarrationAllowed.isPending}
-            onClick={() => {
-              setActionError(null);
-              actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
-            }}
-          ><QuietIcon name="voice" />{state.project.allowNarration ? t.narration.on : t.narration.off}</button>
-          <button
-            type="button"
-            className="btn small ghost"
-            aria-pressed={state.project.allowGeneratedVideo}
-            title={state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff}
-            disabled={!canEdit || actions.setGenerationAllowed.isPending}
-            onClick={() => {
-              setActionError(null);
-              actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
-            }}
-          ><QuietIcon name="film" />{state.project.allowGeneratedVideo ? t.generation.on : t.generation.off}</button>
+          <div className={styles['ruleGroup']} role="group" aria-label={t.rulesLabel}>
+            <button
+              type="button"
+              className="btn small ghost"
+              aria-pressed={state.project.allowEffects}
+              title={state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff}
+              disabled={!canEdit || actions.setEffectsAllowed.isPending}
+              onClick={() => {
+                setActionError(null);
+                actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
+              }}
+            ><QuietIcon name="spark" />{state.project.allowEffects ? t.effects.on : t.effects.off}</button>
+            <button
+              type="button"
+              className="btn small ghost"
+              aria-pressed={state.project.allowNarration}
+              title={state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff}
+              disabled={!canEdit || actions.setNarrationAllowed.isPending}
+              onClick={() => {
+                setActionError(null);
+                actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
+              }}
+            ><QuietIcon name="voice" />{state.project.allowNarration ? t.narration.on : t.narration.off}</button>
+            <button
+              type="button"
+              className="btn small ghost"
+              aria-pressed={state.project.allowGeneratedVideo}
+              title={state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff}
+              disabled={!canEdit || actions.setGenerationAllowed.isPending}
+              onClick={() => {
+                setActionError(null);
+                actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
+              }}
+            ><QuietIcon name="film" />{state.project.allowGeneratedVideo ? t.generation.on : t.generation.off}</button>
+          </div>
+          <span className={styles['divider']} aria-hidden="true" />
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
+          <span className={styles['divider']} aria-hidden="true" />
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>
+        </div>
+        <div className={styles['exportSlot']}>
           <button type="button" className="btn primary small" aria-expanded={exportOpen} onClick={() => setExportOpen(!exportOpen)}><QuietIcon name="download" />{t.exportButton}</button>
         </div>
       </header>
@@ -440,7 +446,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
 
       <div className={styles['dock']}>
         <div className={styles['transport']}>
-          <button type="button" className="btn icononly small" aria-label={playing ? t.transport.pause : t.transport.play} disabled={shown === null} onClick={togglePlay}>
+          <button type="button" className={`btn icononly small ${styles['play']}`} aria-label={playing ? t.transport.pause : t.transport.play} disabled={shown === null} onClick={togglePlay}>
             <QuietIcon name={playing ? 'pause' : 'play'} />
           </button>
           <span className={styles['clock']} aria-label={t.transport.position}>{formatClock(playhead)} <span>/ {strip === null ? '--:--.-' : formatClock(strip.duration)}</span></span>

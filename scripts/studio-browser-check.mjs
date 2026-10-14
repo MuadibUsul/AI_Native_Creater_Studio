@@ -11,12 +11,12 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv } from './lib/studio-env.mjs';
 
-const evidenceDir = resolve('docs/verification/artifacts/v6-1c');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-1c'); // ANCS_EVIDENCE_DIR：另存一套证据（如界面改版前后对比），不覆盖里程碑证据
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const prefix = `v61c-${randomUUID().slice(0, 8)}`;
 const email = `${prefix}@test.local`;
@@ -63,7 +63,7 @@ try {
   await page.getByRole('link', { name: '进入共看片室' }).waitFor({ timeout: 20_000 });
   await shot('01-home-entry');
   await page.getByRole('link', { name: '进入共看片室' }).click();
-  await page.getByRole('heading', { name: '用素材剪一条视频' }).waitFor({ timeout: 20_000 });
+  await page.getByRole('heading', { name: '新建一条视频' }).waitFor({ timeout: 20_000 });
   await page.getByRole('button', { name: '开始' }).click();
   await page.getByText('请填写作品名称').waitFor();
   await page.getByLabel('作品名称').fill('冰岛环岛自驾 · 第一天');
@@ -200,10 +200,24 @@ try {
   await page.getByText('当前版本').waitFor({ timeout: 60_000 });
   pass('刷新后状态保持', '语言、工程版本与预览恢复');
 
+  // 10. 手机宽度：顶栏的每个操作都要够得着（导出不能被挤出屏幕）
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  await shot('17-phone');
+  const exportBox = await page.getByRole('button', { name: '导出' }).boundingBox();
+  // 越界时列出越界的元素（文档顺序，含宽度与最小内容宽度），方便定位是谁把页面撑宽
+  const offenders = await page.evaluate(() => [...globalThis.document.querySelectorAll('body *')]
+    .filter((element) => element.getBoundingClientRect().right > globalThis.innerWidth + 1)
+    .slice(0, 14).map((element) => `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]} w${element.getBoundingClientRect().width.toFixed(0)}`));
+  if (exportBox === null || exportBox.x < 0 || exportBox.x + exportBox.width > 390) throw new Error(`phone: export button is outside the viewport (${JSON.stringify(exportBox)}; widest: ${offenders.join(', ')})`);
+  const pageOverflow = await page.evaluate(() => globalThis.document.documentElement.scrollWidth - globalThis.innerWidth);
+  if (pageOverflow > 0) throw new Error(`phone: page scrolls sideways by ${String(pageOverflow)} px`);
+  pass('手机宽度', `390 px：导出按钮在屏幕内（x ${exportBox.x.toFixed(0)}–${(exportBox.x + exportBox.width).toFixed(0)}），页面无横向溢出`);
+
   if (pageErrors.length > 0) throw new Error(`browser errors: ${pageErrors.join(' | ')}`);
   const summary = { when: new Date().toISOString(), director: 'SCRIPTED (not a real provider)', workspaceId, projectId, results };
   await writeFile(resolve(evidenceDir, 'result.json'), `${JSON.stringify(summary, null, 2)}\n`);
-  console.log(`\nV6-1c studio browser check passed (${String(results.length)} checks). Evidence: docs/verification/artifacts/v6-1c/`);
+  console.log(`\nV6-1c studio browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);
 } catch (error) {
   if (page) await page.screenshot({ path: resolve(evidenceDir, 'failure.png') }).catch(() => undefined);
   console.error(error);

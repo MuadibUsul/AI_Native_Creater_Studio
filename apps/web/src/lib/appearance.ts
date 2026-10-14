@@ -37,6 +37,12 @@ export function saveDeviceAppearance(userId: string, mode: AppearanceMode | null
 
 export function applyAppearance(mode: AppearanceMode): void {
   const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-  document.body.dataset['appearanceMode'] = mode;
-  document.body.classList.toggle('theme-dark', mode === 'dark' || (mode === 'system' && systemDark));
+  const body = document.body;
+  // Switching appearance is a state change, not motion: hold control transitions (ui-tokens.css) for two frames so every colour flips at once.
+  body.dataset['themeSwitching'] = '';
+  body.dataset['appearanceMode'] = mode;
+  body.classList.toggle('theme-dark', mode === 'dark' || (mode === 'system' && systemDark));
+  const release = () => { delete body.dataset['themeSwitching']; };
+  if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(() => window.requestAnimationFrame(release));
+  else release();
 }

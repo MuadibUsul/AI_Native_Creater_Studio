@@ -13,6 +13,7 @@
   --ui-border-control: #737373;
   --ui-action-primary-bg: #171717;
   --ui-action-primary-fg: #FFFFFF;
+  --ui-action-primary-hover: #383838;
   --ui-selection-bg: #E8E8E8;
   --ui-focus-ring: #171717;
   --ui-media-matte: #0A0A0A;
@@ -35,6 +36,7 @@
   --ui-border-control: #737373;
   --ui-action-primary-bg: #171717;
   --ui-action-primary-fg: #FFFFFF;
+  --ui-action-primary-hover: #383838;
   --ui-selection-bg: #E8E8E8;
   --ui-focus-ring: #171717;
   --ui-media-matte: #0A0A0A;
@@ -42,36 +44,38 @@
 }
 :root[data-theme="dark"] {
   --ui-bg-canvas: #0A0A0A;
-  --ui-bg-subtle: #141414;
-  --ui-bg-elevated: #1C1C1C;
-  --ui-bg-hover: #262626;
-  --ui-fg-primary: #F5F5F5;
+  --ui-bg-subtle: #111111;
+  --ui-bg-elevated: #171717;
+  --ui-bg-hover: #222222;
+  --ui-fg-primary: #EDEDED;
   --ui-fg-secondary: #B3B3B3;
   --ui-fg-muted: #A3A3A3;
-  --ui-border-subtle: #333333;
+  --ui-border-subtle: #262626;
   --ui-border-control: #8C8C8C;
-  --ui-action-primary-bg: #F5F5F5;
+  --ui-action-primary-bg: #EDEDED;
   --ui-action-primary-fg: #171717;
-  --ui-selection-bg: #303030;
-  --ui-focus-ring: #F5F5F5;
+  --ui-action-primary-hover: #FFFFFF;
+  --ui-selection-bg: #2A2A2A;
+  --ui-focus-ring: #EDEDED;
   --ui-media-matte: #0A0A0A;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]), :root[data-theme="system"] {
   --ui-bg-canvas: #0A0A0A;
-  --ui-bg-subtle: #141414;
-  --ui-bg-elevated: #1C1C1C;
-  --ui-bg-hover: #262626;
-  --ui-fg-primary: #F5F5F5;
+  --ui-bg-subtle: #111111;
+  --ui-bg-elevated: #171717;
+  --ui-bg-hover: #222222;
+  --ui-fg-primary: #EDEDED;
   --ui-fg-secondary: #B3B3B3;
   --ui-fg-muted: #A3A3A3;
-  --ui-border-subtle: #333333;
+  --ui-border-subtle: #262626;
   --ui-border-control: #8C8C8C;
-  --ui-action-primary-bg: #F5F5F5;
+  --ui-action-primary-bg: #EDEDED;
   --ui-action-primary-fg: #171717;
-  --ui-selection-bg: #303030;
-  --ui-focus-ring: #F5F5F5;
+  --ui-action-primary-hover: #FFFFFF;
+  --ui-selection-bg: #2A2A2A;
+  --ui-focus-ring: #EDEDED;
   --ui-media-matte: #0A0A0A;
     color-scheme: dark;
   }
