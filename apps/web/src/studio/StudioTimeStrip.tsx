@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import {
   compareMediaTime,
   mediaTimeSchema,
+  mediaTimeToDisplaySeconds,
   sequenceTimeAtX,
   stepFrames,
   temporalSelectionFromDrag,
@@ -16,6 +17,7 @@ import {
 } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import { formatClock } from './studio-time';
+import { waveformBars, type FootageWaveform } from './studio-waveform';
 import styles from './studio.module.css';
 
 /**
@@ -24,10 +26,19 @@ import styles from './studio.module.css';
  * 缩放（界面精修第三阶段）：zoom > 1 时内容按倍数加宽、横向滚动；坐标换算仍走 contracts 的有理视口（widthPx = 可见宽 × zoom），
  * Ctrl/⌘ + 滚轮以指针处为锚点缩放，其余方式以播放头为锚点；播放头移出可见区时自动跟随。
  * 试改改动：changes 来自服务端 A/B 对照（真实片段区间），只画在标尺下沿，不改选区。
+ * 触屏（界面精修第四阶段）：两指捏合按档位缩放、以两指中点为锚；两指平移横向滚动；第二根手指落下时取消单指选择。
+ * 波形：声音片段画出所用源区间的实测峰值（媒体索引）；没有测量值就不画。
  */
 
 /** 时间带缩放档位（1 = 适合宽度） */
 export const STRIP_ZOOM_LEVELS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16] as const;
+
+/** 离目标倍数最近的缩放档位（按对数距离；双指捏合用） */
+export function nearestStripZoom(target: number): number {
+  const levels: readonly number[] = STRIP_ZOOM_LEVELS;
+  if (!(target > 0)) return levels[0]!;
+  return levels.reduce((best, level) => (Math.abs(Math.log(level / target)) < Math.abs(Math.log(best / target)) ? level : best), levels[0]!);
+}
 
 /** 下一档缩放（direction 1 放大，-1 缩小），到头不变 */
 export function nextStripZoom(current: number, direction: 1 | -1): number {
@@ -48,6 +59,8 @@ export interface StripClip {
   kind: 'VIDEO' | 'AUDIO';
   assetVersionId: string | null;
   sequenceRange: MediaRange;
+  /** 片段用到的源区间（画波形用）；试改中改过的片段不知道源区间时为空，不画波形 */
+  source?: { range: MediaRange; reverse: boolean };
 }
 
 export interface StripLane {
@@ -100,6 +113,8 @@ export function StudioTimeStrip(props: {
   onZoomChange?: (zoom: number) => void;
   /** 试改相对当前版本内容有改动的序列区间（来自服务端对照） */
   changes?: MediaRange[];
+  /** 资产版本 → 实测波形（媒体索引） */
+  waveforms?: ReadonlyMap<string, FootageWaveform>;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.strip;
@@ -137,6 +152,56 @@ export function StudioTimeStrip(props: {
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
+  }, [ref, zoom, contentWidth, onZoomChange]);
+  // 触屏双指：捕获阶段记下触点；第二根手指落下时开始捏合并取消单指选择（不再传给片段区）
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number; midX: number } | null>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null || onZoomChange === undefined) return;
+    const points = () => [...touches.current.values()];
+    const distance = () => { const [a, b] = points(); return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; };
+    const midX = () => { const [a, b] = points(); return a && b ? (a.x + b.x) / 2 : 0; };
+    const onDown = (event: globalThis.PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touches.current.size === 2) {
+        pinch.current = { distance: distance(), zoom, midX: midX() };
+        scrubbing.current = false;
+        setDrag(null);
+        event.stopPropagation();
+      } else if (touches.current.size > 2) event.stopPropagation();
+    };
+    const onMove = (event: globalThis.PointerEvent) => {
+      if (event.pointerType !== 'touch' || !touches.current.has(event.pointerId)) return;
+      touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const gesture = pinch.current;
+      if (gesture === null || touches.current.size !== 2) return;
+      event.stopPropagation();
+      const center = midX();
+      element.scrollLeft = Math.max(0, element.scrollLeft - (center - gesture.midX));
+      gesture.midX = center;
+      if (gesture.distance <= 0) return;
+      const next = nearestStripZoom(gesture.zoom * (distance() / gesture.distance));
+      if (next === zoom) return;
+      const offset = center - element.getBoundingClientRect().left;
+      pendingAnchor.current = { fraction: contentWidth > 0 ? (element.scrollLeft + offset) / contentWidth : 0, offset };
+      onZoomChange(next);
+    };
+    const onUp = (event: globalThis.PointerEvent) => {
+      if (!touches.current.delete(event.pointerId)) return;
+      if (touches.current.size < 2) pinch.current = null;
+    };
+    element.addEventListener('pointerdown', onDown, true);
+    element.addEventListener('pointermove', onMove, true);
+    element.addEventListener('pointerup', onUp, true);
+    element.addEventListener('pointercancel', onUp, true);
+    return () => {
+      element.removeEventListener('pointerdown', onDown, true);
+      element.removeEventListener('pointermove', onMove, true);
+      element.removeEventListener('pointerup', onUp, true);
+      element.removeEventListener('pointercancel', onUp, true);
+    };
   }, [ref, zoom, contentWidth, onZoomChange]);
   const timeAt = (x: number): MediaTime | null => (viewport === null ? null : sequenceTimeAtX(viewport, x, { frameRate: props.frameRate }));
 
@@ -283,6 +348,7 @@ export function StudioTimeStrip(props: {
                   }}
                 >
                   {lane.audio && !lane.narration ? '' : label}
+                  {lane.audio ? <ClipWaveform wave={clip.assetVersionId === null ? undefined : props.waveforms?.get(clip.assetVersionId)} source={clip.source} width={box.width} /> : null}
                 </button>
               );
             })}
@@ -294,4 +360,17 @@ export function StudioTimeStrip(props: {
       </div>
     </div>
   );
+}
+
+/** 声音片段里的波形：每根柱子约 3 px，高度 = 该段实测峰值；没有测量值的柱子留空 */
+function ClipWaveform(props: { wave: FootageWaveform | undefined; source: StripClip['source']; width: number }) {
+  if (props.wave === undefined || props.source === undefined || props.width < 6) return null;
+  const bars = waveformBars(props.wave, mediaTimeToDisplaySeconds(props.source.range.start), mediaTimeToDisplaySeconds(props.source.range.end), Math.min(800, Math.floor(props.width / 3)), props.source.reverse);
+  if (!bars.some((value) => value !== null && value > 0)) return null;
+  const path = bars.map((value, index) => {
+    if (value === null || value <= 0) return '';
+    const height = Math.max(4, value * 96);
+    return `M${String(index + 0.15)} ${String(50 - height / 2)}h0.7v${String(height)}h-0.7z`;
+  }).join('');
+  return <svg className={styles['wave']} viewBox={`0 0 ${String(bars.length)} 100`} preserveAspectRatio="none" aria-hidden="true" data-waveform="true"><path d={path} /></svg>;
 }

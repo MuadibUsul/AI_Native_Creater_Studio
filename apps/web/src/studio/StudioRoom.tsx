@@ -18,10 +18,11 @@ import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
 import { StudioDistillDrawer } from './StudioDistillDrawer';
 import { StudioRuleGroup } from './StudioRuleGroup';
+import { useFootageWaveforms } from './studio-waveform';
 import { STRIP_ZOOM_LEVELS, StudioTimeStrip, nextStripZoom, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 import { StudioShortcuts } from './StudioShortcuts';
-import { StudioTasks, studioTaskRows, useStudioExports } from './StudioTasks';
+import { StudioTasks, studioTaskRows, useStudioExports, useTaskNotice } from './StudioTasks';
 import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
 import { useReplySpeech } from '@/voice/useReplySpeech';
 import { useVoice } from '@/voice/useVoice';
@@ -139,6 +140,10 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const trialChanges = useMemo(() => (trialView === null ? [] : (compareQuery.data?.diffs ?? [])
     .filter((diff) => diff.objectKind === 'CLIP' && (diff.change === 'ADDED' || diff.change === 'CHANGED') && diff.afterSequenceRange !== null)
     .map((diff) => diff.afterSequenceRange as MediaRange)), [trialView, compareQuery.data]);
+  // 试改里内容有变化的片段：它们的源区间不知道，不画波形（对照还没回来时一律当作未知）
+  const trialChangedClipIds = useMemo(() => (compareQuery.data === undefined ? null : new Set(compareQuery.data.diffs
+    .filter((diff) => diff.objectKind === 'CLIP' && diff.change !== 'UNCHANGED' && diff.change !== 'REMOVED')
+    .map((diff) => diff.objectId))), [compareQuery.data]);
   // 特效图层（V6-3）：资产版本 → 特效名；时间带给特效轨与片段标名
   const effectNames = useMemo(() => new Map((state?.effects ?? []).map((effect) => [effect.footageId, effect.name])), [state?.effects]);
   // 讲述配音（V6-5）：资产版本 → 讲述稿开头；时间带给讲述轨与片段标名
@@ -150,11 +155,19 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       ...(timeline.audioTrackId === null ? [] : [{ trackId: timeline.audioTrackId, kind: 'AUDIO' as const }]),
     ];
     const kindOf = new Map(lanes.map((lane) => [lane.trackId, lane.kind]));
+    // 片段用到的源区间（画波形）：当前版本取自工程文档；试改里只有内容没变的片段沿用文档里的源区间
+    const documentClips = new Map(timeline.clips.map((clip) => [clip.id, clip]));
+    // （测试替身里的片段可能只给了序列区间；缺源区间时就不画波形）
+    const sourceOf = (clip: (typeof timeline.clips)[number]): { source?: NonNullable<StripClip['source']> } => ((clip.sourceRange as MediaRange | undefined) === undefined ? {} : { source: { range: clip.sourceRange, reverse: clip.timeMapping?.direction === 'REVERSE' } });
     const clips: StripClip[] = trialView !== null
-      ? trialView.clips.map((clip) => ({ id: clip.clipId, trackId: clip.trackId, kind: clip.kind, assetVersionId: clip.sourceVersionId, sequenceRange: clip.sequenceRange }))
+      ? trialView.clips.map((clip) => {
+        const known = documentClips.get(clip.clipId);
+        const unchanged = known !== undefined && known.assetVersionId === clip.sourceVersionId && trialChangedClipIds !== null && !trialChangedClipIds.has(clip.clipId);
+        return { id: clip.clipId, trackId: clip.trackId, kind: clip.kind, assetVersionId: clip.sourceVersionId, sequenceRange: clip.sequenceRange, ...(unchanged ? sourceOf(known) : {}) };
+      })
       : timeline.clips.flatMap((clip) => {
         const kind = kindOf.get(clip.trackId) ?? timeline.trackKinds.get(clip.trackId);
-        return kind === undefined ? [] : [{ id: clip.id, trackId: clip.trackId, kind, assetVersionId: clip.assetVersionId, sequenceRange: clip.sequenceRange }];
+        return kind === undefined ? [] : [{ id: clip.id, trackId: clip.trackId, kind, assetVersionId: clip.assetVersionId, sequenceRange: clip.sequenceRange, ...sourceOf(clip) }];
       });
     for (const clip of clips) {
       if (!kindOf.has(clip.trackId)) { kindOf.set(clip.trackId, clip.kind); lanes.push({ trackId: clip.trackId, kind: clip.kind }); }
@@ -168,7 +181,15 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     const rank = (lane: StripLane): number => (lane.effect === true ? 0 : lane.kind === 'VIDEO' ? 1 : lane.narration === true ? 2 : 3);
     lanes.sort((left, right) => rank(left) - rank(right));
     return { duration: trialView?.duration ?? timeline.duration, frameRate: timeline.frameRate, lanes, clips };
-  }, [timeline, trialView, effectNames, narrationTexts]);
+  }, [timeline, trialView, trialChangedClipIds, effectNames, narrationTexts]);
+  // 声音片段的实测波形：只读素材自己的媒体索引（按资产版本对应）；素材列表处理中会每 2.5 秒刷新，只在用到的素材变化时才换查询
+  const waveformVersions = new Set((strip?.clips ?? []).flatMap((clip) => (clip.kind === 'AUDIO' && clip.source !== undefined && clip.assetVersionId !== null ? [clip.assetVersionId] : [])));
+  const waveformKey = (state?.footage ?? []).flatMap((item) => (item.footageId !== null && waveformVersions.has(item.footageId) ? [`${item.assetId}:${item.footageId}`] : [])).sort().join(',');
+  const waveformFootage = useMemo(() => (waveformKey === '' ? [] : waveformKey.split(',').map((pair) => {
+    const [assetId = '', versionId = ''] = pair.split(':');
+    return { assetId, versionId };
+  })), [waveformKey]);
+  const waveforms = useFootageWaveforms(workspaceId, waveformFootage);
 
   // 播放
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -444,6 +465,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     if (userId) saveDeviceAppearance(userId, next);
   };
 
+  // 任务中心与结束提醒（在提前返回之前：提醒要跨渲染比较任务状态）
+  const taskRows = state === undefined ? [] : studioTaskRows({
+    footage: state.footage,
+    generations: state.generations,
+    exports: exportsQuery.data ?? [],
+    turn: latest,
+    t,
+    formatTime: (iso) => new Date(iso).toLocaleString(locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
+  });
+  const taskNotice = useTaskNotice(taskRows);
+
   keyboard.current = {
     playhead,
     duration: strip?.duration ?? null,
@@ -482,14 +514,6 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : article !== null ? 'article' : 'empty';
   const running = latest?.status === 'RUNNING';
   const cost = state.cost;
-  const taskRows = studioTaskRows({
-    footage: state.footage,
-    generations: state.generations,
-    exports: exportsQuery.data ?? [],
-    turn: latest,
-    t,
-    formatTime: (iso) => new Date(iso).toLocaleString(locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
-  });
   const activeTasks = taskRows.filter((row) => row.status === 'running').length;
   const failedTasks = taskRows.filter((row) => row.status === 'failed').length;
 
@@ -548,7 +572,18 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           <span className={styles['divider']} aria-hidden="true" />
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
-          <button type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
+          <span className={styles['tasksAnchor']}>
+            <button type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
+            {/* 任务结束的就近提醒：读屏礼貌播报；点一下打开任务抽屉 */}
+            <span role="status" className={styles['taskNoticeRegion']}>
+              {taskNotice.finished.length > 0 && !tasksOpen ? (() => {
+                const only = taskNotice.finished.length === 1 ? taskNotice.finished[0] : undefined;
+                const text = only !== undefined ? t.tasks.noticeOne(only.title, t.tasks.status[only.status]) : t.tasks.noticeMany(taskNotice.finished.length);
+                const failed = taskNotice.finished.some((row) => row.status === 'failed');
+                return <button type="button" className={styles['taskNotice']} data-status={failed ? 'failed' : 'done'} aria-label={t.tasks.noticeOpen(text)} onClick={() => { taskNotice.dismiss(); setDistillOpen(false); setFootageOpen(false); setTasksOpen(true); }}>{text}</button>;
+              })() : null}
+            </span>
+          </span>
           <span className={styles['divider']} aria-hidden="true" />
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>
@@ -614,6 +649,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
             frameRate={strip.frameRate}
             lanes={strip.lanes}
             clips={strip.clips}
+            waveforms={waveforms}
             clipLabel={footageName}
             playhead={playhead}
             selection={selection}

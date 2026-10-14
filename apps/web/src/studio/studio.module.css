@@ -193,7 +193,7 @@
 .tick:first-child::after { left: 0; }
 .lanes { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 6px 0; cursor: crosshair; }
 .lane { position: relative; height: 30px; border-radius: 6px; background: var(--ui-bg-subtle); box-shadow: inset 0 0 0 1px var(--ui-border-subtle); }
-.laneAudio { height: 18px; }
+.laneAudio { height: 24px; }
 .laneLabel { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ui-fg-secondary); pointer-events: none; }
 .clip {
   position: absolute;
@@ -217,6 +217,9 @@
 }
 .clip:hover { background: var(--ui-bg-hover); }
 .clipAudio { background: var(--ui-selection-bg); box-shadow: none; }
+/* 声音片段里的实测波形（媒体索引峰值；没有测量值不画） */
+.wave { position: absolute; inset: 2px 0; width: 100%; height: calc(100% - 4px); fill: var(--ui-fg-secondary); pointer-events: none; }
+.clipSelected .wave { fill: var(--ui-fg-primary); }
 .clipSelected { outline: 2px solid var(--ui-fg-primary); outline-offset: 1px; box-shadow: 0 0 0 4px var(--ui-bg-elevated); z-index: 1; }
 .clip:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
 .stripEmpty { padding: 10px 0; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
@@ -452,6 +455,29 @@
 .taskRow[data-status='done'] .taskStatus { border-color: var(--ui-border-subtle); color: var(--ui-fg-secondary); font-weight: 500; }
 .taskTitle { overflow-wrap: anywhere; }
 .taskDetail { grid-column: 2; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+
+/* 任务结束的就近提醒：浮在任务按钮下方（浮层层级），8 秒后自动收起 */
+.tasksAnchor { position: relative; display: inline-flex; }
+.taskNoticeRegion { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; }
+.taskNotice {
+  display: block;
+  max-width: 280px;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-2);
+  color: var(--ui-fg-primary);
+  font-size: var(--ui-type-metadata);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  animation: enterUp var(--ui-motion-popover) var(--ui-ease-enter);
+}
+.taskNotice[data-status='failed'] { border-color: var(--ui-fg-primary); font-weight: 600; }
+.taskNotice:hover { background: var(--ui-bg-hover); }
 
 /* 手机宽度：顶栏分两行——返回 / 标题 / 导出在第一行，其余操作在第二行横向滚动；抽屉全屏、导出面板从底部升起 */
 @media (max-width: 760px) {

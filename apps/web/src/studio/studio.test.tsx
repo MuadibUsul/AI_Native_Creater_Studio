@@ -24,6 +24,15 @@ beforeAll(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, width: 900, height: 40, right: 900, bottom: 40, toJSON: () => ({}) });
+  // jsdom 没有 PointerEvent：用带坐标的鼠标事件代替（与浏览器同样带 clientX/clientY、pointerId 与 pointerType）
+  if (!('PointerEvent' in globalThis)) {
+    globalThis.PointerEvent = class extends MouseEvent {
+      readonly pointerId: number;
+      readonly pointerType: string;
+      readonly isPrimary: boolean;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; this.pointerType = init.pointerType ?? 'mouse'; this.isPrimary = init.isPrimary ?? true; }
+    } as unknown as typeof PointerEvent;
+  }
 });
 
 const mt = (ticks: number, den = 30) => ({ ticks: String(ticks), timebase: { num: 1, den } });
@@ -112,7 +121,7 @@ function client(overrides: { state?: unknown; turns?: unknown[]; clips?: unknown
     agent: { listTurns: vi.fn().mockResolvedValue(overrides.turns ?? []), startTurn, createSession: vi.fn(), cancelTurn: vi.fn(), strategies: vi.fn().mockResolvedValue([beatPack]) },
     previews: { request: vi.fn().mockResolvedValue(preview()), get: vi.fn().mockResolvedValue(preview()) },
     finalRenders: { list: vi.fn().mockResolvedValue([{ id: 'wfr_1', status: 'SUCCEEDED', createdAt: '2026-10-14T08:00:00.000Z' }]) },
-    assets: { uploadResumable: vi.fn() },
+    assets: { uploadResumable: vi.fn(), mediaIndex: vi.fn().mockResolvedValue({ runId: null, sourceAssetVersionId: 'av_none', processorVersion: 'source-index-v1', status: 'EMPTY', coveragePermille: 0, checkpointMs: 0, errorSummary: null, items: [], nextCursor: null }) },
     ...overrides.extra,
   });
   return { sdk, adoptProposal, startTurn };
@@ -285,13 +294,6 @@ describe('V6-1c 共看片室', () => {
 
   it('V6-3 指画面与特效：特效开关显式修改项目规则；框出画面区域随对话发出；特效轨与特效片段单独标名', async () => {
     HTMLElement.prototype.setPointerCapture = vi.fn();
-    // jsdom 没有 PointerEvent：用带坐标的鼠标事件代替（与浏览器同样带 clientX/clientY）
-    if (!('PointerEvent' in globalThis)) {
-      globalThis.PointerEvent = class extends MouseEvent {
-        readonly pointerId: number;
-        constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
-      } as unknown as typeof PointerEvent;
-    }
     const withEffect = preview({ clips: [...preview().clips as unknown[], { clipId: 'clp_fx', trackId: 'trk_fx', kind: 'VIDEO', sourceVersionId: 'av_fx', sequenceRange: range(15, 60) }] });
     const { sdk, startTurn } = client({
       turns: [turn()],
@@ -576,5 +578,77 @@ describe('V6-1c 共看片室', () => {
     expect(screen.getByLabelText('Tell AI what to change')).toBeTruthy();
     expect(document.cookie).toContain('ancs-locale=en');
     expect(document.documentElement.lang).toBe('en');
+  });
+  it('时间带波形：声音片段画出所用源区间的实测峰值（媒体索引）；索引属于别的版本时不画', async () => {
+    const linear = { kind: 'LINEAR', rate: { num: 1, den: 1 }, direction: 'FORWARD', preservePitch: true };
+    // 源 0–6 秒：1–2 秒响（峰值 800），其余静音
+    const peaks = Array.from({ length: 600 }, (_, index) => (index >= 100 && index < 200 ? 800 : 0));
+    const mediaIndex = vi.fn().mockImplementation((_workspaceId: string, assetId: string) => Promise.resolve({
+      runId: 'mix_1', sourceAssetVersionId: assetId === 'ast_glacier.mp4' ? 'av_g' : 'av_older', processorVersion: 'source-index-v1', status: 'READY', coveragePermille: 1000, checkpointMs: 6000, errorSummary: null,
+      items: [{ id: 'mie_1', kind: 'WAVEFORM', ordinal: 0, sourceStartPts: '0', sourceEndPts: '6000', timeBase: { numerator: 1, denominator: 1000 }, streamId: 'audio:1', confidencePermille: 1000, payload: { sourceStartMs: 0, sourceEndMs: 6000, sampleIntervalMs: 10, peaks }, previewUrl: null, previewExpiresAt: null }],
+      nextCursor: null,
+    }));
+    const clips = [
+      { id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sourceRange: range(30, 90), sequenceRange: range(0, 60), timeMapping: linear },
+      // 声音片段用源 1–3 秒：前一半响、后一半静音
+      { id: 'clp_ga', sequenceId: 'seq_1', trackId: 'trk_a', assetVersionId: 'av_g', sourceRange: range(30, 90), sequenceRange: range(0, 60), timeMapping: linear },
+      { id: 'clp_la', sequenceId: 'seq_1', trackId: 'trk_a', assetVersionId: 'av_l', sourceRange: range(0, 60), sequenceRange: range(60, 120), timeMapping: linear },
+    ];
+    const { sdk } = client({
+      turns: [],
+      extra: {
+        assets: { uploadResumable: vi.fn(), mediaIndex },
+        projects: {
+          state: vi.fn().mockResolvedValue({ document: { projectRevision: 5, composition: { sequences: [{ id: 'seq_1', duration: mt(120), frameRate: { num: 30, den: 1 } }], tracks: projectState().document.composition.tracks, clips } } }),
+          proposal: vi.fn().mockResolvedValue(proposal), adoptProposal: vi.fn(), discardProposal: vi.fn(),
+        },
+      },
+    });
+    const { container } = renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    await waitFor(() => expect(container.querySelectorAll('[data-waveform]')).toHaveLength(1));
+    expect(mediaIndex).toHaveBeenCalledWith('ws_1', 'ast_glacier.mp4', { kind: 'WAVEFORM', limit: 100 });
+    expect(mediaIndex).toHaveBeenCalledWith('ws_1', 'ast_lake.mp4', { kind: 'WAVEFORM', limit: 100 });
+    const svg = container.querySelector('[data-waveform]') as SVGElement;
+    const bars = Number(svg.getAttribute('viewBox')?.split(' ')[2]);
+    const drawn = (svg.querySelector('path')?.getAttribute('d') ?? '').match(/M/g)?.length ?? 0;
+    expect(bars).toBeGreaterThan(50);
+    expect(drawn / bars).toBeGreaterThan(0.45);
+    expect(drawn / bars).toBeLessThan(0.56);
+    // 声音片段在声音轨里（不是画面轨）
+    expect(svg.closest('button')?.getAttribute('aria-label')).toMatch(/^片段 glacier\.mp4，00:00\.0 到 00:02\.0$/);
+  });
+
+  it('时间带触屏：两指捏合按档位缩放；第二根手指落下时取消单指选择（不跳播放头、不选区）', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    await screen.findByText('试改改了 1 处');
+    const zoom = screen.getByRole('group', { name: '时间带缩放' });
+    const lanes = screen.getByLabelText('片段区：拖动选择一段时间，点击选中片段');
+    const touch = (pointerId: number, clientX: number) => ({ pointerId, pointerType: 'touch', clientX, clientY: 10, button: 0, isPrimary: pointerId === 1 });
+    fireEvent.pointerDown(lanes, touch(1, 300));
+    fireEvent.pointerDown(lanes, touch(2, 400));
+    fireEvent.pointerMove(lanes, touch(2, 500));
+    expect(within(zoom).getByText('2×')).toBeTruthy();
+    fireEvent.pointerMove(lanes, touch(2, 1100));
+    expect(within(zoom).getByText('8×')).toBeTruthy();
+    fireEvent.pointerUp(lanes, touch(2, 1100));
+    fireEvent.pointerUp(lanes, touch(1, 300));
+    // 单指那一下被取消：播放头仍在开头，没有出现选区
+    expect(screen.getByRole('slider', { name: '时间标尺：拖动定位播放位置' }).getAttribute('aria-valuetext')).toBe('00:00.0');
+    expect(screen.queryByRole('button', { name: '清除选择' })).toBeNull();
+  });
+
+  it('任务结束就近提醒：看着进行中的素材处理完，任务按钮下方提示"完成"，点一下打开任务', async () => {
+    const processing = studioState({ footage: [{ ...footage('glacier.mp4', 'av_g'), status: 'PROCESSING', understanding: { index: 'NONE', transcript: 'NONE', visual: 'NONE' } }] });
+    const ready = studioState({ footage: [{ ...footage('glacier.mp4', 'av_g'), understanding: { index: 'READY', transcript: 'READY', visual: 'READY' } }] });
+    const { sdk } = client({ turns: [] });
+    (sdk.studio.state as ReturnType<typeof vi.fn>).mockResolvedValueOnce(processing).mockResolvedValue(ready);
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByRole('button', { name: '任务：1 项进行中' })).toBeTruthy();
+    const notice = await screen.findByRole('button', { name: 'glacier.mp4 · 完成。打开任务' }, { timeout: 6000 });
+    expect(notice.closest('[role="status"]')).toBeTruthy();
+    await userEvent.click(notice);
+    expect(screen.getByRole('complementary', { name: '任务' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'glacier.mp4 · 完成。打开任务' })).toBeNull();
   });
 });

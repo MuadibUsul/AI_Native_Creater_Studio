@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { WORKFLOW_TERMINAL_STATUSES, type AgentTurn, type Generation, type StudioState, type WorkflowRun } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
@@ -51,6 +51,36 @@ export function studioTaskRows(input: { footage: StudioState['footage']; generat
   if (input.turn?.status === 'RUNNING') rows.push({ key: `a-${input.turn.id}`, group: 'ai', title: input.turn.message, status: 'running', detail: t.tasks.aiRunning });
   else if (input.turn?.status === 'FAILED') rows.push({ key: `a-${input.turn.id}`, group: 'ai', title: input.turn.message, status: 'failed', detail: t.tasks.aiFailed });
   return rows;
+}
+
+/**
+ * 纯函数：上一次看到时在进行中、这一次结束了的任务（可单测）。
+ * 素材处理完后并入"已就绪"那一行，所以进行中的素材行消失也算完成；AI 这一轮就在对话里，不另提醒。
+ */
+export function finishedTasks(previous: readonly TaskRow[], rows: readonly TaskRow[]): TaskRow[] {
+  const now = new Map(rows.map((row) => [row.key, row]));
+  return previous.filter((row) => row.status === 'running' && row.group !== 'ai').flatMap((row) => {
+    const next = now.get(row.key);
+    if (next === undefined) return row.group === 'footage' ? [{ ...row, status: 'done' as const, detail: null }] : [];
+    return next.status === 'done' || next.status === 'failed' ? [next] : [];
+  });
+}
+
+/** 任务结束的就近提醒：只提醒这次打开页面后看着结束的任务（刷新前已结束的不算），8 秒后自动收起 */
+export function useTaskNotice(rows: TaskRow[]): { finished: TaskRow[]; dismiss: () => void } {
+  const previous = useRef<readonly TaskRow[]>(rows);
+  const [finished, setFinished] = useState<TaskRow[]>([]);
+  useEffect(() => {
+    const ended = finishedTasks(previous.current, rows);
+    previous.current = rows;
+    if (ended.length > 0) setFinished(ended);
+  }, [rows]);
+  useEffect(() => {
+    if (finished.length === 0) return;
+    const timer = setTimeout(() => setFinished([]), 8_000);
+    return () => clearTimeout(timer);
+  }, [finished]);
+  return { finished, dismiss: () => setFinished([]) };
 }
 
 /** 导出运行列表（只读）；有进行中的导出时每 5 秒刷新 */

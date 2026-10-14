@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentTurn, Generation, StudioState, WorkflowRun } from '@ancs/contracts';
 import { MESSAGES } from '@/i18n/messages';
-import { StudioTasks, studioTaskRows } from './StudioTasks';
+import { StudioTasks, finishedTasks, studioTaskRows, type TaskRow } from './StudioTasks';
 
 /**
  * 任务中心：素材处理 / 付费生成 / 导出 / AI 这一轮——只读服务端状态整理成任务行（状态写成文字，不只靠颜色）；
@@ -53,5 +53,13 @@ describe('任务中心', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     await userEvent.click(within(panel).getByRole('button', { name: '关闭' }));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+  it('结束提醒：只提醒看着从进行中变为完成/没成功的任务；进行中的素材行消失算处理完；AI 这一轮不另提醒', () => {
+    const row = (key: string, group: TaskRow['group'], status: TaskRow['status']): TaskRow => ({ key, group, title: key, status, detail: null });
+    const before = [row('f-a', 'footage', 'running'), row('e-1', 'export', 'running'), row('g-1', 'generation', 'running'), row('a-1', 'ai', 'running'), row('e-0', 'export', 'done')];
+    const after = [row('f-ready', 'footage', 'done'), row('e-1', 'export', 'failed'), row('g-1', 'generation', 'running'), row('e-0', 'export', 'done')];
+    expect(finishedTasks(before, after).map((item) => `${item.key}:${item.status}`)).toEqual(['f-a:done', 'e-1:failed']);
+    expect(finishedTasks([], after)).toEqual([]);
+    expect(finishedTasks(after, after)).toEqual([]);
   });
 });
