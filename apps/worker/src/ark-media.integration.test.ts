@@ -114,4 +114,17 @@ describe('Seedance 生成镜头', () => {
     expect(blocked).toMatchObject({ outcome: 'NOT_CHARGED', providerJobId: 'cgt-test-1', message: 'Seedance returned no video (InputTextSensitiveContentDetected: sensitive prompt)' });
     expect(String((blocked as Error).message)).not.toContain(KEY);
   });
+
+  it('请求根本没发出去（连不上 / 网络白名单拦截）= 不扣费，而不是结果不明', { timeout: 60_000 }, async () => {
+    // 一个刚关掉的本地端口：连接被拒绝，请求一个字节都没发出
+    const closed = createServer();
+    const port = await new Promise<number>((resolve) => closed.listen(0, '127.0.0.1', () => resolve((closed.address() as AddressInfo).port)));
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const unreachable = createSeedanceGenerationProvider({ seedance: createSeedance({ apiKey: KEY, model: offer.model, baseUrl: `http://127.0.0.1:${String(port)}/api/v3` }), offer, pollIntervalMs: 1, wait: () => Promise.resolve() });
+    const refused = await unreachable.generate(input('r.mp4')).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(PaidGenerationFailure);
+    expect(refused).toMatchObject({ outcome: 'NOT_CHARGED' });
+    expect(String((refused as Error).message)).toContain('the request was never sent');
+    expect(String((refused as Error).message)).toContain(`127.0.0.1:${String(port)}`);
+  });
 });

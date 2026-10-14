@@ -8,10 +8,13 @@
  * - 计费与重试规则在调用方（付费生成执行器）：这里只做 HTTP 与格式。
  */
 
+import { requestNeverSent } from '@ancs/contracts';
+
 export const ARK_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
 
 export class ArkHttpError extends Error {
-  constructor(message: string, readonly status: number | null, readonly code: string | null = null) {
+  /** neverSent：请求确定没有发出去（DNS / 拒绝连接 / 出网代理拦截），供应商不可能收到 */
+  constructor(message: string, readonly status: number | null, readonly code: string | null = null, readonly neverSent = false) {
     super(message);
     this.name = 'ArkHttpError';
   }
@@ -61,7 +64,8 @@ export function createArkHttp(options: ArkHttpOptions): ArkHttp {
       response = await doFetch(url, { ...init, signal: AbortSignal.timeout(ms) });
     } catch (error) {
       const name = error instanceof Error ? error.name : '';
-      throw new ArkHttpError(`Ark ${name === 'TimeoutError' ? `gave no response within ${String(Math.round(ms / 1000))} s` : 'connection failed'} (${new URL(url).host})`, null);
+      const neverSent = requestNeverSent(error);
+      throw new ArkHttpError(`Ark ${name === 'TimeoutError' ? `gave no response within ${String(Math.round(ms / 1000))} s` : 'connection failed'} (${new URL(url).host}${neverSent ? '; the request was never sent' : ''})`, null, null, neverSent);
     }
     if (!response.ok) throw await failure(response);
     return response;

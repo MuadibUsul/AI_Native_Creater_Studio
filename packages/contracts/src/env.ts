@@ -365,6 +365,17 @@ export const workerEnvSchema = z.object({
       return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
     } catch { return false; }
   }, 'ANCS_SEEDANCE_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带整数秒 durationOptions，例如 [5,10]）').optional(),
+  /** Runway API Key（https://dev.runwayml.com）：选区重绘（ANCS_RUNWAY_OFFER_JSON）。只在 Worker 内存中使用，只放请求头 */
+  RUNWAYML_API_SECRET: z.string().min(16, 'RUNWAYML_API_SECRET 过短').optional(),
+  /** Runway API 地址（缺省 https://api.dev.runwayml.com/v1） */
+  ANCS_RUNWAY_BASE_URL: z.string().url('ANCS_RUNWAY_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_RUNWAY_BASE_URL 必须是 https').optional(),
+  /**
+   * V6-8 选区重绘接 Runway gen4_aleph（需 RUNWAYML_API_SECRET）：VIDEO_REGION 的报价依据（model 为 Runway 模型 id，如 gen4_aleph）。
+   * 价格按 Runway 价格页填写（按秒计费的 credits 换算成美元微单位），平台不内置。配置即启用；可与进程驱动并存。
+   */
+  ANCS_RUNWAY_OFFER_JSON: z.string().refine((value) => {
+    try { const offer = generationOfferSchema.safeParse(JSON.parse(value)); return offer.success && offer.data.kind === 'VIDEO_REGION' && offer.data.implementation === 'REAL'; } catch { return false; }
+  }, 'ANCS_RUNWAY_OFFER_JSON 必须是 VIDEO_REGION 的报价 JSON（implementation 为 REAL）').optional(),
   /** Seedance 是否同时生成声音（缺省 1） */
   ANCS_SEEDANCE_GENERATE_AUDIO: z.enum(['0', '1'], { message: 'ANCS_SEEDANCE_GENERATE_AUDIO 仅支持 0 | 1' }).optional(),
   /** Seedance 分辨率（如 480p / 720p / 1080p；缺省用模型的缺省值） */
@@ -403,6 +414,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
     if (driver === 'gemini' && value.GEMINI_API_KEY === undefined) {
       issues.push({ variable: 'GEMINI_API_KEY', message: `${variable}=gemini 时必须配置 GEMINI_API_KEY（fail-closed，不回退 Mock）` });
     }
+  }
+  if (value.ANCS_RUNWAY_OFFER_JSON !== undefined && value.RUNWAYML_API_SECRET === undefined) {
+    issues.push({ variable: 'RUNWAYML_API_SECRET', message: '配置了 ANCS_RUNWAY_OFFER_JSON（Runway 选区重绘）时必须配置 RUNWAYML_API_SECRET' });
   }
   if (value.ANCS_SEEDANCE_OFFER_JSON !== undefined && value.ARK_API_KEY === undefined) {
     issues.push({ variable: 'ARK_API_KEY', message: '配置了 ANCS_SEEDANCE_OFFER_JSON（Seedance 生成镜头）时必须配置 ARK_API_KEY' });

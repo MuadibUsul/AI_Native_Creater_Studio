@@ -218,6 +218,19 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     }
   });
 
+  it('Runway 选区重绘：报价依据只接受 VIDEO_REGION 真实实现；缺 RUNWAYML_API_SECRET 启动失败；地址必须是 https', () => {
+    const runway = { kind: 'VIDEO_REGION', providerId: 'runway', implementation: 'REAL', model: 'gen4_aleph', perSecondMicros: { min: 150_000, max: 150_000 }, maxSeconds: 5 };
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(runway) });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['RUNWAYML_API_SECRET']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(runway), RUNWAYML_API_SECRET: 'k'.repeat(40) }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    for (const bad of [{ ...runway, kind: 'VIDEO_SHOT' }, { ...runway, implementation: 'SCRIPTED' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_BASE_URL: 'http://api.dev.runwayml.com/v1' }).ok).toBe(false);
+  });
+
   it('火山方舟 Seedance：报价依据必须带整数秒档位；缺 ARK_API_KEY 启动失败；地址必须是 https；分辨率形如 720p', () => {
     const seedance = { kind: 'VIDEO_SHOT', providerId: 'seedance', implementation: 'REAL', model: 'doubao-seedance-2-5-260628', perSecondMicros: { min: 50_000, max: 50_000 }, maxSeconds: 10, durationOptions: [5, 10] };
     const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(seedance) });

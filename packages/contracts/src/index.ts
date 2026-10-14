@@ -2907,6 +2907,7 @@ export {
   PAID_GENERATION_WORKFLOW,
   PAID_GENERATION_WORKFLOW_VERSION,
   PaidGenerationFailure,
+  requestNeverSent,
   acceptGenerationRequestSchema,
   avatarClipRequestSchema,
   generationBudgetSchema,

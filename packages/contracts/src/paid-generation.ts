@@ -239,6 +239,28 @@ export class PaidGenerationFailure extends Error {
   }
 }
 
+/** 只在建立连接阶段出现的错误码：请求一个字节都还没发出去（DNS、拒绝连接、网络不可达、TLS 证书） */
+const NEVER_SENT_CODES = new Set([
+  'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH',
+  'CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+/**
+ * 网络错误是否确定发生在请求发出之前（供应商不可能收到、不可能计费）：沿 `cause` 链查找连接阶段的错误码，
+ * 或出网代理拒绝建立隧道（Node 的 fetch 报 "Proxy response (403) !== 200 when HTTP Tunneling"，即网络白名单拦截）。
+ * 连接中途断开、超时等**不算**（可能已送达），调用方仍按"结果不明"处理。纯函数，不做 I/O。
+ */
+export function requestNeverSent(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current !== null && typeof current === 'object'; depth += 1) {
+    const { code, message, cause } = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof code === 'string' && NEVER_SENT_CODES.has(code)) return true;
+    if (typeof message === 'string' && /Proxy response \(\d+\) !== 200 when HTTP Tunneling/.test(message)) return true;
+    current = cause;
+  }
+  return false;
+}
+
 /** Worker 装配的生成执行器：准备参考素材 → 调用供应商一次 → 读回产物并探测（选区重绘同时测圈外变化）。 */
 export interface PaidGenerationExecutor {
   offers(): readonly GenerationOffer[];

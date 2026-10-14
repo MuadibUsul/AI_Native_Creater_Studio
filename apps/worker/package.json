@@ -18,6 +18,7 @@
     "@ancs/providers-anthropic": "workspace:*",
     "@ancs/providers-ark": "workspace:*",
     "@ancs/providers-gemini": "workspace:*",
+    "@ancs/providers-runway": "workspace:*",
     "@ancs/providers-credential-vault-local": "workspace:*",
     "@ancs/providers-mock-provider": "workspace:*",
     "@ancs/providers-queue-bullmq": "workspace:*",

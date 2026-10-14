@@ -5,6 +5,7 @@
 // Gemini 列出可用模型（不计费）+ 导演模型用一个工具回一句话 + TTS 合成一句话（各一次小请求）。
 // 加 --heygen-generate <照片.png|jpg> <声音样本.wav|mp3> 才会真的生成一段数字人视频（消耗 HeyGen 额度，约 2 秒）。
 // 加 --veo-generate 才会真的用 Veo 生成一段 4 秒镜头（按秒计费；模型取 ANCS_VEO_OFFER_JSON 的 model，缺省 veo-3.1-fast-generate-preview）。
+// Runway：有 RUNWAYML_API_SECRET 时读剩余额度（免费）；加 --runway-generate 才会真的用 gen4_aleph 改写一段 2 秒测试原片（计费，按秒扣 credits）。
 // 加 --seedance-generate [模型 id] 才会真的用火山方舟 Seedance 生成一段镜头（计费；时长取 ANCS_SEEDANCE_OFFER_JSON 最短一档，缺省 5 秒；
 //   模型取参数，其次 ANCS_SEEDANCE_OFFER_JSON 的 model）。方舟没有免费的探测接口，不加参数时不访问方舟。
 //
@@ -22,6 +23,8 @@ import { createHeyGenAvatarProvider, createHeyGenClient } from '../apps/worker/d
 import { createVeoGenerationProvider } from '../apps/worker/dist/gemini-media.js';
 import { createSeedanceGenerationProvider } from '../apps/worker/dist/ark-media.js';
 import { createSeedance } from '../packages/providers/ark/dist/index.js';
+import { createRunwayAleph, createRunwayHttp, runwayOrganization } from '../packages/providers/runway/dist/index.js';
+import { createRunwayRegionProvider } from '../apps/worker/dist/runway-media.js';
 import { GeminiAgentModel, createGeminiHttp, createGeminiSpeech, createGeminiVeo } from '../packages/providers/gemini/dist/index.js';
 
 const args = process.argv.slice(2);
@@ -154,7 +157,7 @@ if (seedanceFlag !== -1) {
       };
       const outputPath = join(out, 'seedance-shot.mp4');
       try {
-        const result = await createSeedanceGenerationProvider({ seedance: traced, offer, ...(process.env.ANCS_SEEDANCE_RESOLUTION ? { resolution: process.env.ANCS_SEEDANCE_RESOLUTION } : {}) }).generate({
+        const result = await createSeedanceGenerationProvider({ seedance: traced, offer, generateAudio: process.env.ANCS_SEEDANCE_GENERATE_AUDIO !== '0', ...(process.env.ANCS_SEEDANCE_RESOLUTION ? { resolution: process.env.ANCS_SEEDANCE_RESOLUTION } : {}) }).generate({
           kind: 'VIDEO_SHOT', providerId: offer.providerId, prompt: '清晨的山间湖面，薄雾在水面上缓缓流动，镜头缓慢向前推进，柔和的晨光', script: null, language: null,
           seconds: clipSeconds, maxSeconds: clipSeconds, width: 1280, height: 720, fps: 30, outputPath, likenessPath: null, voicePath: null, sourcePath: null, region: null,
         });
@@ -163,6 +166,36 @@ if (seedanceFlag !== -1) {
         report.push(`Seedance 生成镜头 ${model} 失败（${error.outcome ?? 'ERROR'}）：${error.message}${marks.length > 0 ? `；${marks.join('；')}` : ''}`);
         process.exitCode = 1;
       }
+    }
+  }
+}
+
+if (process.env.RUNWAYML_API_SECRET) {
+  const apiKey = process.env.RUNWAYML_API_SECRET;
+  const baseUrl = process.env.ANCS_RUNWAY_BASE_URL;
+  try {
+    const { creditBalance } = await runwayOrganization(createRunwayHttp({ apiKey, ...(baseUrl ? { baseUrl } : {}) }));
+    report.push(`Runway 额度读取 OK：剩余 ${String(creditBalance)} credits`);
+  } catch (error) {
+    report.push(`Runway 额度读取失败：${error.message}`);
+    process.exitCode = 1;
+  }
+  if (args.includes('--runway-generate')) {
+    const source = join(out, 'runway-source.mp4');
+    execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30:duration=2', '-pix_fmt', 'yuv420p', '-c:v', 'libx264', source]);
+    const configured = process.env.ANCS_RUNWAY_OFFER_JSON ? JSON.parse(process.env.ANCS_RUNWAY_OFFER_JSON) : null;
+    const offer = configured ?? { kind: 'VIDEO_REGION', providerId: 'runway', implementation: 'REAL', model: 'gen4_aleph', perSecondMicros: { min: 0, max: 1 }, maxSeconds: 5, languages: [] };
+    const outputPath = join(out, 'runway-region.mp4');
+    const started = Date.now();
+    try {
+      const result = await createRunwayRegionProvider({ aleph: createRunwayAleph({ apiKey, model: offer.model, ...(baseUrl ? { baseUrl } : {}) }), offer }).generate({
+        kind: 'VIDEO_REGION', providerId: offer.providerId, prompt: 'turn the background into a warm sunset sky', script: null, language: null,
+        seconds: 2, maxSeconds: 2, width: 1280, height: 720, fps: 30, outputPath, likenessPath: null, voicePath: null, sourcePath: source, region: { x: 0, y: 0, width: 1, height: 0.5 },
+      });
+      report.push(`Runway 选区重绘 ${offer.model} OK：任务 ${String(result.providerJobId)}，${seconds(outputPath).toFixed(2)} 秒，耗时 ${String(Math.round((Date.now() - started) / 1000))} s → ${outputPath}`);
+    } catch (error) {
+      report.push(`Runway 选区重绘失败（${error.outcome ?? 'ERROR'}）：${error.message}`);
+      process.exitCode = 1;
     }
   }
 }

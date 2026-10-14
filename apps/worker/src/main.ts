@@ -5,6 +5,7 @@ import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWo
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
+import { createRunwayAleph } from '@ancs/providers-runway';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
@@ -22,6 +23,7 @@ import { createFishAudioClient, createFishAudioNarrationSynthesizer } from './fi
 import { HEYGEN_DEFAULT_OFFER, combineGenerationProviders, createHeyGenAvatarProvider, createHeyGenClient } from './heygen.js';
 import { createGeminiNarrationSynthesizer, createVeoGenerationProvider } from './gemini-media.js';
 import { createSeedanceGenerationProvider } from './ark-media.js';
+import { createRunwayRegionProvider } from './runway-media.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -203,7 +205,14 @@ const seedanceProvider = seedanceOffer === undefined || config.ARK_API_KEY === u
   ...(config.ANCS_SEEDANCE_RESOLUTION === undefined ? {} : { resolution: config.ANCS_SEEDANCE_RESOLUTION }),
   ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
 });
-const generationProviders = [videoGenerationProvider, veoProvider, seedanceProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
+/** V6-8 选区重绘接 Runway gen4_aleph（配置 ANCS_RUNWAY_OFFER_JSON 即启用；报价依据由部署方按 Runway 价格填写） */
+const runwayOffer = config.ANCS_RUNWAY_OFFER_JSON === undefined ? undefined : generationOfferSchema.parse(JSON.parse(config.ANCS_RUNWAY_OFFER_JSON));
+const runwayProvider = runwayOffer === undefined || config.RUNWAYML_API_SECRET === undefined ? undefined : createRunwayRegionProvider({
+  aleph: createRunwayAleph({ apiKey: config.RUNWAYML_API_SECRET, model: runwayOffer.model, ...(config.ANCS_RUNWAY_BASE_URL === undefined ? {} : { baseUrl: config.ANCS_RUNWAY_BASE_URL }) }),
+  offer: runwayOffer,
+  ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+});
+const generationProviders = [videoGenerationProvider, veoProvider, seedanceProvider, runwayProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
 const generationProvider = generationProviders.length === 0 ? undefined : combineGenerationProviders(generationProviders);
 const generationExecutor = generationProvider === undefined || deps.storage === undefined ? undefined : createPaidGenerationExecutor({
   provider: generationProvider, storage: deps.storage, probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
@@ -219,6 +228,7 @@ const providerInventory: ProviderInventoryEntry[] = [
   ...(avatarProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'avatar_generation', driver: 'heygen', implementation: 'REAL' as const }]),
   ...(veoProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'video_generation', driver: 'veo', implementation: 'REAL' as const }]),
   ...(seedanceProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'video_generation', driver: 'seedance', implementation: 'REAL' as const }]),
+  ...(runwayProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'region_generation', driver: 'runway', implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {

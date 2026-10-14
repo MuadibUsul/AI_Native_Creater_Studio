@@ -73,6 +73,7 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
 | `ANCS_AGENT_DRIVER` / `ANCS_VISUAL_ANALYSIS_DRIVER`（Worker） | 未配置 | AI 导演 / 素材画面理解：`anthropic`（需 `ANTHROPIC_API_KEY`）或 `gemini`（需 `GEMINI_API_KEY`；模型 `ANCS_AGENT_MODEL` 缺省 `gemini-flash-latest`、`ANCS_VISION_MODEL` 缺省 `gemini-flash-lite-latest`）；画面理解另可 `process`。缺密钥启动失败 |
 | `ANCS_VEO_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接 Google Veo：VIDEO_SHOT 报价依据（必须带 `durationOptions`，价格按 Google 价格页填写），需 `GEMINI_API_KEY`；装配清单出现 `video_generation=veo` |
+| `ANCS_RUNWAY_OFFER_JSON`（Worker） | 未配置 | V6-8 选区重绘接 Runway gen4_aleph：VIDEO_REGION 报价依据（价格按 Runway 价格页换算填写），需 `RUNWAYML_API_SECRET`；可选 `ANCS_RUNWAY_BASE_URL`；装配清单出现 `region_generation=runway` |
 | `ANCS_SEEDANCE_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接火山方舟 Seedance：VIDEO_SHOT 报价依据（必须带整数秒 `durationOptions`，价格按方舟价格页换算填写），需 `ARK_API_KEY`；可选 `ANCS_SEEDANCE_GENERATE_AUDIO`、`ANCS_SEEDANCE_RESOLUTION`、`ANCS_ARK_BASE_URL`；装配清单出现 `video_generation=seedance` |
 | `ANCS_AVATAR_DRIVER`（Worker） | 未配置 | V6-7 数字人：`heygen`（需 `HEYGEN_API_KEY` 与 `FISH_AUDIO_API_KEY`；可选 `ANCS_AVATAR_OFFER_JSON` 报价依据） |
 | `ANCS_GENERATION_DRIVER`（Worker） | 未配置 | V6-8 视频生成：`process`（需 `ANCS_GENERATION_EXECUTABLE` 与 `ANCS_GENERATION_OFFERS_JSON`；可选 `ANCS_GENERATION_ARGS_JSON`、`ANCS_GENERATION_PASS_ENV`、`ANCS_GENERATION_TIMEOUT_SECONDS`） |
@@ -155,6 +156,7 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - 装配：`ANCS_AVATAR_DRIVER=heygen`（数字人）与 `ANCS_GENERATION_DRIVER=process`（生成镜头、选区重绘）可以并存；装配清单出现 `avatar_generation` / `paid_generation`。没有配置时 AI 如实回复"这个部署还没有接入这类生成的供应商"。
 - 网络：放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；Gemini / Veo 放行 `generativelanguage.googleapis.com`（Veo 成片的下载链接会跳转到 Google 存储域名，Worker 跟随跳转时不带密钥）；在需要经代理出网的环境里给 Worker 加 `NODE_USE_ENV_PROXY=1`。
 - Veo 只能生成 4/6/8 秒：报价与预留按不短于所需的最短一档，成片统一到项目画布与帧率后放进试改（只用需要的长度）。
+- 网络层失败分两类：请求确定没发出去（DNS、拒绝连接、出网代理拒绝建立隧道）→ 不扣费、释放预留；连接中途断开或超时 → 结果不明、待对账。诊断：`node scripts/provider-network-check.mjs`（不产生生成费用）。
 - Seedance（火山方舟）放行 `ark.cn-beijing.volces.com` 与成片所在的对象存储域名（`*.tos-cn-beijing.volces.com`）；成片链接是临时签名链接，Worker 下载时不带密钥。Veo 与 Seedance 共用同一套"提交一次 → 轮询 → 下载 → 统一画布"的实现（`apps/worker/src/hosted-video-shot.ts`），计费结局一致。
 - 密钥只在 Worker 进程内存里使用，不进日志与错误信息；进程驱动的子进程只拿到白名单环境变量 + `ANCS_GENERATION_PASS_ENV` 列出的变量。
 - 身份档案的授权记录（`identity_consent_records`）只增不改，由数据库触发器保证；删除身份档案或工作区时随级联清理。

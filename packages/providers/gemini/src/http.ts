@@ -5,6 +5,8 @@
  * - 错误信息取供应商返回的 `error.message`（截断），状态码原样保留，由调用方分类（模型调用 / 付费生成各有规则）。
  */
 
+import { requestNeverSent } from '@ancs/contracts';
+
 export const GEMINI_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 export interface GeminiHttpOptions {
@@ -24,6 +26,8 @@ export class GeminiHttpError extends Error {
     readonly retryAfterMs: number | null = null,
     /** 用完的是按天计的配额（等几十秒也不会恢复） */
     readonly dailyQuota = false,
+    /** 请求确定没有发出去（DNS / 拒绝连接 / 出网代理拦截）：供应商不可能收到 */
+    readonly neverSent = false,
   ) {
     super(message);
     this.name = 'GeminiHttpError';
@@ -93,7 +97,8 @@ export function createGeminiHttp(options: GeminiHttpOptions): GeminiHttp {
       const name = error instanceof Error ? error.name : '';
       const what = name === 'TimeoutError' ? `no response within ${String(Math.round(timeoutMs / 1000))} s` : name === 'AbortError' ? 'request aborted' : 'connection failed';
       // 带上主机名（不含路径与查询串）：下载跳转到的主机被网络策略拦下时，一眼看出要放行哪个域名
-      throw new GeminiHttpError(`Gemini ${what} (${new URL(url).host})`, null);
+      const neverSent = requestNeverSent(error);
+      throw new GeminiHttpError(`Gemini ${what} (${new URL(url).host}${neverSent ? '; the request was never sent' : ''})`, null, null, null, false, neverSent);
     }
     const redirected = init.redirect === 'manual' && response.status >= 300 && response.status < 400;
     if (!response.ok && !redirected) throw await failure(response);

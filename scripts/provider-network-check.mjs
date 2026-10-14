@@ -43,7 +43,7 @@ const providers = [
     auth: (key) => ({ path: '/v1/projects', headers: { authorization: `Token ${key}` } }) },
   { id: 'anthropic', name: 'Anthropic（Claude 导演）', base: 'https://api.anthropic.com', keyEnv: 'ANTHROPIC_API_KEY',
     auth: (key) => ({ path: '/v1/models?limit=1', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } }) },
-  { id: 'runway', name: 'Runway（已提供密钥，代码尚未接入）', base: 'https://api.dev.runwayml.com', keyEnv: 'RUNWAYML_API_SECRET',
+  { id: 'runway', name: 'Runway（选区重绘 gen4_aleph）', base: 'https://api.dev.runwayml.com', keyEnv: 'RUNWAYML_API_SECRET',
     auth: (key) => ({ path: '/v1/organization', headers: { authorization: `Bearer ${key}`, 'x-runway-version': '2024-11-06' } }) },
 ];
 // 成片下载可能落到的域名（供应商返回的临时链接；只检查能否出网，真实域名以第一次任务返回的链接为准）

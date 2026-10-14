@@ -30,6 +30,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-anthropic': srcAlias('./packages/providers/anthropic/src/index.ts'),
   '@ancs/providers-gemini': srcAlias('./packages/providers/gemini/src/index.ts'),
   '@ancs/providers-ark': srcAlias('./packages/providers/ark/src/index.ts'),
+  '@ancs/providers-runway': srcAlias('./packages/providers/runway/src/index.ts'),
   '@ancs/providers-mock-tts': srcAlias('./packages/providers/mock-tts/src/index.ts'),
   '@ancs/providers-mock-payments': srcAlias('./packages/providers/mock-payments/src/index.ts'),
   '@ancs/providers-malware-heuristic': srcAlias('./packages/providers/malware-heuristic/src/index.ts'),
