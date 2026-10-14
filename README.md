@@ -25,7 +25,8 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | V6-3 | 代码生成特效：在画面上框出一块说“这里加个爆炸/光效”→ 透明特效图层成为试改（特效轨）→ “换个颜色”只重渲图层 → 采用；6 个模板，AI 写的特效代码先过四道门禁、在隔离子进程里渲染；素材作品缺省不允许程序化特效，由用户在顶栏开启 | 已交付，真实浏览器 + 真实特效渲染 + 真实 FFmpeg 预览/终渲染验证（区域内像素变化、区域外不变）；**AI 为脚本导演，真实 Claude 待密钥**；AI 写特效代码缺省关闭，待真实模型评测后开启 |
 | V6-4 | 批注式审片：手机或桌面逐处标记（位置 + 一句话 + 可选框选）→ 逐条和 AI 讨论方案 → 一次执行 → 只重渲改动的分段 → 采用；可添加到主屏幕 | 已交付，真实浏览器（手机 + 桌面）+ 真实 FFmpeg 验证；**AI 为脚本导演，真实 Claude 待密钥**；语音批注随 V6-2 |
 | V6-6 | 蒸馏器：从参考视频学风格——上传文件或粘贴链接（1–5 条）→ 真实 FFmpeg 测量剪法（镜头时长、剪辑频率、节奏曲线、卡点比例与随机对照、黑场过渡、色调、响度、节拍）→ 一个可选的风格（只列测得到的，没测的如实列出）→ 改说明 → 选用后作为 AI 的风格参考 | 已交付，真实浏览器 + 真实 FFmpeg 测量验证（合成参考视频与真值一致）；**平台链接（YouTube 等）需部署方配置下载命令**，指定的三条 YouTube 视频因本环境网络不通尚未测量；模型撰写说明待密钥；景别/推拉/变速/字幕样式还没测 |
-| V6-5、V6-7、V6-8 | 讲述配音、数字人、生成式特效与视频生成 | 未开始 |
+| V6-5 | 文章转视频：新建时贴一篇文章 → AI 写讲述稿、合成配音（讲述轨 + 逐句字幕）、为每个要点配图解卡（标题、要点、步骤、引用、柱状图、大数字；数据图只用文章里的数字，服务端校验）→ 共看片室里接着改；可选"知识解说"风格 | 已交付，真实浏览器 + 真实语音合成（本地 flite，英文）+ 真实特效渲染 + 真实 FFmpeg 验证；**供应商配音（中文）待接入**（进程协议已就绪，有参考实现）；**AI 为脚本导演，真实 Claude 待密钥**；旧 Scene 流水线待真实验证后下线 |
+| V6-7、V6-8 | 数字人与嗓音、生成式特效与视频生成（带报价） | 未开始 |
 
 只有带证据的 `VERIFIED` 计入完成；脚本模型 / Mock 通过 ≠ 真实 Provider 通过。各里程碑的"未验证与待办"见 `docs/V06/milestones/`。
 
@@ -52,6 +53,8 @@ ANCS_REFERENCE_FETCH_CMD=yt-dlp --no-playlist -f mp4/bestvideo*+bestaudio/best -
 
 不配置也能用：下载视频后在"从参考视频学风格"里上传文件。
 
+讲述配音（"从文章开始"做解说视频）：本机 FFmpeg 带 libflite 时可先用 `ANCS_NARRATION_DRIVER=flite`（只会英文、音质基础、无需密钥）；正式配音（含中文）用 `ANCS_NARRATION_DRIVER=process` 接你的供应商，照 `scripts/narration-process-example.mjs` 把合成那一步换成供应商调用，并用 `ANCS_NARRATION_VOICES_JSON` 声明声音与语言。
+
 完整清单（每项的作用、没配时的表现、验证方法）见 `docs/V06/integration-checklist.md`。
 
 ## 快速开始
@@ -75,7 +78,7 @@ node apps/realtime/dist/main.js      # Realtime Gateway（实时语音，可选�
 cd apps/web && npx next start -p 3000
 ```
 
-登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。想加特效：顶栏打开"特效"，暂停到某一刻点"框选画面"框出位置，再说"这里加个光效"。想学某位博主的剪法：在"风格（可选）"一行点"从参考视频学风格"，放几条这位博主的视频，学完点"用这个风格"。看完后点顶栏"审片"（`/w/<workspaceId>/review/<projectId>`，手机上可添加到主屏幕）逐处标记问题、和 AI 商量后一次改完。
+登录后在首页点"进入共看片室"新建作品（路由 `/w/<workspaceId>/studio/new`），放入素材，点"让 AI 剪第一版"。想加特效：顶栏打开"特效"，暂停到某一刻点"框选画面"框出位置，再说"这里加个光效"。想做解说视频：新建时选"从文章开始"贴上文章，进入后点"让 AI 讲成视频"。想学某位博主的剪法：在"风格（可选）"一行点"从参考视频学风格"，放几条这位博主的视频，学完点"用这个风格"。看完后点顶栏"审片"（`/w/<workspaceId>/review/<projectId>`，手机上可添加到主屏幕）逐处标记问题、和 AI 商量后一次改完。
 
 ## 验收与评测脚本
 
@@ -84,6 +87,8 @@ cd apps/web && npx next start -p 3000
 | `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
 | `node scripts/voice-browser-check.mjs` | 实时语音端到端：Chrome 假麦克风 → AudioWorklet → 网关 → 流式识别（本地同协议假服务）→ 指代绑定 → 试改；中英文；截图写入 `docs/verification/artifacts/v6-2/` |
 | `node scripts/effects-browser-check.mjs` | 代码生成特效端到端：项目规则开关 → 框选画面 → 特效试改（预览像素校验）→ 改颜色 → 采用，真实 API/Worker/FFmpeg + 真实特效渲染子进程，脚本导演；截图写入 `docs/verification/artifacts/v6-3/` |
+| `node scripts/narration-browser-check.mjs` | 文章转视频端到端：新建页贴文章 → AI 讲述 + 图解卡（真实 flite 合成 + 真实特效渲染）→ 预览音量与卡片画面校验 → 采用；中英、深色、手机宽度；截图写入 `docs/verification/artifacts/v6-5/` |
+| `node scripts/eval-first-cut.mjs --set evals/first-cut/explainer.json` | 文章转视频评测（英文用例用本地 flite 讲述；中文用例需要中文配音，没有时跳过并写明原因） |
 | `node scripts/distill-browser-check.mjs` | 从参考视频学风格端到端：网页链接未配置下载工具的失败提示 → 上传 + 直接链接两条已知真值的参考视频 → 结果卡与真值比对 → 改说明 → 选用后 AI 按风格剪第一版；真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-6/` |
 | `node scripts/distill-reference.mjs [--json out.json] <文件或链接>…` | 不用数据库直接测量 1–5 条参考视频的剪法，打印剪辑 DNA 与风格说明（与工作流同一套代码）；平台页面链接需要 `ANCS_REFERENCE_FETCH_CMD` |
 | `node scripts/review-browser-check.mjs` | 批注式审片端到端：手机 390×844 触屏 + 桌面，真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-4/` |

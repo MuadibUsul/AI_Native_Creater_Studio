@@ -6,6 +6,9 @@
 //       --model anthropic（真实 Claude；需要环境变量 ANTHROPIC_API_KEY，可选 ANCS_AGENT_MODEL / ANCS_VISION_MODEL）
 // 有 ANTHROPIC_API_KEY 时同时启用视觉理解；有 DEEPGRAM_API_KEY 时启用语音转写。
 //
+// 用例可以是素材（footage）或文章（article，V6-5：图文工程 + 讲述配音 + 图解卡；讲述用 FFmpeg 内置 flite 本地英文语音，
+// 中文讲述需要部署方接入的配音引擎，评测里会如实失败）。
+//
 // 用法：node scripts/eval-first-cut.mjs [--set evals/first-cut/smoke.json] [--model scripted|anthropic] [--export]
 // 结果：.artifacts/eval/first-cut/<时间>/report.json、report.md、rating-sheet.md（以及 --export 的成片）
 import { execFileSync } from 'node:child_process';
@@ -62,24 +65,41 @@ const contentType = (file) => (/\.(mov)$/i.test(file) ? 'video/quicktime' : /\.(
 const understandingDone = (state) => state.footage.length > 0 && state.footage.every((item) => item.status === 'READY' && Object.values(item.understanding).every((value) => value !== 'WORKING'));
 
 const { director, implementation, model } = await createDirector();
-const env = await startStudioEnv({ director, ...(await optionalAdapters()), workDirPrefix: 'ancs-eval-' });
+const usesArticles = manifest.cases.some((testCase) => testCase.article !== undefined);
+// 文章用例需要图解卡（特效渲染）与讲述配音
+const env = await startStudioEnv({ director, ...(await optionalAdapters()), workDirPrefix: 'ancs-eval-', ...(usesArticles ? { effects: { codegen: 'disabled' }, narration: {} } : {}) });
 const report = { runId, set: manifest.id, model: { implementation, model }, startedAt: new Date().toISOString(), cases: [] };
 let failed = false;
 
 try {
   const { client } = await env.signedInClient(`eval-${randomUUID().slice(0, 8)}@test.local`);
   const workspace = await client.workspaces.create({ name: `评测 ${manifest.id}` });
+  // 本评测环境的配音引擎：FFmpeg 内置 flite，只会英文
+  const voiceLanguages = ['en'];
   for (const testCase of manifest.cases) {
     const started = Date.now();
     const entry = { id: testCase.id, title: testCase.title, request: testCase.request, strategy: testCase.strategy ?? null };
+    if (testCase.requiresVoiceLanguage !== undefined && !voiceLanguages.includes(testCase.requiresVoiceLanguage)) {
+      entry.status = 'SKIPPED';
+      entry.error = `needs a ${testCase.requiresVoiceLanguage} narration voice; this evaluation environment only has the local English voice (flite)`;
+      report.cases.push(entry);
+      console.log(`SKIP  ${testCase.id} — ${entry.error}`);
+      continue;
+    }
     try {
-      const ref = await client.studio.create(workspace.id, { title: testCase.title, aspectRatio: testCase.aspectRatio ?? '16:9', locale: testCase.locale ?? 'zh-CN' }, { idempotencyKey: `eval-${randomUUID()}` });
-      for (const item of testCase.footage) {
+      const ref = await client.studio.create(workspace.id, {
+        title: testCase.title, aspectRatio: testCase.aspectRatio ?? '16:9', locale: testCase.locale ?? 'zh-CN',
+        ...(testCase.article === undefined ? {} : { article: testCase.article, narration: testCase.narration ?? true }),
+      }, { idempotencyKey: `eval-${randomUUID()}` });
+      const footage = testCase.footage ?? [];
+      for (const item of footage) {
         const file = await materializeFootage(item, env.workDir);
         const bytes = await readFile(file);
         await client.assets.uploadResumable(workspace.id, { assetType: 'USER_UPLOAD', filename: item.generate?.name ?? basename(file), contentType: contentType(file), data: new Blob([bytes]), projectId: ref.projectId });
       }
-      const state = await waitFor(() => client.studio.state(workspace.id, ref.projectId), understandingDone, { timeoutMs: 20 * 60_000, intervalMs: 1000, label: 'footage understanding' });
+      const state = footage.length === 0 ? await client.studio.state(workspace.id, ref.projectId)
+        : await waitFor(() => client.studio.state(workspace.id, ref.projectId), understandingDone, { timeoutMs: 20 * 60_000, intervalMs: 1000, label: 'footage understanding' });
+      if (testCase.article !== undefined) entry.article = state.project.article;
       entry.footage = state.footage.map((item) => ({ name: item.name, duration: item.duration, understanding: item.understanding }));
       const turnStarted = Date.now();
       const turn = await client.agent.startTurn(workspace.id, ref.sessionId, {
@@ -155,7 +175,7 @@ function renderReport(data) {
 function renderRatingSheet(data) {
   const criteria = ['叙事完整（开场、发展、高潮、收尾）', '节奏与剪点', '镜头选择（最好的画面用上了吗）', '声音连续与音量', '是否满足这句话的要求', '整体：愿意直接发吗'];
   const lines = [`# 人工评分表 · ${data.set} · ${data.runId}`, '', '每项 1–5 分（5 最好），写一句理由。评分标准见 docs/V06/eval/first-cut-rubric.md。', ''];
-  for (const entry of data.cases) {
+  for (const entry of data.cases.filter((item) => item.status !== 'SKIPPED')) {
     lines.push(`## ${entry.title}（${entry.id}）${entry.exportFile ? ` · 成片 ${entry.exportFile}` : ''}`, '', '| 项 | 分（1–5） | 理由 |', '|---|---|---|');
     for (const criterion of criteria) lines.push(`| ${criterion} |  |  |`);
     if (entry.strategy) lines.push('| 风格贴合度（只评所选策略） |  |  |');
