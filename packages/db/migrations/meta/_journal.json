@@ -666,6 +666,13 @@
       "when": 1791616804473,
       "tag": "0095_paid_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791616864473,
+      "tag": "0096_identity_consent_workspace_cascade",
+      "breakpoints": true
     }
   ]
 }

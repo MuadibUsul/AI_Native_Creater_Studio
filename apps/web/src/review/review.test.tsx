@@ -29,6 +29,8 @@ const studioState = {
   session: { id: 'ses_1', workspaceId: 'ws_1', projectId: 'prj_1', sequenceId: 'seq_1', locale: 'zh-CN', createdBy: null, createdAt: '2026-10-12T00:00:00.000Z' },
   footage: [],
   cost: { projectId: 'prj_1', turns: 0, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 0, unpricedCalls: 0 },
+  generations: [],
+  generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
 };
 const projectState = {
   document: {

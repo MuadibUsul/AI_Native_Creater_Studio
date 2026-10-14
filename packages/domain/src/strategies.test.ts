@@ -13,8 +13,8 @@ import { BUILT_IN_STRATEGY_PACKS, resolveStrategyKnobs, strategyGuidanceText } f
 describe('策略包（可选风格）', () => {
   const [documentary, beat] = BUILT_IN_STRATEGY_PACKS;
 
-  it('内置预设：两个旅游风格与一个知识解说风格（V6-5），中英文名称与说明齐全', () => {
-    expect(BUILT_IN_STRATEGY_PACKS.map((pack) => pack.id)).toEqual(['builtin:travel-documentary', 'builtin:travel-beat', 'builtin:explainer']);
+  it('内置预设：两个旅游风格、一个知识解说风格（V6-5）与一个高能娱乐风格（V6-8），中英文名称与说明齐全', () => {
+    expect(BUILT_IN_STRATEGY_PACKS.map((pack) => pack.id)).toEqual(['builtin:travel-documentary', 'builtin:travel-beat', 'builtin:explainer', 'builtin:entertainment']);
     for (const pack of BUILT_IN_STRATEGY_PACKS) {
       expect(pack.name['zh-CN'].length).toBeGreaterThan(0);
       expect(pack.summary.en.length).toBeGreaterThan(0);

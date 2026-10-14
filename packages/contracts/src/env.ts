@@ -294,7 +294,11 @@ export const workerEnvSchema = z.object({
    * process = 部署方接入的语音合成子进程（任意供应商；协议：stdin 一行 JSON {text, voice, speed}，stdout 输出 FFmpeg 可解码的音频）。
    * 不配置时讲述工具明确报"本部署没有配置配音"。
    */
-  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process' }).optional(),
+  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process', 'fish'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process | fish' }).optional(),
+  /** Fish Audio（https://fish.audio）密钥：讲述配音（driver=fish）与数字人"你的声音"（声音克隆）。只在 Worker 内存中使用 */
+  FISH_AUDIO_API_KEY: z.string().min(16, 'FISH_AUDIO_API_KEY 过短').optional(),
+  /** Fish Audio TTS 模型（请求头 model），缺省 s1 */
+  ANCS_FISH_AUDIO_MODEL: nonEmpty('ANCS_FISH_AUDIO_MODEL').optional(),
   ANCS_NARRATION_EXECUTABLE: nonEmpty('ANCS_NARRATION_EXECUTABLE').optional(),
   ANCS_NARRATION_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_NARRATION_ARGS_JSON 必须是字符串数组 JSON').optional(),
   /** process 驱动提供的声音列表（JSON 数组：{ id, name, languages: ["zh","en"], description }） */
@@ -318,6 +322,16 @@ export const workerEnvSchema = z.object({
   }, 'ANCS_GENERATION_OFFERS_JSON 必须是报价数组 JSON：[{ "kind": "VIDEO_SHOT", "providerId": "vendor-x", "implementation": "REAL", "model": "…", "perSecondMicros": { "min": 50000, "max": 400000 }, "maxSeconds": 8 }]').optional(),
   /** 传给生成子进程的额外环境变量名（逗号分隔，例如供应商密钥 VENDOR_API_KEY）；子进程只拿到白名单 + 这里列出的变量 */
   ANCS_GENERATION_PASS_ENV: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*$/, 'ANCS_GENERATION_PASS_ENV 必须是逗号分隔的环境变量名').optional(),
+  /**
+   * V6-7 数字人出镜：heygen = HeyGen 会说话的照片 + Fish Audio 用你的声音读讲稿（需 HEYGEN_API_KEY 与 FISH_AUDIO_API_KEY）。
+   * 与 ANCS_GENERATION_DRIVER（生成镜头/选区重绘）可以并存。
+   */
+  ANCS_AVATAR_DRIVER: z.enum(['heygen'], { message: 'ANCS_AVATAR_DRIVER 仅支持 heygen' }).optional(),
+  HEYGEN_API_KEY: z.string().min(16, 'HEYGEN_API_KEY 过短').optional(),
+  /** 数字人报价依据覆盖（JSON：{ kind: "AVATAR_CLIP", providerId, implementation: "REAL", model, perSecondMicros, maxSeconds, languages }）；缺省为 V6 §10.1 规划区间 */
+  ANCS_AVATAR_OFFER_JSON: z.string().refine((value) => {
+    try { const offer = generationOfferSchema.safeParse(JSON.parse(value)); return offer.success && offer.data.kind === 'AVATAR_CLIP' && offer.data.implementation === 'REAL'; } catch { return false; }
+  }, 'ANCS_AVATAR_OFFER_JSON 必须是 AVATAR_CLIP 的报价 JSON（implementation 为 REAL）').optional(),
   /** 单次生成子进程超时（秒，缺省 1200）；超时按"结果不明"处理（待对账，不重试） */
   ANCS_GENERATION_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(7200).optional(),
 });
@@ -359,6 +373,18 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
     issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=process 时必须用 ANCS_NARRATION_VOICES_JSON 声明可用的声音与语言' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'fish' && value.FISH_AUDIO_API_KEY === undefined) {
+    issues.push({ variable: 'FISH_AUDIO_API_KEY', message: 'ANCS_NARRATION_DRIVER=fish 时必须配置 FISH_AUDIO_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'fish' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=fish 时必须用 ANCS_NARRATION_VOICES_JSON 声明 Fish Audio 声音（id = Fish 声音模型 id）与语言' });
+  }
+  if (value.ANCS_AVATAR_DRIVER === 'heygen' && value.HEYGEN_API_KEY === undefined) {
+    issues.push({ variable: 'HEYGEN_API_KEY', message: 'ANCS_AVATAR_DRIVER=heygen 时必须配置 HEYGEN_API_KEY（fail-closed）' });
+  }
+  if (value.ANCS_AVATAR_DRIVER === 'heygen' && value.FISH_AUDIO_API_KEY === undefined) {
+    issues.push({ variable: 'FISH_AUDIO_API_KEY', message: 'ANCS_AVATAR_DRIVER=heygen 用 Fish Audio 合成"你的声音"，必须配置 FISH_AUDIO_API_KEY' });
   }
   if (value.ANCS_GENERATION_DRIVER === 'process' && value.ANCS_GENERATION_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_GENERATION_EXECUTABLE', message: 'ANCS_GENERATION_DRIVER=process 时必须配置 ANCS_GENERATION_EXECUTABLE' });

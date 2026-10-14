@@ -338,6 +338,9 @@ describe('V6-7 / V6-8 付费生成（真实 FFmpeg，脚本导演 + 测试替身
     expect(stacked.operations.filter((op) => op.op === 'insert_clip')).toHaveLength(2);
 
     behavior = 'normal';
+    // 只框了画面、没点片段（界面上"框选画面"）：取那一刻画面里的素材片段，范围取指着的那一段
+    const framedOnly = await quoteTurn(f, { kind: 'VIDEO_REGION', summary: '框里换成雪景', prompt: 'snow' }, { pointer: { timeRange: { start: '0.5', end: '1.5' }, frameRegion: REGION } });
+    expect(framedOnly.generation!.request).toMatchObject({ clipId: f.clipId, start: ft(15), end: ft(45), region: REGION });
     const { generation: toDecline } = await quoteTurn(f, quote);
     expect((await declineGeneration(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, generationId: toDecline!.id })).status).toBe('DECLINED');
     expect((await failure(accept(f, toDecline!.id, toDecline!.estimateMaxMicros))).details['reason']).toBe(GENERATION_ERROR_REASONS.QUOTE_NOT_PENDING);
@@ -409,6 +412,12 @@ describe('V6-7 / V6-8 付费生成（真实 FFmpeg，脚本导演 + 测试替身
     const face2 = await storeAsset({ workspaceId: f.workspaceId, projectId: null, file: join(workRoot, 'face.png'), mimeType: 'image/png', assetType: 'SOURCE_IMAGE', filename: 'face2.png' });
     const replaced = await setIdentityReference(deps(), { workspaceId: f.workspaceId, identityId: identity.id, kind: 'LIKENESS', assetId: face2.assetId, actorId: null });
     expect(replaced.likeness).toMatchObject({ consent: null, ready: false });
+
+    // 单独删除授权记录：拒绝；删除整个工作区：随之清理（经 workspace_id 级联时身份档案可能还在）
+    const removal = await handle.db.delete(identityConsentRecords).where(eq(identityConsentRecords.creatorIdentityId, identity.id)).then(() => null, (error: unknown) => error);
+    expect(String((removal as { cause?: { message?: string } } | null)?.cause?.message)).toContain('append-only');
+    await handle.db.execute(`delete from workspaces where id = '${f.workspaceId}'`);
+    expect(await handle.db.select().from(identityConsentRecords).where(eq(identityConsentRecords.workspaceId, f.workspaceId))).toEqual([]);
   });
 
   it('进程协议：成功带费用 / 失败未扣费 / 崩溃 = 结果不明；子进程拿不到未声明的环境变量', { timeout: 300_000 }, async () => {
@@ -430,7 +439,7 @@ describe('V6-7 / V6-8 付费生成（真实 FFmpeg，脚本导演 + 测试替身
     process.env['ANCS_IT_DECLARED'] = 'declared';
     process.env['ANCS_IT_SECRET'] = 'leaked'; // secrets:check-ignore: test-only dummy
     const provider = createProcessGenerationProvider({ executable: process.execPath, args: [probeScript], offers, passEnv: ['ANCS_IT_DECLARED'] });
-    await expect(provider.generate({ kind: 'VIDEO_SHOT', prompt: 'x', script: null, language: null, seconds: 1, maxSeconds: 1, width: 64, height: 64, fps: 30, outputPath: join(workRoot, 'x.mp4'), likenessPath: null, voicePath: null, sourcePath: null, region: null }))
+    await expect(provider.generate({ kind: 'VIDEO_SHOT', providerId: 'example', prompt: 'x', script: null, language: null, seconds: 1, maxSeconds: 1, width: 64, height: 64, fps: 30, outputPath: join(workRoot, 'x.mp4'), likenessPath: null, voicePath: null, sourcePath: null, region: null }))
       .rejects.toMatchObject({ message: 'declared,-' });
     delete process.env['ANCS_IT_DECLARED'];
     delete process.env['ANCS_IT_SECRET'];

@@ -153,6 +153,28 @@ export function createFliteNarrationSynthesizer(options: { probe: SourceMediaPro
 }
 
 /**
+ * 供应商 HTTP 接口的语音合成（例如 Fish Audio）：`fetchAudio` 返回一句话的音频（任何 FFmpeg 能解码的格式），
+ * 这里统一转成 24 kHz 单声道 PCM 并逐句拼接（句界精确）。语速交给供应商（`applySpeed` 为 false 时不再变速）。
+ */
+export function createHttpNarrationSynthesizer(options: {
+  engine: string; voices: readonly NarrationVoice[]; probe: SourceMediaProbe; ffmpegPath?: string; timeoutMs?: number; applySpeed?: boolean;
+  fetchAudio(input: { text: string; voice: string; speed: number }): Promise<Uint8Array>;
+}): NarrationSynthesizer {
+  const ffmpeg = options.ffmpegPath ?? 'ffmpeg';
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  return assemble({
+    engine: options.engine,
+    voices: options.voices,
+    async sentencePcm({ text, voice, speed }) {
+      const audio = await options.fetchAudio({ text, voice, speed });
+      if (audio.byteLength === 0) throw new Error('the speech service returned no audio');
+      const pcm = await run(ffmpeg, toPcmArgs('pipe:0', options.applySpeed === true ? speed : 1), { input: Buffer.from(audio), timeoutMs, maxOutputBytes: 200 * 1024 * 1024, env: childProcessEnv(process.env, MEDIA_CHILD_ENV) });
+      return pcm.stdout;
+    },
+  }, options);
+}
+
+/**
  * 部署方接入的语音合成子进程（任意供应商）。每句一次：stdin 一行 JSON `{"text","voice","speed"}`，stdout 是音频。
  * 子进程是部署方配置的可信程序（可能需要自己的供应商密钥），与 ASR 子进程同样继承 Worker 环境；不运行 AI 写的代码。
  */

@@ -33,3 +33,4 @@ tmp/
 
 # 本地 Redis 快照（开发/测试时 redis-server 在仓库根启动会写出）
 dump.rdb
+provider-smoke-output/

@@ -15,7 +15,7 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | `docs/ops/deployment-runbook.md` | 部署步骤与环境变量校验 |
 | `AGENTS.md` | 代理协作规则与禁止事项（接手前必读） |
 
-## 现在做到哪了（2026-10-12）
+## 现在做到哪了（2026-10-14）
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
@@ -26,7 +26,8 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | V6-4 | 批注式审片：手机或桌面逐处标记（位置 + 一句话 + 可选框选）→ 逐条和 AI 讨论方案 → 一次执行 → 只重渲改动的分段 → 采用；可添加到主屏幕 | 已交付，真实浏览器（手机 + 桌面）+ 真实 FFmpeg 验证；**AI 为脚本导演，真实 Claude 待密钥**；语音批注随 V6-2 |
 | V6-6 | 蒸馏器：从参考视频学风格——上传文件或粘贴链接（1–5 条）→ 真实 FFmpeg 测量剪法（镜头时长、剪辑频率、节奏曲线、卡点比例与随机对照、黑场过渡、色调、响度、节拍）→ 一个可选的风格（只列测得到的，没测的如实列出）→ 改说明 → 选用后作为 AI 的风格参考 | 已交付，真实浏览器 + 真实 FFmpeg 测量验证（合成参考视频与真值一致）；**平台链接（YouTube 等）需部署方配置下载命令**，指定的三条 YouTube 视频因本环境网络不通尚未测量；模型撰写说明待密钥；景别/推拉/变速/字幕样式还没测 |
 | V6-5 | 文章转视频：新建时贴一篇文章 → AI 写讲述稿、合成配音（讲述轨 + 逐句字幕）、为每个要点配图解卡（标题、要点、步骤、引用、柱状图、大数字；数据图只用文章里的数字，服务端校验）→ 共看片室里接着改；可选"知识解说"风格 | 已交付，真实浏览器 + 真实语音合成（本地 flite，英文）+ 真实特效渲染 + 真实 FFmpeg 验证；**供应商配音（中文）待接入**（进程协议已就绪，有参考实现）；**AI 为脚本导演，真实 Claude 待密钥**；旧 Scene 流水线待真实验证后下线 |
-| V6-7、V6-8 | 数字人与嗓音、生成式特效与视频生成（带报价） | 未开始 |
+| V6-7 | 数字人与嗓音："我的形象与声音"（参考照片 + 声音样本 + 只增不改、可撤回的授权记录）→ 作品里说"用我的数字人说这段" → AI 只报价 → 你确认 → 预算预留 → 生成一次（不自动重试，结果不明进入待对账）→ 拉回自有存储 → 有声画中画试改 → 按实结算；HeyGen（数字人）+ Fish Audio（你的声音、讲述配音）适配器 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**生成供应商实测用 FFmpeg 测试替身**；HeyGen / Fish Audio 适配器按公开接口用本地替身服务测过协议，**真实服务待放行网络后验证**；AI 为脚本导演 |
+| V6-8 | 视频生成重特效：框出区域说"换成……"→ 报价 → 确认 → 只取框内的生成层（框外保持原片，并测量供应商是否改了框外）；生成镜头；视频生成供应商经进程协议接入；可选风格"高能娱乐"与娱乐评测集模板 | 已交付，真实浏览器 + 真实 FFmpeg 验证（框内变、框外不变）；**真实视频生成供应商未接入**（协议与参考实现就绪）；娱乐评测待你的原片与真实导演 |
 
 只有带证据的 `VERIFIED` 计入完成；脚本模型 / Mock 通过 ≠ 真实 Provider 通过。各里程碑的"未验证与待办"见 `docs/V06/milestones/`。
 
@@ -53,7 +54,20 @@ ANCS_REFERENCE_FETCH_CMD=yt-dlp --no-playlist -f mp4/bestvideo*+bestaudio/best -
 
 不配置也能用：下载视频后在"从参考视频学风格"里上传文件。
 
-讲述配音（"从文章开始"做解说视频）：本机 FFmpeg 带 libflite 时可先用 `ANCS_NARRATION_DRIVER=flite`（只会英文、音质基础、无需密钥）；正式配音（含中文）用 `ANCS_NARRATION_DRIVER=process` 接你的供应商，照 `scripts/narration-process-example.mjs` 把合成那一步换成供应商调用，并用 `ANCS_NARRATION_VOICES_JSON` 声明声音与语言。
+讲述配音（"从文章开始"做解说视频）：本机 FFmpeg 带 libflite 时可先用 `ANCS_NARRATION_DRIVER=flite`（只会英文、音质基础、无需密钥）；正式配音（含中文）推荐 Fish Audio：`ANCS_NARRATION_DRIVER=fish` + `FISH_AUDIO_API_KEY` + `ANCS_NARRATION_VOICES_JSON`（`id` 填 Fish 声音模型 id）；也可以用 `ANCS_NARRATION_DRIVER=process` 接任意供应商（参考 `scripts/narration-process-example.mjs`）。
+
+数字人与付费生成（V6-7/V6-8，每次都先报价、由用户确认）：
+
+```bash
+ANCS_AVATAR_DRIVER=heygen      # 数字人：HeyGen 会说话的照片 + Fish Audio 用你的声音读讲稿
+HEYGEN_API_KEY=…
+FISH_AUDIO_API_KEY=…
+ANCS_GENERATION_DRIVER=process # 生成镜头 / 选区重绘：你写的小程序调用视频生成供应商（协议见 scripts/generation-process-example.mjs）
+ANCS_GENERATION_EXECUTABLE=…
+ANCS_GENERATION_OFFERS_JSON=…  # 每类的每秒价格区间与单次上限（报价依据）
+```
+
+另外**工作区必须设置生成预算**（没设时确认会被拒绝）。网络需放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；配好后先跑 `NODE_USE_ENV_PROXY=1 node scripts/provider-smoke.mjs`（一句话 TTS + 读 HeyGen 额度，几乎不花钱）。
 
 完整清单（每项的作用、没配时的表现、验证方法）见 `docs/V06/integration-checklist.md`。
 
@@ -88,6 +102,8 @@ cd apps/web && npx next start -p 3000
 | `node scripts/voice-browser-check.mjs` | 实时语音端到端：Chrome 假麦克风 → AudioWorklet → 网关 → 流式识别（本地同协议假服务）→ 指代绑定 → 试改；中英文；截图写入 `docs/verification/artifacts/v6-2/` |
 | `node scripts/effects-browser-check.mjs` | 代码生成特效端到端：项目规则开关 → 框选画面 → 特效试改（预览像素校验）→ 改颜色 → 采用，真实 API/Worker/FFmpeg + 真实特效渲染子进程，脚本导演；截图写入 `docs/verification/artifacts/v6-3/` |
 | `node scripts/narration-browser-check.mjs` | 文章转视频端到端：新建页贴文章 → AI 讲述 + 图解卡（真实 flite 合成 + 真实特效渲染）→ 预览音量与卡片画面校验 → 采用；中英、深色、手机宽度；截图写入 `docs/verification/artifacts/v6-5/` |
+| `node scripts/generation-browser-check.mjs` | 付费生成端到端：顶栏"生成"开关 → 框出区域说"换成……"→ 报价卡 → 确认 → 只取框内的生成层（圈外测量）→ 采用；我的形象与声音（上传、声明、授权）→ 数字人画中画；中英、深色、手机宽度；脚本导演 + FFmpeg 测试替身；截图写入 `docs/verification/artifacts/v6-7/` |
+| `node scripts/provider-smoke.mjs [--heygen-generate 照片 声音]` | 真实 Fish Audio / HeyGen 冒烟：缺省只合成一句话并读 HeyGen 额度；加参数才真的生成约 2 秒数字人（消耗额度）。密钥只从环境变量读 |
 | `node scripts/eval-first-cut.mjs --set evals/first-cut/explainer.json` | 文章转视频评测（英文用例用本地 flite 讲述；中文用例需要中文配音，没有时跳过并写明原因） |
 | `node scripts/distill-browser-check.mjs` | 从参考视频学风格端到端：网页链接未配置下载工具的失败提示 → 上传 + 直接链接两条已知真值的参考视频 → 结果卡与真值比对 → 改说明 → 选用后 AI 按风格剪第一版；真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-6/` |
 | `node scripts/distill-reference.mjs [--json out.json] <文件或链接>…` | 不用数据库直接测量 1–5 条参考视频的剪法，打印剪辑 DNA 与风格说明（与工作流同一套代码）；平台页面链接需要 `ANCS_REFERENCE_FETCH_CMD` |

@@ -4,6 +4,8 @@
 // 选了风格时（上下文里的 optional_style_strategy 只是数据）：第一版按风格测得的镜头中位时长切镜头，并在回复里说明。
 // 有文章、时间线为空时（V6-5）：逐段讲述（add_narration）→ 每段配一张图解卡，时间对齐该段讲述（标题卡 / 大数字 / 要点）→ 自检 → 回复。
 // 测试替身直接用文章段落当讲述稿；真实导演会改写成口语讲述稿。
+// 请求里要求付费生成时（V6-7/V6-8）：先 list_generation_options，再 quote_generation（只报价），回复里说清价格、等你确认——
+// 框了画面区域说"重绘/换成" → 选区重绘；说"数字人/我出镜" → 用已授权的身份档案出镜（引号里的话就是讲稿）；说"生成一个镜头" → 生成镜头。
 // 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
@@ -15,6 +17,9 @@ const usage = { inputTokens: 1200, outputTokens: 180, cacheReadInputTokens: 0, c
 const EFFECT_WORDS = [
   [/爆炸|explo|boom/i, 'burst'], [/漏光|light leak/i, 'light-leak'], [/光效|光晕|glow/i, 'glow'], [/闪光|sparkle/i, 'sparkles'],
   [/冲击波|shock/i, 'shockwave'], [/彩纸|confetti/i, 'confetti'],
+];
+const GENERATION_WORDS = [
+  [/数字人|我出镜|digital human|my avatar/i, 'AVATAR_CLIP'], [/重绘|换成|regenerate|replace .* with/i, 'VIDEO_REGION'], [/生成.{0,6}镜头|generate (a|one) shot|b-?roll/i, 'VIDEO_SHOT'],
 ];
 const COLOR_WORDS = [[/红|red/i, '#ff3b30'], [/蓝|blue/i, '#3aa0ff'], [/金|gold/i, '#ffd25a'], [/绿|green/i, '#34c759']];
 
@@ -36,6 +41,8 @@ export class ScriptedDirector {
     const last = request.messages.at(-1);
     const results = last.content.filter((block) => block.type === 'tool_result');
     if (results.length > 0) {
+      const lastCall = request.messages.at(-2)?.content.find((block) => block.type === 'tool_use')?.name;
+      if (lastCall === 'list_generation_options' || lastCall === 'quote_generation') return this.#generationStep(request, text, zh, lastCall, results[0]);
       const failed = results.find((block) => block.isError);
       if (failed !== undefined) {
         if (failed.content.includes('PRODUCTION_POLICY_BLOCKED')) {
@@ -73,6 +80,9 @@ export class ScriptedDirector {
       return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
     }
     const requestText = tag(text, 'request') ?? '';
+    if (GENERATION_WORDS.some(([pattern]) => pattern.test(requestText))) {
+      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'list_generation_options', input: {} }], stopReason: 'tool_use', usage };
+    }
     const effectClip = (timeline.clips ?? []).find((clip) => typeof clip.effect === 'string');
     const color = COLOR_WORDS.find(([pattern]) => pattern.test(requestText))?.[1];
     if (effectClip !== undefined && color !== undefined) {
@@ -122,6 +132,46 @@ export class ScriptedDirector {
       this.pendingReply = zh ? '把这一段剪短了 1 秒，后面的内容跟着前移。' : 'Trimmed this part by 1 second; everything after it moved up.';
     }
     return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
+  }
+
+  /** 付费生成：看可用选项 → 报价（只报价，用户在界面上确认）→ 回复价格。 */
+  #generationStep(request, text, zh, lastCall, result) {
+    const requestText = tag(text, 'request') ?? '';
+    const pointer = JSON.parse(tag(text, 'pointer') ?? '{}');
+    const body = JSON.parse(result.content);
+    if (lastCall === 'quote_generation') {
+      if (result.isError) {
+        const reason = String(body.reason ?? '');
+        if (reason === 'PRODUCTION_POLICY_BLOCKED') return this.#reply(zh ? '这个作品还没允许付费生成：点顶栏的"生成：关"打开后再说一次。' : 'Paid generation is off for this project. Turn it on with "Generation: off" in the top bar, then ask again.');
+        if (reason.includes('CONSENT') || reason.includes('REFERENCE')) return this.#reply(zh ? '你的形象或声音还没准备好：先在"我的形象与声音"里上传照片和声音样本并授权。' : 'Your likeness or voice is not ready yet: add a photo and a voice sample and give consent on "My likeness & voice".');
+        return this.#reply((zh ? '这次没法报价：' : "Couldn't quote: ") + String(body.error ?? '').slice(0, 160));
+      }
+      return this.#reply(zh ? `报好价了：约 ${String(body.seconds)} 秒，预计 ${String(body.estimate)}。在下面的报价卡上确认后才会生成。` : `Quoted: about ${String(body.seconds)} s, estimated ${String(body.estimate)}. Nothing is generated until you confirm the quote card below.`);
+    }
+    const kind = GENERATION_WORDS.find(([pattern]) => pattern.test(requestText))?.[1] ?? 'VIDEO_SHOT';
+    const offer = (body.offers ?? []).find((item) => item.kind === kind);
+    if (offer === undefined || offer.available !== true) return this.#reply(zh ? '这个部署还没有接入这类生成的供应商。' : 'This deployment has no provider for that kind of generation yet.');
+    const quoted = requestText.match(/[「“"]([^」”"]{1,400})[」”"]/)?.[1];
+    let input;
+    if (kind === 'AVATAR_CLIP') {
+      const identity = (body.identities ?? []).find((item) => item.likeness === 'READY' && item.voice === 'READY') ?? (body.identities ?? [])[0];
+      if (identity === undefined) return this.#reply(zh ? '还没有身份档案：先在"我的形象与声音"里建一个。' : 'There is no identity yet: create one on "My likeness & voice".');
+      const script = quoted ?? requestText;
+      const corner = /角落|[右左][下上]角|画中画|corner|picture-in-picture/i.test(requestText);
+      input = { kind, identityId: identity.id, script, language: /[\u4e00-\u9fff]/.test(script) ? 'zh' : 'en', framing: corner ? 'CORNER' : 'FULL',
+        summary: zh ? `${identity.name}${corner ? '在右下角' : ''}出镜说：${script.slice(0, 40)}` : `${identity.name} on camera${corner ? ' (corner)' : ''}: ${script.slice(0, 40)}` };
+    } else if (kind === 'VIDEO_REGION') {
+      const what = quoted ?? requestText;
+      input = { kind, prompt: what, summary: zh ? `把框出的区域重绘成：${what.slice(0, 40)}` : `Regenerate the framed area as: ${what.slice(0, 40)}` };
+      if (pointer.timeRange === undefined || pointer.timeRange === null) {
+        const clip = (pointer.clips ?? [])[0];
+        if (clip !== undefined) Object.assign(input, { start: clip.at[0], end: String(Math.min(Number(clip.at[1]), Number(clip.at[0]) + offer.maxSeconds)) });
+      }
+    } else {
+      const what = quoted ?? requestText;
+      input = { kind, prompt: what, seconds: '3', summary: zh ? `生成一个 3 秒镜头：${what.slice(0, 40)}` : `A 3-second generated shot: ${what.slice(0, 40)}` };
+    }
+    return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'quote_generation', input }], stopReason: 'tool_use', usage };
   }
 
   /** 文章第一版：按已经做过的工具调用推进（讲述 → 图解卡 → 自检 → 回复）。 */

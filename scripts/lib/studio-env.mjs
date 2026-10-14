@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
+import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
 import { createDefaultRegistry } from '../../apps/worker/dist/handlers.js';
@@ -24,6 +24,7 @@ import { createProcessMotionValidator } from '../../apps/worker/dist/motion-vali
 import { createFfmpegReferenceAnalyzer } from '../../apps/worker/dist/reference-analyzer-process.js';
 import { createReferenceFetcher } from '../../apps/worker/dist/reference-fetcher.js';
 import { createFliteNarrationSynthesizer } from '../../apps/worker/dist/narration-synthesizer-process.js';
+import { createPaidGenerationExecutor, createScriptedGenerationProvider } from '../../apps/worker/dist/paid-generation.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
@@ -31,7 +32,9 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
 /**
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
- *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite' } }} options
+ *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite' },
+ *   generation?: { provider?: object, behavior?: () => string } }} options
+ *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身）。
  *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
@@ -86,6 +89,10 @@ export async function startStudioEnv(options) {
   apiPort = app.server.address().port;
 
   const probe = createFfmpegSourceMediaProbe();
+  const generationExecutor = options.generation === undefined ? undefined : createPaidGenerationExecutor({
+    provider: options.generation.provider ?? createScriptedGenerationProvider({ ...(options.generation.behavior === undefined ? {} : { behavior: options.generation.behavior }) }),
+    storage, probe,
+  });
   const workflowRegistry = new WorkflowRegistry()
     .register(compositionFinalRenderWorkflow({ executor: createFfmpegRenderPlanExecutor(), outputProbe: probe }))
     .register(agentTurnWorkflow({
@@ -96,6 +103,7 @@ export async function startStudioEnv(options) {
         effects: { renderer: createProcessEffectRenderer({ probe }), validator: createProcessMotionValidator(), codegen: options.effects.codegen ?? 'disabled' },
       }),
       ...(options.narration === undefined ? {} : { narration: { synthesizer: createFliteNarrationSynthesizer({ probe }) } }),
+      ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
     }))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
     .register(referenceDistillWorkflow({
@@ -104,6 +112,7 @@ export async function startStudioEnv(options) {
       frames: createStorageFrameSampler({ storage }),
       ...(options.distill?.model === undefined ? {} : { model: options.distill.model }),
     }));
+  if (generationExecutor !== undefined) workflowRegistry.register(paidGenerationWorkflow({ executor: generationExecutor }));
   const registry = createDefaultRegistry({
     sourceMediaProbe: probe,
     sourceMediaTranscoder: createFfmpegMediaProxyTranscoder(),

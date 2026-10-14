@@ -31,6 +31,8 @@ import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 export interface GenerationProviderInput {
   kind: GenerationKind;
+  /** 报价时选定的供应商（多个供应商并存时按它分派） */
+  providerId: string;
   prompt: string | null;
   script: string | null;
   language: string | null;
@@ -156,7 +158,7 @@ export function createPaidGenerationExecutor(options: { provider: GenerationProv
         const outputPath = path.join(dir, 'output.mp4');
         await hooks.beforeProviderCall();
         const result = await options.provider.generate({
-          kind: job.kind, prompt: job.prompt, script: job.script, language: job.language, seconds: job.seconds, maxSeconds: job.maxSeconds,
+          kind: job.kind, providerId: job.providerId, prompt: job.prompt, script: job.script, language: job.language, seconds: job.seconds, maxSeconds: job.maxSeconds,
           width: job.width, height: job.height, fps, outputPath, likenessPath, voicePath, sourcePath, region: job.region,
         });
         const video = await readFile(outputPath).catch(() => null);

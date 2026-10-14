@@ -85,6 +85,8 @@ function client(overrides: { createVoiceSession?: ReturnType<typeof vi.fn> } = {
       footage: [{ assetId: 'ast_g', footageId: 'av_g', name: 'glacier.mp4', kind: 'video', status: 'READY', duration: '6.0', understanding: { index: 'READY', transcript: 'NOT_CONFIGURED', visual: 'NOT_CONFIGURED' } },
         { assetId: 'ast_l', footageId: 'av_l', name: 'lake.mp4', kind: 'video', status: 'READY', duration: '6.0', understanding: { index: 'READY', transcript: 'NOT_CONFIGURED', visual: 'NOT_CONFIGURED' } }],
       cost: { projectId: 'prj_1', turns: 0, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 0, unpricedCalls: 0 },
+      generations: [],
+      generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
     }) },
     projects: {
       state: vi.fn().mockResolvedValue({ document: { projectRevision: 5, composition: {

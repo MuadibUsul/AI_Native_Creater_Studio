@@ -7,6 +7,7 @@ import {
   GENERATION_ERROR_REASONS,
   GENERATION_KINDS,
   GENERATION_QUOTE_TTL_MINUTES,
+  GENERATION_TRACK_PREFIX,
   MAX_GENERATION_PROMPT_CHARS,
   MAX_NARRATION_CHARS,
   compareMediaTime,
@@ -134,20 +135,37 @@ function isNormalSpeed(clip: KernelClip): boolean {
 
 type RegionRequest = Extract<GenerationRequest, { kind: 'VIDEO_REGION' }>;
 
+/** 某一时刻画面里最上层的素材片段（特效层 FX*、生成层 GEN* 之外的画面轨）。 */
+function pictureClipAt(state: TimelineState, at: MediaTime): KernelClip | undefined {
+  const tracks = state.tracks.filter((track) => track.kind === 'VIDEO' && !track.name.startsWith('FX') && !track.name.startsWith(GENERATION_TRACK_PREFIX))
+    .sort((left, right) => right.position - left.position);
+  for (const track of tracks) {
+    const hit = state.clips.find((clip) => clip.trackId === track.id && clip.assetVersionId !== null
+      && compareMediaTime(clip.sequenceRange.start, at) <= 0 && compareMediaTime(at, clip.sequenceRange.end) < 0);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
 function regionRequest(state: TimelineState, timebase: Rational, context: AgentToolContext, input: QuoteInput, offer: GenerationOffer): RegionRequest | AgentToolOutcome {
   const prompt = input.prompt?.trim() ?? '';
   if (prompt.length === 0) return fail('VIDEO_REGION needs a prompt describing what the region should become', GENERATION_ERROR_REASONS.INVALID_REQUEST);
   const clipId = input.clipId ?? context.pointer?.clipIds[0];
-  const clip = clipId === undefined ? undefined : state.clips.find((item) => item.id === clipId);
+  const pointedAt = input.start ?? context.pointer?.timeRange?.start;
+  // 只框了画面、没点片段：取那一刻画面里最上层的素材片段（不含特效层与生成层）
+  const clip = clipId !== undefined ? state.clips.find((item) => item.id === clipId)
+    : pointedAt === undefined ? undefined : pictureClipAt(state, agentSecondsToTime(pointedAt, timebase));
   const track = clip === undefined ? undefined : state.tracks.find((item) => item.id === clip.trackId);
   if (clip === undefined || track?.kind !== 'VIDEO' || clip.assetVersionId === null) {
-    return fail('VIDEO_REGION needs a picture clip on the timeline (clipId, or the clip the person pointed at)', GENERATION_ERROR_REASONS.CLIP_NOT_FOUND, { clipId: clipId ?? null });
+    return fail('VIDEO_REGION needs a picture clip on the timeline (clipId, the clip the person pointed at, or footage under the framed moment)', GENERATION_ERROR_REASONS.CLIP_NOT_FOUND, { clipId: clipId ?? null });
   }
   if (!isNormalSpeed(clip)) return fail('this clip plays at a changed speed; regenerating part of it is not supported', GENERATION_ERROR_REASONS.INVALID_REQUEST);
   const region = input.region ?? context.pointer?.frameRegion ?? null;
   if (region === null) return fail('VIDEO_REGION needs a region (or the person draws one on the picture)', GENERATION_ERROR_REASONS.INVALID_REQUEST);
   const start = agentSecondsToTime(input.start ?? context.pointer?.timeRange?.start ?? mediaTimeToDisplaySecondsText(clip.sequenceRange.start, 6), timebase);
-  const end = agentSecondsToTime(input.end ?? context.pointer?.timeRange?.end ?? mediaTimeToDisplaySecondsText(clip.sequenceRange.end, 6), timebase);
+  const requestedEnd = agentSecondsToTime(input.end ?? context.pointer?.timeRange?.end ?? mediaTimeToDisplaySecondsText(clip.sequenceRange.end, 6), timebase);
+  // 缺省范围（指着的那一刻起）超出片段时收在片段末尾；AI 明确给的范围不改
+  const end = input.end === undefined && compareMediaTime(requestedEnd, clip.sequenceRange.end) > 0 ? clip.sequenceRange.end : requestedEnd;
   if (compareMediaTime(start, clip.sequenceRange.start) < 0 || compareMediaTime(end, clip.sequenceRange.end) > 0 || compareMediaTime(start, end) >= 0) {
     return fail(`the range must lie inside the clip (${mediaTimeToDisplaySecondsText(clip.sequenceRange.start, 3)}-${mediaTimeToDisplaySecondsText(clip.sequenceRange.end, 3)} s)`, GENERATION_ERROR_REASONS.INVALID_REQUEST);
   }

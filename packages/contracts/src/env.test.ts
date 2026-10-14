@@ -158,6 +158,25 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(crossCheckWorkerEnv(slowHeartbeat.value!).map((issue) => issue.variable)).toEqual(['ANCS_WORKER_HEARTBEAT_MS']);
   });
 
+  it('V6-5/V6-7/V6-8 Fish Audio、HeyGen 与视频生成：缺密钥/缺声音/缺报价依据 → 启动失败；报价依据只接受真实实现', () => {
+    const fish = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_NARRATION_DRIVER: 'fish' });
+    expect(crossCheckWorkerEnv(fish.value!).map((issue) => issue.variable)).toEqual(['FISH_AUDIO_API_KEY', 'ANCS_NARRATION_VOICES_JSON']);
+    const voices = JSON.stringify([{ id: 'abc123', name: 'Mine', languages: ['zh', 'en'], description: 'cloned' }]);
+    const fishReady = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_NARRATION_DRIVER: 'fish', FISH_AUDIO_API_KEY: 'f'.repeat(32), ANCS_NARRATION_VOICES_JSON: voices }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(fishReady.value!)).toEqual([]);
+    const heygen = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_DRIVER: 'heygen' });
+    expect(crossCheckWorkerEnv(heygen.value!).map((issue) => issue.variable)).toEqual(['HEYGEN_API_KEY', 'FISH_AUDIO_API_KEY']);
+    const offer = { kind: 'AVATAR_CLIP', providerId: 'heygen', implementation: 'REAL', model: 'm', perSecondMicros: { min: 1, max: 2 }, maxSeconds: 20 };
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify(offer) }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify({ ...offer, implementation: 'SCRIPTED' }) }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify({ ...offer, kind: 'VIDEO_SHOT' }) }).ok).toBe(false);
+    const video = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(video.value!).map((issue) => issue.variable)).toEqual(['ANCS_GENERATION_EXECUTABLE', 'ANCS_GENERATION_OFFERS_JSON']);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_OFFERS_JSON: JSON.stringify([{ ...offer, kind: 'VIDEO_SHOT', implementation: 'SCRIPTED' }]) }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_PASS_ENV: 'VENDOR_KEY, OTHER_KEY' }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_PASS_ENV: 'bad name' }).ok).toBe(false);
+  });
+
   it('ASR 驱动显式选择：deepgram 缺密钥 / process 缺可执行文件 → 启动失败', () => {
     const deepgram = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'deepgram' });
     expect(crossCheckWorkerEnv(deepgram.value!).map((issue) => issue.variable)).toEqual(['DEEPGRAM_API_KEY']);

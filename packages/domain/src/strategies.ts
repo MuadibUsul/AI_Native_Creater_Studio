@@ -190,6 +190,62 @@ export const BUILT_IN_STRATEGY_PACKS: readonly StrategyPack[] = [
     ],
     source: null,
   }),
+  // V6-8 首批类型之三（娱乐）：高能娱乐的常见手法，作为可选风格数据；不是写死的流水线
+  strategyPackSchema.parse({
+    id: 'builtin:entertainment',
+    version: 1,
+    kind: 'BUILT_IN',
+    genre: 'entertainment',
+    name: { 'zh-CN': '高能娱乐', en: 'High-energy entertainment' },
+    summary: {
+      'zh-CN': '前 3 秒抛出钩子，镜头极快、几乎没有空档，大字幕跟着说话走，音效密集，推拉变焦强调反应，一路埋悬念到结尾揭晓。',
+      en: 'A hook in the first 3 seconds, very fast cutting with almost no dead air, big captions following the speech, dense sound effects, punch-in zooms on reactions, and suspense carried to a payoff at the end.',
+    },
+    knobs: [
+      {
+        key: 'pacing', label: { 'zh-CN': '节奏', en: 'Pacing' }, defaultValue: 'default',
+        options: [
+          { value: 'calmer', label: { 'zh-CN': '稍缓', en: 'Calmer' }, guidance: 'Shots of about 1.5-3 s; keep the hook, but let key moments breathe.' },
+          { value: 'default', label: { 'zh-CN': '默认', en: 'Default' }, guidance: 'Shots of about 0.8-2 s; cut out every pause and filler word.' },
+          { value: 'intense', label: { 'zh-CN': '更密', en: 'More intense' }, guidance: 'Shots of about 0.4-1.2 s; jump cuts inside sentences are fine when the words stay intelligible.' },
+        ],
+      },
+      {
+        key: 'captions', label: { 'zh-CN': '字幕', en: 'Captions' }, defaultValue: 'big',
+        options: [
+          { value: 'big', label: { 'zh-CN': '大字幕', en: 'Big captions' }, guidance: 'Short, large captions for nearly every spoken line; key words emphasized.' },
+          { value: 'keywords', label: { 'zh-CN': '只上关键词', en: 'Key words only' }, guidance: 'Only key words and numbers as large on-screen text.' },
+        ],
+      },
+    ],
+    editingDna: {
+      shotSeconds: { typical: { min: 0.8, max: 2 }, median: 1.3 },
+      beatCutRatio: null,
+      shotScaleVariety: null,
+      transitionsPerMinute: 1,
+      speedRampsPerMinute: 1,
+      zoomsPerMinute: 6,
+      hookSeconds: 3,
+      captionStyle: 'Large, bold captions for most spoken lines; key words emphasized',
+      soundHabits: 'Dense sound effects on cuts, reveals and reactions; music under everything',
+      colorTendency: 'Saturated and bright',
+    },
+    structureHints: [
+      'Hook (0-3 s): the stakes or the most surprising moment, shown and said at once',
+      'Setup: what is happening and what could go wrong, fast',
+      'Escalation: each part raises the stakes; tease what is coming before every lull',
+      'Payoff: the result or reveal, then end quickly',
+    ],
+    agentGuidance: 'Style reference chosen by the user: high-energy entertainment. Open on the strongest moment within 3 seconds, cut every pause and filler, keep shots short, emphasize reactions (punch-in zooms via clip transforms are fine), caption most spoken lines with large text, and keep teasing what comes next. Use only moments that are in the footage; do not invent events.',
+    styleRubric: [
+      { key: 'hook_3s', criterion: 'The first three seconds show or say the stakes.', weight: 2 },
+      { key: 'no_dead_air', criterion: 'No pauses or filler longer than half a second remain.', weight: 2 },
+      { key: 'short_shots', criterion: 'Median shot length is within ±30% of the chosen pacing.', weight: 1 },
+      { key: 'captions', criterion: 'Most spoken lines have large captions.', weight: 1 },
+      { key: 'payoff', criterion: 'The ending delivers the result that the hook promised.', weight: 2 },
+    ],
+    source: null,
+  }),
 ];
 
 const summaryOf = (pack: StrategyPack, createdAt: Date | null): StrategyPackSummary => strategyPackSummarySchema.parse({

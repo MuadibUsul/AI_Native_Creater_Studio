@@ -99,7 +99,8 @@ async function assertStillAllowed(deps: DomainDeps, row: GenerationRow): Promise
 
 function confirmMessage(row: GenerationRow, locale: Locale): string {
   const estimate = `${formatMicros(row.estimateMinMicros)}–${formatMicros(row.estimateMaxMicros)}`;
-  return locale === 'en' ? `Confirmed: ${row.summary} (estimated ${estimate})` : `确认生成：${row.summary}（预计 ${estimate}）`;
+  const summary = row.summary.trim().replace(/[。．.!！?？]+$/u, '');
+  return locale === 'en' ? `Confirmed: ${summary} (estimated ${estimate})` : `确认生成：${summary}（预计 ${estimate}）`;
 }
 
 /**
@@ -412,19 +413,22 @@ function chargeText(row: GenerationRow, locale: Locale): string {
   return `实际花费 ${formatMicros(charged)}${row.costSource === 'QUOTE_MAX' ? '（供应商没有报告费用，按报价上限计）' : ''}。`;
 }
 
+const withoutEndMark = (text: string): string => text.trim().replace(/[。．.!！?？]+$/u, '');
+
 function successReply(row: GenerationRow, locale: Locale, placed: boolean): string {
   const name = KIND_NAMES[row.kind as GenerationRequest['kind']][locale];
+  const summary = withoutEndMark(row.summary);
   const outside = row.outsideRegionChange !== null && row.outsideRegionChange > OUTSIDE_REGION_CHANGE_THRESHOLD;
   if (locale === 'en') {
     return [
-      `${name[0]!.toUpperCase()}${name.slice(1)} done: ${row.summary}.`,
+      `${name[0]!.toUpperCase()}${name.slice(1)} done: ${summary}.`,
       chargeText(row, locale),
       placed ? 'It is in the trial edit: preview it, then keep it or undo.' : 'It could not be placed on the timeline; the clip is in your footage.',
       outside ? `Note: the provider also changed the picture outside the region (mean difference ${row.outsideRegionChange!.toFixed(1)}); only the region is used.` : '',
     ].filter((part) => part.length > 0).join(' ');
   }
   return [
-    `${name}好了：${row.summary}。`,
+    `${name}好了：${summary}。`,
     chargeText(row, locale),
     placed ? '已放进试改，先预览再决定要不要。' : '没能放进时间线；生成的片段在素材里。',
     outside ? `注意：供应商把框外的画面也改了（平均差 ${row.outsideRegionChange!.toFixed(1)}），合成时只用了框内部分。` : '',

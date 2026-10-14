@@ -15,7 +15,9 @@ import { executeJob } from './runner.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
-import { UNCONFIGURED_GENERATION_EXECUTOR, createPaidGenerationExecutor, createProcessGenerationProvider } from './paid-generation.js';
+import { UNCONFIGURED_GENERATION_EXECUTOR, createPaidGenerationExecutor, createProcessGenerationProvider, type GenerationProvider } from './paid-generation.js';
+import { createFishAudioClient, createFishAudioNarrationSynthesizer } from './fish-audio.js';
+import { HEYGEN_DEFAULT_OFFER, combineGenerationProviders, createHeyGenAvatarProvider, createHeyGenClient } from './heygen.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -127,7 +129,18 @@ const visualDriver = config.ANCS_VISUAL_ANALYSIS_DRIVER ?? (config.ANCS_VISUAL_A
  * 未配置时讲述工具明确报"没有配置配音"。合成不自动重试（失败如实交还 AI）。
  */
 const narrationDriver = config.ANCS_NARRATION_DRIVER;
-const narrationSynthesizer = narrationDriver === 'flite'
+/** Fish Audio（讲述配音 driver=fish；数字人"你的声音"）：密钥只在本进程内存中使用 */
+const fishAudio = config.FISH_AUDIO_API_KEY === undefined ? undefined : createFishAudioClient({
+  apiKey: config.FISH_AUDIO_API_KEY, ...(config.ANCS_FISH_AUDIO_MODEL === undefined ? {} : { model: config.ANCS_FISH_AUDIO_MODEL }),
+});
+const narrationSynthesizer = narrationDriver === 'fish' && fishAudio !== undefined && config.ANCS_NARRATION_VOICES_JSON !== undefined
+  ? createFishAudioNarrationSynthesizer({
+    client: fishAudio,
+    voices: narrationVoiceSchema.array().parse(JSON.parse(config.ANCS_NARRATION_VOICES_JSON)),
+    probe: sourceMediaProbe,
+    ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+  })
+  : narrationDriver === 'flite'
   ? createFliteNarrationSynthesizer({ probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) })
   : narrationDriver === 'process' && config.ANCS_NARRATION_EXECUTABLE !== undefined && config.ANCS_NARRATION_VOICES_JSON !== undefined
     ? createProcessNarrationSynthesizer({
@@ -143,7 +156,7 @@ const narrationSynthesizer = narrationDriver === 'flite'
  * V6-7/V6-8：付费生成（数字人出镜、生成镜头、选区重绘）。只有 process 驱动（部署方接入的供应商子进程）；
  * 测试替身不经环境变量装配。未配置时报价工具明确报"本部署没有配置"。每次生成只调用一次，结果不明 → 待对账。
  */
-const generationProvider = config.ANCS_GENERATION_DRIVER === 'process' && config.ANCS_GENERATION_EXECUTABLE !== undefined && config.ANCS_GENERATION_OFFERS_JSON !== undefined
+const videoGenerationProvider = config.ANCS_GENERATION_DRIVER === 'process' && config.ANCS_GENERATION_EXECUTABLE !== undefined && config.ANCS_GENERATION_OFFERS_JSON !== undefined
   ? createProcessGenerationProvider({
     executable: config.ANCS_GENERATION_EXECUTABLE,
     args: config.ANCS_GENERATION_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_GENERATION_ARGS_JSON) as string[],
@@ -152,6 +165,17 @@ const generationProvider = config.ANCS_GENERATION_DRIVER === 'process' && config
     passEnv: (config.ANCS_GENERATION_PASS_ENV ?? '').split(',').map((name) => name.trim()).filter((name) => name.length > 0),
   })
   : undefined;
+/** V6-7 数字人出镜（HeyGen 会说话的照片 + Fish Audio 你的声音）；与生成镜头/选区重绘的供应商并存 */
+const avatarProvider = config.ANCS_AVATAR_DRIVER === 'heygen' && config.HEYGEN_API_KEY !== undefined && fishAudio !== undefined
+  ? createHeyGenAvatarProvider({
+    heygen: createHeyGenClient({ apiKey: config.HEYGEN_API_KEY }),
+    fish: fishAudio,
+    offer: config.ANCS_AVATAR_OFFER_JSON === undefined ? HEYGEN_DEFAULT_OFFER : generationOfferSchema.parse(JSON.parse(config.ANCS_AVATAR_OFFER_JSON)),
+    ...ffmpegPaths,
+  })
+  : undefined;
+const generationProviders = [videoGenerationProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
+const generationProvider = generationProviders.length === 0 ? undefined : combineGenerationProviders(generationProviders);
 const generationExecutor = generationProvider === undefined || deps.storage === undefined ? undefined : createPaidGenerationExecutor({
   provider: generationProvider, storage: deps.storage, probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
 });
@@ -162,7 +186,8 @@ const providerInventory: ProviderInventoryEntry[] = [
   ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [{ capability: 'agent_model', driver: config.ANCS_AGENT_DRIVER, implementation: 'REAL' as const }]),
   ...(visualDriver === undefined ? [] : [{ capability: 'visual_analysis', driver: visualDriver, implementation: 'REAL' as const }]),
   ...(narrationSynthesizer === undefined || narrationDriver === undefined ? [] : [{ capability: 'narration', driver: narrationDriver, implementation: narrationSynthesizer.implementation }]),
-  ...(generationExecutor === undefined ? [] : [{ capability: 'paid_generation', driver: 'process', implementation: 'REAL' as const }]),
+  ...(videoGenerationProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'paid_generation', driver: 'process', implementation: 'REAL' as const }]),
+  ...(avatarProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'avatar_generation', driver: 'heygen', implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
