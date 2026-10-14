@@ -1,6 +1,6 @@
 # Google Gemini 接入：导演 / 视觉理解 / 讲述配音 / Veo 生成镜头
 
-- 状态：**导演、视觉理解、讲述配音已用真实 Gemini 验证**（2026-10-14，项目所有者提供的 API Key，免费层）；Veo 生成镜头的适配器与计费结局已用本地替身验证，**真实 Veo 尚未调用**（按秒计费，等项目所有者确认）。这不是新的 V6 里程碑，而是给 V6-1（导演）、V6-1b（视觉理解）、V6-5（讲述）、V6-6（风格撰写）、V6-8（生成镜头）接上第二家真实供应商；产品行为与界面不变
+- 状态：**导演、视觉理解、讲述配音已用真实 Gemini 验证**（2026-10-14，项目所有者提供的 API Key，免费层）；Veo 生成镜头的适配器与计费结局已用本地替身验证；**项目所有者确认后做了一次真实 Veo 4 秒测试：这把 Key 没有 Veo 配额（免费层），提交即被拒（429），没有生成、没有扣费**——真实成片待开通付费层后再测。这不是新的 V6 里程碑，而是给 V6-1（导演）、V6-1b（视觉理解）、V6-5（讲述）、V6-6（风格撰写）、V6-8（生成镜头）接上第二家真实供应商；产品行为与界面不变
 - 依据：V6 §6（AI 通用能力：导演与调度代码不按供应商或类型分支，模型只是端口）、§8（Agent Runtime 的模型端口）、§10（付费生成先报价、不自动重试）；AGENTS.md（密钥只在服务端；Mock ≠ 真实验证；价格不臆造；外部调用只经 Worker 端口）
 - 目标体验：只有 Gemini Key 的部署也能用真实 AI 剪片、理解画面、用中文讲述；生成镜头接 Veo 时报价准确、失败如实
 
@@ -49,6 +49,7 @@
 | 浏览器全流程 | 3 段素材画面理解 16 s；第一版 29 s（9 次工具调用），试改可播放；指着 00:01.8–00:06.3 说"这一段剪短一点"→ 23 s 新试改（复用 3/4 段）；采用：版本 4 → 5 |
 | Provider 冒烟 | 模型列表 539 ms；导演一次工具调用 `trim_clip({"clipId":"clp_1","seconds":3})` 693 ms；TTS 因按天配额如实失败、未重试 |
 | 成本 | Gemini 调用计为"未定价"（没有可核对的公开价）；用量照记 |
+| 真实 Veo 4 秒测试（2026-10-14，项目所有者确认后） | `node scripts/provider-smoke.mjs --veo-generate`：`veo-3.1-fast-generate-preview` 提交即 429 `RESOURCE_EXHAUSTED`（没有配额明细、没有建议等待时间——这把 Key 在免费层没有 Veo 配额，不是一时限流）；再试最便宜的 `veo-3.1-lite-generate-preview` 一次，同样被拒。两次都**没有生成、没有扣费**；平台侧按设计处理：归为"不扣费"、不重试、错误信息不含密钥。同一次冒烟里 Gemini TTS 已恢复（按天配额重置后合成 4.5 秒中英测试句 2.9 s） |
 
 ### 真实模型暴露的质量问题（flash-lite，如实记录）
 
@@ -74,7 +75,7 @@ GEMINI_API_KEY=… NODE_USE_ENV_PROXY=1 ANCS_AGENT_MODEL=gemini-flash-lite-lates
 
 ## 未验证与待办
 
-- **真实 Veo：** 按秒计费，等项目所有者确认后运行 `node scripts/provider-smoke.mjs --veo-generate`（4 秒），再在共看片室走"报价 → 确认 → 试改"；核对：Veo REST 参数形状（`durationSeconds` 等）、单次耗时、Google 账单与报价是否吻合、被安全过滤是否计费（当前按不扣费处理）。价格先按 Google 价格页填进 `ANCS_VEO_OFFER_JSON`。
+- **真实 Veo：** 这把 Key 没有 Veo 配额（2026-10-14 实测，见上）。需要在这把 Key 所属的 Google Cloud 项目开通结算（付费层）后，再运行 `node scripts/provider-smoke.mjs --veo-generate`（4 秒），然后在共看片室走"报价 → 确认 → 试改"；核对：Veo REST 参数形状（`durationSeconds` 等，配额检查先于参数校验，所以这次没能核对）、单次耗时、Google 账单与报价是否吻合、被安全过滤是否计费（当前按不扣费处理）。价格先按 Google 价格页填进 `ANCS_VEO_OFFER_JSON`。
 - **TTS 配额：** 免费层每个 TTS 模型每天 10 次请求，逐句合成一篇文章就会用掉大半。TODO（why：生产讲述不能受免费层限制；dependency：付费层或按整段合成；interface：`GeminiSpeech.synthesizeScript(sentences)` 一次合成整段并用静音检测切分句界，`createHttpNarrationSynthesizer` 增加整段模式）。
 - **Gemini 计价：** TODO（why：成本面与每轮预算上限目前对 Gemini 不起作用；dependency：可核对的价格来源；interface：`AGENT_MODEL_PRICES` 增加 Gemini 模型或部署方用 `ANCS_AGENT_MODEL_PRICES_JSON` 声明）。在此之前每轮仍受迭代次数上限约束。
 - **更强的 Gemini 导演模型：** flash / pro 在实测时过载或免费层无配额；付费层下用同一套评测（`--model gemini`，`ANCS_AGENT_MODEL=gemini-flash-latest` 等）对比指向范围与失败交代两项。
