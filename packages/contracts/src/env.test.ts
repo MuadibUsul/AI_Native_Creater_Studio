@@ -200,6 +200,24 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(crossCheckWorkerEnv(processVision.value!).map((issue) => issue.variable)).toEqual(['ANCS_VISUAL_ANALYSIS_EXECUTABLE']);
   });
 
+  it('Gemini：导演 / 视觉 / 讲述选 gemini 缺 GEMINI_API_KEY → 启动失败（逐项说明）；Veo 报价依据必须带时长档位且不超过单次上限', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'gemini', ANCS_VISUAL_ANALYSIS_DRIVER: 'gemini', ANCS_NARRATION_DRIVER: 'gemini' });
+    const issues = crossCheckWorkerEnv(missing.value!);
+    expect(issues.map((issue) => issue.variable)).toEqual(['GEMINI_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY']);
+    expect(issues.map((issue) => issue.message.split('=')[0])).toEqual(['ANCS_AGENT_DRIVER', 'ANCS_VISUAL_ANALYSIS_DRIVER', 'ANCS_NARRATION_DRIVER']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'gemini', ANCS_VISUAL_ANALYSIS_DRIVER: 'gemini', ANCS_NARRATION_DRIVER: 'gemini', GEMINI_API_KEY: 'g'.repeat(39), ANCS_AGENT_MODEL: 'gemini-flash-latest' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+
+    const veo = { kind: 'VIDEO_SHOT', providerId: 'veo', implementation: 'REAL', model: 'veo-3.1-fast-generate-preview', perSecondMicros: { min: 150_000, max: 150_000 }, maxSeconds: 8, durationOptions: [4, 6, 8] };
+    const veoOnly = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VEO_OFFER_JSON: JSON.stringify(veo) });
+    expect(veoOnly.ok).toBe(true);
+    expect(crossCheckWorkerEnv(veoOnly.value!).map((issue) => issue.variable)).toEqual(['GEMINI_API_KEY']);
+    const { durationOptions: _options, ...withoutOptions } = veo;
+    for (const bad of [withoutOptions, { ...veo, durationOptions: [4, 6, 10] }, { ...veo, kind: 'VIDEO_REGION' }, { ...veo, implementation: 'SCRIPTED' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VEO_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+  });
+
   it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {
     const blankOptional = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: '', ANCS_STORAGE_SECRET: '  ', ANCS_PLATFORM_PROVIDER_KEYS: '' });
     expect(blankOptional.ok).toBe(true);

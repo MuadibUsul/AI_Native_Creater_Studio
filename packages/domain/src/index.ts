@@ -703,7 +703,7 @@ export type { NarrationRef } from './agent-narration.js';
 export { ARTICLE_AGENT_TOOLS, ARTICLE_CONTEXT_CHARS, articleContextView, articleParagraphs, projectArticle } from './agent-article.js';
 export { numbersIn, numbersMissingFromSource } from './source-numbers.js';
 export { GENERATION_AGENT_TOOLS } from './agent-generation.js';
-export { estimateSpeechSeconds, formatMicros, generationBudget, generationCanvas, listProjectGenerations, quoteGeneration, toGeneration } from './paid-generation-quote.js';
+export { billedSeconds, estimateSpeechSeconds, formatMicros, generationBudget, generationCanvas, listProjectGenerations, quoteGeneration, toGeneration } from './paid-generation-quote.js';
 export type { GenerationQuote } from './paid-generation-quote.js';
 export { acceptGeneration, countGenerationsNeedingReconciliation, declineGeneration, generationPlacementOperations, paidGenerationWorkflow } from './paid-generation.js';
 export type { PaidGenerationPorts } from './paid-generation.js';

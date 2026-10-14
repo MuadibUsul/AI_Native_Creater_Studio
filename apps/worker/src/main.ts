@@ -3,6 +3,7 @@ import { hostname } from 'node:os';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
+import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
@@ -18,6 +19,7 @@ import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } fr
 import { UNCONFIGURED_GENERATION_EXECUTOR, createPaidGenerationExecutor, createProcessGenerationProvider, type GenerationProvider } from './paid-generation.js';
 import { createFishAudioClient, createFishAudioNarrationSynthesizer } from './fish-audio.js';
 import { HEYGEN_DEFAULT_OFFER, combineGenerationProviders, createHeyGenAvatarProvider, createHeyGenClient } from './heygen.js';
+import { createGeminiNarrationSynthesizer, createVeoGenerationProvider } from './gemini-media.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -118,7 +120,9 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
  */
 const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
   ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5' })
-  : unconfiguredAgentModel();
+  : config.ANCS_AGENT_DRIVER === 'gemini' && config.GEMINI_API_KEY !== undefined
+    ? new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'gemini-flash-latest' })
+    : unconfiguredAgentModel();
 /** V6-1b：AI 导演看素材的抽帧（源/代理文件流式物化 + FFmpeg 单帧解码，进程内 LRU 缓存）。 */
 const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) });
 /** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
@@ -133,7 +137,14 @@ const narrationDriver = config.ANCS_NARRATION_DRIVER;
 const fishAudio = config.FISH_AUDIO_API_KEY === undefined ? undefined : createFishAudioClient({
   apiKey: config.FISH_AUDIO_API_KEY, ...(config.ANCS_FISH_AUDIO_MODEL === undefined ? {} : { model: config.ANCS_FISH_AUDIO_MODEL }),
 });
-const narrationSynthesizer = narrationDriver === 'fish' && fishAudio !== undefined && config.ANCS_NARRATION_VOICES_JSON !== undefined
+const narrationSynthesizer = narrationDriver === 'gemini' && config.GEMINI_API_KEY !== undefined
+  ? createGeminiNarrationSynthesizer({
+    speech: createGeminiSpeech({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_GEMINI_TTS_MODEL ?? 'gemini-3.8-flash-lite-tts' }),
+    ...(config.ANCS_NARRATION_VOICES_JSON === undefined ? {} : { voices: narrationVoiceSchema.array().parse(JSON.parse(config.ANCS_NARRATION_VOICES_JSON)) }),
+    probe: sourceMediaProbe,
+    ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+  })
+  : narrationDriver === 'fish' && fishAudio !== undefined && config.ANCS_NARRATION_VOICES_JSON !== undefined
   ? createFishAudioNarrationSynthesizer({
     client: fishAudio,
     voices: narrationVoiceSchema.array().parse(JSON.parse(config.ANCS_NARRATION_VOICES_JSON)),
@@ -174,7 +185,14 @@ const avatarProvider = config.ANCS_AVATAR_DRIVER === 'heygen' && config.HEYGEN_A
     ...ffmpegPaths,
   })
   : undefined;
-const generationProviders = [videoGenerationProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
+/** V6-8 生成镜头接 Google Veo（配置 ANCS_VEO_OFFER_JSON 即启用；报价依据由部署方按 Google 价格页填写） */
+const veoOffer = config.ANCS_VEO_OFFER_JSON === undefined ? undefined : generationOfferSchema.parse(JSON.parse(config.ANCS_VEO_OFFER_JSON));
+const veoProvider = veoOffer === undefined || config.GEMINI_API_KEY === undefined ? undefined : createVeoGenerationProvider({
+  veo: createGeminiVeo({ apiKey: config.GEMINI_API_KEY, model: veoOffer.model }),
+  offer: veoOffer,
+  ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+});
+const generationProviders = [videoGenerationProvider, veoProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
 const generationProvider = generationProviders.length === 0 ? undefined : combineGenerationProviders(generationProviders);
 const generationExecutor = generationProvider === undefined || deps.storage === undefined ? undefined : createPaidGenerationExecutor({
   provider: generationProvider, storage: deps.storage, probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
@@ -188,6 +206,7 @@ const providerInventory: ProviderInventoryEntry[] = [
   ...(narrationSynthesizer === undefined || narrationDriver === undefined ? [] : [{ capability: 'narration', driver: narrationDriver, implementation: narrationSynthesizer.implementation }]),
   ...(videoGenerationProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'paid_generation', driver: 'process', implementation: 'REAL' as const }]),
   ...(avatarProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'avatar_generation', driver: 'heygen', implementation: 'REAL' as const }]),
+  ...(veoProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'video_generation', driver: 'veo', implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {
@@ -197,6 +216,8 @@ if (inventoryIssues.length > 0) {
 console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
 const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5' }), ...ffmpegPaths })
+  : visualDriver === 'gemini' && config.GEMINI_API_KEY !== undefined
+  ? createModelVisualAnalysisAdapter({ model: new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_VISION_MODEL ?? 'gemini-flash-lite-latest' }), ...ffmpegPaths })
   : visualDriver === 'process' && config.ANCS_VISUAL_ANALYSIS_EXECUTABLE !== undefined
     ? createProcessMediaVisualAnalysisAdapter({
       executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,

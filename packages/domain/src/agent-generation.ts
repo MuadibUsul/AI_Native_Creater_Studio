@@ -90,7 +90,7 @@ const listGenerationOptionsTool: AgentToolDefinition<Record<string, never>> = {
           const offer = bestOffer(offers, kind);
           return offer === null
             ? { kind, available: false, what: KIND_NOTES[kind] }
-            : { kind, available: true, what: KIND_NOTES[kind], price: priceText(offer), maxSeconds: offer.maxSeconds, ...(offer.languages.length === 0 ? {} : { languages: offer.languages }), ...(offer.implementation === 'SCRIPTED' ? { note: 'test double in this deployment' } : {}) };
+            : { kind, available: true, what: KIND_NOTES[kind], price: priceText(offer), maxSeconds: offer.maxSeconds, ...(offer.durationOptions === undefined ? {} : { lengths: `the provider only makes ${offer.durationOptions.join(' / ')} s clips; a shorter shot is billed at the next length and trimmed to fit` }), ...(offer.languages.length === 0 ? {} : { languages: offer.languages }), ...(offer.implementation === 'SCRIPTED' ? { note: 'test double in this deployment' } : {}) };
         }),
         identities: identities.map((identity) => ({
           id: identity.id,
@@ -269,6 +269,7 @@ async function quote(context: AgentToolContext, input: QuoteInput): Promise<Agen
       kind: input.kind,
       provider: { id: offer.providerId, model: offer.model, ...(offer.implementation === 'SCRIPTED' ? { note: 'test double' } : {}) },
       seconds: input.kind === 'AVATAR_CLIP' ? `about ${estimatedSeconds} (${String(priced.minSeconds)}-${String(priced.maxSeconds)})` : estimatedSeconds,
+      ...(input.kind !== 'AVATAR_CLIP' && priced.maxSeconds !== seconds ? { billedSeconds: priced.maxSeconds } : {}),
       estimate,
       expiresInMinutes: GENERATION_QUOTE_TTL_MINUTES,
       ...(budget.configured ? {} : { budget: 'No generation budget is set for this workspace; confirming will be refused until the owner sets one.' }),

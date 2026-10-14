@@ -32,10 +32,10 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
 /**
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
- *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite' },
+ *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite', synthesizer?: (probe: object) => object },
  *   generation?: { provider?: object, behavior?: () => string } }} options
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
- *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身）。
+ *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
  *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
 export async function startStudioEnv(options) {
@@ -102,7 +102,7 @@ export async function startStudioEnv(options) {
       ...(options.effects === undefined ? {} : {
         effects: { renderer: createProcessEffectRenderer({ probe }), validator: createProcessMotionValidator(), codegen: options.effects.codegen ?? 'disabled' },
       }),
-      ...(options.narration === undefined ? {} : { narration: { synthesizer: createFliteNarrationSynthesizer({ probe }) } }),
+      ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
       ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
     }))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）

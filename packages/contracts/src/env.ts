@@ -253,11 +253,11 @@ export const workerEnvSchema = z.object({
   ANCS_ASR_EXECUTABLE: nonEmpty('ANCS_ASR_EXECUTABLE').optional(),
   ANCS_ASR_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_ASR_ARGS_JSON 必须是字符串数组 JSON').optional(),
   /**
-   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic = 视觉模型逐帧写镜头说明（需 ANTHROPIC_API_KEY）。
+   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini = 视觉模型逐帧写镜头说明（需对应密钥）。
    * 缺省：配置了 ANCS_VISUAL_ANALYSIS_EXECUTABLE 则为 process，否则不装配（视觉分析任务明确失败"未配置"）。
    */
-  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic' }).optional(),
-  /** 视觉理解模型 id（缺省 claude-haiku-5-5） */
+  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini' }).optional(),
+  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest） */
   ANCS_VISION_MODEL: nonEmpty('ANCS_VISION_MODEL').optional(),
   /** 视觉分析子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaVisualAnalysis JSON。 */
   ANCS_VISUAL_ANALYSIS_EXECUTABLE: nonEmpty('ANCS_VISUAL_ANALYSIS_EXECUTABLE').optional(),
@@ -268,13 +268,18 @@ export const workerEnvSchema = z.object({
   ANCS_DISABLE_RENDER: z.enum(['0', '1']).optional(),
   ANCS_WORKER_ONCE: z.enum(['0', '1']).optional(),
   /**
-   * 通用导演 Agent 的模型驱动（V6-1）：anthropic = 真实 Claude（需 ANTHROPIC_API_KEY）。
-   * 未配置时不装配真实模型：AI 轮次明确失败（AGENT_MODEL_NOT_CONFIGURED），不回退 Mock。
+   * 通用导演 Agent 的模型驱动（V6-1）：anthropic = 真实 Claude（需 ANTHROPIC_API_KEY）；gemini = Google Gemini（需 GEMINI_API_KEY）。
+   * 未配置时不装配真实模型：AI 轮次明确失败（AGENT_MODEL_NOT_CONFIGURED），不回退 Mock。风格撰写（蒸馏器）用同一个模型。
    */
-  ANCS_AGENT_DRIVER: z.enum(['anthropic'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic' }).optional(),
+  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini' }).optional(),
   /** Claude API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回、不下发客户端） */
   ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
-  /** 导演模型 id（缺省 claude-opus-5-5） */
+  /**
+   * Google Gemini API Key（https://ai.google.dev）：导演 / 视觉理解（driver=gemini）、讲述配音（ANCS_NARRATION_DRIVER=gemini）、
+   * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
+   */
+  GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
+  /** 导演模型 id（缺省 anthropic: claude-opus-5-5；gemini: gemini-flash-latest） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
@@ -294,7 +299,9 @@ export const workerEnvSchema = z.object({
    * process = 部署方接入的语音合成子进程（任意供应商；协议：stdin 一行 JSON {text, voice, speed}，stdout 输出 FFmpeg 可解码的音频）。
    * 不配置时讲述工具明确报"本部署没有配置配音"。
    */
-  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process', 'fish'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process | fish' }).optional(),
+  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process', 'fish', 'gemini'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process | fish | gemini' }).optional(),
+  /** Gemini 语音合成模型（driver=gemini），缺省 gemini-3.8-flash-lite-tts；声音为 Gemini 预置声音（缺省列表见 Worker，可用 ANCS_NARRATION_VOICES_JSON 覆盖） */
+  ANCS_GEMINI_TTS_MODEL: nonEmpty('ANCS_GEMINI_TTS_MODEL').optional(),
   /** Fish Audio（https://fish.audio）密钥：讲述配音（driver=fish）与数字人"你的声音"（声音克隆）。只在 Worker 内存中使用 */
   FISH_AUDIO_API_KEY: z.string().min(16, 'FISH_AUDIO_API_KEY 过短').optional(),
   /** Fish Audio TTS 模型（请求头 model），缺省 s1 */
@@ -332,6 +339,17 @@ export const workerEnvSchema = z.object({
   ANCS_AVATAR_OFFER_JSON: z.string().refine((value) => {
     try { const offer = generationOfferSchema.safeParse(JSON.parse(value)); return offer.success && offer.data.kind === 'AVATAR_CLIP' && offer.data.implementation === 'REAL'; } catch { return false; }
   }, 'ANCS_AVATAR_OFFER_JSON 必须是 AVATAR_CLIP 的报价 JSON（implementation 为 REAL）').optional(),
+  /**
+   * V6-8 生成镜头接 Google Veo（需 GEMINI_API_KEY）：VIDEO_SHOT 的报价依据，model 为 Veo 模型 id（如 veo-3.1-fast-generate-preview），
+   * durationOptions 为 Veo 能生成的时长档位（如 [4,6,8]，按不短于所需的最短一档计费）。价格按 Google 价格页填写，平台不内置。
+   * 配置即启用；与 ANCS_GENERATION_DRIVER、ANCS_AVATAR_DRIVER 可以并存。
+   */
+  ANCS_VEO_OFFER_JSON: z.string().refine((value) => {
+    try {
+      const offer = generationOfferSchema.safeParse(JSON.parse(value));
+      return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
+    } catch { return false; }
+  }, 'ANCS_VEO_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带 durationOptions，例如 [4,6,8]）').optional(),
   /** 单次生成子进程超时（秒，缺省 1200）；超时按"结果不明"处理（待对账，不重试） */
   ANCS_GENERATION_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(7200).optional(),
 });
@@ -361,6 +379,14 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'process' && value.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_VISUAL_ANALYSIS_EXECUTABLE', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=process 时必须配置 ANCS_VISUAL_ANALYSIS_EXECUTABLE' });
+  }
+  for (const [variable, driver] of [['ANCS_AGENT_DRIVER', value.ANCS_AGENT_DRIVER], ['ANCS_VISUAL_ANALYSIS_DRIVER', value.ANCS_VISUAL_ANALYSIS_DRIVER], ['ANCS_NARRATION_DRIVER', value.ANCS_NARRATION_DRIVER]] as const) {
+    if (driver === 'gemini' && value.GEMINI_API_KEY === undefined) {
+      issues.push({ variable: 'GEMINI_API_KEY', message: `${variable}=gemini 时必须配置 GEMINI_API_KEY（fail-closed，不回退 Mock）` });
+    }
+  }
+  if (value.ANCS_VEO_OFFER_JSON !== undefined && value.GEMINI_API_KEY === undefined) {
+    issues.push({ variable: 'GEMINI_API_KEY', message: '配置了 ANCS_VEO_OFFER_JSON（Veo 生成镜头）时必须配置 GEMINI_API_KEY' });
   }
   if (value.ANCS_AGENT_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_AGENT_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });

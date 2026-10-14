@@ -4,12 +4,13 @@
 //
 // 模型：--model scripted（默认，脚本导演，只验证评测流程能跑通，不衡量质量）
 //       --model anthropic（真实 Claude；需要环境变量 ANTHROPIC_API_KEY，可选 ANCS_AGENT_MODEL / ANCS_VISION_MODEL）
-// 有 ANTHROPIC_API_KEY 时同时启用视觉理解；有 DEEPGRAM_API_KEY 时启用语音转写。
+//       --model gemini（Google Gemini；需要环境变量 GEMINI_API_KEY，可选 ANCS_AGENT_MODEL / ANCS_VISION_MODEL / ANCS_GEMINI_TTS_MODEL）
+// 真实模型时同一家的视觉模型同时做视觉理解；有 DEEPGRAM_API_KEY 时启用语音转写。
 //
-// 用例可以是素材（footage）或文章（article，V6-5：图文工程 + 讲述配音 + 图解卡；讲述用 FFmpeg 内置 flite 本地英文语音，
-// 中文讲述需要部署方接入的配音引擎，评测里会如实失败）。
+// 用例可以是素材（footage）或文章（article，V6-5：图文工程 + 讲述配音 + 图解卡）。讲述配音：--voice flite（FFmpeg 内置本地英文语音）
+// 或 --voice gemini（Gemini TTS，中英等多语言；--model gemini 时缺省）。声音不会说用例要求的语言时如实跳过。
 //
-// 用法：node scripts/eval-first-cut.mjs [--set evals/first-cut/smoke.json] [--model scripted|anthropic] [--export]
+// 用法：node scripts/eval-first-cut.mjs [--set evals/first-cut/smoke.json] [--model scripted|anthropic|gemini] [--voice flite|gemini] [--export]
 // 结果：.artifacts/eval/first-cut/<时间>/report.json、report.md、rating-sheet.md（以及 --export 的成片）
 import { execFileSync } from 'node:child_process';
 import { Blob } from 'node:buffer';
@@ -21,7 +22,8 @@ import { getStrategyPack, reviewDraftOperations, scoreFirstCut } from '../packag
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
-const { values } = parseArgs({ options: { set: { type: 'string', default: 'evals/first-cut/smoke.json' }, model: { type: 'string', default: 'scripted' }, export: { type: 'boolean', default: false } } });
+const { values } = parseArgs({ options: { set: { type: 'string', default: 'evals/first-cut/smoke.json' }, model: { type: 'string', default: 'scripted' }, voice: { type: 'string' }, export: { type: 'boolean', default: false } } });
+const voiceEngine = values.voice ?? (values.model === 'gemini' ? 'gemini' : 'flite');
 const manifest = JSON.parse(await readFile(resolve(values.set), 'utf8'));
 const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = resolve('.artifacts/eval/first-cut', runId);
@@ -29,6 +31,13 @@ await mkdir(outDir, { recursive: true });
 
 async function createDirector() {
   if (values.model === 'scripted') return { director: new ScriptedDirector(), implementation: 'SCRIPTED', model: 'scripted-director' };
+  if (values.model === 'gemini') {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error('--model gemini needs GEMINI_API_KEY in the environment (never pass keys on the command line)');
+    const { GeminiAgentModel } = await import('../packages/providers/gemini/dist/index.js');
+    const model = process.env.ANCS_AGENT_MODEL ?? 'gemini-flash-latest';
+    return { director: new GeminiAgentModel({ apiKey, model }), implementation: 'REAL', model };
+  }
   if (values.model !== 'anthropic') throw new Error(`unknown --model ${values.model}`);
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('--model anthropic needs ANTHROPIC_API_KEY in the environment (never pass keys on the command line)');
@@ -43,6 +52,11 @@ async function optionalAdapters() {
     const { AnthropicAgentModel } = await import('../packages/providers/anthropic/dist/index.js');
     const { createModelVisualAnalysisAdapter } = await import('../apps/worker/dist/model-visual-analysis.js');
     adapters.mediaVisualAnalysisAdapter = createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: process.env.ANTHROPIC_API_KEY, model: process.env.ANCS_VISION_MODEL ?? 'claude-haiku-5-5' }) });
+  }
+  if (process.env.GEMINI_API_KEY && values.model === 'gemini') {
+    const { GeminiAgentModel } = await import('../packages/providers/gemini/dist/index.js');
+    const { createModelVisualAnalysisAdapter } = await import('../apps/worker/dist/model-visual-analysis.js');
+    adapters.mediaVisualAnalysisAdapter = createModelVisualAnalysisAdapter({ model: new GeminiAgentModel({ apiKey: process.env.GEMINI_API_KEY, model: process.env.ANCS_VISION_MODEL ?? 'gemini-flash-lite-latest' }) });
   }
   if (process.env.DEEPGRAM_API_KEY) {
     const { createDeepgramSpeechRecognitionAdapter } = await import('../apps/worker/dist/deepgram-speech-recognition.js');
@@ -67,21 +81,31 @@ const understandingDone = (state) => state.footage.length > 0 && state.footage.e
 const { director, implementation, model } = await createDirector();
 const usesArticles = manifest.cases.some((testCase) => testCase.article !== undefined);
 // 文章用例需要图解卡（特效渲染）与讲述配音
-const env = await startStudioEnv({ director, ...(await optionalAdapters()), workDirPrefix: 'ancs-eval-', ...(usesArticles ? { effects: { codegen: 'disabled' }, narration: {} } : {}) });
-const report = { runId, set: manifest.id, model: { implementation, model }, startedAt: new Date().toISOString(), cases: [] };
+async function narrationOption() {
+  if (voiceEngine === 'flite') return { option: {}, languages: ['en'], label: 'the local English voice (flite)' };
+  if (voiceEngine !== 'gemini') throw new Error(`unknown --voice ${voiceEngine}`);
+  if (!process.env.GEMINI_API_KEY) throw new Error('--voice gemini needs GEMINI_API_KEY in the environment');
+  const { createGeminiSpeech } = await import('../packages/providers/gemini/dist/index.js');
+  const { GEMINI_DEFAULT_VOICES, createGeminiNarrationSynthesizer } = await import('../apps/worker/dist/gemini-media.js');
+  const speech = createGeminiSpeech({ apiKey: process.env.GEMINI_API_KEY, model: process.env.ANCS_GEMINI_TTS_MODEL ?? 'gemini-3.8-flash-lite-tts' });
+  return { option: { synthesizer: (probe) => createGeminiNarrationSynthesizer({ speech, probe }) }, languages: [...new Set(GEMINI_DEFAULT_VOICES.flatMap((voice) => voice.languages))], label: `Gemini TTS (${speech.model})` };
+}
+const narration = await narrationOption();
+const env = await startStudioEnv({ director, ...(await optionalAdapters()), workDirPrefix: 'ancs-eval-', ...(usesArticles ? { effects: { codegen: 'disabled' }, narration: narration.option } : {}) });
+const report = { runId, set: manifest.id, model: { implementation, model }, voice: narration.label, startedAt: new Date().toISOString(), cases: [] };
 let failed = false;
 
 try {
   const { client } = await env.signedInClient(`eval-${randomUUID().slice(0, 8)}@test.local`);
   const workspace = await client.workspaces.create({ name: `评测 ${manifest.id}` });
-  // 本评测环境的配音引擎：FFmpeg 内置 flite，只会英文
-  const voiceLanguages = ['en'];
+  // 本评测环境的配音引擎会说的语言
+  const voiceLanguages = narration.languages;
   for (const testCase of manifest.cases) {
     const started = Date.now();
     const entry = { id: testCase.id, title: testCase.title, request: testCase.request, strategy: testCase.strategy ?? null };
     if (testCase.requiresVoiceLanguage !== undefined && !voiceLanguages.includes(testCase.requiresVoiceLanguage)) {
       entry.status = 'SKIPPED';
-      entry.error = `needs a ${testCase.requiresVoiceLanguage} narration voice; this evaluation environment only has the local English voice (flite)`;
+      entry.error = `needs a ${testCase.requiresVoiceLanguage} narration voice; this evaluation environment only has ${narration.label}`;
       report.cases.push(entry);
       console.log(`SKIP  ${testCase.id} — ${entry.error}`);
       continue;

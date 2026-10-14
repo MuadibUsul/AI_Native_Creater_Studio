@@ -70,7 +70,9 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
 | `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
-| `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
+| `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
+| `ANCS_AGENT_DRIVER` / `ANCS_VISUAL_ANALYSIS_DRIVER`（Worker） | 未配置 | AI 导演 / 素材画面理解：`anthropic`（需 `ANTHROPIC_API_KEY`）或 `gemini`（需 `GEMINI_API_KEY`；模型 `ANCS_AGENT_MODEL` 缺省 `gemini-flash-latest`、`ANCS_VISION_MODEL` 缺省 `gemini-flash-lite-latest`）；画面理解另可 `process`。缺密钥启动失败 |
+| `ANCS_VEO_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接 Google Veo：VIDEO_SHOT 报价依据（必须带 `durationOptions`，价格按 Google 价格页填写），需 `GEMINI_API_KEY`；装配清单出现 `video_generation=veo` |
 | `ANCS_AVATAR_DRIVER`（Worker） | 未配置 | V6-7 数字人：`heygen`（需 `HEYGEN_API_KEY` 与 `FISH_AUDIO_API_KEY`；可选 `ANCS_AVATAR_OFFER_JSON` 报价依据） |
 | `ANCS_GENERATION_DRIVER`（Worker） | 未配置 | V6-8 视频生成：`process`（需 `ANCS_GENERATION_EXECUTABLE` 与 `ANCS_GENERATION_OFFERS_JSON`；可选 `ANCS_GENERATION_ARGS_JSON`、`ANCS_GENERATION_PASS_ENV`、`ANCS_GENERATION_TIMEOUT_SECONDS`） |
 | `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
@@ -150,7 +152,8 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - 流程：AI 只报价（`quote_generation`）→ 用户在共看片室报价卡上确认（API 校验确认金额 = 报价上限）→ 在**工作区生成预算**里原子预留（没设预算 → 拒绝）→ `PAID_GENERATION` 工作流生成一次（不重试）→ 产物写入对象存储并探测（保留类 `KEEP_PAID_GENERATED`）→ 放进试改 → 按供应商报告的费用结算（没报告按报价上限并标明；明确未扣费的失败释放预留）。
 - **待对账**：调用供应商之后的任何中断（超时、进程崩溃、Worker 丢租约）都把生成标为 `NEEDS_RECONCILIATION`，绝不再次调用，预留保持。运维按 `generation_requests.provider_job_id` 与供应商核对后手工处理（AdminAction 接入前的临时做法；见 V6-7 记录的 TODO）。
 - 装配：`ANCS_AVATAR_DRIVER=heygen`（数字人）与 `ANCS_GENERATION_DRIVER=process`（生成镜头、选区重绘）可以并存；装配清单出现 `avatar_generation` / `paid_generation`。没有配置时 AI 如实回复"这个部署还没有接入这类生成的供应商"。
-- 网络：放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；在需要经代理出网的环境里给 Worker 加 `NODE_USE_ENV_PROXY=1`。
+- 网络：放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；Gemini / Veo 放行 `generativelanguage.googleapis.com`（Veo 成片的下载链接会跳转到 Google 存储域名，Worker 跟随跳转时不带密钥）；在需要经代理出网的环境里给 Worker 加 `NODE_USE_ENV_PROXY=1`。
+- Veo 只能生成 4/6/8 秒：报价与预留按不短于所需的最短一档，成片统一到项目画布与帧率后放进试改（只用需要的长度）。
 - 密钥只在 Worker 进程内存里使用，不进日志与错误信息；进程驱动的子进程只拿到白名单环境变量 + `ANCS_GENERATION_PASS_ENV` 列出的变量。
 - 身份档案的授权记录（`identity_consent_records`）只增不改，由数据库触发器保证；删除身份档案或工作区时随级联清理。
 

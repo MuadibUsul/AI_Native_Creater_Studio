@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { IDENTITY_CONSENT_STATEMENTS, MICROS_PER_CREDIT, mediaTimeSchema, type GenerationOffer, type GenerationRequest } from '@ancs/contracts';
+import { IDENTITY_CONSENT_STATEMENTS, MICROS_PER_CREDIT, generationOfferSchema, mediaTimeSchema, type GenerationOffer, type GenerationRequest } from '@ancs/contracts';
 import type { KernelClip, KernelTrack, TimelineState } from '@ancs/kernel';
 import { AGENT_SYSTEM_PROMPT } from './agent-prompt.js';
 import { defaultAgentToolCatalog } from './agent-tools.js';
 import { identityConsentStatementSha256 } from './identity-profiles.js';
 import { generationPlacementOperations } from './paid-generation.js';
-import { estimateSpeechSeconds, formatMicros, quoteGeneration } from './paid-generation-quote.js';
+import { billedSeconds, estimateSpeechSeconds, formatMicros, quoteGeneration } from './paid-generation-quote.js';
 
 /**
  * V6-7 / V6-8 付费生成的纯计算部分：
@@ -46,6 +46,17 @@ describe('付费生成：报价', () => {
   it('数字人：按讲稿语速浮动 0.8–1.3 倍，上限不超过供应商单次上限', () => {
     expect(quoteGeneration(offer('AVATAR_CLIP', 35_000, 100_000, 20), 'AVATAR_CLIP', 10)).toMatchObject({ minSeconds: 8, maxSeconds: 13, minMicros: 280_000, maxMicros: 1_300_000 });
     expect(quoteGeneration(offer('AVATAR_CLIP', 35_000, 100_000, 12), 'AVATAR_CLIP', 10).maxSeconds).toBe(12);
+  });
+
+  it('只能生成固定时长的供应商（如 Veo 4/6/8 秒）：按不短于所需的最短一档报价与预留', () => {
+    const veo = { ...offer('VIDEO_SHOT', 150_000, 150_000), durationOptions: [8, 4, 6] };
+    expect(billedSeconds(veo, 3)).toBe(4);
+    expect(billedSeconds(veo, 4)).toBe(4);
+    expect(billedSeconds(veo, 4.2)).toBe(6);
+    expect(billedSeconds(veo, 9)).toBe(8);
+    expect(quoteGeneration(veo, 'VIDEO_SHOT', 2.5)).toEqual({ minSeconds: 4, maxSeconds: 4, minMicros: 600_000, maxMicros: 600_000, reserveCredits: 60 });
+    expect(billedSeconds(offer('VIDEO_SHOT', 1, 2), 2.5)).toBe(2.5);
+    expect(generationOfferSchema.safeParse({ ...veo, durationOptions: [4, 10] }).success).toBe(false);
   });
 
   it('讲稿时长估计：英文按词、中文按字，外加起止留白', () => {

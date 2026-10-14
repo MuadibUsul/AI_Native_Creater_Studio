@@ -55,9 +55,16 @@ export interface GenerationQuote {
   reserveCredits: number;
 }
 
+/** 供应商只能生成固定时长（offer.durationOptions）时：按不短于所需的最短一档计（没有更长的档位时取最长一档） */
+export function billedSeconds(offer: GenerationOffer, seconds: number): number {
+  if (offer.durationOptions === undefined) return seconds;
+  const options = [...offer.durationOptions].sort((left, right) => left - right);
+  return options.find((option) => option >= seconds - 1e-9) ?? options[options.length - 1] ?? seconds;
+}
+
 export function quoteGeneration(offer: GenerationOffer, kind: GenerationKind, seconds: number): GenerationQuote {
-  const minSeconds = kind === 'AVATAR_CLIP' ? Math.round(seconds * 0.8 * 10) / 10 : seconds;
-  const maxSeconds = kind === 'AVATAR_CLIP' ? Math.min(offer.maxSeconds, Math.round(seconds * 1.3 * 10) / 10) : seconds;
+  const minSeconds = billedSeconds(offer, kind === 'AVATAR_CLIP' ? Math.round(seconds * 0.8 * 10) / 10 : seconds);
+  const maxSeconds = billedSeconds(offer, kind === 'AVATAR_CLIP' ? Math.min(offer.maxSeconds, Math.round(seconds * 1.3 * 10) / 10) : seconds);
   const minMicros = Math.ceil(minSeconds * offer.perSecondMicros.min);
   const maxMicros = Math.ceil(maxSeconds * offer.perSecondMicros.max);
   return { minSeconds, maxSeconds, minMicros, maxMicros, reserveCredits: Math.ceil(maxMicros / MICROS_PER_CREDIT) };

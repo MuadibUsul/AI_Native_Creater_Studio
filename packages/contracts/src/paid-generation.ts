@@ -90,7 +90,12 @@ export const generationOfferSchema = z.object({
   maxSeconds: z.number().int().min(1).max(MAX_GENERATION_SECONDS),
   /** 数字人：供应商能说的语言（BCP 47 主标签）；其他类型为空 */
   languages: z.array(z.string().regex(/^[a-z]{2,3}$/)).max(40).default([]),
-}).strict();
+  /**
+   * 供应商只能生成固定时长（秒，如 Veo 的 4/6/8）：报价与计费按不短于所需的最短一档；缺省 = 按所需秒数。
+   * 最长一档不得超过 maxSeconds。
+   */
+  durationOptions: z.array(z.number().int().min(1).max(MAX_GENERATION_SECONDS)).min(1).max(10).optional(),
+}).strict().refine((offer) => offer.durationOptions === undefined || Math.max(...offer.durationOptions) <= offer.maxSeconds, 'durationOptions must not exceed maxSeconds');
 export type GenerationOffer = z.infer<typeof generationOfferSchema>;
 
 export const generationCostSourceSchema = z.enum(['PROVIDER', 'QUOTE_MAX']);

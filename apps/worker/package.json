@@ -16,6 +16,7 @@
     "@ancs/db": "workspace:*",
     "@ancs/domain": "workspace:*",
     "@ancs/providers-anthropic": "workspace:*",
+    "@ancs/providers-gemini": "workspace:*",
     "@ancs/providers-credential-vault-local": "workspace:*",
     "@ancs/providers-mock-provider": "workspace:*",
     "@ancs/providers-queue-bullmq": "workspace:*",
