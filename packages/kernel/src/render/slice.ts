@@ -42,6 +42,20 @@ function canonical(time: MediaTime, plan: Pick<RenderPlan, 'frameRate'>): MediaT
   return rescaleMediaTime(parsed, frameTimebase(plan), 'nearest');
 }
 
+/**
+ * 平移到窗口起点：两边都能在帧时基精确表示时（常见情况）按帧刻度精确相减、结果仍在帧时基；
+ * 否则退回纳秒时基。直接用纳秒相减会把 38/30 s 这类非有限小数四舍五入成 1266666667 ns，
+ * 下游 FFmpeg 的公共时基随之膨胀到 32 位整数之外（预览渲染失败）。
+ */
+function shiftToWindow(time: MediaTime, origin: MediaTime, plan: Pick<RenderPlan, 'frameRate'>): MediaTime {
+  const a = canonical(time, plan);
+  const b = canonical(origin, plan);
+  if (a.timebase.num === b.timebase.num && a.timebase.den === b.timebase.den) {
+    return mediaTimeSchema.parse({ ticks: (BigInt(a.ticks) - BigInt(b.ticks)).toString(), timebase: a.timebase });
+  }
+  return canonical(subtractMediaTime(a, b), plan);
+}
+
 const maxTime = (left: MediaTime, right: MediaTime): MediaTime => (compareMediaTime(left, right) >= 0 ? left : right);
 const minTime = (left: MediaTime, right: MediaTime): MediaTime => (compareMediaTime(left, right) <= 0 ? left : right);
 
@@ -70,7 +84,7 @@ function withHash(plan: Omit<RenderPlan, 'planHash'>): RenderPlan {
 /** 视频切片：窗口内的画面（音频、字幕清空），时间平移到 0 起。 */
 export function sliceRenderPlanVideo(plan: RenderPlan, window: MediaRange): RenderPlan {
   const bounds = mediaRangeSchema.parse(window);
-  const shift = (time: MediaTime): MediaTime => canonical(subtractMediaTime(time, bounds.start), plan);
+  const shift = (time: MediaTime): MediaTime => shiftToWindow(time, bounds.start, plan);
   const usedSources = new Set<string>();
   const videoLayers = plan.videoLayers.map((layer) => ({
     ...layer,
@@ -95,7 +109,7 @@ export function sliceRenderPlanVideo(plan: RenderPlan, window: MediaRange): Rend
     sequenceId: plan.sequenceId,
     documentRevision: plan.documentRevision,
     frameRate: plan.frameRate,
-    duration: canonical(subtractMediaTime(bounds.end, bounds.start), plan),
+    duration: shiftToWindow(bounds.end, bounds.start, plan),
     sources: plan.sources.filter((source) => usedSources.has(source.assetVersionId)),
     videoLayers,
     audio: [],

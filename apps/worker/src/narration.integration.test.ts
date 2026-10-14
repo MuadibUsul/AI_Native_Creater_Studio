@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { AgentContentBlock, AgentEffectPorts, AgentModelAdapter, AgentModelRequest, AgentModelResponse, AgentNarrationPorts } from '@ancs/contracts';
-import { assets, assetVersions, compositionCaptionSpans, createDb, resolveTestDatabaseUrl, runMigrations, workflowRuns, type DbHandle } from '@ancs/db';
+import { assets, assetVersions, compositionCaptionSpans, createDb, jobs, resolveTestDatabaseUrl, runMigrations, workflowRuns, type DbHandle } from '@ancs/db';
 import {
   WorkflowRegistry,
   adoptProposal,
@@ -15,10 +15,12 @@ import {
   compositionFinalRenderWorkflow,
   createStudioProject,
   getAgentTurn,
+  getSequencePreview,
   getStudioState,
   getWorkflowRun,
   listProjectComposition,
   loadProposalForRead,
+  requestSequencePreview,
   startAgentTurn,
   startCompositionFinalRender,
   updateProjectProductionPolicy,
@@ -26,8 +28,10 @@ import {
 } from '@ancs/domain';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createProcessEffectRenderer } from './effect-renderer-process.js';
-import { createFliteNarrationSynthesizer } from './narration-synthesizer-process.js';
+import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
+import { findRepoRoot } from './render-executor-process.js';
+import { createPreviewRenderHandler } from './preview-render-handler.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createWorkflowAdvanceHandler } from './workflow-handler.js';
 
@@ -214,6 +218,14 @@ describe('V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚
     expect(captions.filter((caption) => caption.speechAnchorId === first.clipId)).toHaveLength(2);
     expect(captions.filter((caption) => caption.speechAnchorId === second.clipId)).toHaveLength(1);
 
+    // 预览（分段渲染、分段缓存）：讲述音频 + 图解卡也能出预览
+    const preview = await requestSequencePreview(deps(), { workspaceId, projectId: ref.projectId, sequenceId: ref.sequenceId, request: {} });
+    const previewJob = (await handle.db.select().from(jobs).where(eq(jobs.input, { previewId: preview.id })))[0];
+    await createPreviewRenderHandler({ executor: createFfmpegRenderPlanExecutor({ timeoutMs: 180_000 }) })
+      .handle(deps(), { previewId: preview.id }, { jobId: previewJob?.id ?? 'job_x', workspaceId, heartbeat: async () => undefined });
+    const previewDone = await getSequencePreview(deps(), { workspaceId, previewId: preview.id });
+    expect(previewDone.status, JSON.stringify(previewDone.error)).toBe('READY');
+
     const handler = createWorkflowAdvanceHandler({ registry: new WorkflowRegistry().register(compositionFinalRenderWorkflow({ executor: createFfmpegRenderPlanExecutor({ timeoutMs: 180_000 }), outputProbe: probe })) });
     const run = await startCompositionFinalRender(deps(), { workspaceId, projectId: ref.projectId, sequenceId: ref.sequenceId, request: { profile: PROFILE } });
     for (let round = 0; round < 6; round += 1) {
@@ -237,6 +249,23 @@ describe('V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚
     const raw = execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-ss', '1', '-i', file, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
     const corner = [...raw.subarray((5 * PROFILE.width + 5) * 3, (5 * PROFILE.width + 5) * 3 + 3)];
     expect(Math.abs(corner[0]! - 0x0f) + Math.abs(corner[1]! - 0x17) + Math.abs(corner[2]! - 0x20)).toBeLessThan(24);
+  });
+
+  it('进程驱动（部署方接入任意供应商）：按协议逐句调用参考实现，拼成一条音频，句界精确、可解码', { timeout: 120_000 }, async () => {
+    const synthesizer = createProcessNarrationSynthesizer({
+      executable: process.execPath,
+      args: [join(findRepoRoot(process.cwd()) ?? process.cwd(), 'scripts/narration-process-example.mjs')],
+      voices: [{ id: 'slt', name: 'SLT', languages: ['en'], description: 'flite example' }],
+      probe,
+    });
+    expect(synthesizer).toMatchObject({ implementation: 'REAL', engine: 'process:node' });
+    const output = await synthesizer.synthesize({ sentences: ['First sentence here.', 'And a second one.'], voice: 'slt', speed: 1 });
+    expect(output.probe).toMatchObject({ status: 'READY', streams: [expect.objectContaining({ type: 'AUDIO' })] });
+    expect(output.sentences).toHaveLength(2);
+    expect(output.sentences[0]!.startMs).toBe(0);
+    expect(output.sentences[1]!.startMs - output.sentences[0]!.endMs).toBeCloseTo(250, 0);
+    expect(output.durationMs).toBeCloseTo(output.sentences[1]!.endMs, 0);
+    await expect(synthesizer.synthesize({ sentences: ['x'], voice: 'nobody', speed: 1 })).rejects.toThrow(/unknown voice/);
   });
 
   it('规则与能力：素材工程默认不允许合成语音；中文讲述被英文声音拒绝；没有文章时数据图解被拒；未配置引擎；移除讲述连同字幕', { timeout: 600_000 }, async () => {

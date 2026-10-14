@@ -70,6 +70,7 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
 | `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
+| `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
 | `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
 | `ANCS_TRUST_PROXY_HOPS` | `0` | 前置可信代理跳数；为 0 时不信任 `X-Forwarded-For`。部署在负载均衡/反向代理后必须如实设置，否则所有用户共享代理 IP 的限流桶 |
 | `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流（每实例内存）；生产不得为 `off` |
@@ -134,6 +135,13 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - 参考视频存为工作区素材库里的草稿资产（`DRAFT_RENDER_30D`，许可证"未知"并记录来源链接与最终链接）；风格包 id 由工作流 id 派生（重放不会重复保存）。
 - 配置了 AI 导演（`ANCS_AGENT_DRIVER`）时由模型看测量结果与抽帧撰写说明（数值仍只来自测量，模型的画面观察标为推断）；否则用规则版说明。接口：`POST /api/v1/workspaces/:id/strategy-distills`（202，`project:write`，按"昂贵端点"限流）、`GET …/strategy-distills/:runId`、`PATCH …/strategy-packs/:packId`（内置预设 409）。
 - 命令行（不用数据库）：`node scripts/distill-reference.mjs [--json out.json] <文件或链接>…`，与工作流同一套测量与撰写代码。
+
+### 5.4 讲述配音（V6-5）
+
+- Worker 按 `ANCS_NARRATION_DRIVER` 装配语音合成：`flite`（FFmpeg 内置 libflite，本地英文语音，无需密钥）或 `process`（部署方的合成程序，见 `.env.example`）。不配置时讲述工具明确报不可用，装配清单（启动日志"外部能力驱动"）里没有 `narration`。
+- 合成逐句进行、拼成一条 24 kHz 单声道 WAV（句间 0.25 s），每句的起止位置精确，字幕按句生成并绑定讲述片段；产物经真实探测后存为 `VOICE_AUDIO`（来源 GENERATED，保留类 `KEEP_PAID_GENERATED`）。同一段讲述（引擎、声音、语速、句子相同）复用已有音频。
+- 合成语音受项目制作规则约束（`allowGeneratedSpeech`）：素材作品默认关闭，用户在共看片室顶栏"配音：关/开"显式切换（写工作区事件）；从文章开始的作品按新建时的选择。
+- 合成失败不自动重试，如实交还 AI；`process` 子进程每句硬超时 2 分钟、输出上限 64 MB。
 
 ## 6. 队列
 

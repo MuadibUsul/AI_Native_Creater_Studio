@@ -170,6 +170,24 @@ describe('V6-1c 共看片室（HTTP + SDK）', () => {
     expect(redone).toMatchObject({ clips: 1, duration: '240/30' });
   }, 60_000);
 
+  it('从文章新建（V6-5）：图文工程，文章存进简报；配音按新建时的选择；没有文章不能单独选配音', async () => {
+    const owner = await signedIn();
+    const workspace = await owner.workspaces.create({ name: `文章-${randomUUID().slice(0, 8)}` });
+    const article = { title: 'Fresh water', text: 'Water covers about 71 percent of the Earth.\nOnly 2.5 percent is fresh.' };
+    const ref = await owner.studio.create(workspace.id, { title: 'Fresh water', locale: 'en', article, narration: true }, { idempotencyKey: `s-${randomUUID()}` });
+    const state = await owner.studio.state(workspace.id, ref.projectId);
+    expect(state.project).toMatchObject({ allowEffects: true, allowNarration: true, article: { title: 'Fresh water', characters: article.text.length, paragraphs: 2 } });
+    expect(state.narration).toEqual([]);
+    const document = await owner.projects.state(ref.projectId, { schemaVersion: '1.0' });
+    expect(document.document.brief.article).toEqual(article);
+    expect(document.document.productionPolicy).toMatchObject({ mode: 'HYBRID', allowGeneratedSpeech: true, allowGeneratedVideo: false, allowGeneratedImage: false, allowProceduralGraphics: true, allowCaptions: true });
+
+    const silent = await owner.studio.create(workspace.id, { title: 'Quiet', article, narration: false }, { idempotencyKey: `s-${randomUUID()}` });
+    expect((await owner.studio.state(workspace.id, silent.projectId)).project.allowNarration).toBe(false);
+    // 不选文章时没有"配音"这个选项（契约拒绝，SDK 发出前即按同一 schema 校验）
+    await expect(owner.studio.create(workspace.id, { title: 'x', narration: true }, { idempotencyKey: `s-${randomUUID()}` })).rejects.toThrow(/narration is chosen together with an article/);
+  }, 60_000);
+
   it('制作规则开关（V6-3）：默认关闭程序化特效；编辑者显式开关；VIEWER 403；跨工作区 404；空修改被拒', async () => {
     const owner = await signedIn();
     const workspace = await owner.workspaces.create({ name: `特效-${randomUUID().slice(0, 8)}` });

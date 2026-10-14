@@ -23,6 +23,7 @@ import { createProcessEffectRenderer } from '../../apps/worker/dist/effect-rende
 import { createProcessMotionValidator } from '../../apps/worker/dist/motion-validator-process.js';
 import { createFfmpegReferenceAnalyzer } from '../../apps/worker/dist/reference-analyzer-process.js';
 import { createReferenceFetcher } from '../../apps/worker/dist/reference-fetcher.js';
+import { createFliteNarrationSynthesizer } from '../../apps/worker/dist/narration-synthesizer-process.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
@@ -30,7 +31,8 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
 /**
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
- *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] } }} options
+ *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite' } }} options
+ *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身）。
  *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
  */
 export async function startStudioEnv(options) {
@@ -93,6 +95,7 @@ export async function startStudioEnv(options) {
       ...(options.effects === undefined ? {} : {
         effects: { renderer: createProcessEffectRenderer({ probe }), validator: createProcessMotionValidator(), codegen: options.effects.codegen ?? 'disabled' },
       }),
+      ...(options.narration === undefined ? {} : { narration: { synthesizer: createFliteNarrationSynthesizer({ probe }) } }),
     }))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
     .register(referenceDistillWorkflow({

@@ -2,6 +2,8 @@
 // edit_timeline / review_draft / add_effect / update_effect；审片讨论只回方案，审片执行按批注指着的片段修改；
 // 请求里提到特效（爆炸、光效……）时用模板加在指着的画面区域，提到颜色时改已有特效的颜色。
 // 选了风格时（上下文里的 optional_style_strategy 只是数据）：第一版按风格测得的镜头中位时长切镜头，并在回复里说明。
+// 有文章、时间线为空时（V6-5）：逐段讲述（add_narration）→ 每段配一张图解卡，时间对齐该段讲述（标题卡 / 大数字 / 要点）→ 自检 → 回复。
+// 测试替身直接用文章段落当讲述稿；真实导演会改写成口语讲述稿。
 // 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
@@ -28,6 +30,9 @@ export class ScriptedDirector {
     const text = first.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
     const session = JSON.parse(tag(text, 'session') ?? '{}');
     const zh = session.language !== 'en';
+    const article = JSON.parse(tag(text, 'article') ?? 'null');
+    const startTimeline = JSON.parse(tag(text, 'timeline') ?? '{}');
+    if (article !== null && (startTimeline.clips ?? []).length === 0) return this.#articleStep(request, article, zh);
     const last = request.messages.at(-1);
     const results = last.content.filter((block) => block.type === 'tool_result');
     if (results.length > 0) {
@@ -117,6 +122,52 @@ export class ScriptedDirector {
       this.pendingReply = zh ? '把这一段剪短了 1 秒，后面的内容跟着前移。' : 'Trimmed this part by 1 second; everything after it moved up.';
     }
     return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
+  }
+
+  /** 文章第一版：按已经做过的工具调用推进（讲述 → 图解卡 → 自检 → 回复）。 */
+  #articleStep(request, article, zh) {
+    const calls = [];
+    const results = new Map();
+    for (const message of request.messages) {
+      for (const block of message.content) {
+        if (block.type === 'tool_use') calls.push(block);
+        if (block.type === 'tool_result') results.set(block.toolUseId, block);
+      }
+    }
+    const last = calls.at(-1);
+    const lastResult = last === undefined ? undefined : results.get(last.id);
+    if (lastResult?.isError === true && last.name === 'add_narration') {
+      const reason = JSON.parse(lastResult.content).reason ?? '';
+      return this.#reply(reason === 'NARRATION_LANGUAGE_UNSUPPORTED'
+        ? (zh ? '现在配置的声音不会说这篇文章的语言，需要先配置相应语言的配音。' : 'No configured voice speaks the language of this article; a voice for it has to be configured first.')
+        : (zh ? `没能配上讲述：${reason}` : `Could not add the narration: ${reason}`));
+    }
+    const paragraphs = article.paragraphs.map((paragraph) => paragraph.text);
+    const narrated = calls.filter((call) => call.name === 'add_narration').map((call) => JSON.parse(results.get(call.id)?.content ?? '{}'));
+    const tool = (name, input) => ({ model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name, input }], stopReason: 'tool_use', usage });
+    if (narrated.length < paragraphs.length) return tool('add_narration', { text: paragraphs[narrated.length] });
+    const cards = calls.filter((call) => call.name === 'add_effect');
+    if (cards.length < paragraphs.length) {
+      const index = cards.length;
+      const part = narrated[index];
+      const seconds = Math.min(30, Number(part.at[1]) - Number(part.at[0])).toFixed(3);
+      const paragraph = paragraphs[index];
+      const sentences = paragraph.split(/(?<=[.!?])\s+|(?<=[。！？])/).map((item) => item.trim()).filter(Boolean);
+      const number = paragraph.match(/\d[\d,]*(?:\.\d+)?(?:\s?(?:%|percent))?/);
+      if (index === 0) {
+        return tool('add_effect', { template: 'title-card', at: part.at[0], seconds, params: { title: article.title || sentences[0].slice(0, 80), subtitle: (sentences[0] ?? '').slice(0, 140) } });
+      }
+      if (number !== null) {
+        const value = number[0].replace(/\s?percent$/, '%');
+        return tool('add_effect', { template: 'big-number', at: part.at[0], seconds, params: { value, label: (sentences.find((item) => item.includes(number[0])) ?? sentences[0]).slice(0, 120) } });
+      }
+      return tool('add_effect', { template: 'key-points', at: part.at[0], seconds, params: { heading: sentences[0].split(/\s+/).slice(0, 4).join(' ').slice(0, 80), points: sentences.slice(0, 5).map((item) => item.slice(0, 60)).join('|') } });
+    }
+    if (!calls.some((call) => call.name === 'review_draft')) return tool('review_draft', {});
+    const total = narrated.at(-1)?.at?.[1] ?? '0';
+    return this.#reply(zh
+      ? `第一版：${String(paragraphs.length)} 段讲述（共 ${Number(total).toFixed(1)} 秒），每段配了一张图解卡。`
+      : `First version: ${String(paragraphs.length)} narrated parts (${Number(total).toFixed(1)} s in total), each with a diagram card.`);
   }
 
   #reply(text) {

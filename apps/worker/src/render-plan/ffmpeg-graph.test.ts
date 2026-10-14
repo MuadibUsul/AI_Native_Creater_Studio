@@ -57,6 +57,21 @@ describe('decimalSeconds', () => {
 });
 
 describe('compileFfmpegMediaGraph', () => {
+  it('偏移分母过大（纳秒四舍五入的时间）：吸附到源时基网格，公共时基不超出 FFmpeg 的 32 位整数', () => {
+    const ns = (ticks: string) => ({ ticks, timebase: { num: 1, den: 1_000_000_000 } });
+    const card = segment('c1', { start: ns('1266666667'), end: t(2_000) }, { start: t(0), end: { ticks: '22', timebase: { num: 1, den: 30 } } });
+    const graph = compileFfmpegMediaGraph({
+      plan: plan({ frameRate: { num: 30, den: 1 }, duration: t(2_000), videoLayers: [{ trackId: 'fx', trackPosition: 1, segments: [card] }] }),
+      profile: PROFILE,
+      sources: [{ assetVersionId: 'avA', path: 'assets/card.mov', videoTimeBase: { num: 1, den: 15360 }, audioChannels: null }],
+    });
+    const settb = /settb=1\/(\d+)/.exec(graph.filterGraph);
+    expect(settb).not.toBeNull();
+    expect(BigInt(settb![1]!)).toBeLessThanOrEqual(2_147_483_647n);
+    // 1.266666667 s 吸附到 1/15360 网格 = 19456/15360 s
+    expect(graph.filterGraph).toContain('settb=1/15360,setpts=PTS+19456');
+  });
+
   it('帧窗口与精确公共时基：段起止换成输出帧号，源时基与偏移落在整数刻度；总帧数/采样数由时长向上取整', () => {
     const graph = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES });
     // 3.5s @ 30000/1001 → ceil(104.895) = 105 帧；48 kHz → 168000 采样

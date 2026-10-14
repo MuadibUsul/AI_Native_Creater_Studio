@@ -72,6 +72,11 @@ const floorDiv = (num: bigint, den: bigint): bigint => {
 const ceilDiv = (num: bigint, den: bigint): bigint => -floorDiv(-num, den);
 const seconds = (time: MediaTime): Fraction => reduce(timeToFraction(time));
 
+/** FFmpeg 的时基分子分母都是 32 位整数；公共时基超过它时 settb 会被解析成 0（渲染失败）。 */
+const MAX_FFMPEG_TIMEBASE_DEN = 2_147_483_647n;
+/** 把时间吸附到 1/den 网格（四舍五入）。 */
+const snapTo = (value: Fraction, den: bigint): Fraction => reduce({ num: (value.num * den * 2n + value.den) / (value.den * 2n), den });
+
 /** 秒（有理数）→ 十进制字符串；`direction` 控制舍入（-ss 必须向下，保证"保持帧"被解码）。 */
 export function decimalSeconds(value: Fraction, direction: 'floor' | 'nearest', digits = 9): string {
   const scale = 10n ** BigInt(digits);
@@ -191,14 +196,20 @@ export function compileFfmpegMediaGraph(input: {
       if (source === undefined || source.videoTimeBase === null) {
         throw new Error(`staged source missing video stream: ${segment.sourceVersionId}`);
       }
-      const srcStart = seconds(segment.sourceRange.start);
-      const seqStart = seconds(segment.sequenceRange.start);
       const { kStart, kEnd } = frameWindow(segment.sequenceRange, fps);
       if (kEnd <= kStart) continue; // 段短于一帧间隔且不覆盖任何输出帧
-      const index = addInput(source.path, srcStart);
       // 公共时基 L：源时基与两个偏移均为整数刻度
       const sourceTb: Fraction = reduce({ num: BigInt(source.videoTimeBase.num), den: BigInt(source.videoTimeBase.den) });
-      const L = lcm(lcm(sourceTb.den, srcStart.den), seqStart.den);
+      let srcStart = seconds(segment.sourceRange.start);
+      let seqStart = seconds(segment.sequenceRange.start);
+      let L = lcm(lcm(sourceTb.den, srcStart.den), seqStart.den);
+      if (L > MAX_FFMPEG_TIMEBASE_DEN) {
+        // 偏移的分母过大（例如经纳秒时基四舍五入的时间）：吸附到源时基网格，误差不超过一个源刻度
+        srcStart = snapTo(srcStart, sourceTb.den);
+        seqStart = snapTo(seqStart, sourceTb.den);
+        L = lcm(lcm(sourceTb.den, srcStart.den), seqStart.den);
+      }
+      const index = addInput(source.path, srcStart);
       const shift = (seqStart.num * (L / seqStart.den)) - (srcStart.num * (L / srcStart.den));
       const placement = placementOf(segment, profile);
       const chain = [

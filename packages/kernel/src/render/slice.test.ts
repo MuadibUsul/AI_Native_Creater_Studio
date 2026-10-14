@@ -54,6 +54,20 @@ describe('renderPlanWindows', () => {
 });
 
 describe('sliceRenderPlanVideo', () => {
+  it('窗口中间开始的片段：平移按帧刻度精确相减（38/30 s 仍是帧时基，不变成四舍五入的纳秒）', () => {
+    const frameSegment = (start: number, end: number): RenderPlanVideoSegment => ({
+      ...segment('clp_card', [0, 1], [0, 1]),
+      sequenceRange: { start: frames(start), end: frames(end) },
+      sourceRange: { start: frames(0), end: frames(end - start) },
+    });
+    const full = plan([frameSegment(398, 561)], { duration: frames(561) });
+    const slice = sliceRenderPlanVideo(full, { start: frames(360), end: frames(420) });
+    const placed = slice.videoLayers[0]!.segments[0]!;
+    expect(placed.sequenceRange).toEqual({ start: frames(38), end: frames(60) });
+    expect(placed.sourceRange).toEqual({ start: frames(0), end: frames(22) });
+    expect(slice.duration).toEqual(frames(60));
+  });
+
   it('裁到窗口并平移到 0 起：源范围按映射同步裁切；不含音频与字幕；只列用到的源', () => {
     const full = plan([segment('clp_1', [1000, 3000], [10_000, 12_000]), segment('clp_2', [3000, 5000], [0, 2000], 'av_b')]);
     const slice = sliceRenderPlanVideo(full, { start: frames(60), end: frames(90) });
