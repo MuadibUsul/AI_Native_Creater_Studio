@@ -150,7 +150,7 @@ describe('Veo 生成镜头', () => {
     expect(probed.streams.find((item) => item.type === 'VIDEO')).toMatchObject({ width: 640, height: 360, averageFrameRate: { numerator: 30, denominator: 1 } });
     expect(probed.streams.some((item) => item.type === 'AUDIO')).toBe(true);
     expect(probed.durationMs).toBeGreaterThanOrEqual(3_900);
-    await expect(stat(join(workRoot, 'ok.mp4.veo.mp4'))).rejects.toThrow();
+    await expect(stat(join(workRoot, 'ok.mp4.provider.mp4'))).rejects.toThrow();
 
     await provider().generate(input('portrait.mp4', { width: 360, height: 640, seconds: 5, maxSeconds: 6 }));
     expect(JSON.parse(requests.filter((item) => item.path.endsWith(':predictLongRunning')).at(-1)!.body)).toMatchObject({ parameters: { aspectRatio: '9:16', durationSeconds: 6 } });

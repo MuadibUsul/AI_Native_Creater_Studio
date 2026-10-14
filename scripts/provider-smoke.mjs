@@ -5,8 +5,10 @@
 // Gemini 列出可用模型（不计费）+ 导演模型用一个工具回一句话 + TTS 合成一句话（各一次小请求）。
 // 加 --heygen-generate <照片.png|jpg> <声音样本.wav|mp3> 才会真的生成一段数字人视频（消耗 HeyGen 额度，约 2 秒）。
 // 加 --veo-generate 才会真的用 Veo 生成一段 4 秒镜头（按秒计费；模型取 ANCS_VEO_OFFER_JSON 的 model，缺省 veo-3.1-fast-generate-preview）。
+// 加 --seedance-generate [模型 id] 才会真的用火山方舟 Seedance 生成一段镜头（计费；时长取 ANCS_SEEDANCE_OFFER_JSON 最短一档，缺省 5 秒；
+//   模型取参数，其次 ANCS_SEEDANCE_OFFER_JSON 的 model）。方舟没有免费的探测接口，不加参数时不访问方舟。
 //
-// 密钥只从环境变量读（FISH_AUDIO_API_KEY / HEYGEN_API_KEY / GEMINI_API_KEY），不打印、不写文件。需要先构建：pnpm build。
+// 密钥只从环境变量读（FISH_AUDIO_API_KEY / HEYGEN_API_KEY / GEMINI_API_KEY / ARK_API_KEY），不打印、不写文件。需要先构建：pnpm build。
 // 在需要经代理出网的环境里加 NODE_USE_ENV_PROXY=1（Node 的 fetch 才会走 HTTPS_PROXY）。
 //
 // 用法：
@@ -18,6 +20,8 @@ import { join, resolve } from 'node:path';
 import { createFishAudioClient } from '../apps/worker/dist/fish-audio.js';
 import { createHeyGenAvatarProvider, createHeyGenClient } from '../apps/worker/dist/heygen.js';
 import { createVeoGenerationProvider } from '../apps/worker/dist/gemini-media.js';
+import { createSeedanceGenerationProvider } from '../apps/worker/dist/ark-media.js';
+import { createSeedance } from '../packages/providers/ark/dist/index.js';
 import { GeminiAgentModel, createGeminiHttp, createGeminiSpeech, createGeminiVeo } from '../packages/providers/gemini/dist/index.js';
 
 const args = process.argv.slice(2);
@@ -120,6 +124,44 @@ if (process.env.GEMINI_API_KEY) {
   }
 } else {
   report.push('Gemini：未设置 GEMINI_API_KEY，跳过');
+}
+
+const seedanceFlag = args.indexOf('--seedance-generate');
+if (seedanceFlag !== -1) {
+  if (!process.env.ARK_API_KEY) {
+    report.push('Seedance：未设置 ARK_API_KEY，跳过');
+  } else {
+    const configured = process.env.ANCS_SEEDANCE_OFFER_JSON ? JSON.parse(process.env.ANCS_SEEDANCE_OFFER_JSON) : null;
+    const argModel = args[seedanceFlag + 1] !== undefined && !args[seedanceFlag + 1].startsWith('--') ? args[seedanceFlag + 1] : undefined;
+    const model = argModel ?? configured?.model;
+    if (model === undefined) {
+      report.push('Seedance：需要模型 id（--seedance-generate <模型 id> 或 ANCS_SEEDANCE_OFFER_JSON），跳过');
+      process.exitCode = 1;
+    } else {
+      const offer = { ...(configured ?? { kind: 'VIDEO_SHOT', providerId: 'seedance', implementation: 'REAL', perSecondMicros: { min: 0, max: 1 }, maxSeconds: 10, languages: [], durationOptions: [5, 10] }), model };
+      const clipSeconds = Math.min(...offer.durationOptions);
+      const seedance = createSeedance({ apiKey: process.env.ARK_API_KEY, model, ...(process.env.ANCS_ARK_BASE_URL ? { baseUrl: process.env.ANCS_ARK_BASE_URL } : {}) });
+      const marks = [];
+      const started = Date.now();
+      const traced = {
+        model,
+        start: async (request) => { const id = await seedance.start(request); marks.push(`提交 ${String(Date.now() - started)} ms（任务 ${id}）`); return id; },
+        poll: async (id) => { const state = await seedance.poll(id); if (state.done) marks.push(`完成 ${String(Math.round((Date.now() - started) / 1000))} s${state.tokens === null ? '' : `，用量 ${String(state.tokens)} tokens`}`); return state; },
+        download: async (uri) => { const bytes = await seedance.download(uri); marks.push(`下载 ${String(bytes.byteLength)} 字节`); return bytes; },
+      };
+      const outputPath = join(out, 'seedance-shot.mp4');
+      try {
+        const result = await createSeedanceGenerationProvider({ seedance: traced, offer, ...(process.env.ANCS_SEEDANCE_RESOLUTION ? { resolution: process.env.ANCS_SEEDANCE_RESOLUTION } : {}) }).generate({
+          kind: 'VIDEO_SHOT', providerId: offer.providerId, prompt: '清晨的山间湖面，薄雾在水面上缓缓流动，镜头缓慢向前推进，柔和的晨光', script: null, language: null,
+          seconds: clipSeconds, maxSeconds: clipSeconds, width: 1280, height: 720, fps: 30, outputPath, likenessPath: null, voicePath: null, sourcePath: null, region: null,
+        });
+        report.push(`Seedance 生成镜头 ${model} OK：任务 ${String(result.providerJobId)}，${seconds(outputPath).toFixed(2)} 秒 → ${outputPath}；${marks.join('；')}`);
+      } catch (error) {
+        report.push(`Seedance 生成镜头 ${model} 失败（${error.outcome ?? 'ERROR'}）：${error.message}${marks.length > 0 ? `；${marks.join('；')}` : ''}`);
+        process.exitCode = 1;
+      }
+    }
+  }
 }
 
 for (const line of report) console.log(line);

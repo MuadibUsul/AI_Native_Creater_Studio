@@ -4,6 +4,7 @@ import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
+import { createSeedance } from '@ancs/providers-ark';
 import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
@@ -20,6 +21,7 @@ import { UNCONFIGURED_GENERATION_EXECUTOR, createPaidGenerationExecutor, createP
 import { createFishAudioClient, createFishAudioNarrationSynthesizer } from './fish-audio.js';
 import { HEYGEN_DEFAULT_OFFER, combineGenerationProviders, createHeyGenAvatarProvider, createHeyGenClient } from './heygen.js';
 import { createGeminiNarrationSynthesizer, createVeoGenerationProvider } from './gemini-media.js';
+import { createSeedanceGenerationProvider } from './ark-media.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
@@ -192,7 +194,16 @@ const veoProvider = veoOffer === undefined || config.GEMINI_API_KEY === undefine
   offer: veoOffer,
   ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
 });
-const generationProviders = [videoGenerationProvider, veoProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
+/** V6-8 生成镜头接火山方舟 Seedance（配置 ANCS_SEEDANCE_OFFER_JSON 即启用；报价依据由部署方按方舟价格换算填写） */
+const seedanceOffer = config.ANCS_SEEDANCE_OFFER_JSON === undefined ? undefined : generationOfferSchema.parse(JSON.parse(config.ANCS_SEEDANCE_OFFER_JSON));
+const seedanceProvider = seedanceOffer === undefined || config.ARK_API_KEY === undefined ? undefined : createSeedanceGenerationProvider({
+  seedance: createSeedance({ apiKey: config.ARK_API_KEY, model: seedanceOffer.model, ...(config.ANCS_ARK_BASE_URL === undefined ? {} : { baseUrl: config.ANCS_ARK_BASE_URL }) }),
+  offer: seedanceOffer,
+  generateAudio: config.ANCS_SEEDANCE_GENERATE_AUDIO !== '0',
+  ...(config.ANCS_SEEDANCE_RESOLUTION === undefined ? {} : { resolution: config.ANCS_SEEDANCE_RESOLUTION }),
+  ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+});
+const generationProviders = [videoGenerationProvider, veoProvider, seedanceProvider, avatarProvider].filter((provider): provider is GenerationProvider => provider !== undefined);
 const generationProvider = generationProviders.length === 0 ? undefined : combineGenerationProviders(generationProviders);
 const generationExecutor = generationProvider === undefined || deps.storage === undefined ? undefined : createPaidGenerationExecutor({
   provider: generationProvider, storage: deps.storage, probe: sourceMediaProbe, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
@@ -207,6 +218,7 @@ const providerInventory: ProviderInventoryEntry[] = [
   ...(videoGenerationProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'paid_generation', driver: 'process', implementation: 'REAL' as const }]),
   ...(avatarProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'avatar_generation', driver: 'heygen', implementation: 'REAL' as const }]),
   ...(veoProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'video_generation', driver: 'veo', implementation: 'REAL' as const }]),
+  ...(seedanceProvider === undefined || generationExecutor === undefined ? [] : [{ capability: 'video_generation', driver: 'seedance', implementation: 'REAL' as const }]),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
 if (inventoryIssues.length > 0) {

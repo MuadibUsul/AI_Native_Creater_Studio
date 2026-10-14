@@ -27,7 +27,7 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | V6-6 | 蒸馏器：从参考视频学风格——上传文件或粘贴链接（1–5 条）→ 真实 FFmpeg 测量剪法（镜头时长、剪辑频率、节奏曲线、卡点比例与随机对照、黑场过渡、色调、响度、节拍）→ 一个可选的风格（只列测得到的，没测的如实列出）→ 改说明 → 选用后作为 AI 的风格参考 | 已交付，真实浏览器 + 真实 FFmpeg 测量验证（合成参考视频与真值一致）；**平台链接（YouTube 等）需部署方配置下载命令**，指定的三条 YouTube 视频因本环境网络不通尚未测量；模型撰写说明待密钥；景别/推拉/变速/字幕样式还没测 |
 | V6-5 | 文章转视频：新建时贴一篇文章 → AI 写讲述稿、合成配音（讲述轨 + 逐句字幕）、为每个要点配图解卡（标题、要点、步骤、引用、柱状图、大数字；数据图只用文章里的数字，服务端校验）→ 共看片室里接着改；可选"知识解说"风格 | 已交付，真实浏览器 + 真实语音合成（本地 flite，英文）+ 真实特效渲染 + 真实 FFmpeg 验证；**供应商配音（中文）待接入**（进程协议已就绪，有参考实现）；**AI 为脚本导演，真实 Claude 待密钥**；旧 Scene 流水线待真实验证后下线 |
 | V6-7 | 数字人与嗓音："我的形象与声音"（参考照片 + 声音样本 + 只增不改、可撤回的授权记录）→ 作品里说"用我的数字人说这段" → AI 只报价 → 你确认 → 预算预留 → 生成一次（不自动重试，结果不明进入待对账）→ 拉回自有存储 → 有声画中画试改 → 按实结算；HeyGen（数字人）+ Fish Audio（你的声音、讲述配音）适配器 | 已交付，真实浏览器 + 真实 FFmpeg 验证；**生成供应商实测用 FFmpeg 测试替身**；HeyGen / Fish Audio 适配器按公开接口用本地替身服务测过协议，**真实服务待放行网络后验证**；AI 为脚本导演 |
-| V6-8 | 视频生成重特效：框出区域说"换成……"→ 报价 → 确认 → 只取框内的生成层（框外保持原片，并测量供应商是否改了框外）；生成镜头；视频生成供应商经进程协议接入；可选风格"高能娱乐"与娱乐评测集模板 | 已交付，真实浏览器 + 真实 FFmpeg 验证（框内变、框外不变）；Google Veo 生成镜头适配器就绪（按 4/6/8 秒档位报价）；真实 Veo 测试时这把 Key 在免费层没有 Veo 配额（提交被拒、未扣费），**待开通付费层**；娱乐评测待你的原片 |
+| V6-8 | 视频生成重特效：框出区域说"换成……"→ 报价 → 确认 → 只取框内的生成层（框外保持原片，并测量供应商是否改了框外）；生成镜头；视频生成供应商经进程协议接入；可选风格"高能娱乐"与娱乐评测集模板 | 已交付，真实浏览器 + 真实 FFmpeg 验证（框内变、框外不变）；Google Veo 与火山方舟 Seedance 生成镜头适配器就绪（按时长档位报价）；真实 Veo 测试时这把 Key 在免费层没有 Veo 配额（提交被拒、未扣费），**待开通付费层**；**真实 Seedance 待网络放行 `*.volces.com`**；娱乐评测待你的原片 |
 | 供应商：Google Gemini | 同一个模型端口接 Gemini：AI 导演、素材画面理解、风格撰写；Gemini TTS 讲述配音（中英）；Veo 生成镜头 | **导演、画面理解、中文讲述已用真实 Gemini 验证**（初剪评测 5 例、真实浏览器 4/4，记录 `docs/V06/milestones/gemini-provider.md`）；实测模型为 flash-lite（flash 当时过载）；暴露的质量问题（指向范围没守住等）如实记录；免费层 TTS 每天 10 次 |
 
 只有带证据的 `VERIFIED` 计入完成；脚本模型 / Mock 通过 ≠ 真实 Provider 通过。各里程碑的"未验证与待办"见 `docs/V06/milestones/`。
@@ -73,6 +73,7 @@ ANCS_GENERATION_DRIVER=process # 生成镜头 / 选区重绘：你写的小程�
 ANCS_GENERATION_EXECUTABLE=…
 ANCS_GENERATION_OFFERS_JSON=…  # 每类的每秒价格区间与单次上限（报价依据）
 ANCS_VEO_OFFER_JSON=…          # 生成镜头接 Google Veo（需 GEMINI_API_KEY）：model、每秒价格（按 Google 价格页填）、durationOptions [4,6,8]
+ANCS_SEEDANCE_OFFER_JSON=…     # 生成镜头接火山方舟 Seedance（需 ARK_API_KEY）：model、每秒价格（按方舟价格换算）、整数秒 durationOptions
 ```
 
 另外**工作区必须设置生成预算**（没设时确认会被拒绝）。网络需放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；配好后先跑 `NODE_USE_ENV_PROXY=1 node scripts/provider-smoke.mjs`（一句话 TTS + 读 HeyGen 额度，几乎不花钱）。
@@ -111,7 +112,7 @@ cd apps/web && npx next start -p 3000
 | `node scripts/effects-browser-check.mjs` | 代码生成特效端到端：项目规则开关 → 框选画面 → 特效试改（预览像素校验）→ 改颜色 → 采用，真实 API/Worker/FFmpeg + 真实特效渲染子进程，脚本导演；截图写入 `docs/verification/artifacts/v6-3/` |
 | `node scripts/narration-browser-check.mjs` | 文章转视频端到端：新建页贴文章 → AI 讲述 + 图解卡（真实 flite 合成 + 真实特效渲染）→ 预览音量与卡片画面校验 → 采用；中英、深色、手机宽度；截图写入 `docs/verification/artifacts/v6-5/` |
 | `node scripts/generation-browser-check.mjs` | 付费生成端到端：顶栏"生成"开关 → 框出区域说"换成……"→ 报价卡 → 确认 → 只取框内的生成层（圈外测量）→ 采用；我的形象与声音（上传、声明、授权）→ 数字人画中画；中英、深色、手机宽度；脚本导演 + FFmpeg 测试替身；截图写入 `docs/verification/artifacts/v6-7/` |
-| `node scripts/provider-smoke.mjs [--heygen-generate 照片 声音] [--veo-generate]` | 真实 Fish Audio / HeyGen / Gemini 冒烟：缺省只合成一句话、读 HeyGen 额度、列 Gemini 模型并让导演模型调一次工具；加参数才真的生成约 2 秒数字人或 4 秒 Veo 镜头（计费）。密钥只从环境变量读 |
+| `node scripts/provider-smoke.mjs [--heygen-generate 照片 声音] [--veo-generate] [--seedance-generate 模型]` | 真实 Fish Audio / HeyGen / Gemini / 火山方舟冒烟：缺省只合成一句话、读 HeyGen 额度、列 Gemini 模型并让导演模型调一次工具；加参数才真的生成约 2 秒数字人、4 秒 Veo 或 5 秒 Seedance 镜头（计费）。密钥只从环境变量读 |
 | `node scripts/gemini-browser-check.mjs` | 真实 Gemini 导演 + 画面理解的共看片室浏览器验收（需 `GEMINI_API_KEY`，少量费用） |
 | `node scripts/eval-first-cut.mjs --set evals/first-cut/explainer.json` | 文章转视频评测（英文用例用本地 flite 讲述；中文用例需要中文配音，没有时跳过并写明原因） |
 | `node scripts/distill-browser-check.mjs` | 从参考视频学风格端到端：网页链接未配置下载工具的失败提示 → 上传 + 直接链接两条已知真值的参考视频 → 结果卡与真值比对 → 改说明 → 选用后 AI 按风格剪第一版；真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-6/` |

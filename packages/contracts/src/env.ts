@@ -350,6 +350,25 @@ export const workerEnvSchema = z.object({
       return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
     } catch { return false; }
   }, 'ANCS_VEO_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带 durationOptions，例如 [4,6,8]）').optional(),
+  /** 火山方舟（Volcengine Ark）API Key：Seedance 生成镜头（ANCS_SEEDANCE_OFFER_JSON）。只在 Worker 内存中使用，只放请求头 */
+  ARK_API_KEY: z.string().min(16, 'ARK_API_KEY 过短').optional(),
+  /** 方舟 API 地址（缺省 https://ark.cn-beijing.volces.com/api/v3） */
+  ANCS_ARK_BASE_URL: z.string().url('ANCS_ARK_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_ARK_BASE_URL 必须是 https').optional(),
+  /**
+   * V6-8 生成镜头接火山方舟 Seedance（需 ARK_API_KEY）：VIDEO_SHOT 的报价依据，model 为 Seedance 模型 id（如 doubao-seedance-2-5-260628），
+   * durationOptions 为整数秒档位（按不短于所需的最短一档计费）。价格按方舟价格页换算成美元微单位填写（方舟按 token 计价、人民币结算），平台不内置。
+   * 配置即启用；与 Veo、进程驱动、数字人可以并存。
+   */
+  ANCS_SEEDANCE_OFFER_JSON: z.string().refine((value) => {
+    try {
+      const offer = generationOfferSchema.safeParse(JSON.parse(value));
+      return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
+    } catch { return false; }
+  }, 'ANCS_SEEDANCE_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带整数秒 durationOptions，例如 [5,10]）').optional(),
+  /** Seedance 是否同时生成声音（缺省 1） */
+  ANCS_SEEDANCE_GENERATE_AUDIO: z.enum(['0', '1'], { message: 'ANCS_SEEDANCE_GENERATE_AUDIO 仅支持 0 | 1' }).optional(),
+  /** Seedance 分辨率（如 480p / 720p / 1080p；缺省用模型的缺省值） */
+  ANCS_SEEDANCE_RESOLUTION: z.string().regex(/^\d{3,4}p$/, 'ANCS_SEEDANCE_RESOLUTION 形如 720p').optional(),
   /** 单次生成子进程超时（秒，缺省 1200）；超时按"结果不明"处理（待对账，不重试） */
   ANCS_GENERATION_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(7200).optional(),
 });
@@ -384,6 +403,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
     if (driver === 'gemini' && value.GEMINI_API_KEY === undefined) {
       issues.push({ variable: 'GEMINI_API_KEY', message: `${variable}=gemini 时必须配置 GEMINI_API_KEY（fail-closed，不回退 Mock）` });
     }
+  }
+  if (value.ANCS_SEEDANCE_OFFER_JSON !== undefined && value.ARK_API_KEY === undefined) {
+    issues.push({ variable: 'ARK_API_KEY', message: '配置了 ANCS_SEEDANCE_OFFER_JSON（Seedance 生成镜头）时必须配置 ARK_API_KEY' });
   }
   if (value.ANCS_VEO_OFFER_JSON !== undefined && value.GEMINI_API_KEY === undefined) {
     issues.push({ variable: 'GEMINI_API_KEY', message: '配置了 ANCS_VEO_OFFER_JSON（Veo 生成镜头）时必须配置 GEMINI_API_KEY' });

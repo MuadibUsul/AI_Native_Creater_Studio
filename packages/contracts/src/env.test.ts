@@ -218,6 +218,21 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     }
   });
 
+  it('火山方舟 Seedance：报价依据必须带整数秒档位；缺 ARK_API_KEY 启动失败；地址必须是 https；分辨率形如 720p', () => {
+    const seedance = { kind: 'VIDEO_SHOT', providerId: 'seedance', implementation: 'REAL', model: 'doubao-seedance-2-5-260628', perSecondMicros: { min: 50_000, max: 50_000 }, maxSeconds: 10, durationOptions: [5, 10] };
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(seedance) });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['ARK_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(seedance), ARK_API_KEY: 'a'.repeat(40), ANCS_SEEDANCE_RESOLUTION: '720p', ANCS_SEEDANCE_GENERATE_AUDIO: '0' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    for (const bad of [{ ...seedance, durationOptions: [4.5] }, { ...seedance, durationOptions: undefined }, { ...seedance, kind: 'AVATAR_CLIP' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ARK_BASE_URL: 'http://ark.example.com/api/v3' }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ARK_BASE_URL: 'https://ark.ap-southeast.bytepluses.com/api/v3' }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_RESOLUTION: 'hd' }).ok).toBe(false);
+  });
+
   it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {
     const blankOptional = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: '', ANCS_STORAGE_SECRET: '  ', ANCS_PLATFORM_PROVIDER_KEYS: '' });
     expect(blankOptional.ok).toBe(true);
