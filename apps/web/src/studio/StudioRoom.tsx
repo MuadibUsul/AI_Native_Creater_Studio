@@ -22,7 +22,7 @@ import { useFootageWaveforms } from './studio-waveform';
 import { STRIP_ZOOM_LEVELS, StudioTimeStrip, nextStripZoom, type StripClip, type StripLane, type StudioSelection } from './StudioTimeStrip';
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 import { StudioShortcuts } from './StudioShortcuts';
-import { StudioTasks, studioTaskRows, useStudioExports, useTaskNotice } from './StudioTasks';
+import { StudioTaskNotice, StudioTasks, studioTaskRows, useStudioExports, useTaskNotice } from './StudioTasks';
 import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
 import { useReplySpeech } from '@/voice/useReplySpeech';
 import { useVoice } from '@/voice/useVoice';
@@ -438,6 +438,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const [footageOpen, setFootageOpen] = useState(false);
   const [distillOpen, setDistillOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const tasksButtonRef = useRef<HTMLButtonElement | null>(null);
   const exportsQuery = useStudioExports(workspaceId, projectId);
   const upload = (files: File[]) => {
     for (const file of files) {
@@ -572,18 +573,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           <span className={styles['divider']} aria-hidden="true" />
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
-          <span className={styles['tasksAnchor']}>
-            <button type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
-            {/* 任务结束的就近提醒：读屏礼貌播报；点一下打开任务抽屉 */}
-            <span role="status" className={styles['taskNoticeRegion']}>
-              {taskNotice.finished.length > 0 && !tasksOpen ? (() => {
-                const only = taskNotice.finished.length === 1 ? taskNotice.finished[0] : undefined;
-                const text = only !== undefined ? t.tasks.noticeOne(only.title, t.tasks.status[only.status]) : t.tasks.noticeMany(taskNotice.finished.length);
-                const failed = taskNotice.finished.some((row) => row.status === 'failed');
-                return <button type="button" className={styles['taskNotice']} data-status={failed ? 'failed' : 'done'} aria-label={t.tasks.noticeOpen(text)} onClick={() => { taskNotice.dismiss(); setDistillOpen(false); setFootageOpen(false); setTasksOpen(true); }}>{text}</button>;
-              })() : null}
-            </span>
-          </span>
+          <button ref={tasksButtonRef} type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
           <button type="button" className="btn icononly ghost small" aria-label={messages.common.toggleTheme} onClick={toggleTheme}><QuietIcon name="sun" /></button>
@@ -731,6 +721,12 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           onUse={(pack) => { setStrategy({ packId: pack.id, knobs: Object.fromEntries(pack.knobs.map((knob) => [knob.key, knob.defaultValue])) }); setDistillOpen(false); }}
         />
       ) : null}
+      {/* 任务结束的就近提醒：渲染在顶栏的横向滚动容器之外（否则会被裁掉），按任务按钮的位置浮在它下方 */}
+      <StudioTaskNotice
+        anchor={tasksButtonRef}
+        rows={tasksOpen ? [] : taskNotice.finished}
+        onOpen={() => { taskNotice.dismiss(); setDistillOpen(false); setFootageOpen(false); setTasksOpen(true); }}
+      />
       {tasksOpen ? <StudioTasks rows={taskRows} loadFailed={exportsQuery.isError} onClose={() => setTasksOpen(false)} /> : null}
       {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
       <StudioShortcuts open={shortcutsOpen} held={shortcutsHeld} onClose={() => setShortcutsOpen(false)} />

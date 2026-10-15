@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { useI18n } from '@/i18n/I18nProvider';
 import { CreditsBilling } from '@/ui/CreditsBilling';
 import styles from '@/components/quiet-frame/legacy.module.css';
 
@@ -10,5 +11,6 @@ import styles from '@/components/quiet-frame/legacy.module.css';
 
 export default function BillingPage() {
   const params = useParams<{ workspaceId: string }>();
-  return <div className="page narrow"><header className="sectionhead"><div><div className="eyebrow mb16">WORKSPACE / BILLING</div><h1>额度与账单</h1><p>余额、用量、套餐和账本记录以服务端状态为准。</p></div></header><div className={styles['surface']}><CreditsBilling workspaceId={params.workspaceId} /></div></div>;
+  const t = useI18n().messages.workspaceAdmin.billingPage;
+  return <div className="page narrow"><header className="sectionhead"><div><div className="eyebrow mb16">{t.eyebrow}</div><h1>{t.title}</h1><p>{t.lead}</p></div></header><div className={styles['surface']}><CreditsBilling workspaceId={params.workspaceId} /></div></div>;
 }

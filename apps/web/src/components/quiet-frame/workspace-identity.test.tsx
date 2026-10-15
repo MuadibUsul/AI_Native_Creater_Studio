@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { voiceCloneSchema, type VoiceClone } from '@ancs/contracts';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils.js';
 import { WorkspaceIdentity } from './workspace-identity.js';
 
@@ -173,5 +174,45 @@ describe('Quiet Frame 声音生命周期', () => {
     expect(screen.getByRole('dialog')).not.toBeNull();
     expect(fixture.retire).toHaveBeenCalledTimes(1);
     expect(fixture.submit).not.toHaveBeenCalled();
+  });
+});
+
+describe('Quiet Frame 身份页英文界面', () => {
+  it('英文界面：身份、声音生命周期与确认窗口全部显示英文，没有中文残留', async () => {
+    const clone = voiceCloneSchema.parse({
+      id: 'vcl_1', workspaceId: 'ws_1', creatorIdentityId: 'cid_1', kind: 'INSTANT', provider: 'mock-voice',
+      mode: 'MANAGED', status: 'READY', qualityVerdict: 'PASS', providerVoiceId: 'provider_voice_1',
+      createdAt: '2026-10-07T00:00:00Z', updatedAt: '2026-10-07T00:00:00Z',
+    });
+    const retire = vi.fn();
+    const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'EDITOR' }) },
+      creatorIdentities: { list: vi.fn().mockResolvedValue([{ id: 'cid_1', displayName: 'Author', updatedAt: '2026-10-07T00:00:00Z', brandIdentity: null, voiceIdentity: null }]) },
+      speechProfiles: { list: vi.fn().mockResolvedValue([]) },
+      assets: { list: vi.fn().mockResolvedValue([]) },
+      voiceClone: {
+        state: vi.fn().mockResolvedValue({ clone, consent: null, samples: [], boundToIdentity: true }),
+        consentStatement: vi.fn().mockResolvedValue({ statement: 'Consent statement v1' }),
+        retire,
+      },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><WorkspaceIdentity workspaceId="ws_1" /></I18nProvider>, client);
+    expect(await screen.findByRole('heading', { name: 'Make every piece unmistakably yours.' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Save identity' })).not.toBeNull();
+    expect(screen.getByLabelText('Identity name')).not.toBeNull();
+    expect(await screen.findByText('Delivery style')).not.toBeNull();
+    expect(screen.getByText('Brand look')).not.toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: /Manage my voice/ }));
+    await screen.findByRole('heading', { name: 'Clone status' });
+    expect(await screen.findByText('Consent statement v1')).not.toBeNull();
+    expect(screen.getByText('READY · mock-voice')).not.toBeNull();
+    expect(screen.getByText(/Linked to this identity · Updated /)).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Confirm consent' })).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Retire locally' }));
+    const dialog = screen.getByRole('dialog', { name: 'Confirm local retirement' });
+    expect(within(dialog).getByText('Identity: Author · Current status: READY')).not.toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).not.toBeNull();
+    expect(retire).not.toHaveBeenCalled();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 });

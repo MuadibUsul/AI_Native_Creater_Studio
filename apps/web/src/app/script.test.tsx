@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
 vi.mock('next/navigation', () => ({
@@ -186,5 +187,63 @@ describe('Script', () => {
     expect((screen.getByRole('button', { name: '锁定' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: '编辑' }) as HTMLButtonElement).disabled).toBe(true);
     expect(updateBlock).not.toHaveBeenCalled();
+  });
+});
+
+describe('Script (English UI)', () => {
+  const englishPlan = () => ({
+    ...plan([block({ text: 'The fed funds rate held at 5.25%.' }), block({ id: 'nbr_2', position: 1, text: 'Markets expect cuts.', locked: true, status: 'APPROVED', claimIds: [] })]),
+    title: 'Rates weekly',
+    thesis: 'What happened to rates.',
+    hook: 'Opening',
+    chapters: [{ id: 'nch_1', title: 'Opening and key facts', intent: null, narrationBlockIds: ['nbr_1', 'nbr_2'] }],
+    estimatedDurationMs: 65_000,
+  });
+
+  it('outline, narration blocks, sources and drawer render in English', async () => {
+    const source = {
+      id: 'src_1', workspaceId: 'ws_1', projectId: 'prj_1', url: 'https://example.com/research',
+      title: 'Research note', publisher: 'Research Lab', author: null, publishedAt: null,
+      retrievedAt: '2026-10-07T00:00:00Z', contentHash: 'a'.repeat(64),
+      excerpt: 'Saved excerpt', snapshotKind: 'live_fetch', note: null,
+    };
+    renderWithClient(<I18nProvider initialLocale="en"><ScriptPage /></I18nProvider>, mockClient({
+      ...editableWorkspace,
+      narrative: { current: vi.fn().mockResolvedValue(englishPlan()) },
+      content: { sources: vi.fn().mockResolvedValue([source]) },
+    }));
+    expect(await screen.findByText('Research note')).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Outline' })).toBeTruthy();
+    expect(screen.getByText('Script draft')).toBeTruthy();
+    expect(screen.getByText('1 / 2 paragraphs locked')).toBeTruthy();
+    expect(screen.getAllByText('About 1 min 05 s').length).toBeGreaterThan(0);
+    expect(screen.getByText('AI draft · Check the facts')).toBeTruthy();
+    expect(screen.getByText('Draft · About 4 s')).toBeTruthy();
+    expect(screen.getByText('Approved · About 4 s')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Lock' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Unlock' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
+    expect(screen.getByText('1 source')).toBeTruthy();
+    expect(screen.getByText('Research Lab · Web snapshot')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'View source →' }));
+    const dialog = screen.getByRole('dialog', { name: 'Source details' });
+    expect(within(dialog).getByText('Research Lab · Retrieved 2026-10-07T00:00:00Z')).toBeTruthy();
+    expect(within(dialog).getByRole('link', { name: 'Open original page →' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('empty state and read-only notice render in English', async () => {
+    renderWithClient(<I18nProvider initialLocale="en"><ScriptPage /></I18nProvider>, mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'VIEWER' }) },
+      narrative: { current: vi.fn().mockResolvedValue(null) },
+    }));
+    expect(await screen.findByText('No narrative plan yet')).toBeTruthy();
+    expect(await screen.findByText('Your role can only view the script.')).toBeTruthy();
+    expect(screen.getByLabelText('Article link')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Import and build narrative' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
   });
 });

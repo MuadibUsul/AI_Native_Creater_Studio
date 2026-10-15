@@ -1,6 +1,7 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils.js';
 import { WorkspaceIdentity } from './workspace-identity.js';
 import { WorkspaceExtensions } from './workspace-extensions.js';
@@ -119,6 +120,67 @@ describe('Quiet Frame 工作区与公开页', () => {
     await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', { providerId: 'provider.test', kind: 'LLM', label: '个人 LLM', secret: fixture }));
     await waitFor(() => expect((secret as HTMLInputElement).value).toBe(''));
     expect(screen.queryByText(fixture)).toBeNull();
+  });
+
+  it('英文界面：扩展目录与详情窗口显示英文，没有中文残留', async () => {
+    const enable = vi.fn().mockResolvedValue({ packId: 'ancs.pack.shorts-analyzer', version: '1.0', enabledAt: '2026-10-07T00:00:00Z' });
+    const client = mockClient({
+      packs: { list: vi.fn().mockResolvedValue([{ installation: { packId: 'ancs.pack.shorts-analyzer', status: 'INSTALLED', name: 'Shorts Analyzer', version: '1.0' }, enabled: false, enabledVersion: null }]), enable, disable: vi.fn() },
+      workspaces: { get: vi.fn().mockResolvedValue({ role: 'OWNER' }) },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><WorkspaceExtensions workspaceId="ws_1" /></I18nProvider>, client);
+    await screen.findByText('Shorts');
+    expect(screen.getByRole('heading', { name: 'One more step, when you need it.' })).toBeTruthy();
+    expect(screen.getByText('Finance charts')).toBeTruthy();
+    expect(screen.getByText('Not installed')).toBeTruthy();
+    expect(screen.getByText('Available')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Learn about and manage Shorts' }));
+    const dialog = screen.getByRole('dialog', { name: 'Shorts extension details' });
+    expect(within(dialog).getByText('Current status: Installed, not enabled')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enable' }));
+    await waitFor(() => expect(enable).toHaveBeenCalledWith('ws_1', 'ancs.pack.shorts-analyzer'));
+    expect((await screen.findByRole('status')).textContent).toBe('Extension enabled. Each project still needs to bind a version.');
+  });
+
+  it('英文界面：设置页各分类显示英文，额度按界面语言格式化，没有中文残留', async () => {
+    const feature = {
+      key: 'V04_MEDIA_EDITING', label: 'Footage editing', description: 'Import, preview and non-destructive editing.',
+      platforms: ['WEB'], minimumCapabilityLevel: 'INTERNAL_VALIDATED', releaseGate: 'G0', releaseReady: false,
+      requestedEnabled: false, effectiveState: 'OFF', reason: 'WORKSPACE_DISABLED', updatedAt: null,
+    };
+    const client = mockClient({
+      workspaces: { get: vi.fn().mockResolvedValue({ name: 'Studio', role: 'OWNER', privacyTier: 'STANDARD' }), features: vi.fn().mockResolvedValue([feature]) },
+      providerConnections: { list: vi.fn().mockResolvedValue([]) },
+      providerSettings: { list: vi.fn().mockResolvedValue([]) },
+      billing: { status: vi.fn().mockResolvedValue({ balanceCredits: 12500, budget: null, usage: { spentCredits: 1500, reservedCredits: 2 } }) },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><WorkspaceSettings workspaceId="ws_1" /></I18nProvider>, client);
+    expect(screen.getByRole('heading', { name: 'Stay in control. Keep it simple.' })).toBeTruthy();
+    expect(await screen.findByText('Script & direction')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Script & direction · Configuration' })).toBeTruthy();
+    expect(screen.getAllByText('Not connected').length).toBe(8);
+    expect(screen.getByRole('button', { name: 'Save connection securely' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Usage & budget' }));
+    expect(await screen.findByText('12,500 Credits')).toBeTruthy();
+    expect(screen.getByText('1,500')).toBeTruthy();
+    expect(screen.getByLabelText('Period limit (Credits)')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'New capabilities' }));
+    expect(await screen.findByText('Release gate G0 · WEB · Requires: Internally validated')).toBeTruthy();
+    expect(screen.getByText('Not selected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Select this capability' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workspace & members' }));
+    expect(await screen.findByText('Your role: OWNER. Members and invitations are managed on the Team page.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Manage team' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Security & privacy' }));
+    expect(await screen.findByRole('button', { name: 'Save privacy tier' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 
   it('欢迎页匿名入口前往登录，设计系统中的操作样本不伪装成真实数据', () => {

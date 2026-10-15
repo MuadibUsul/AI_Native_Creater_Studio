@@ -72,7 +72,7 @@ export default function DashboardPage() {
     mutationFn: async (title: string) => {
       const workspaceId = effectiveWorkspaceId ?? '';
       const channels = await client.channels.list(workspaceId);
-      const channel = channels[0] ?? (await client.channels.create(workspaceId, { name: '默认栏目' }));
+      const channel = channels[0] ?? (await client.channels.create(workspaceId, { name: messages.entry.newProject.defaultChannel }));
       return client.projects.create(workspaceId, { title, channelId: channel.id });
     },
     onSuccess: () => {

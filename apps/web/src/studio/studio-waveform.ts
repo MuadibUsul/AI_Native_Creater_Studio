@@ -64,6 +64,11 @@ export function waveformBars(wave: FootageWaveform, startSeconds: number, endSec
   return reverse ? result.reverse() : result;
 }
 
+/** 峰值（线性 0–1）→ 显示高度（0–1）：按分贝刻度，-54 dBFS 及以下为 0（与常见剪辑软件一致；只是显示换算，数据不变） */
+export function waveformLevel(peak: number): number {
+  return peak <= 0 ? 0 : Math.max(0, Math.min(1, 1 + (20 * Math.log10(peak)) / 54));
+}
+
 /** 读取这些素材的波形（按资产版本对应；索引不是这个版本的就不用）。索引还在进行中时每 5 秒再读一次。 */
 export function useFootageWaveforms(workspaceId: string, footage: { assetId: string; versionId: string }[]): ReadonlyMap<string, FootageWaveform> {
   const client = useAncsClient();

@@ -135,6 +135,7 @@
   2. 制作规则组按 Toggle Group 键盘模型重写为 `StudioRuleGroup`（单一 Tab 停靠点、←/→/↑/↓ 循环、Home/End、跳过禁用项）。
   3. 共看片室快捷键（空格、←/→ 逐帧、Shift+←/→ 一秒、Home/End、M 框选、/ 跟 AI 说、Esc 清除、+/−/0 缩放、? 列表）与"按住 Ctrl/⌘ 显示"的快捷键列表；正在输入、浮层打开或带修饰键时不接管；逐帧用 contracts 的有理 `stepFrames`。
   4. 审片页套用同一规范：内嵌屏幕、等宽时间、批注卡浮起、顶/底栏与页面同底。
+- **第四阶段（已完成，见第 10 节）**：旧页面全部中英双语（工作区与作品二级页、新建、登录、欢迎与设计系统页、运营后台，共 30 余个组件）；首页空状态入口收敛；时间带真实音频波形（顺带修正 Worker 的波形算法）；触屏双指缩放；任务结束就近提醒；Firefox / WebKit 跨引擎验证。
 - **第三阶段（已完成，见第 9 节）**：时间带缩放（档位 1–16×、Ctrl/⌘+滚轮以指针为锚、播放头自动跟随）与试改改动区间高亮（服务端 A/B 对照的真实区间）；旧 `quiet-frame.css` / `workspace.css` 颜色全部迁到 `ui.*`、装饰渐变与背景模糊全部移除，静态测试预算降为 0；任务中心（素材处理、付费生成、导出、AI 这一轮，跨刷新）。
 
 ## 6. 验证与结果
@@ -191,12 +192,14 @@
 
 ## 8. 仍需改进
 
-- 旧 Quiet Frame 页面（素材库、身份、作品表现、历史等）里的英文眉题与正文仍是硬编码中文 / 英文，尚未 i18n（9 处英文眉题）；本轮只做了首页与外框。
-- 首页入口收敛只做了不改流程的部分；是否删除空状态里的"快速创建"表单需要产品决定。
-- 音频片段没有波形（需要真实波形数据，不能画装饰波形——v0.4 禁止虚构数据与彩虹波形）。
-- 时间带缩放暂不支持触屏双指；手机上只有按钮缩放。
+- 没有挂载到任何页面的旧组件（`RenderReview`、`PlaybackSurface`、`VoiceCaptureControl`、`CompareReplayPanel`、`CanvasInteractionLayer`、`preview-harness`）仍是中文；哪天重新启用，要先补双语（英文界面冒烟会拦住）。
+- 服务端返回的错误信息与业务数据（校验错误、审计记录、发布清单步骤、功能目录的名称与说明）按服务端写入的语言原样显示；要双语需要服务端返回错误码或按 `Accept-Language` 返回文案。
+- 写进服务端的默认值随作者当时的界面语言：自动建的栏目名（默认栏目 / Default channel）、默认讲述风格名、素材解绑的编辑意图、重新绑定备注、Finance 预填的许可用途。导演台的编辑意图与发给 AI 的"只改选中分镜"提示仍是中文（记录与提示词，不是界面）。
+- 本次修正前已建索引的素材，WAVEFORM 仍是旧算法的读数（接近 0），时间带上画不出来（不会画假波形）；需要对这些素材调一次媒体索引重建接口（`POST /api/v1/workspaces/:id/assets/:assetId/media-index/rebuild`）。处理器版本号没有升级，因为升级会让所有旧索引同时失效、AI 的素材检索暂时为空。
+- 首页"只建空项目"保留为次要操作（它是不导入内容就建项目的唯一入口，历史验收脚本 n02-15 也依赖它）；若产品决定彻底去掉，需要同时改 n02-15 的脚本。
+- 抖音发布卡的 logo 文字自创建起就是"手动交付"、没有徽标（与 X 卡不同），像是笔误；本轮按原样保留，只加了注释，改它会改变中文页面。
 - 没有在 Linear / Figma 等产品内部做交互走查（无账号），相关结论只来自公开页面与文档。
-- 浏览器验证在 Linux Chromium（Chrome for Testing）完成；Safari / Firefox 的 `text-wrap`、`scrollbar-color` 支持度不同，不支持时退回默认表现，不影响功能。
+- 跨引擎验证用的是 Linux 上的 Firefox 与 WebKitGTK（WebKit 引擎，与 Safari 同源但不是 Safari 本身）；macOS / iOS Safari 未实测。
 
 ## 9. 第二、三阶段实施记录
 
@@ -218,3 +221,39 @@
 - `studio-browser-check`：抽屉进场动画（200 ms）未结束就截图，证据图里抽屉半透明 → 截图前等有限时长的动画结束（无限循环的"处理中"脉冲不等，最多 2 秒）。
 
 旧页面颜色迁移的前后对比：`compare/legacy-{settings,billing,analytics,identity,workspace-assets,team}.png`（左 = 迁移前，右 = 迁移后）。主要控件此前已被 `ui-tokens.css` 覆盖，所以迁移后的可见变化集中在残留的偏绿底色与边线、装饰渐变与背景模糊；布局与文字不变。
+
+## 10. 第四阶段实施记录
+
+| 项 | 解决什么 | 做法 | 验证 |
+|---|---|---|---|
+| 旧页面中英双语 | 素材库、身份、团队、设置、扩展、额度与账单、作品表现、渲染、发布、脚本、分镜/编辑导演台、版本历史、新建、登录、欢迎与设计系统页、运营后台仍是硬编码单语 | 按页面分 5 组文案文件（`i18n/pages/{asset-library,project-flow,workspace-admin,delivery,entry}.ts`，中文与改造前逐字一致，英文由类型检查保证覆盖同一结构），30 余个组件改为读文案；模块级标签表挪进文案；日期/数字按界面语言格式化；根布局的 `<html lang>`、跳转链接、页面描述与本地错误兜底文案随界面语言 | 每个页面组件补英文用例（断言关键英文文案且界面文字不含中文）；`quiet-frame-browser-smoke` 新增英文轮：顶栏切英文后逐页检查 15 个路由的界面文字与无障碍属性，页面从 `/api/v1/` 读到的服务端数据与脚本自己写入的中文数据不算界面文字 |
+| 首页空状态入口 | 两个主按钮（"开始创作"与空状态里的"创建项目"）同时争夺注意力 | "只建空项目"保留为次要按钮，空状态说明指向上方主入口与共看片室 | `dashboard.test.tsx`；截图 |
+| 时间带真实音频波形 | 声音片段只有灰条；而媒体索引里的 WAVEFORM 并不是响度（Worker 把音频重采样到 100 Hz 后取样本值，低通滤掉 50 Hz 以上，−6 dBFS 正弦只读到约 0.009） | Worker 改为流式读取 16 kHz 单声道 PCM、每 10 ms 取绝对值峰值（不缓存整段音频）；时间带按片段的源区间读素材自己的索引（按资产版本对应），按分贝刻度显示（−54 dBFS 到 0）；没有测量值、索引属于别的版本、试改里内容有改动的片段都不画 | Worker 集成用例（−6 dBFS 正弦读数约 500、静音为 0）；`studio-waveform.test.ts`（拼接、取峰、倒放、未知不插值、分贝刻度）；组件用例；浏览器"采用试改"步骤断言声音轨 3 段实测波形 |
+| 触屏双指缩放 | 手机/平板上时间带只能点按钮缩放 | 捕获阶段跟踪触点：两指捏合按档位缩放（以两指中点为锚），两指平移横向滚动；第二根手指落下时取消单指选择 | 组件用例；浏览器经 CDP 真实触摸输入：两指 80 → 200 px 缩放到 3×、播放头不动（截图 `18c-pinch`） |
+| 任务结束就近提醒 | 长任务结束要自己去任务中心看 | 只提醒这次打开页面后看着结束的任务（素材处理完、付费生成完成/没成功、导出完成/没成功；AI 这一轮就在对话里不另提醒），在任务按钮下方浮出、读屏礼貌播报（常驻播报区）、8 秒收起、点一下打开任务；渲染在顶栏的横向滚动容器之外、按按钮位置固定定位，压在抽屉与浮层之上 | `finishedTasks` 纯函数用例；组件用例；浏览器上传步骤断言"… · 完成"出现且中心点最上层就是它本身——首版放在顶栏按钮旁，被顶栏 `overflow-x: auto` 的滚动容器裁掉（Playwright 的"可见"不管裁切，是这条中心点断言抓到的），改为容器外固定定位后通过 |
+| 跨引擎验证 | 只在 Chromium 上验证过 | 新增零依赖脚本 `scripts/cross-engine-check.mjs`：Firefox 走 WebDriver BiDi（Node 22 自带 WebSocket），WebKit 走 WebKitWebDriver（W3C WebDriver）；准备一条真实素材的已采用作品，中英 × 1440/390 px × 首页/共看片室/审片/设置逐页检查 | 见下表 |
+
+第四阶段命令与结果：
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm lint` / `pnpm typecheck` | 通过 |
+| `pnpm test:unit` | 114 文件 / 824 测试全部通过 |
+| `pnpm test:web` | 50 文件 / 296 测试全部通过 |
+| Worker 媒体索引集成测试 | 3/3（含新增峰值用例） |
+| `pnpm secrets:check` / `arch:check` / `spec:check` / `capabilities:check` | 全部通过 |
+| `scripts/studio-browser-check.mjs` | 15/15（新增：采用后声音轨 3 段实测波形；素材处理完时任务按钮旁出现"完成"且没被遮挡；CDP 真实触摸两指捏合缩放到 3×、播放头不动） |
+| `scripts/review-browser-check.mjs` | 9/9 |
+| `scripts/generation-browser-check.mjs` | 6/6 |
+| `scripts/quiet-frame-browser-smoke.mjs` | 中文 11 个二级路由 + 英文 15 个路由全部通过（英文轮首跑发现两处脚本判定问题：英文界面里切回中文的按钮本就写"中文"、分镜页没有 `h1`——已调整判定，不是产品问题） |
+| `scripts/cross-engine-check.mjs`（Firefox 158 + WebKitGTK 2.52，Xvfb） | 33/33：两种引擎 × 中英 × 1440/390 px × 首页/共看片室/审片/设置，均无横向溢出、`<html lang>` 正确、共看片室片段与波形出现且导出按钮在屏幕内、英文界面无中文残留；两种引擎都支持 `text-wrap: balance` 与 `scrollbar-color` |
+
+证据：`docs/verification/artifacts/ui-refresh/phase4/{studio,review,generation,legacy-en}/`、`docs/verification/artifacts/ui-refresh/cross-engine/`（含 `summary.json`）。
+
+跨引擎环境说明：这台 Linux 容器里的 Firefox 来自 Mozilla 官方压缩包、WebKitGTK 与 Xvfb 来自 Ubuntu 软件源（都不进仓库，也没有运行 `playwright install`）；WebKitGTK 播放 H.264 需要 GStreamer 的 libav 插件：首跑时容器里没有，WebKit 截图的视频画面为黑；装上后复跑，画面正常（截图 `cross-engine/webkit-*-studio.png`）。WebKitGTK 与 Safari 同为 WebKit 引擎，但不是 Safari 本身。
+
+子任务里需要说明的取舍：
+- 写进服务端的默认值随作者当时的界面语言（见第 8 节）；导演台的编辑意图与发给 AI 的提示仍为中文。
+- 设置页的标签页与扩展页的"图文与短文"卡改用稳定的内部键，不再拿中文文案比较；素材筛选的内部键改为英文（`data-preview-kind` 的值随之变化，仓库内没有使用者）。
+- 中文界面的金额与 Credits 也按语言格式化，1000 以上带千分位（`12,000`）。
+- 英文界面里少数原本就是英文的眉题（如 `CREATOR STUDIO / EDITORIAL`）保持不变。

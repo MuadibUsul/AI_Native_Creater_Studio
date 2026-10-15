@@ -5,6 +5,7 @@ import type { SceneGraph } from '@ancs/contracts';
 import type { EditOperation } from '@ancs/contracts';
 import { legacyMillisecondsToMediaTime, type FrameRate, type MediaTime, type TemporalSelection, type TimelineViewport } from '@ancs/contracts';
 import { getComponent } from '@ancs/scene-components';
+import { useI18n } from '@/i18n/I18nProvider';
 import { TimelineBand, type TimelineBandLane } from './TimelineBand';
 import ui from './Monochrome.module.css';
 
@@ -47,6 +48,7 @@ export interface LiteTimelineProps {
 const MEDIA_TYPES = new Set(['IMAGE_FULL', 'REAL_BROLL', 'HOST_FULL', 'HOST_SIDE']);
 
 export function LiteTimeline({ graph, onEdit, assets = [], pending = false, error = null, band }: LiteTimelineProps) {
+  const t = useI18n().messages.projectFlow.liteTimeline;
   const [splitAt, setSplitAt] = useState<Record<string, string>>({});
   const scenes = [...graph.scenes].sort((left, right) => left.position - right.position);
 
@@ -63,7 +65,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
           end: legacyMillisecondsToMediaTime(scene.startMs + scene.durationMs),
         },
       }));
-    if (videoClips.length > 0) lanes.push({ id: 'video', label: '视频', kind: 'VIDEO', clips: videoClips });
+    if (videoClips.length > 0) lanes.push({ id: 'video', label: t.videoLane, kind: 'VIDEO', clips: videoClips });
     const captionClips = graph.captions
       .filter((caption) => caption.durationMs > 0)
       .map((caption) => ({
@@ -74,9 +76,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
           end: legacyMillisecondsToMediaTime(caption.startMs + caption.durationMs),
         },
       }));
-    if (captionClips.length > 0) lanes.push({ id: 'captions', label: '字幕', kind: 'CAPTION', clips: captionClips });
+    if (captionClips.length > 0) lanes.push({ id: 'captions', label: t.captionLane, kind: 'CAPTION', clips: captionClips });
     return lanes;
-  }, [scenes, graph.captions]);
+  }, [scenes, graph.captions, t]);
   const expected = (sceneId: string): Record<string, number> => {
     const scene = graph.scenes.find((candidate) => candidate.id === sceneId);
     return scene === undefined ? {} : { [scene.id]: scene.revision };
@@ -105,9 +107,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
   return (
     <div data-testid="lite-timeline" className={`flex flex-col gap-4 p-4 ${ui['panel']}`}>
       <div className="flex items-center justify-between">
-        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>Lite Timeline</h2>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>{t.title}</h2>
         <span className={`text-xs ${ui['mutedText']}`}>
-          共 {scenes.length} 场景 · 所有操作经编辑协议回写（含 revision 条件与幂等键）
+          {t.summary(scenes.length)}
         </span>
       </div>
 
@@ -126,9 +128,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
 
       {error !== null ? (
         <p data-testid="timeline-error" role="alert" className={`text-xs ${ui['notice']}`}>
-          {error.kind === 'conflict' ? '编辑冲突（服务端状态已变化）：请刷新后重试。' : '操作失败：'}
+          {error.kind === 'conflict' ? t.conflictError : t.failedPrefix}
           {error.message}
-          {error.code !== null ? `（${error.code}）` : ''}
+          {error.code !== null ? t.codeSuffix(error.code) : ''}
         </p>
       ) : null}
 
@@ -143,13 +145,13 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                 <span className={`w-8 ${ui['mutedText']}`}>#{scene.position}</span>
                 <span className="min-w-32 font-medium">
                   {scene.sceneType}
-                  {scene.locked ? <span className={`ml-1 text-xs ${ui['emphasis']}`}>已锁定</span> : null}
+                  {scene.locked ? <span className={`ml-1 text-xs ${ui['emphasis']}`}>{t.locked}</span> : null}
                 </span>
 
                 <label className="flex items-center gap-1">
-                  时长
+                  {t.duration}
                   <input
-                    aria-label={`时长 ${String(index)}`}
+                    aria-label={t.durationAria(index)}
                     type="number"
                     min={500}
                     step={100}
@@ -166,26 +168,26 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   ms
                 </label>
 
-                <button type="button" aria-label={`上移场景 ${String(index + 1)}`} disabled={pending || index === 0} onClick={() => move(scene.id, -1)} className={ui['button']}>
+                <button type="button" aria-label={t.moveUpAria(index + 1)} disabled={pending || index === 0} onClick={() => move(scene.id, -1)} className={ui['button']}>
                   ↑
                 </button>
                 <button
                   type="button"
                   disabled={pending || index === scenes.length - 1}
                   onClick={() => move(scene.id, 1)}
-                  aria-label={`下移场景 ${String(index + 1)}`}
+                  aria-label={t.moveDownAria(index + 1)}
                   className={ui['button']}
                 >
                   ↓
                 </button>
 
                 <label className="flex items-center gap-1">
-                  拆分
+                  {t.split}
                   <input
-                    aria-label={`拆分位置 ${String(index)}`}
+                    aria-label={t.splitAria(index)}
                     type="number"
                     min={1}
-                    placeholder="at ms"
+                    placeholder={t.splitPlaceholder}
                     value={splitAt[scene.id] ?? ''}
                     disabled={pending}
                     onChange={(event) => setSplitAt((current) => ({ ...current, [scene.id]: event.target.value }))}
@@ -202,7 +204,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                     }}
                     className={ui['button']}
                   >
-                    拆分
+                    {t.split}
                   </button>
                 </label>
 
@@ -212,7 +214,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   onClick={() => onEdit({ operations: [{ op: 'duplicate_scene', sceneId: scene.id, afterSceneId: null }], expectedSceneRevisions: {} })}
                   className={ui['button']}
                 >
-                  复制
+                  {t.duplicate}
                 </button>
                 <button
                   type="button"
@@ -220,7 +222,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   onClick={() => onEdit({ operations: [{ op: 'delete_scene', sceneId: scene.id }], expectedSceneRevisions: expected(scene.id) })}
                   className={ui['dangerButton']}
                 >
-                  删除
+                  {t.delete}
                 </button>
                 <button
                   type="button"
@@ -228,14 +230,14 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                   onClick={() => onEdit({ operations: [{ op: 'set_scene_lock', sceneId: scene.id, locked: !scene.locked }], expectedSceneRevisions: {} })}
                   className={ui['button']}
                 >
-                  {scene.locked ? '解锁' : '锁定'}
+                  {scene.locked ? t.unlock : t.lock}
                 </button>
 
                 <label className="flex items-center gap-1">
-                  转场
+                  {t.transition}
                   <input
-                    aria-label={`转场 ${String(index)}`}
-                    placeholder="in/out 例如 fade"
+                    aria-label={t.transitionAria(index)}
+                    placeholder={t.transitionPlaceholder}
                     defaultValue={`${String((scene.transition as { in?: string | null }).in ?? '')}/${String((scene.transition as { out?: string | null }).out ?? '')}`}
                     disabled={pending}
                     onBlur={(event) => {
@@ -249,9 +251,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                 {isMedia && definition !== null ? (
                   <>
                     <label className="flex items-center gap-1">
-                      缩放
+                      {t.scale}
                       <input
-                        aria-label={`缩放 ${String(index)}`}
+                        aria-label={t.scaleAria(index)}
                         type="number"
                         min={0.1}
                         max={4}
@@ -269,9 +271,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                       />
                     </label>
                     <label className="flex items-center gap-1">
-                      水平 %
+                      {t.offsetX}
                       <input
-                        aria-label={`水平偏移 ${String(index)}`}
+                        aria-label={t.offsetXAria(index)}
                         type="number"
                         min={-100}
                         max={100}
@@ -289,9 +291,9 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                       />
                     </label>
                     <label className="flex items-center gap-1">
-                      替换素材
+                      {t.replaceAsset}
                       <select
-                        aria-label={`替换素材 ${String(index)}`}
+                        aria-label={t.replaceAssetAria(index)}
                         defaultValue=""
                         disabled={pending || assets.length === 0}
                         onChange={(event) => {
@@ -304,7 +306,7 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
                         }}
                         className={ui['field']}
                       >
-                        <option value="">{assets.length === 0 ? '无可用资产' : '选择…'}</option>
+                        <option value="">{assets.length === 0 ? t.noAssets : t.chooseAsset}</option>
                         {assets.map((asset) => (
                           <option key={asset.id} value={asset.id}>
                             {asset.assetType} · {asset.id.slice(0, 10)}
@@ -321,15 +323,15 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
       </ol>
 
       <section data-testid="timeline-audio" className="flex flex-col gap-1 text-xs">
-        <h3 className={`font-semibold ${ui['primaryText']}`}>音轨（音量）</h3>
+        <h3 className={`font-semibold ${ui['primaryText']}`}>{t.audioTitle}</h3>
         {graph.audioTracks.length === 0 ? (
-          <p className={ui['mutedText']}>暂无音轨：Master Narration 在 P06-03（音频对齐）产生后在此调整音量/淡入淡出。</p>
+          <p className={ui['mutedText']}>{t.audioEmpty}</p>
         ) : (
           graph.audioTracks.map((track) => (
             <label key={track.id} className="flex items-center gap-2">
               {track.kind}
               <input
-                aria-label={`音量 ${track.id}`}
+                aria-label={t.volumeAria(track.id)}
                 type="number"
                 min={0}
                 max={2}
@@ -350,15 +352,15 @@ export function LiteTimeline({ graph, onEdit, assets = [], pending = false, erro
       </section>
 
       <section data-testid="timeline-captions" className="flex flex-col gap-1 text-xs">
-        <h3 className={`font-semibold ${ui['primaryText']}`}>字幕修正</h3>
+        <h3 className={`font-semibold ${ui['primaryText']}`}>{t.captionsTitle}</h3>
         {graph.captions.length === 0 ? (
-          <p className={ui['mutedText']}>暂无字幕：全局对齐（P06-03）产生字幕后在此修正文本。</p>
+          <p className={ui['mutedText']}>{t.captionsEmpty}</p>
         ) : (
           graph.captions.map((caption) => (
             <label key={caption.id} className="flex items-center gap-2">
               <span className={`w-20 ${ui['mutedText']}`}>{caption.startMs}ms</span>
               <input
-                aria-label={`字幕文本 ${caption.id}`}
+                aria-label={t.captionAria(caption.id)}
                 defaultValue={caption.text}
                 disabled={pending}
                 onBlur={(event) => {

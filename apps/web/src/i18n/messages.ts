@@ -1,4 +1,9 @@
 import type { Locale } from './locale';
+import { ASSET_LIBRARY_TEXT } from './pages/asset-library';
+import { PROJECT_FLOW_TEXT } from './pages/project-flow';
+import { WORKSPACE_ADMIN_TEXT } from './pages/workspace-admin';
+import { DELIVERY_TEXT } from './pages/delivery';
+import { ENTRY_TEXT } from './pages/entry';
 
 /**
  * 界面文案目录（中文为基准，英文必须覆盖同一结构——类型检查保证不缺键）。
@@ -14,6 +19,10 @@ const zhCN = {
     switchLanguage: 'English',
     switchLanguageAria: '切换为英文界面',
     toggleTheme: '切换浅深色',
+    skipToMain: '跳到主要内容',
+    appDescription: '支持素材剪辑、生成与混合制作的视频创作工作台',
+    apiUnavailable: '无法连接业务 API（请确认 API 已启动且地址正确）',
+    unknownError: '未知错误',
   },
   home: {
     studioTitle: '用你拍的素材剪一条视频',
@@ -570,6 +579,11 @@ const zhCN = {
     },
     readOnly: '你只能查看这条视频（没有编辑权限）。',
   },
+  assetLibrary: ASSET_LIBRARY_TEXT['zh-CN'],
+  projectFlow: PROJECT_FLOW_TEXT['zh-CN'],
+  workspaceAdmin: WORKSPACE_ADMIN_TEXT['zh-CN'],
+  delivery: DELIVERY_TEXT['zh-CN'],
+  entry: ENTRY_TEXT['zh-CN'],
 };
 
 export type Messages = typeof zhCN;
@@ -583,6 +597,10 @@ const en: Messages = {
     switchLanguage: '中文',
     switchLanguageAria: 'Switch the interface to Chinese',
     toggleTheme: 'Toggle light/dark',
+    skipToMain: 'Skip to main content',
+    appDescription: 'A video creation studio for footage editing, generation and hybrid production',
+    apiUnavailable: 'Cannot reach the API (check that it is running and the address is correct)',
+    unknownError: 'Unknown error',
   },
   home: {
     studioTitle: 'Edit a video from your own footage',
@@ -1139,6 +1157,11 @@ const en: Messages = {
     },
     readOnly: 'You can only view this video (no edit permission).',
   },
+  assetLibrary: ASSET_LIBRARY_TEXT.en,
+  projectFlow: PROJECT_FLOW_TEXT.en,
+  workspaceAdmin: WORKSPACE_ADMIN_TEXT.en,
+  delivery: DELIVERY_TEXT.en,
+  entry: ENTRY_TEXT.en,
 };
 
 export const MESSAGES: Record<Locale, Messages> = { 'zh-CN': zhCN, en };

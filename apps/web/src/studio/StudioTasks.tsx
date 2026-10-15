@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { WORKFLOW_TERMINAL_STATUSES, type AgentTurn, type Generation, type StudioState, type WorkflowRun } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
@@ -81,6 +81,36 @@ export function useTaskNotice(rows: TaskRow[]): { finished: TaskRow[]; dismiss: 
     return () => clearTimeout(timer);
   }, [finished]);
   return { finished, dismiss: () => setFinished([]) };
+}
+
+/**
+ * 任务结束的就近提醒：常驻一个礼貌播报区（读屏才能播报后来出现的内容），有提醒时浮在任务按钮正下方。
+ * 用 fixed 定位跟随按钮位置：按钮在顶栏的横向滚动容器里，放在容器内会被裁掉。
+ */
+export function StudioTaskNotice(props: { anchor: RefObject<HTMLElement | null>; rows: TaskRow[]; onOpen: () => void }) {
+  const { messages } = useI18n();
+  const t = messages.studio.tasks;
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const visible = props.rows.length > 0;
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const place = () => {
+      const rect = props.anchor.current?.getBoundingClientRect();
+      if (rect !== undefined) setPosition({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [visible, props.anchor]);
+  const only = props.rows.length === 1 ? props.rows[0] : undefined;
+  const text = only !== undefined ? t.noticeOne(only.title, t.status[only.status]) : t.noticeMany(props.rows.length);
+  return (
+    <div role="status" className={styles['taskNoticeRegion']} style={position === null ? undefined : { top: `${String(position.top)}px`, right: `${String(position.right)}px` }}>
+      {visible ? (
+        <button type="button" className={styles['taskNotice']} data-status={props.rows.some((row) => row.status === 'failed') ? 'failed' : 'done'} aria-label={t.noticeOpen(text)} onClick={props.onOpen}>{text}</button>
+      ) : null}
+    </div>
+  );
 }
 
 /** 导出运行列表（只读）；有进行中的导出时每 5 秒刷新 */

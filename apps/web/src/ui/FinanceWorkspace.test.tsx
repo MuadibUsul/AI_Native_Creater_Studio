@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { mockClient, renderWithClient } from '@/test-utils.js';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { FinanceWorkspace } from './FinanceWorkspace.js';
 
 describe('FinanceWorkspace', () => {
@@ -84,5 +85,27 @@ describe('FinanceWorkspace', () => {
       visualizationType: 'CANDLE', title: '利率观察', dataSourceId: 'fds_1', templateId: 'fmt_1',
       data: [expect.objectContaining({ label: '本期', value: 4.25, unit: 'bps', timezone: 'Asia/Shanghai', adjustment: 'UNADJUSTED', sourceId: 'fds_1', observedAt: expect.any(String) })],
     })));
+  });
+
+  it('renders Finance Pack in English, including local validation notices and frozen artifact metadata', async () => {
+    const artifact = { id: 'fart_1', visualizationType: 'YIELD_CURVE', title: 'Rates watch', dataSourceSnapshot: { name: 'Source A', license: { name: 'License A' } }, templateSnapshot: { key: 'rates', version: 2 } };
+    const client = mockClient({ finance: {
+      listDataSources: vi.fn().mockResolvedValue({ items: [] }),
+      listTemplates: vi.fn().mockResolvedValue({ items: [] }),
+      listArtifacts: vi.fn().mockResolvedValue({ items: [artifact] }),
+      createDataSource: vi.fn(), createTemplate: vi.fn(), generateArtifact: vi.fn(),
+    } });
+    renderWithClient(<I18nProvider initialLocale="en"><FinanceWorkspace workspaceId="ws_1" /></I18nProvider>, client);
+    const root = await screen.findByTestId('finance-workspace');
+    expect(screen.getByText('1. Data source and license')).toBeTruthy();
+    expect(screen.getByLabelText('Visualization type').textContent).toBe('CandlestickYield curvePolicy pathSupply chainTrade routeScenario tree');
+    expect((screen.getByLabelText('Permitted use') as HTMLInputElement).value).toBe('Internal video production');
+    expect(screen.getByText('Yield curve · Rates watch')).toBeTruthy();
+    expect(screen.getByText('Source: Source A (License A) · Template: rates v2')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('Output title'), 'Policy path');
+    await userEvent.type(screen.getByLabelText('Data label'), '2026 Q4');
+    await userEvent.click(screen.getByRole('button', { name: 'Generate and freeze snapshot' }));
+    expect(await screen.findByText(/^Generation failed: Charts cannot be generated from missing data/)).toBeTruthy();
+    expect(root.textContent).not.toMatch(/[一-鿿]/);
   });
 });

@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { MonochromeSeriesChart, type ChartSeries } from './MonochromeSeriesChart';
 
 const props = {
@@ -47,5 +48,20 @@ describe('MonochromeSeriesChart', () => {
     expect(container.querySelector('svg')).toBeNull();
     expect(screen.getByText('暂无可绘制的采样值；缺失值保持未知。')).toBeTruthy();
     expect(screen.getByRole('table').querySelector('tbody td:last-child')?.textContent).toBe('未知');
+  });
+
+  it('renders its own labels in English without Chinese text', () => {
+    const english = { ...props, title: 'Retention', xLabel: 'Time', yLabel: 'Rate' };
+    const { container, unmount } = render(<I18nProvider initialLocale="en"><MonochromeSeriesChart {...english} series={[{ id: 'one', label: 'Views', points: [{ x: 0, y: 80 }, { x: 1, y: null }, { x: 2, y: 40 }] }]} /></I18nProvider>);
+    expect(screen.getByRole('img', { name: 'Retention; 1 series; Time and Rate; LIFETIME · UTC' })).toBeTruthy();
+    expect(container.querySelector('[data-series-id="one"] g[aria-label]')?.getAttribute('aria-label')).toBe('Views: 0s, 80%');
+    expect(screen.getByText('View data table')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Series' })).toBeTruthy();
+    expect([...screen.getByRole('table').querySelectorAll('tbody td:last-child')].map((cell) => cell.textContent)).toEqual(['80%', 'Unknown', '40%']);
+    expect(container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
+    unmount();
+    const empty = render(<I18nProvider initialLocale="en"><MonochromeSeriesChart {...english} series={[{ id: 'empty', label: 'Views', points: [{ x: 0, y: null }] }]} /></I18nProvider>);
+    expect(screen.getByText('No sample values to plot; missing values stay unknown.')).toBeTruthy();
+    expect(empty.container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

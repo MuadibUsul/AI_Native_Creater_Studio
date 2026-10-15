@@ -51,7 +51,7 @@ try {
   page.on('pageerror', (error) => pageErrors.push(`${page.url()}: ${error.message}`));
   page.on('console', (message) => { if (message.type() === 'error' && /hydrat|did not match/i.test(message.text())) pageErrors.push(`console: ${message.text()}`); });
   // 截图前等有限时长的进场动画结束（无限循环的"处理中"脉冲不等），避免拍到抽屉半透明的中间帧
-  const settle = () => page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity), undefined, { timeout: 2_000 }).catch(() => undefined);
+  const settle = () => page.waitForFunction(() => globalThis.document.getAnimations().every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity), undefined, { timeout: 2_000 }).catch(() => undefined);
   const shot = async (name) => { await settle(); await page.screenshot({ path: resolve(evidenceDir, `${name}.png`) }); };
 
   // 1. 登录 → 建工作区 → 首页入口 → 新建
@@ -95,9 +95,15 @@ try {
     const labels = [...globalThis.document.querySelectorAll('aside b')].map((node) => node.textContent);
     return labels.filter((text) => text === '未配置').length === 6 && labels.filter((text) => text === '已理解').length === 3;
   }, null, { timeout: 120_000 });
+  // 任务结束的就近提醒：看着素材处理完，任务按钮下方出现"… · 完成"（8 秒后自动收起）
+  const notice = page.getByRole('button', { name: /· 完成。打开任务$/ }).first();
+  await notice.waitFor({ timeout: 8_000 });
+  // 可见 ≠ 没被挡住：取提醒中心点最上层的元素，必须是提醒本身（素材抽屉开着时也不能盖住它）
+  const noticeOnTop = await notice.evaluate((node) => { const box = node.getBoundingClientRect(); const hit = globalThis.document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2); return hit === node || node.contains(hit); });
+  if (!noticeOnTop) throw new Error('task-finished notice is covered by another layer');
   await shot('04-footage-drawer');
   await page.getByRole('button', { name: '关闭素材面板' }).click();
-  pass('上传 3 段素材并完成探测/代理/索引', 'AI 对语音与画面的理解：未配置 ASR/视觉驱动时显示“未配置”');
+  pass('上传 3 段素材并完成探测/代理/索引', 'AI 对语音与画面的理解：未配置 ASR/视觉驱动时显示“未配置”；处理完时任务按钮旁就近提示"完成"');
   await shot('05-ready-no-cut');
 
   // 3. AI 第一版 → 试改预览（工程未变）→ 播放
@@ -123,8 +129,11 @@ try {
   await page.getByText('当前版本', { exact: true }).waitFor({ timeout: 120_000 });
   const revisionAfter = await revisionOf();
   if (revisionAfter === revisionBefore) throw new Error('adopting did not advance the project revision');
+  // 声音轨的波形来自素材的媒体索引（Worker 用 FFmpeg 实测的每 10 ms 峰值）；测试素材是恒定音量的正弦，波形应是一条齐平的带
+  await page.locator('[data-waveform] path').first().waitFor({ timeout: 30_000 });
+  const waveformCount = await page.locator('[data-waveform]').count();
   await shot('07-adopted');
-  pass('采用试改写入工程', `${revisionBefore} → ${revisionAfter}`);
+  pass('采用试改写入工程', `${revisionBefore} → ${revisionAfter}；声音轨 ${String(waveformCount)} 段实测波形`);
 
   // 5. 在时间带上拖选第二段 → 说一句 → 局部重渲（复用未改动的分段）
   const lanes = page.getByLabel('片段区：拖动选择一段时间，点击选中片段');
@@ -245,6 +254,24 @@ try {
   await page.keyboard.press('Digit0');
   await zoomGroup.getByText('1×', { exact: true }).waitFor({ timeout: 10_000 });
   pass('键盘', `Shift+→ 前进一秒到 00:01.0；? 打开快捷键列表，Esc 收起；+ 两次缩放到 2×（可横向滚动 ${String(scrollable)} px），0 恢复`);
+
+  // 触屏两指捏合（真实浏览器触摸输入，经 CDP）：两指在片段区张开到 2.5 倍距离 → 缩放到相邻档位；两指不产生选区、不跳播放头
+  const lanesBox = await page.getByLabel('片段区：拖动选择一段时间，点击选中片段').boundingBox();
+  const touchAt = (x) => ({ x, y: lanesBox.y + lanesBox.height / 2 });
+  const cdp = await page.context().newCDPSession(page);
+  const centerX = lanesBox.x + lanesBox.width / 2;
+  const clockBefore = await page.getByRole('slider', { name: '时间标尺：拖动定位播放位置' }).getAttribute('aria-valuetext');
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touchAt(centerX - 40), touchAt(centerX + 40)] });
+  for (const spread of [60, 80, 100]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touchAt(centerX - spread), touchAt(centerX + spread)] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await zoomGroup.getByText('2.5×', { exact: true }).or(zoomGroup.getByText('3×', { exact: true })).or(zoomGroup.getByText('2×', { exact: true })).waitFor({ timeout: 10_000 });
+  const pinched = await zoomGroup.locator('span').filter({ hasText: /×$/ }).first().textContent();
+  const clockAfter = await page.getByRole('slider', { name: '时间标尺：拖动定位播放位置' }).getAttribute('aria-valuetext');
+  if (clockAfter !== clockBefore) throw new Error(`pinch moved the playhead: ${String(clockBefore)} → ${String(clockAfter)}`);
+  await shot('18c-pinch');
+  await page.keyboard.press('Digit0');
+  await zoomGroup.getByText('1×', { exact: true }).waitFor({ timeout: 10_000 });
+  pass('触屏两指缩放', `两指张开 80 → 200 px：缩放到 ${String(pinched)}，播放头不动（${String(clockAfter)}）`);
 
   // 11. 手机宽度：顶栏的每个操作都要够得着（导出不能被挤出屏幕）
   await page.setViewportSize({ width: 390, height: 844 });

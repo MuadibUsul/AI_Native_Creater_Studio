@@ -456,9 +456,8 @@
 .taskTitle { overflow-wrap: anywhere; }
 .taskDetail { grid-column: 2; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
 
-/* 任务结束的就近提醒：浮在任务按钮下方（浮层层级），8 秒后自动收起 */
-.tasksAnchor { position: relative; display: inline-flex; }
-.taskNoticeRegion { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; }
+/* 任务结束的就近提醒：浮在任务按钮下方，压在抽屉与浮层之上（手机全屏抽屉除外），8 秒后自动收起 */
+.taskNoticeRegion { position: fixed; top: calc(var(--studio-topbar-h) + 6px); right: var(--ui-space-3); z-index: 36; }
 .taskNotice {
   display: block;
   max-width: 280px;

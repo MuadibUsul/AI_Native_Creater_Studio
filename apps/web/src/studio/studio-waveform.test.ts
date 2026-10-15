@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeWaveformEntries, waveformBars } from './studio-waveform';
+import { mergeWaveformEntries, waveformBars, waveformLevel } from './studio-waveform';
 
 /**
  * 时间带波形：只用媒体索引里的实测峰值。条目按源时间拼接；没有测量值的位置保持未知（null），不插值、不补零。
@@ -24,5 +24,13 @@ describe('时间带波形', () => {
     // 超出已测范围也是未知
     expect(waveformBars(wave, 0.1, 0.2, 2)).toEqual([null, null]);
     expect(waveformBars(wave, 0.02, 0.02, 3)).toEqual([]);
+  });
+
+  it('显示高度按分贝刻度：0 dBFS 满高，-6 dBFS 约九成，-18 dBFS 约三分之二，-54 dBFS 及以下为 0', () => {
+    expect(waveformLevel(1)).toBe(1);
+    expect(waveformLevel(0.5)).toBeCloseTo(0.889, 2);
+    expect(waveformLevel(0.125)).toBeCloseTo(0.666, 2);
+    expect(waveformLevel(0.001)).toBe(0);
+    expect(waveformLevel(0)).toBe(0);
   });
 });

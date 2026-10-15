@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactElement } from 'react';
 import type { CreditPack, CreditReconcile, LedgerEntry } from '@ancs/contracts';
 import { AncsApiError } from '@ancs/sdk';
+import { useI18n } from '@/i18n/I18nProvider';
+import type { Messages } from '@/i18n/messages';
 import { useAncsClient } from '@/lib/client';
 import { useBilling, useCreditPacks, useCreditStatement, useEntitlements } from '@/lib/queries';
 import { StateBlock } from './StateBlock';
@@ -18,49 +20,61 @@ import ui from './Monochrome.module.css';
  * - 对账：收款事件 ↔ 账本条目（不一致 = 明确展示，绝不自动"修正"）。
  */
 
-const errorText = (error: unknown): string =>
-  error instanceof AncsApiError ? `${String(error.status)} ${error.code}` : error instanceof Error ? error.message : '未知错误';
+type BillingText = Messages['workspaceAdmin']['billing'];
+type NumberFormat = (value: number) => string;
 
-function entryLabel(entry: LedgerEntry): string {
+const errorText = (error: unknown, unknownLabel: string): string =>
+  error instanceof AncsApiError ? `${String(error.status)} ${error.code}` : error instanceof Error ? error.message : unknownLabel;
+
+function entryLabel(entry: LedgerEntry, labels: BillingText['entryLabels']): string {
   switch (entry.entryType) {
     case 'CREDIT':
-      if (entry.referenceType === 'billing_event') return '充值（事件入账）';
-      if (entry.referenceType === 'admin_grant') return '赠送';
-      if (entry.referenceType === 'monthly_grant') return '订阅月授予';
-      return '入账';
+      if (entry.referenceType === 'billing_event') return labels.topUp;
+      if (entry.referenceType === 'admin_grant') return labels.grant;
+      if (entry.referenceType === 'monthly_grant') return labels.monthlyGrant;
+      return labels.credit;
     case 'DEBIT':
-      return entry.referenceType === 'refund_of' ? '退款扣回' : '使用扣减';
+      return entry.referenceType === 'refund_of' ? labels.refundClawback : labels.usage;
     case 'REFUND':
-      return '退款返还';
+      return labels.refund;
     case 'ADJUSTMENT':
-      return '调整';
+      return labels.adjustment;
     case 'HOLD':
-      return '预算预留（不影响余额）';
+      return labels.hold;
     case 'HOLD_RELEASE':
-      return '预留释放（不影响余额）';
+      return labels.holdRelease;
   }
 }
 
 /** 符号由 entryType 决定（amount 恒非负）：DEBIT 为 −；HOLD/HOLD_RELEASE 无余额效果。 */
-function entryAmountText(entry: LedgerEntry): string {
-  if (entry.entryType === 'DEBIT') return `−${String(entry.amount)}`;
-  if (entry.entryType === 'HOLD' || entry.entryType === 'HOLD_RELEASE') return String(entry.amount);
-  return `+${String(entry.amount)}`;
+function entryAmountText(entry: LedgerEntry, format: NumberFormat): string {
+  if (entry.entryType === 'DEBIT') return `−${format(entry.amount)}`;
+  if (entry.entryType === 'HOLD' || entry.entryType === 'HOLD_RELEASE') return format(entry.amount);
+  return `+${format(entry.amount)}`;
 }
 
-/** 价格为数据：priceMinor=0 表示未定价（种子口径），不虚构货币金额。 */
-const priceText = (pack: CreditPack): string => (pack.priceMinor > 0 ? `${(pack.priceMinor / 100).toFixed(2)} ${pack.currency}` : '未定价');
+/** 价格为数据：priceMinor=0 表示未定价（种子口径），不虚构货币金额；币种代码原样取自服务端。 */
+const priceText = (pack: CreditPack, locale: string, unpriced: string): string =>
+  pack.priceMinor > 0
+    ? `${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(pack.priceMinor / 100)} ${pack.currency}`
+    : unpriced;
 
 /** 字节用量格式化（1 位小数；null 上限 = 不限）。 */
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+function formatBytes(bytes: number, locale: string): string {
+  const oneDecimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (bytes >= 1024 ** 3) return `${oneDecimal.format(bytes / 1024 ** 3)} GB`;
+  return `${oneDecimal.format(bytes / 1024 ** 2)} MB`;
 }
 
-const limitText = (used: number, limit: number | null, format: (value: number) => string): string =>
-  limit === null ? `${format(used)}（不限）` : `${format(used)} / ${format(limit)}`;
+const limitText = (used: number, limit: number | null, format: NumberFormat, unlimited: (used: string) => string): string =>
+  limit === null ? unlimited(format(used)) : `${format(used)} / ${format(limit)}`;
 
 export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactElement {
+  const { messages, locale } = useI18n();
+  const t = messages.workspaceAdmin.billing;
+  const describe = (error: unknown): string => errorText(error, t.unknownError);
+  const numberFormat = new Intl.NumberFormat(locale);
+  const formatNumber: NumberFormat = (value) => numberFormat.format(value);
   const client = useAncsClient();
   const queryClient = useQueryClient();
   const statement = useCreditStatement(workspaceId);
@@ -74,11 +88,11 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
   const buy = useMutation({
     mutationFn: (packCode: string) => client.workspaces.buyCredits(workspaceId, { packCode }),
     onSuccess: (result) => {
-      setNotice('已生成渠道结账链接。支付完成后由渠道事件入账（入账只经事件，且有延迟）。');
+      setNotice(t.checkoutReady);
       setCheckoutUrl(result.checkoutUrl);
     },
     onError: (error: unknown) => {
-      setNotice(`发起购买失败：${errorText(error)}`);
+      setNotice(t.buyFailed(describe(error)));
       setCheckoutUrl(null);
     },
   });
@@ -89,20 +103,20 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
       setReconcile(result);
       await queryClient.invalidateQueries({ queryKey: ['workspaces', workspaceId, 'credits'] });
     },
-    onError: (error: unknown) => setNotice(`对账失败：${errorText(error)}`),
+    onError: (error: unknown) => setNotice(t.reconcileFailed(describe(error))),
   });
 
   if (statement.isPending) {
-    return <StateBlock variant="loading" title="正在加载 Credits 账单…" />;
+    return <StateBlock variant="loading" title={t.loading} />;
   }
   if (statement.isError) {
     return (
       <StateBlock
         variant="error"
-        title="Credits 账单加载失败"
-        description="请检查会话与网络后重试。"
-        diagnostics={errorText(statement.error)}
-        action={{ label: '重试', onClick: () => void statement.refetch() }}
+        title={t.loadFailed}
+        description={t.loadFailedHint}
+        diagnostics={describe(statement.error)}
+        action={{ label: messages.common.retry, onClick: () => void statement.refetch() }}
       />
     );
   }
@@ -112,46 +126,48 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
 
   return (
     <section data-testid="credits-billing" className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Credits 与账单</h1>
+      <h1 className="text-xl font-semibold">{t.title}</h1>
 
       <div className={`${ui['panel']} p-4`}>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <p className={`text-sm ${ui['secondaryText']}`}>
-            套餐：<span className={`font-medium ${ui['primaryText']}`}>{billing.data?.state.planKey ?? '默认套餐'}</span>
-            <span className={`ml-2 text-xs ${ui['secondaryText']}`}>订阅状态：{billing.data?.state.state ?? '—'}</span>
+            {t.plan}<span className={`font-medium ${ui['primaryText']}`}>{billing.data?.state.planKey ?? t.defaultPlan}</span>
+            <span className={`ml-2 text-xs ${ui['secondaryText']}`}>{t.subscription(billing.data?.state.state ?? '—')}</span>
           </p>
-          <p className={`text-xs ${ui['secondaryText']}`}>入账口径：支付成功事件入账且「至多一次」；网页跳转不触发入账。</p>
+          <p className={`text-xs ${ui['secondaryText']}`}>{t.ledgerRule}</p>
         </div>
         <dl className="mt-3 flex flex-wrap gap-6 text-sm">
           <div>
-            <dt className={`text-xs ${ui['secondaryText']}`}>余额</dt>
+            <dt className={`text-xs ${ui['secondaryText']}`}>{t.balance}</dt>
             <dd data-testid="credits-balance" className={`text-lg font-semibold ${ui['primaryText']}`}>
-              {data.balanceCredits}
+              {formatNumber(data.balanceCredits)}
             </dd>
           </div>
           <div>
-            <dt className={`text-xs ${ui['secondaryText']}`}>预扣（预算预留）</dt>
+            <dt className={`text-xs ${ui['secondaryText']}`}>{t.held}</dt>
             <dd data-testid="credits-held" className={`text-lg font-semibold ${ui['primaryText']}`}>
-              {data.heldCredits}
+              {formatNumber(data.heldCredits)}
             </dd>
           </div>
           <div>
-            <dt className={`text-xs ${ui['secondaryText']}`}>可用</dt>
+            <dt className={`text-xs ${ui['secondaryText']}`}>{t.available}</dt>
             <dd data-testid="credits-available" className={`text-lg font-semibold ${ui['primaryText']}`}>
-              {data.availableCredits}
+              {formatNumber(data.availableCredits)}
             </dd>
           </div>
         </dl>
         {entitlement.data !== undefined ? (
           <p data-testid="plan-usage" className={`mt-3 text-xs ${ui['secondaryText']}`}>
-            用量（Plan 权益核算）：存储 {limitText(entitlement.data.usage.storageBytesUsed, entitlement.data.entitlements.storageBytes, formatBytes)} · 席位{' '}
-            {limitText(entitlement.data.usage.seatsUsed, entitlement.data.entitlements.seats, String)}
+            {t.planUsage(
+              limitText(entitlement.data.usage.storageBytesUsed, entitlement.data.entitlements.storageBytes, (bytes) => formatBytes(bytes, locale), t.unlimited),
+              limitText(entitlement.data.usage.seatsUsed, entitlement.data.entitlements.seats, formatNumber, t.unlimited),
+            )}
           </p>
         ) : null}
       </div>
 
       <div className={`${ui['panel']} p-4`}>
-        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>购买 Credits</h2>
+        <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>{t.buyTitle}</h2>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(packs.data ?? []).map((pack) => {
             const purchasable = pack.status === 'ACTIVE' && pack.priceMinor > 0;
@@ -161,16 +177,16 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
                   <span className={`text-sm font-medium ${ui['primaryText']}`}>{pack.name}</span>
                   <span className={`text-xs ${ui['mutedText']}`}>v{pack.version}</span>
                 </div>
-                <p className={`text-xs ${ui['secondaryText']}`}>{pack.credits} Credits</p>
-                <p className={`text-xs ${pack.priceMinor > 0 ? ui['secondaryText'] : ui['emphasis']}`}>{priceText(pack)}</p>
+                <p className={`text-xs ${ui['secondaryText']}`}>{t.packCredits(formatNumber(pack.credits))}</p>
+                <p className={`text-xs ${pack.priceMinor > 0 ? ui['secondaryText'] : ui['emphasis']}`}>{priceText(pack, locale, t.unpriced)}</p>
                 <button
                   type="button"
                   disabled={!purchasable || buy.isPending}
-                  title={purchasable ? undefined : '未定价（待运营配置价格版本；上线门 P09-06 前必须定价）'}
+                  title={purchasable ? undefined : t.unpricedHint}
                   onClick={() => buy.mutate(pack.code)}
                   className={`mt-1 ${ui['primaryButton']}`}
                 >
-                  购买
+                  {t.buy}
                 </button>
               </li>
             );
@@ -183,42 +199,47 @@ export function CreditsBilling({ workspaceId }: { workspaceId: string }): ReactE
         ) : null}
         {checkoutUrl !== null ? (
           <a data-testid="credits-checkout-link" href={checkoutUrl} target="_blank" rel="noreferrer" className={`mt-2 inline-block text-sm ${ui['link']}`}>
-            前往渠道结账页完成支付（网页返回不代表入账——入账以渠道事件为准）
+            {t.checkoutLink}
           </a>
         ) : null}
       </div>
 
       <div className={`${ui['panel']} p-4`}>
         <div className="flex items-center justify-between">
-          <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>账单明细（只追加）</h2>
+          <h2 className={`text-sm font-semibold ${ui['primaryText']}`}>{t.ledgerTitle}</h2>
           <button
             type="button"
             onClick={() => runReconcile.mutate()}
             disabled={runReconcile.isPending}
             className={ui['button']}
           >
-            对账（事件 ↔ 账本）
+            {t.reconcile}
           </button>
         </div>
         {entries.length === 0 ? (
-          <p className={`mt-3 text-sm ${ui['secondaryText']}`}>暂无 Credits 流水（充值/赠送/使用后在此展示）。</p>
+          <p className={`mt-3 text-sm ${ui['secondaryText']}`}>{t.noEntries}</p>
         ) : (
           <ul className="mt-3 flex flex-col">
             {entries.map((entry) => (
               <li key={entry.id} data-testid={`credit-entry-${entry.id}`} className={`flex items-center justify-between gap-3 border-b py-2 text-sm last:border-b-0 ${ui['divider']}`}>
                 <div className="flex flex-col">
-                  <span className={ui['primaryText']}>{entryLabel(entry)}</span>
-                  <span className={`text-xs ${ui['mutedText']}`}>{new Date(entry.createdAt).toLocaleString()}</span>
+                  <span className={ui['primaryText']}>{entryLabel(entry, t.entryLabels)}</span>
+                  <span className={`text-xs ${ui['mutedText']}`}>{new Date(entry.createdAt).toLocaleString(locale)}</span>
                 </div>
-                <span className={`font-mono ${ui['primaryText']}`}>{entryAmountText(entry)}</span>
+                <span className={`font-mono ${ui['primaryText']}`}>{entryAmountText(entry, formatNumber)}</span>
               </li>
             ))}
           </ul>
         )}
         {reconcile !== null ? (
           <p data-testid="credits-reconcile" role="status" className={`mt-3 text-sm ${reconcile.consistent ? ui['secondaryText'] : ui['notice']}`}>
-            收款事件 {reconcile.purchaseEvents} · 账本入账条目 {reconcile.purchaseEntries} · 退款条目 {reconcile.refundEntries} · 余额 {reconcile.balanceCredits} ——{' '}
-            {reconcile.consistent ? '一致' : '不一致（需人工排查，系统不会自动修正）'}
+            {t.reconcileSummary(
+              formatNumber(reconcile.purchaseEvents),
+              formatNumber(reconcile.purchaseEntries),
+              formatNumber(reconcile.refundEntries),
+              formatNumber(reconcile.balanceCredits),
+            )}{' '}
+            {reconcile.consistent ? t.consistent : t.inconsistent}
           </p>
         ) : null}
       </div>

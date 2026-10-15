@@ -9,10 +9,10 @@ import { Providers } from '@/app/providers';
 import { StudioShell } from '@/ui/StudioShell';
 import { APPEARANCE_COOKIE, initialAppearance, type AppearanceMode } from '@/lib/appearance';
 import { LOCALE_COOKIE, negotiateLocale, parseLocale, type Locale } from '@/i18n/locale';
+import { MESSAGES } from '@/i18n/messages';
 
-export const metadata: Metadata = {
+const baseMetadata: Metadata = {
   title: 'Creator Studio · ANCS',
-  description: '支持素材剪辑、生成与混合制作的视频创作工作台',
   // V6-4：手机网页审片可添加到主屏幕（manifest 由 app/manifest.ts 生成）
   appleWebApp: { capable: true, title: 'ANCS', statusBarStyle: 'black-translucent' },
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
@@ -45,20 +45,23 @@ async function serverAppearance(): Promise<AppearanceMode> {
   }
 }
 
-/** 双语界面的首屏语言：本设备明确选择 → 浏览器语言。旧页面仍是中文，所以 <html lang> 只跟随明确选择，双语区域自行标注 lang。 */
-async function serverLocale(): Promise<{ locale: Locale; explicit: boolean }> {
-  const chosen = parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
-  return chosen === null ? { locale: negotiateLocale((await headers()).get('accept-language')), explicit: false } : { locale: chosen, explicit: true };
+/** 首屏语言：本设备明确选择 → 浏览器语言（界面精修第四阶段起全部页面双语，<html lang> 随之一致）。 */
+async function serverLocale(): Promise<Locale> {
+  return parseLocale((await cookies()).get(LOCALE_COOKIE)?.value) ?? negotiateLocale((await headers()).get('accept-language'));
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { ...baseMetadata, description: MESSAGES[await serverLocale()].common.appDescription };
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const mode = await serverAppearance();
-  const { locale, explicit } = await serverLocale();
+  const locale = await serverLocale();
   return (
-    <html lang={explicit ? locale : 'zh-CN'}>
+    <html lang={locale}>
       <body data-appearance-mode={mode} className={mode === 'dark' ? 'theme-dark' : undefined} suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: appearanceBootScript }} />
-        <a className="skiplink" href="#main">跳到主要内容</a>
+        <a className="skiplink" href="#main">{MESSAGES[locale].common.skipToMain}</a>
         <Providers locale={locale}>
           <StudioShell>{children}</StudioShell>
         </Providers>

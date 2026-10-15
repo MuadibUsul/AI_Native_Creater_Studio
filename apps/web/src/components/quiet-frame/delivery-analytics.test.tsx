@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils';
 import { DeliveryAnalytics, formatMetric, retentionSegments } from './delivery-analytics';
 
@@ -45,5 +46,34 @@ describe('Quiet Frame analytics data rendering', () => {
     expect(screen.getAllByText('42').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('Finance Pack')).toBeNull();
     expect(listDataSources).not.toHaveBeenCalled();
+  });
+
+  it('renders performance, the retention chart and advanced tools in English without Chinese interface text', async () => {
+    const client = mockClient({
+      publications: {
+        list: vi.fn().mockResolvedValue({ items: [{ id: 'pub_1', title: 'Launch cut', platformId: 'YOUTUBE' }] }),
+        listAnalytics: vi.fn().mockResolvedValue({ items: [{ id: 'perf_1', platformId: 'YOUTUBE', metrics: { views: 12480, impressions: null, clickThroughRate: null, watchTimeMs: null, averageWatchTimeMs: 65_000, retention: [{ positionMs: 0, rate: 1 }, { positionMs: 30_000, rate: 0.6 }] }, sampling: { source: 'provider', fetchedAt: '2026-10-07T08:00:00.000Z', granularity: 'LIFETIME', timezone: 'UTC' } }] }),
+      },
+      analytics: {
+        listScenes: vi.fn().mockResolvedValue({ items: [{ id: 'sp_1', sceneId: 'scn_00001', sceneType: 'LINE_CHART', position: 0, startMs: 0, durationMs: 30_000, retentionRate: null, derivation: { method: 'TIME_WINDOW_AVERAGE', sampleCount: 1 } }] }),
+        listLearnings: vi.fn().mockResolvedValue({ items: [{ id: 'lrn_1', title: 'Shorter openings', explanation: 'Short scenes retained better.', status: 'ACTIVE', evidence: { sampleCount: 2 } }] }),
+      },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><DeliveryAnalytics workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    expect(await screen.findByText('12,480')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'See how your work is understood.' })).toBeTruthy();
+    expect(screen.getByText('YOUTUBE · Real snapshot')).toBeTruthy();
+    expect(screen.getByText('Average watch time')).toBeTruthy();
+    expect(screen.getByRole('img', { name: /^Real platform retention curve; 1 series; Video time and Relative retention; LIFETIME · UTC · Fetched / })).toBeTruthy();
+    expect(screen.getByText('View data table')).toBeTruthy();
+    expect(await screen.findByText('Correlation · 2 samples')).toBeTruthy();
+    expect(await screen.findByText('Unknown')).toBeTruthy();
+    await userEvent.click(screen.getByText('Advanced performance and suggestions'));
+    expect(await screen.findByTestId('analytics-workspace')).toBeTruthy();
+    expect(screen.getByText('Publishing performance')).toBeTruthy();
+    expect(screen.getAllByText('Unknown (not returned by the platform)').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Correlation evidence · 2 samples · Channel unchanged')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import NewProjectPage from './page';
 import { apiError, mockClient, renderWithClient } from '@/test-utils';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -204,5 +205,41 @@ describe('Quiet Frame 新建作品', () => {
     expect((screen.getByRole('button', { name: /读取文章/ }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('作品名称') as HTMLInputElement).disabled).toBe(true);
     expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it('英文界面：表单、校验与解析结果全部为英文', async () => {
+    const parsedEn = {
+      document: {
+        id: 'doc_en', title: 'Source headline', language: 'en',
+        blocks: [{ id: 'block_1', type: 'paragraph', text: 'The first paragraph parsed from the real input.' }],
+      },
+      normalization: { blockCount: 3, claims: 1 },
+    };
+    const createContent = vi.fn().mockResolvedValue(parsedEn);
+    const client = mockClient({
+      ...editableWorkspace,
+      channels: { list: vi.fn().mockResolvedValue([{ id: 'ch_1' }]) },
+      projects: { create: vi.fn().mockResolvedValue({ id: 'prj_en' }) },
+      content: { create: createContent },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><NewProjectPage /></I18nProvider>, client);
+    await waitFor(() => expect(screen.getByLabelText('Project title')).not.toHaveProperty('disabled', true));
+    expect(screen.getByRole('heading', { name: 'Your project starts here.' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Paste text' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Target length' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.type(screen.getByLabelText('Article URL'), 'https://example.com/article');
+    await userEvent.click(screen.getByRole('button', { name: /Read article/ }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Please enter a project title.');
+    expect(createContent).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByLabelText('Project title'), 'English project');
+    await userEvent.click(screen.getByRole('button', { name: /Read article/ }));
+    expect(await screen.findByText('Source headline')).toBeTruthy();
+    expect(screen.getByText('3 content blocks')).toBeTruthy();
+    expect(screen.getByText('1 item to verify')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generate script draft/ })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 });

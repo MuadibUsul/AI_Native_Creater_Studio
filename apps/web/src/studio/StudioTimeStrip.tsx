@@ -17,7 +17,7 @@ import {
 } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import { formatClock } from './studio-time';
-import { waveformBars, type FootageWaveform } from './studio-waveform';
+import { waveformBars, waveformLevel, type FootageWaveform } from './studio-waveform';
 import styles from './studio.module.css';
 
 /**
@@ -362,10 +362,11 @@ export function StudioTimeStrip(props: {
   );
 }
 
-/** 声音片段里的波形：每根柱子约 3 px，高度 = 该段实测峰值；没有测量值的柱子留空 */
+/** 声音片段里的波形：每根柱子约 3 px，高度 = 该段实测峰值（分贝刻度）；没有测量值的柱子留空 */
 function ClipWaveform(props: { wave: FootageWaveform | undefined; source: StripClip['source']; width: number }) {
   if (props.wave === undefined || props.source === undefined || props.width < 6) return null;
-  const bars = waveformBars(props.wave, mediaTimeToDisplaySeconds(props.source.range.start), mediaTimeToDisplaySeconds(props.source.range.end), Math.min(800, Math.floor(props.width / 3)), props.source.reverse);
+  const bars = waveformBars(props.wave, mediaTimeToDisplaySeconds(props.source.range.start), mediaTimeToDisplaySeconds(props.source.range.end), Math.min(800, Math.floor(props.width / 3)), props.source.reverse)
+    .map((value) => (value === null ? null : waveformLevel(value)));
   if (!bars.some((value) => value !== null && value > 0)) return null;
   const path = bars.map((value, index) => {
     if (value === null || value <= 0) return '';

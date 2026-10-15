@@ -1,6 +1,7 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
 vi.mock('next/navigation', () => ({
@@ -315,5 +316,120 @@ describe('Scene Editor', () => {
     expect(await screen.findByText('场景不存在')).toBeTruthy();
     expect(screen.getByRole('button', { name: '刷新场景图' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '返回当前分镜' }).getAttribute('href')).toBe('/w/ws_1/p/prj_1/storyboard');
+  });
+});
+
+describe('English UI', () => {
+  /** 界面文字（排除场景静帧：静帧是作品内容，不是界面文案）。 */
+  const uiText = (): string => {
+    const clone = document.body.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('[data-scene-type]').forEach((node) => node.remove());
+    return clone.textContent ?? '';
+  };
+  const englishScene = (overrides: Record<string, unknown> = {}) => scene({
+    narration: 'Rates held at 5.25%.',
+    props: { title: 'Fed funds path', unit: '%', series: [{ name: 'Rate', points: [{ t: '2023', v: 4.5 }, { t: '2024', v: 5.25 }] }], sourceLabel: 'Sample dataset' },
+    ...overrides,
+  });
+
+  it('Director workspace, inspector, PropForm and Lite Timeline render in English', async () => {
+    renderWithClient(<I18nProvider initialLocale="en"><StoryboardPage /></I18nProvider>, mockClient({
+      ...editableWorkspace,
+      projects: { graph: vi.fn().mockResolvedValue(graph([englishScene()])) },
+      assets: { list: vi.fn().mockResolvedValue([]) },
+    }));
+    expect(await screen.findByRole('region', { name: 'Director workspace' })).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'Shot list' })).toBeTruthy();
+    expect(screen.getByText('Current shot · Draft preview')).toBeTruthy();
+    expect(screen.getByText('Current narration · Editable')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '+ Duplicate shot' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Shorten the narration' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Change this shot' })).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Lock this shot' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save properties' })).toBeTruthy();
+    expect(screen.getByText('Title')).toBeTruthy();
+    expect(screen.getByText('Data series')).toBeTruthy();
+    expect(screen.getAllByText('06 s').length).toBeGreaterThan(0);
+    expect(uiText()).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Lite Timeline' }));
+    expect(await screen.findByText('Project assets · 0 replaceable')).toBeTruthy();
+    expect(screen.getByText('Lite Timeline')).toBeTruthy();
+    expect(screen.getByText('Timeline band')).toBeTruthy();
+    expect(screen.getByLabelText('Duration 0')).toBeTruthy();
+    expect(screen.getByRole('slider', { name: 'Time ruler (playhead)' })).toBeTruthy();
+    expect(screen.getByText(/No audio tracks yet/)).toBeTruthy();
+    expect(uiText()).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Sources' }));
+    expect(screen.getByText('Facts 1 · Datasets 1')).toBeTruthy();
+    expect(screen.getByText('This shot is bound to 1 data item(s) and 0 asset(s).')).toBeTruthy();
+    await userEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    expect(screen.getByText('0 captions · 0 audio tracks')).toBeTruthy();
+    expect(uiText()).not.toMatch(/[一-鿿]/);
+  });
+
+  it('AI change dialog and AiEditPanel render in English', async () => {
+    const aiEditPlan = vi.fn().mockResolvedValue({
+      schemaVersion: '0.1', planVersion: 'edit-plan-v1', planId: 'epl_1', projectId: 'prj_1',
+      baseProjectRevision: 5, prompt: 'Shorten the narration', rationale: ['Keep the pace'],
+      operations: [{ operation: { op: 'update_scene', sceneId: 'scn_1', changes: { durationMs: 5000 } }, summary: 'Shorten by 1 s', sceneId: 'scn_1', before: { durationMs: 6000 }, after: { durationMs: 5000 } }],
+      impact: { scenesAdded: 0, scenesRemoved: 0, scenesModified: 1, durationDeltaMs: -1000, costImpact: 'NONE', notes: [] },
+      warnings: [], generation: { method: 'LLM', providerId: 'mock.llm', modelVersion: null, promptVersion: null, attempts: 1 },
+    });
+    renderWithClient(<I18nProvider initialLocale="en"><StoryboardPage /></I18nProvider>, mockClient({
+      ...editableWorkspace,
+      projects: { graph: vi.fn().mockResolvedValue(graph([englishScene()])), edit: vi.fn() },
+      narrative: { current: vi.fn().mockResolvedValue(null), aiEditPlan },
+    }));
+    await screen.findByRole('region', { name: 'Director workspace' });
+    await userEvent.click(screen.getByRole('button', { name: 'Shorten the narration' }));
+    const dialog = await screen.findByRole('dialog', { name: 'AI change diff' });
+    expect(await within(dialog).findByRole('button', { name: 'Apply (1 change)' })).toBeTruthy();
+    expect(within(dialog).getByText('Review the changes, then decide.')).toBeTruthy();
+    expect(within(dialog).getByText('Requested shot: Fed funds path (scn_1)')).toBeTruthy();
+    expect(within(dialog).getByText('Plan targets: scn_1')).toBeTruthy();
+    expect(within(dialog).getByText('Reason: Keep the pace')).toBeTruthy();
+    expect(within(dialog).getByTestId('ai-edit-impact').textContent).toContain('Duration -1000ms');
+    expect(within(dialog).getByText('Cost impact').parentElement?.textContent).toContain('None (no Provider calls while planning)');
+    expect(within(dialog).getByRole('button', { name: 'Reject plan' })).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('empty storyboard and Director plan preview render in English', async () => {
+    renderWithClient(<I18nProvider initialLocale="en"><StoryboardPage /></I18nProvider>, mockClient({
+      ...editableWorkspace,
+      projects: { graph: vi.fn().mockResolvedValue(graph([])) },
+      narrative: {
+        current: vi.fn().mockResolvedValue({ id: 'npl_1', revision: 2 }),
+        directorPlan: vi.fn().mockResolvedValue(directorPreview({
+          scenes: [{ sceneId: 'dsc_1', position: 0, sceneType: 'LINE_CHART', durationMs: 10_000, visualIntent: 'Show the trend first' }],
+          decisionSummary: 'Explain the trend, then the analysis.',
+          warnings: [{ code: 'CHECK_DATA', severity: 'WARNING', message: 'Check the data source' }],
+        })),
+      },
+    }));
+    expect(await screen.findByText('The storyboard is empty')).toBeTruthy();
+    expect(screen.getByText('Empty')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Preview Director plan' })).not.toHaveProperty('disabled', true));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview Director plan' }));
+    expect(await screen.findByText('Plan preview · 1 shot')).toBeTruthy();
+    expect(screen.getByText('Estimated length: 10 s · Assets needed: 0 · Provider jobs: 0')).toBeTruthy();
+    expect(screen.getByText('Cost: 0.00 CNY (KNOWN)')).toBeTruthy();
+    expect(screen.getByText('WARNING: Check the data source')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply plan' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Discard plan' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('missing deep-linked shot renders in English', async () => {
+    renderWithClient(<I18nProvider initialLocale="en"><SceneEditorPage /></I18nProvider>, mockClient({
+      ...editableWorkspace,
+      projects: { graph: vi.fn().mockResolvedValue(graph([englishScene({ id: 'scn_other' })])) },
+    }));
+    expect(await screen.findByText('Shot not found')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Refresh scene graph' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to storyboard' }).getAttribute('href')).toBe('/w/ws_1/p/prj_1/storyboard');
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
   });
 });

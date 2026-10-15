@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils.js';
 
 vi.mock('next/navigation', () => ({
@@ -144,5 +145,52 @@ describe('Credits 与账单（P09-03）', () => {
     await userEvent.click(await screen.findByRole('button', { name: '对账（事件 ↔ 账本）' }));
     await waitFor(() => expect(reconcileCredits).toHaveBeenCalledWith('ws_1'));
     expect((await screen.findByTestId('credits-reconcile')).textContent).toMatch(/收款事件 1 · 账本入账条目 1 · 退款条目 0 · 余额 500 —— 一致/);
+  });
+
+  it('英文界面：余额、明细、包目录与对账显示英文，数字按界面语言格式化，没有中文残留', async () => {
+    const reconcileCredits = vi.fn().mockResolvedValue({ workspaceId: 'ws_1', balanceCredits: 12000, purchaseEvents: 1, purchaseEntries: 1, refundEntries: 0, consistent: false });
+    const client = mockClient({
+      workspaces: {
+        creditStatement: vi.fn().mockResolvedValue(
+          statement({
+            balanceCredits: 12000,
+            heldCredits: 1500,
+            availableCredits: 10500,
+            entries: [
+              ledger({ id: 'led_refund', entryType: 'DEBIT', amount: 3000, referenceType: 'refund_of', referenceId: 'led_grant' }),
+              ledger({ amount: 12000 }),
+            ],
+          }),
+        ),
+        creditPacks: vi.fn().mockResolvedValue([
+          pack({ name: 'Starter' }),
+          pack({ id: 'cpk_2', code: 'creator_2000', name: 'Creator 2000', credits: 2000, priceMinor: 190000 }),
+        ]),
+        billing: vi.fn().mockResolvedValue(billingState),
+        entitlements: vi.fn().mockResolvedValue(entitlement),
+        reconcileCredits,
+      },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><BillingPage /></I18nProvider>, client);
+
+    expect((await screen.findByTestId('credits-balance')).textContent).toBe('12,000');
+    expect(screen.getByTestId('credits-held').textContent).toBe('1,500');
+    expect(screen.getByTestId('credits-available').textContent).toBe('10,500');
+    expect(screen.getAllByRole('heading', { name: 'Credits & billing' }).length).toBe(2);
+    expect(screen.getByText('Default plan')).toBeTruthy();
+    expect((await screen.findByTestId('plan-usage')).textContent).toBe('Usage (plan entitlements): Storage 512.0 MB / 2.0 GB · Seats 1 / 1');
+    expect(screen.getByText('Top-up (credited by event)')).toBeTruthy();
+    expect(screen.getByText('Refund clawback')).toBeTruthy();
+    expect(screen.getByText('−3,000')).toBeTruthy();
+    expect(screen.getByText('+12,000')).toBeTruthy();
+    expect(await screen.findByText('Not priced')).toBeTruthy();
+    expect(screen.getByText('1,900.00 USD')).toBeTruthy();
+    expect(screen.getByText('2,000 Credits')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Reconcile (events ↔ ledger)' }));
+    await waitFor(() => expect(reconcileCredits).toHaveBeenCalledWith('ws_1'));
+    expect((await screen.findByTestId('credits-reconcile')).textContent).toBe(
+      'Payment events 1 · Ledger credit entries 1 · Refund entries 0 · Balance 12,000 — Inconsistent (needs manual review; the system never corrects it automatically)',
+    );
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 });

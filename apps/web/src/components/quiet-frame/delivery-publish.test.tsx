@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils';
 import { DeliveryPublish } from './delivery-publish';
 
@@ -93,5 +94,31 @@ describe('Quiet Frame publish gates', () => {
     await userEvent.click(screen.getByRole('button', { name: '撤销交接' }));
     await waitFor(() => expect(cancelHandoff).toHaveBeenCalledWith('ws_1', 'prj_1', 'hdf_1'));
     expect(screen.getByText('已撤销')).toBeTruthy();
+  });
+
+  it('renders delivery channels and handoffs in English without Chinese interface text', async () => {
+    const { client, createHandoff } = clientForPublish(true);
+    client.projects.get = vi.fn().mockResolvedValue({ id: 'prj_1', title: 'Launch cut' });
+    client.publications.list = vi.fn().mockResolvedValue({ items: [{ id: 'pub_1', platformId: 'YOUTUBE', title: 'Launch cut', state: 'DRAFT', remoteUrl: null }] });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><DeliveryPublish workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    await screen.findByRole('heading', { name: 'Launch cut' });
+    expect(screen.getByRole('heading', { name: 'Your work is ready. Choose where it goes next.' })).toBeTruthy();
+    const buttons = await screen.findAllByRole('button', { name: /Prepare package/ });
+    await waitFor(() => expect((buttons[0] as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByRole('heading', { name: 'Bilibili' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Douyin' })).toBeTruthy();
+    expect(screen.getByText('Platform draft')).toBeTruthy();
+    expect(screen.getByTestId('package-preview').textContent).toContain('Cover mockup · Not a frame from the render');
+    expect(screen.getByText('Render rnd_1 · Project version pv_1')).toBeTruthy();
+    expect(screen.getByPlaceholderText("Follow the target platform's requirements")).toBeTruthy();
+    const createButton = screen.getByRole('button', { name: 'Create 24-hour handoff' });
+    await waitFor(() => expect((createButton as HTMLButtonElement).disabled).toBe(false));
+    await userEvent.click(createButton);
+    await waitFor(() => expect(createHandoff).toHaveBeenCalled());
+    expect(await screen.findByText('Waiting to be claimed')).toBeTruthy();
+    expect(screen.getByText(/^Expires: /)).toBeTruthy();
+    expect(screen.getByText(/Time-limited handoff created/)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

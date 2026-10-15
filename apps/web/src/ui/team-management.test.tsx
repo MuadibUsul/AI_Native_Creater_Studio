@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils.js';
 
 vi.mock('next/navigation', () => ({
@@ -152,5 +153,29 @@ describe('团队与隐私（P09-04）', () => {
     await userEvent.selectOptions(screen.getByLabelText('隐私档位'), 'PRIVATE');
     await userEvent.click(screen.getByRole('button', { name: '应用档位' }));
     await waitFor(() => expect(setPrivacyTier).toHaveBeenCalledWith('ws_1', { privacyTier: 'PRIVATE' }));
+  });
+
+  it('英文界面：成员、邀请、超额提示与隐私档位显示英文，没有中文残留', async () => {
+    const client = teamClient({
+      get: vi.fn().mockResolvedValue(workspace({ name: 'Studio' })),
+      invitations: { list: vi.fn().mockResolvedValue([invitation()]), create: vi.fn(), revoke: vi.fn() },
+      entitlements: vi.fn().mockResolvedValue(entitlement({ entitlements: { seats: 1, storageBytes: null, privacyMode: false }, overCommitted: ['seats', 'privacyMode'] })),
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><TeamPage /></I18nProvider>, client);
+
+    expect(await screen.findByText('owner@test.local')).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: 'Team & privacy' }).length).toBe(2);
+    expect(screen.getByRole('heading', { name: 'Members (1)' })).toBeTruthy();
+    expect(screen.getByText(/^Joined /)).toBeTruthy();
+    const banner = await screen.findByTestId('over-committed');
+    expect(banner.textContent).toBe('Over the current plan limits: Seats, Privacy tier. New additions are blocked; existing members and data are kept (nothing is removed or deleted automatically). Upgrade your plan or adjust explicitly.');
+    const role = screen.getByLabelText('Role for owner@test.local');
+    expect(role.getAttribute('title')).toBe('A workspace must keep at least one owner');
+    expect(screen.getByLabelText('Invitation email')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Invite' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeTruthy();
+    expect(screen.getByText(/your plan does not include privacy mode/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply tier' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 });
