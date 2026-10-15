@@ -86,8 +86,11 @@ export interface VoiceDockProps {
   voices: { list: RealtimeVoice[]; value: string | null; onChange: (id: string) => void } | null;
   browserVoice: boolean;
   readAloud: { enabled: boolean; onToggle: () => void };
-  stopSpeaking: (() => void) | null;
-  stopTurn: (() => void) | null;
+  /** 停止说话 / 停止这一轮：会话进行中一直占位（不适用时禁用），避免 AI 说完时按钮消失、整条语音条重新居中导致点错（例如点到"采用"） */
+  stopSpeaking: { enabled: boolean; onStop: () => void };
+  stopTurn: { enabled: boolean; onStop: () => void } | null;
+  /** 正在出声的那一轮（供验收测量把回应对应到轮次） */
+  replyTurnId: string | null;
   trial: { onKeep: () => void; onDiscard: () => void; busy: boolean } | null;
   undo: { onUndo: () => void; busy: boolean } | null;
   failed: { onRetry: () => void; onDrop: () => void } | null;
@@ -106,7 +109,7 @@ export function StudioVoiceDock(props: VoiceDockProps) {
   const t = messages.studio.voice;
   const live = props.phase !== 'error' && props.phase !== 'ended';
   return (
-    <div className={styles['layer']} data-phase={props.phase} data-voice-dock="" role="region" aria-label={t.region}>
+    <div className={styles['layer']} data-phase={props.phase} data-reply-turn={props.replyTurnId ?? undefined} data-voice-dock="" role="region" aria-label={t.region}>
       {props.caption !== null ? (
         <p className={`${styles['caption']} ${props.caption.tone === 'alert' ? styles['captionAlert'] : ''}`} role={props.caption.tone === 'alert' ? 'alert' : 'status'} aria-live="polite" data-voice-caption="">
           <b>{props.caption.main}</b>
@@ -137,13 +140,13 @@ export function StudioVoiceDock(props: VoiceDockProps) {
             <QuietIcon name="volume" /><span className={styles['label']}>{t.readAloud}</span>
           </button>
         ) : null}
-        {props.stopSpeaking !== null ? (
-          <button type="button" className={styles['button']} title={t.stopSpeakingHint} aria-label={t.stopSpeaking} onClick={props.stopSpeaking}>
+        {live ? (
+          <button type="button" className={styles['button']} title={t.stopSpeakingHint} aria-label={t.stopSpeaking} disabled={!props.stopSpeaking.enabled} onClick={props.stopSpeaking.onStop}>
             <QuietIcon name="pause" /><span className={styles['label']}>{t.stopSpeaking}</span>
           </button>
         ) : null}
-        {props.stopTurn !== null ? (
-          <button type="button" className={styles['button']} title={t.stopTurnHint} aria-label={t.stopTurn} onClick={props.stopTurn}>
+        {live && props.stopTurn !== null ? (
+          <button type="button" className={styles['button']} title={t.stopTurnHint} aria-label={t.stopTurn} disabled={!props.stopTurn.enabled} onClick={props.stopTurn.onStop}>
             <span className={styles['stopGlyph']} aria-hidden="true" /><span className={styles['label']}>{t.stopTurn}</span>
           </button>
         ) : null}

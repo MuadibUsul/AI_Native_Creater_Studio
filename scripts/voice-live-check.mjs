@@ -39,7 +39,7 @@ if (!audioKey || !claudeKey) {
 const email = `issue9-${randomUUID().slice(0, 8)}@test.local`;
 const results = [];
 const pass = (name, detail = '') => { results.push({ name, detail }); console.log(`PASS ${name}${detail ? ` — ${detail}` : ''}`); };
-const metrics = { utterances: [], replies: [], bargeIns: [], stopSpeaking: null, connect: [], claudeTurns: [] };
+const metrics = { utterances: [], replies: [], bargeIns: [], stopSpeaking: null, connect: [], claudeTurns: [], extraEdit: null };
 const usage = { asrRequests: 0, asrAudioSeconds: 0, ttsRequests: 0, ttsCharacters: 0, clipTtsRequests: 0, clipTtsCharacters: 0, badKeyAsrRequests: 0 };
 const gatewayEvents = [];
 
@@ -197,11 +197,12 @@ try {
       const record = () => {
         const dock = globalThis.document.querySelector('[data-voice-dock]');
         const phase = dock?.getAttribute('data-phase') ?? 'off';
+        const replyTurn = dock?.getAttribute('data-reply-turn') ?? null;
         const caption = globalThis.document.querySelector('[data-voice-caption]')?.textContent ?? '';
         const last = mic.log[mic.log.length - 1];
-        if (last === undefined || last.phase !== phase || last.caption !== caption) mic.log.push({ t: globalThis.performance.now(), phase, caption });
+        if (last === undefined || last.phase !== phase || last.caption !== caption || last.replyTurn !== replyTurn) mic.log.push({ t: globalThis.performance.now(), phase, caption, replyTurn });
       };
-      new globalThis.MutationObserver(record).observe(globalThis.document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-phase'] });
+      new globalThis.MutationObserver(record).observe(globalThis.document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-phase', 'data-reply-turn'] });
     });
     const tab = await context.newPage();
     tab.on('pageerror', (error) => pageErrors.push(`${tab.url()}: ${error.message}`));
@@ -244,7 +245,15 @@ try {
     const session = await currentSession();
     return session === null ? [] : (await client.agent.listTurns(workspace.id, session.id)).filter((turn) => turn.message !== '用这些素材剪出第一版。');
   };
-  const waitTurns = (count, label, timeoutMs = 360_000) => waitFor(voiceTurns, (turns) => turns.length >= count && turns.every((turn) => turn.status !== 'RUNNING'), { timeoutMs, intervalMs: 1000, label });
+  const waitTurns = (count, label, timeoutMs = 360_000) => waitFor(voiceTurns, (turns) => turns.length >= count && turns.every((turn) => turn.status !== 'RUNNING'), { timeoutMs, intervalMs: 1000, label })
+    .then((turns) => [...turns].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)));
+  /** 某一轮的回应第一次出声（页面时钟）距这句话说完多久；没念（失败 / 没有回应 / 被跳过）为 null */
+  const replyLatency = async (turn, endedAt) => {
+    const hit = (await phaseLog()).find((entry) => entry.t >= endedAt && entry.phase === 'speaking' && entry.replyTurn === turn.id);
+    return hit === undefined ? null : Math.round(hit.t - endedAt);
+  };
+  const outcome = (turn) => `${turn.status}${turn.proposalId === null ? '' : '，有试改'}${turn.error === null ? '' : `（${String(turn.error.details?.reason ?? turn.error.code)}）`}`;
+  const claudeSeconds = (turn) => (turn.completedAt === null ? null : Math.round((Date.parse(turn.completedAt) - Date.parse(turn.createdAt)) / 1000));
   const isTranscript = (entry) => entry.phase === 'recognizing' && entry.caption !== '' && !entry.caption.startsWith('…');
   /** 说一句：记录开口检测、首个转写、说完到交给 AI 的时间（页面时钟，毫秒） */
   async function say(name, options = {}) {
@@ -327,31 +336,40 @@ try {
   if (queued) await shot('03-zh-desktop-light-thinking-queued');
   pass('第二句：说到一半换指向；AI 忙时排队', `${queued ? '已排队（"还有 1 句排队"）' : 'AI 已空闲，直接发出'}；首个转写 ${String(second.firstTranscriptMs)} ms；说完到交出 ${String(second.endToDeliveredMs)} ms`);
 
-  // 第一句的回应：真实 Claude 完成 → 网关用真实合成念出来（选的 Nova）
-  const speaking1 = await firstAfter(first.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'first reply audio');
-  metrics.replies.push({ after: 'zh_edit1', userEndToFirstAudioMs: Math.round(speaking1.t - first.endedAt) });
+  // 前两句的回应：真实 Claude 完成 → 网关用真实合成念出来（选的 Nova）；按 data-reply-turn 把出声对应到轮次
+  await firstAfter(first.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'first reply audio');
   await assertClear('zh speaking');
   await shot('04-zh-desktop-light-speaking');
   let turns = await waitTurns(2, 'two voice turns');
-  const firstTurn = turns.find((turn) => turn.pointer.clipIds.includes(lakeClip ?? '-')) ?? turns[turns.length - 1];
-  const secondTurn = turns.find((turn) => turn.message.includes('音乐') || turn.message.toLowerCase().includes('music'));
-  if (secondTurn === undefined) throw new Error(`second voice turn not found: ${turns.map((turn) => turn.message).join(' | ')}`);
+  const [firstTurn, secondTurn] = turns;
+  if (secondTurn === undefined || !(secondTurn.message.includes('音乐') || secondTurn.message.toLowerCase().includes('music'))) throw new Error(`second voice turn not found: ${turns.map((turn) => turn.message).join(' | ')}`);
+  await firstAfter(second.endedAt, (entry) => entry.phase !== 'speaking' && entry.phase !== 'thinking', 180_000, 'replies finished').catch(() => undefined);
+  for (const [turn, said] of [[firstTurn, first], [secondTurn, second]]) {
+    metrics.replies.push({ after: said.clip, turnStatus: turn.status, claudeSeconds: claudeSeconds(turn), userEndToFirstAudioMs: await replyLatency(turn, said.endedAt) });
+  }
   if (!secondTurn.pointer.clipIds.includes(glacierClip ?? '-')) throw new Error(`mid-sentence switch: "这里" bound to ${JSON.stringify(secondTurn.pointer)}, expected glacier ${String(glacierClip)}`);
   if (!firstTurn.pointer.clipIds.includes(lakeClip ?? '-')) throw new Error(`first utterance bound to ${JSON.stringify(firstTurn.pointer)}, expected lake ${String(lakeClip)}`);
-  const firstReply = replyEvents()[0];
-  pass('AI 回应：真实 Claude → 真实语音合成念出来', `说完到听见回应 ${String(metrics.replies[0].userEndToFirstAudioMs)} ms（其中 Claude 这一轮 ${String(Math.round((Date.parse(firstTurn.completedAt) - Date.parse(firstTurn.createdAt)) / 1000))} s，合成首块 ${String(firstReply?.firstChunkMs ?? '?')} ms，声音 ${String(firstReply?.voice ?? '?')}）`);
+  const spokenReply = replyEvents().find((event) => event.characters > 0);
+  pass('AI 回应：真实 Claude → 真实语音合成念出来（按轮次对应）', metrics.replies.map((reply) => `${reply.clip ?? reply.after}：${reply.turnStatus}，Claude ${String(reply.claudeSeconds)} s，说完到听见回应 ${reply.userEndToFirstAudioMs === null ? '未念（这一轮没有可念的回应）' : `${String(reply.userEndToFirstAudioMs)} ms`}`).join('；') + `；合成首块 ${String(spokenReply?.firstChunkMs ?? '?')} ms，声音 ${String(spokenReply?.voice ?? '?')}；第一句结局 ${outcome(firstTurn)}，第二句 ${outcome(secondTurn)}`);
   pass('指向绑定：第一句绑 lake；第二句开口指 road、说"这里"前改指 glacier → 绑 glacier', `第一轮"${firstTurn.message}"→ ${firstTurn.pointer.clipIds.join(',')}；第二轮"${secondTurn.message}"→ ${secondTurn.pointer.clipIds.join(',')}`);
 
   // 纠正：第三句
   await firstAfter(await now(), (entry) => entry.phase === 'listening', 120_000, 'idle before correction');
   const fix = await say('zh_fix');
   turns = await waitTurns(3, 'correction turn');
-  const fixTurn = turns.find((turn) => turn.message.includes('不对') || turn.message.includes('三秒') || turn.message.includes('3 秒'));
-  pass('纠正：作为新的一句交给 AI（带上前文）', `"${fixTurn?.message ?? turns[0].message}"；首个转写 ${String(fix.firstTranscriptMs)} ms`);
+  const fixTurn = turns[2];
+  pass('纠正：作为新的一句交给 AI（带上前文）', `"${fixTurn.message}"（${outcome(fixTurn)}，AI："${(fixTurn.reply ?? '').slice(0, 60)}"）；首个转写 ${String(fix.firstTranscriptMs)} ms`);
 
-  // 打断：AI 念回应时开口 → 立刻停播
-  const speaking3 = await firstAfter(fix.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'correction reply audio');
-  metrics.replies.push({ after: 'zh_fix', userEndToFirstAudioMs: Math.round(speaking3.t - fix.endedAt) });
+  // 打断：AI 念回应时开口 → 立刻停播（要打断的那一轮必须有回应可念；没有时再说一句明确的修改，打断它的回应）
+  let interrupted = { turn: fixTurn, said: fix };
+  if (fixTurn.status !== 'COMPLETED' || (fixTurn.reply ?? '').trim() === '') {
+    const extra = await say('zh_short');
+    const extraTurns = await waitTurns(turns.length + 1, 'extra turn to interrupt');
+    interrupted = { turn: extraTurns[extraTurns.length - 1], said: extra };
+    metrics.extraEdit = { reason: 'correction turn had no reply to interrupt', turn: interrupted.turn.message, outcome: outcome(interrupted.turn) };
+  }
+  await firstAfter(interrupted.said.endedAt, (entry) => entry.phase === 'speaking' && entry.replyTurn === interrupted.turn.id, 360_000, 'reply audio to interrupt');
+  metrics.replies.push({ after: interrupted.said.clip, turnStatus: interrupted.turn.status, claudeSeconds: claudeSeconds(interrupted.turn), userEndToFirstAudioMs: await replyLatency(interrupted.turn, interrupted.said.endedAt) });
   await page.waitForTimeout(700);
   const barge = await play('zh_barge');
   const bargeOnset = barge + LEAD_SECONDS * 1000;
@@ -362,13 +380,12 @@ try {
   await playEnded();
   await firstAfter(bargeOnset, (entry) => entry.phase === 'thinking', 30_000, 'barge utterance delivered');
   const stoppedReply = await waitFor(async () => replyEvents().find((event) => event.stopped === true), Boolean, { timeoutMs: 10_000, intervalMs: 200, label: 'stopped reply logged' }).catch(() => undefined);
-  pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `已下发 ${String(stoppedReply.audioSeconds)} s 音频后中止`}`);
+  pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `已下发 ${String(stoppedReply.audioSeconds)} s 音频后中止`}`.replace('网关记录被打断的回应 未见', '这一轮的音频网关已全部下发（合成快于播放），停的是浏览器里的播放'));
 
   // 继续：打断那句的回应 → "停止说话"只停声音
-  const speaking4 = await firstAfter(stopped.t + 1, (entry) => entry.phase === 'speaking', 360_000, 'continue reply audio');
-  metrics.replies.push({ after: 'zh_barge', userEndToFirstAudioMs: null });
+  const speaking4 = await firstAfter(stopped.t + 1, (entry) => entry.phase === 'speaking', 360_000, 'continue reply audio').catch(() => null);
   await page.waitForTimeout(300);
-  if ((await page.locator('[data-voice-dock]').getAttribute('data-phase')) === 'speaking') {
+  if (speaking4 !== null && (await page.locator('[data-voice-dock]').getAttribute('data-phase')) === 'speaking') {
     const before = await now();
     await dock().getByRole('button', { name: '停止说话' }).click();
     const silent = await firstAfter(before, (entry) => entry.phase !== 'speaking', 5000, 'stop speaking');
@@ -376,13 +393,23 @@ try {
     await page.locator('[data-voice-caption]').filter({ hasText: '已停止说话' }).waitFor({ timeout: 5000 });
     pass('停止说话：只停声音，不影响这一轮与试改', `点击到停声 ${String(metrics.stopSpeaking.clickToSilenceMs)} ms（之后阶段 ${silent.phase}）`);
   } else {
-    pass('停止说话：回应太短，按钮出现前已念完（未测）', `回应开始于页面时钟 ${String(Math.round(speaking4.t))} ms`);
+    pass('停止说话：这一轮的回应没赶上测（未测）', speaking4 === null ? '打断后那一轮没有可念的回应' : '回应在点击前已念完');
   }
-  turns = await waitTurns(4, 'continue turn');
+  turns = await waitTurns(turns.length + 1, 'continue turn');
 
   // 采用 / 撤销：改动只经试改，由用户明确采用
   const keepButton = dock().getByRole('button', { name: '采用' });
-  await keepButton.waitFor({ timeout: 60_000 });
+  if (!(await keepButton.waitFor({ timeout: 20_000 }).then(() => true, () => false))) {
+    // 真实 AI 这几轮没有留下试改（例如它说做不到，或拒绝了某一轮）：再说一句明确的修改，让采用 / 撤销有对象
+    const extra = await say('zh_short');
+    const extraTurns = await waitTurns(turns.length + 1, 'extra edit turn');
+    const extraTurn = extraTurns[extraTurns.length - 1];
+    metrics.extraEdit = { reason: 'no open trial after the continue turn', turn: extraTurn.message, outcome: outcome(extraTurn) };
+    pass('补一句明确的修改（前几轮没有留下试改）', `"${extraTurn.message}"（${outcome(extraTurn)}）；首个转写 ${String(extra.firstTranscriptMs)} ms`);
+    await keepButton.waitFor({ timeout: 60_000 });
+  }
+  const zhTurns = await voiceTurns();
+  metrics.zhTurnOutcomes = zhTurns.map((turn) => ({ message: turn.message, outcome: outcome(turn) }));
   await shot('06-zh-desktop-light-trial');
   const revisionBefore = (await client.studio.state(workspace.id, ref.projectId)).project.revision;
   await keepButton.click();

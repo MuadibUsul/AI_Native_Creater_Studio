@@ -507,6 +507,7 @@ const zhCN = {
         STOPPED_SPEAKING: '已停止说话。',
         TURN_STOPPED: '已让 AI 停下这一轮。',
         TURN_STOPPED_QUEUE: (count: number) => `已让 AI 停下这一轮，排队的 ${String(count)} 句也取消了。`,
+        TURN_FAILED: '刚才那句 AI 没能完成，原因在对话里。',
       },
       errors: {
         UNSUPPORTED: '这个浏览器不支持实时语音，请用文字。',
@@ -1130,6 +1131,7 @@ const en: Messages = {
         STOPPED_SPEAKING: 'Stopped speaking.',
         TURN_STOPPED: 'Asked the AI to stop this turn.',
         TURN_STOPPED_QUEUE: (count: number) => `Asked the AI to stop this turn; ${String(count)} queued ${count === 1 ? 'sentence was' : 'sentences were'} cancelled too.`,
+        TURN_FAILED: 'The AI could not finish that one; the reason is in the conversation.',
       },
       errors: {
         UNSUPPORTED: 'This browser does not support live voice. Please type instead.',

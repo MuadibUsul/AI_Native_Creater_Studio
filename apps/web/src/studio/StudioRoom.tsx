@@ -430,6 +430,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     for (const turn of turns) {
       if (!voiceTurns.current.has(turn.id) || spoken.current.has(turn.id) || turn.status === 'RUNNING') continue;
       spoken.current.add(turn.id);
+      // 用语音交出的一句 AI 没能完成：在画布边缘说一声（用户可能没在看对话栏），原因在对话里
+      if (turn.status === 'FAILED' && voiceActive) setVoiceNotice(t.voice.notices.TURN_FAILED);
       if (!readAloud || !voiceActive || voiceHearing || turn.reply === null || turn.reply.trim() === '') continue;
       if (!voiceSpeak(turn.id)) speech.speak(turn.reply);
     }
@@ -617,8 +619,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       voices={voice.tts === null ? null : { list: voice.tts.voices, value: voice.voiceId, onChange: voice.setVoiceId }}
       browserVoice={voice.tts === null && speech.supported}
       readAloud={{ enabled: readAloud, onToggle: () => { if (readAloud) { voice.stopSpeaking(); speech.stop(); } setReadAloud(!readAloud); } }}
-      stopSpeaking={voiceAiSpeaking || voice.reply.state === 'preparing' ? stopVoiceSpeaking : null}
-      stopTurn={canEdit && (running || voiceWaiting > 0) ? stopVoiceTurn : null}
+      stopSpeaking={{ enabled: voiceAiSpeaking || voice.reply.state === 'preparing', onStop: stopVoiceSpeaking }}
+      stopTurn={canEdit ? { enabled: running || voiceWaiting > 0, onStop: stopVoiceTurn } : null}
+      replyTurnId={voice.reply.state === 'playing' ? voice.reply.turnId : null}
       trial={trial !== null && !running && canEdit ? { onKeep: () => keep(trial), onDiscard: () => discard(trial), busy: actions.adopt.isPending || actions.discard.isPending } : null}
       undo={canUndoChange && canEdit && !running ? { onUndo: undoChange, busy: actions.undoChange.isPending } : null}
       failed={voiceFailed === null ? null : {
