@@ -1,5 +1,7 @@
 # ANCS 界面精修 2026-10：审计、设计系统、方案与交付
 
+> **2026-10-15 更新**：本文的 Monochrome 视觉部分已被 `docs/decisions/0019-stitch-canvas-design-language.md` 部分取代（参照 Google Stitch 的"画布"设计语言，见 `docs/design/stitch-redesign-2026-10.md`）；交互状态、动效时长、无障碍规则继续有效。
+
 > 背景：项目所有者要求研究一组全球设计资源，在现有 Monochrome 体系内系统性提升视觉与交互（"最终的审美你来定"），并把"黑"的问题解决掉。
 > 研究报告：`docs/design/research/2026-10-design-references.md`（访问情况、测得数值、逐站规律、链接）。
 > 前后对比证据：`docs/verification/artifacts/ui-refresh/{before,after}/{studio,generation,review}/`（同一套浏览器验收脚本、同一流程、同一数据形状；before 为改动前的 HEAD 构建）。

@@ -105,7 +105,8 @@ try {
     return labels.filter((text) => text === '未配置').length === 6 && labels.filter((text) => text === '已理解').length === 3;
   }, null, { timeout: 120_000 });
   // 任务结束的就近提醒：看着素材处理完，任务按钮下方出现"… · 完成"（8 秒后自动收起）
-  const notice = page.getByRole('button', { name: /· 完成。打开任务$/ }).first();
+  // 一次轮询里同时处理完多段时，提醒合并为"N 项任务结束了"（单段时是"名字 · 完成"）
+  const notice = page.getByRole('button', { name: /(?:· 完成|项任务结束了)。打开任务$/ }).first();
   await notice.waitFor({ timeout: 8_000 });
   // 可见 ≠ 没被挡住：取提醒中心点最上层的元素，必须是提醒本身（素材抽屉开着时也不能盖住它）
   const noticeOnTop = await notice.evaluate((node) => { const box = node.getBoundingClientRect(); const hit = globalThis.document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2); return hit === node || node.contains(hit); });
@@ -294,7 +295,11 @@ try {
   if (exportBox === null || exportBox.x < 0 || exportBox.x + exportBox.width > 390) throw new Error(`phone: export button is outside the viewport (${JSON.stringify(exportBox)}; widest: ${offenders.join(', ')})`);
   const pageOverflow = await page.evaluate(() => globalThis.document.documentElement.scrollWidth - globalThis.innerWidth);
   if (pageOverflow > 0) throw new Error(`phone: page scrolls sideways by ${String(pageOverflow)} px`);
-  pass('手机宽度', `390 px：导出按钮在屏幕内（x ${exportBox.x.toFixed(0)}–${(exportBox.x + exportBox.width).toFixed(0)}），页面无横向溢出`);
+  // 一列布局：看片屏幕在上、AI 对话栏在下（不能被 DOM 顺序带到画面上面）
+  const stageBox = await page.getByRole('region', { name: '作品画面' }).boundingBox();
+  const chatBox = await page.getByRole('region', { name: '和 AI 说' }).boundingBox();
+  if (stageBox === null || chatBox === null || stageBox.y >= chatBox.y) throw new Error(`phone: the picture must come before the chat panel (${JSON.stringify({ stageBox, chatBox })})`);
+  pass('手机宽度', `390 px：导出按钮在屏幕内（x ${exportBox.x.toFixed(0)}–${(exportBox.x + exportBox.width).toFixed(0)}），页面无横向溢出；画面（y ${stageBox.y.toFixed(0)}）在对话栏（y ${chatBox.y.toFixed(0)}）之上`);
 
   if (pageErrors.length > 0) throw new Error(`browser errors: ${pageErrors.join(' | ')}`);
   const summary = { when: new Date().toISOString(), director: 'SCRIPTED (not a real provider)', workspaceId, projectId, results };

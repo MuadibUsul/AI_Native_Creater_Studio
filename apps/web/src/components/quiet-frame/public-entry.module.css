@@ -1,5 +1,6 @@
 .publicLanding {
   min-height: 100dvh;
+  overflow-x: clip;
   background: var(--ui-canvas-dots), var(--ui-bg-canvas);
   background-attachment: fixed;
   color: var(--ui-fg-primary);
@@ -82,3 +83,4 @@
 .designSystem :global(.status-board div) {
   border-color: var(--ui-border-subtle);
 }
+.publicLanding :global(.landing-buttons) { flex-wrap: wrap; justify-content: center; }

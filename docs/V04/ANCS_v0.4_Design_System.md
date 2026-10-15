@@ -1,5 +1,7 @@
 # ANCS v0.4｜苹果式极简黑白设计系统
 
+> **2026-10-15**：项目所有者要求改为参照 Google Stitch 的交互与视觉，本规范的黑白禁令（装饰渐变、背景模糊、非中性色、小圆角）在受控范围内被 `docs/decisions/0019-stitch-canvas-design-language.md` 放开；当前 token 名为 "ANCS Canvas"，说明见 `docs/design/stitch-redesign-2026-10.md`。其余原则（对比度、状态不只靠颜色、媒体保色、减少动效）继续有效。
+
 本文件是总规范§29的完整摘录，关联N16-01—12、Design Tokens JSON/CSS参考。不是已实现前端或高保真界面图；UI不改变作品内容主题。
 
 <a id="s29"></a>

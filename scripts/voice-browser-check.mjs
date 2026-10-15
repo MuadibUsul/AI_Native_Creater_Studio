@@ -11,13 +11,13 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { Blob } from 'node:buffer';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { deepgramResult, deepgramUtteranceEnd } from '../apps/realtime/dist/index.js';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
-const evidenceDir = resolve('docs/verification/artifacts/v6-2');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-2'); // ANCS_EVIDENCE_DIR：另存一套证据（如界面改版），不覆盖里程碑证据
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const email = `v62-${randomUUID().slice(0, 8)}@test.local`;
 const results = [];
@@ -139,7 +139,7 @@ try {
   pass('英文：未说完先保留，后半句接上', `"${enTurn.message}"；识别参数 ${enConnection.query.get('model')}/${enConnection.query.get('language')}`);
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
-  console.log(`\nV6-2 voice browser check passed (${String(results.length)} checks). Evidence: docs/verification/artifacts/v6-2/`);
+  console.log(`\nV6-2 voice browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);
 } catch (error) {
   console.error(error);
   if (page) await page.screenshot({ path: resolve(evidenceDir, 'failure.png') }).catch(() => undefined);

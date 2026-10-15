@@ -11,12 +11,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
-const evidenceDir = resolve('docs/verification/artifacts/v6-5');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-5'); // ANCS_EVIDENCE_DIR：另存一套证据（如界面改版），不覆盖里程碑证据
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const email = `v65-${randomUUID().slice(0, 8)}@test.local`;
 const results = [];
@@ -152,7 +152,7 @@ try {
   pass('中英切换、深色、手机宽度', '"配音：开"/"Voice-over: on"、讲述轨随语言切换；新建页 390 px 无横向溢出');
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
-  console.log(`\nV6-5 narration browser check passed (${String(results.length)} checks). Evidence: docs/verification/artifacts/v6-5/`);
+  console.log(`\nV6-5 narration browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);
 } catch (error) {
   console.error(error);
   if (page) await page.screenshot({ path: resolve(evidenceDir, 'failure.png') }).catch(() => undefined);

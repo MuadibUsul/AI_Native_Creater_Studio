@@ -12,12 +12,12 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { Blob } from 'node:buffer';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
-const evidenceDir = resolve('docs/verification/artifacts/v6-3');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-3'); // ANCS_EVIDENCE_DIR：另存一套证据（如界面改版），不覆盖里程碑证据
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const email = `v63-${randomUUID().slice(0, 8)}@test.local`;
 const results = [];
@@ -180,7 +180,7 @@ try {
   pass('中英切换与深色', '特效开关、特效轨与片段标名随语言切换');
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
-  console.log(`\nV6-3 effects browser check passed (${String(results.length)} checks). Evidence: docs/verification/artifacts/v6-3/`);
+  console.log(`\nV6-3 effects browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);
 } catch (error) {
   console.error(error);
   if (page) await page.screenshot({ path: resolve(evidenceDir, 'failure.png') }).catch(() => undefined);

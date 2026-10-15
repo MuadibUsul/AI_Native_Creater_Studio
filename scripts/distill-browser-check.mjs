@@ -14,12 +14,12 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile } from 'node:fs/promises';
 import { Blob } from 'node:buffer';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
-const evidenceDir = resolve('docs/verification/artifacts/v6-6');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-6'); // ANCS_EVIDENCE_DIR：另存一套证据（如界面改版），不覆盖里程碑证据
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const email = `v66-${randomUUID().slice(0, 8)}@test.local`;
 const results = [];
@@ -181,7 +181,7 @@ try {
   pass('风格进入对话', `这一轮带上 ${learned.id}（策略包只作为上下文数据）；脚本导演按测得的 0.5 秒镜头切了 12 个镜头，成为试改 ${proposal.proposalId}`);
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
-  console.log(`\nV6-6 distill browser check passed (${String(results.length)} checks). Evidence: docs/verification/artifacts/v6-6/`);
+  console.log(`\nV6-6 distill browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);
 } catch (error) {
   console.error(error);
   if (page) await page.screenshot({ path: resolve(evidenceDir, 'failure.png') }).catch(() => undefined);

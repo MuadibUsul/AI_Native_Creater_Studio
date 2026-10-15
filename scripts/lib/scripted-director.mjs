@@ -80,11 +80,12 @@ export class ScriptedDirector {
       return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'edit_timeline', input: { operations } }], stopReason: 'tool_use', usage };
     }
     const requestText = tag(text, 'request') ?? '';
-    if (GENERATION_WORDS.some(([pattern]) => pattern.test(requestText))) {
-      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'list_generation_options', input: {} }], stopReason: 'tool_use', usage };
-    }
     const effectClip = (timeline.clips ?? []).find((clip) => typeof clip.effect === 'string');
     const color = COLOR_WORDS.find(([pattern]) => pattern.test(requestText))?.[1];
+    // "换成蓝色"：已有特效时是改特效颜色，不是付费重绘（"换成"也是重绘的触发词，先判断改色）
+    if (GENERATION_WORDS.some(([pattern]) => pattern.test(requestText)) && !(effectClip !== undefined && color !== undefined)) {
+      return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'list_generation_options', input: {} }], stopReason: 'tool_use', usage };
+    }
     if (effectClip !== undefined && color !== undefined) {
       // 改已有特效的颜色：同一段特效代码按新参数重渲（不写新代码）
       this.pendingReply = zh ? `把「${effectClip.effect}」改成了新的颜色。` : `Changed the color of "${effectClip.effect}".`;
