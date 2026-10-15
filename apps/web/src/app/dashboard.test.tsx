@@ -6,7 +6,8 @@ import DashboardPage from './page.js';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
 const replace = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
+const push = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace, push }) }));
 
 /**
  * Dashboard 状态矩阵（P05-03）：加载（由 pending 覆盖于其他用例）/
@@ -104,12 +105,44 @@ describe('Dashboard', () => {
     });
     renderWithClient(<I18nProvider initialLocale="en"><DashboardPage /></I18nProvider>, client);
     expect(await screen.findByRole('link', { name: /Weekly rates/ })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Turn ideas into finished work.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'What video shall we make today?' })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Footage' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByText('Draft')).toBeTruthy();
     expect(screen.getByText('Target 1 min 30 s · 16:9')).toBeTruthy();
     expect(screen.getByText('1 project')).toBeTruthy();
     expect(screen.getByRole('link', { name: /New project/ })).toBeTruthy();
     expect(screen.queryByText(/[一-龥]/)).toBeNull();
+  });
+
+  it('首页输入框（参照 Stitch）：素材剪辑带着想法进新建页；文章讲述要先贴文章；素材与文章作品都进共看片室', async () => {
+    push.mockClear();
+    window.sessionStorage.clear();
+    const client = mockClient({
+      auth: { session: vi.fn().mockResolvedValue(session()) },
+      workspaces: { list: vi.fn().mockResolvedValue([workspace('ws_1', '旅行')]) },
+      projects: {
+        list: vi.fn().mockResolvedValue([
+          { id: 'prj_f', title: '冰岛自驾', status: 'DRAFT', mode: 'FOOTAGE_EDIT', revision: 1, aspectRatio: '16:9', fps: 30 },
+          { id: 'prj_a', title: '冰川为什么后退', status: 'DRAFT', mode: 'HYBRID', revision: 1, aspectRatio: '16:9', fps: 30 },
+        ]),
+      },
+    });
+    renderWithClient(<DashboardPage />, client);
+    expect((await screen.findByRole('link', { name: /冰岛自驾/ })).getAttribute('href')).toBe('/w/ws_1/studio/prj_f');
+    expect(screen.getByRole('link', { name: /冰川为什么后退/ }).getAttribute('href')).toBe('/w/ws_1/studio/prj_a');
+    expect(screen.getByText('素材剪辑 · 16:9')).toBeTruthy();
+    expect(screen.getByText('文章讲述 · 16:9')).toBeTruthy();
+    // 建议只填进输入框，不直接发送
+    await userEvent.click(screen.getByRole('button', { name: /竖屏 30 秒城市夜跑/ }));
+    expect((screen.getByRole('textbox', { name: '想做的视频' }) as HTMLTextAreaElement).value).toBe('竖屏 30 秒城市夜跑，跟着音乐卡点');
+    await userEvent.click(screen.getByRole('button', { name: '开始创作' }));
+    expect(push).toHaveBeenCalledWith('/w/ws_1/studio/new');
+    expect(JSON.parse(window.sessionStorage.getItem('ancs-studio-draft') ?? 'null')).toEqual({ start: 'footage', brief: '竖屏 30 秒城市夜跑，跟着音乐卡点' });
+    // 文章讲述：没贴文章时不能开始
+    await userEvent.click(screen.getByRole('radio', { name: '文章讲述' }));
+    await userEvent.clear(screen.getByRole('textbox', { name: '想做的视频' }));
+    expect(screen.getByRole('button', { name: '开始创作' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('group', { name: '试试这样说' })).toBeNull();
   });
 
   it('失败：错误块可重试（重新调用 SDK）', async () => {

@@ -1,4 +1,5 @@
-/* V6-4 批注式审片：手机优先（单列：看片 → 标记 → 批注 → 底部执行栏），宽屏两列。只用 ui.* 语义 token；看片区垫底固定为 media matte。 */
+/* V6-4 批注式审片：手机优先（单列：看片 → 标记 → 批注 → 底部执行栏），宽屏两列（与共看片室一致：讨论面板在左、画面在右，ADR 0019）。
+   只用 ui.* 语义 token；画面内部（角标、字幕、框选）固定为媒体垫底配色。 */
 
 .room {
   --review-on-matte: #F5F5F5;
@@ -7,7 +8,8 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--ui-bg-canvas);
+  background: var(--ui-canvas-dots), var(--ui-bg-canvas);
+  background-attachment: fixed;
   color: var(--ui-fg-primary);
   font-family: var(--ui-font-family);
   font-size: var(--ui-type-control);
@@ -23,31 +25,29 @@
   display: flex;
   align-items: center;
   gap: var(--ui-space-2);
-  min-height: 52px;
+  min-height: 56px;
   padding: 0 var(--ui-space-3);
-  border-bottom: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-canvas);
+  background: var(--ui-glass-bg);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
   min-width: 0;
 }
 .titleGroup { display: flex; flex-direction: column; min-width: 0; }
 .eyebrow { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
-.title { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; }
+.title { font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; }
 .spacer { flex: 1; }
 
 .body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .watch { display: flex; flex-direction: column; scroll-margin-top: 52px; }
 
-/* 看片区：与共看片室一致，是四周留边的内嵌"屏幕"（垫底仍为 media matte，不改视频像素） */
+/* 看片区：与共看片室一致，画面浮在点阵画布上（圆角 + 阴影），不改视频像素 */
 .stage {
   display: flex;
   justify-content: center;
-  background: var(--ui-media-matte);
   padding: var(--ui-space-2);
   margin: var(--ui-space-2) var(--ui-space-2) 0;
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
 }
-.frame { position: relative; width: 100%; max-height: var(--review-stage-height); background: #000; touch-action: manipulation; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+.frame { position: relative; width: 100%; max-height: var(--review-stage-height); background: #000; touch-action: manipulation; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--ui-border-subtle), var(--ui-shadow-3); }
 .video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .stageStatus {
   position: absolute;
@@ -108,8 +108,8 @@
   gap: var(--ui-space-3);
   margin: var(--ui-space-3);
   padding: var(--ui-space-3);
-  border: 1px solid var(--ui-border-control);
-  border-radius: var(--ui-radius-overlay);
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 24px;
   background: var(--ui-bg-elevated);
   box-shadow: var(--ui-shadow-2);
 }
@@ -121,7 +121,7 @@
 
 /* 批注列表 */
 .notesPanel { padding: var(--ui-space-3); padding-bottom: 120px; }
-.notesTitle { font-size: var(--ui-type-section-title); font-weight: 600; margin-bottom: var(--ui-space-3); }
+.notesTitle { font-size: var(--ui-type-section-title); font-weight: 500; margin-bottom: var(--ui-space-3); }
 .emptyNotes, .intro { color: var(--ui-fg-secondary); font-size: var(--ui-type-metadata); }
 .intro { margin-top: var(--ui-space-3); }
 .noteList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--ui-space-3); }
@@ -141,10 +141,10 @@
   font-family: var(--ui-font-mono);
   font-variant-numeric: tabular-nums;
   font-size: var(--ui-type-metadata);
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 3px 10px;
+  border-radius: var(--ui-radius-pill);
   border: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-canvas);
+  background: var(--ui-bg-subtle);
   color: var(--ui-fg-primary);
 }
 button.timeChip { cursor: pointer; min-height: 28px; border-color: var(--ui-border-control); transition: background-color var(--ui-motion-feedback) var(--ui-ease-standard); }
@@ -174,8 +174,10 @@ button.timeChip:hover { background: var(--ui-bg-hover); }
   gap: var(--ui-space-2);
   padding: var(--ui-space-3);
   padding-bottom: calc(var(--ui-space-3) + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--ui-border-subtle);
-  background: var(--ui-bg-canvas);
+  border-top: 1px solid var(--ui-glass-border);
+  background: var(--ui-glass-bg);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
 }
 .applyBar:empty { display: none; }
 .applyRow { display: flex; align-items: center; gap: var(--ui-space-2); flex-wrap: wrap; }
@@ -200,7 +202,9 @@ button.timeChip:hover { background: var(--ui-bg-hover); }
 @media (min-width: 1024px) {
   .room { --review-stage-height: calc(100dvh - 300px); }
   .body { flex-direction: row; align-items: flex-start; }
-  .watch { flex: 1 1 auto; min-width: 0; position: sticky; top: 52px; }
-  .stage { padding: var(--ui-space-4); margin: var(--ui-space-3) var(--ui-space-3) 0; border-radius: var(--ui-radius-overlay); }
-  .notesPanel { width: 420px; flex: none; border-left: 1px solid var(--ui-border-subtle); min-height: calc(100dvh - 52px); padding-bottom: var(--ui-space-6); }
+  .topbar { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .watch { flex: 1 1 auto; min-width: 0; position: sticky; top: 56px; }
+  .stage { padding: var(--ui-space-2) var(--ui-space-4); margin: var(--ui-space-2) var(--ui-space-3) 0; }
+  .notesPanel { order: -1; width: 400px; flex: none; margin: 0 0 var(--ui-space-3) var(--ui-space-3); padding: var(--ui-space-6); min-height: calc(100dvh - 68px); border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-container); background: var(--ui-bg-elevated); box-shadow: var(--ui-shadow-2); }
+  .notesPanel .note { background: var(--ui-bg-subtle); box-shadow: none; }
 }

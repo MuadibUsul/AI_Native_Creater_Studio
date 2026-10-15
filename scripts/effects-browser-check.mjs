@@ -101,14 +101,14 @@ try {
     await page.getByRole('button', { name: '发送' }).click();
   };
   await shot('01-studio');
-  pass('打开共看片室', '顶栏显示"特效：关"');
+  pass('打开共看片室', '输入框上方显示"特效：关"');
 
   // 3. 规则未开：框出画面说"这里加个爆炸" → AI 如实说明需要先开启
   await seekTo(1.0);
   await markArea([0.55, 0.2], [0.9, 0.75]);
   await page.getByText('画面区域 · 00:01.0').waitFor();
   await say('这里加个爆炸');
-  await page.getByText('这个作品还没开启特效：点顶栏的"特效：关"打开后再说一次。').waitFor({ timeout: 60_000 });
+  await page.getByText('这个作品还没开启特效：点输入框上方的"特效：关"打开后再说一次。').waitFor({ timeout: 60_000 });
   await shot('02-blocked');
   pass('规则未开时如实拒绝', 'AI 回复需要先开启特效；没有渲染、没有试改');
 

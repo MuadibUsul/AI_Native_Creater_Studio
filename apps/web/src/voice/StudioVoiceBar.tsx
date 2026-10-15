@@ -16,7 +16,7 @@ export function VoiceToggle(props: { state: VoiceState; disabled: boolean; onSta
   return (
     <button
       type="button"
-      className={`btn icononly ${on ? 'primary' : ''} ${styles['toggle']}`}
+      className={`ui-round ${on ? styles['toggleOn'] : ''} ${styles['toggle']}`}
       aria-pressed={on}
       aria-label={on ? t.stop : t.start}
       aria-keyshortcuts="V"

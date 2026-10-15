@@ -62,17 +62,23 @@ try {
   await page.getByText('还没有工作区').waitFor({ timeout: 20_000 });
   await page.getByLabel('工作区名称').fill('共看片室验收');
   await page.getByRole('button', { name: '创建工作区' }).click();
-  await page.getByRole('link', { name: '进入共看片室' }).waitFor({ timeout: 20_000 });
+  // 首页（ADR 0019，参照 Stitch）：居中大输入框——起点（素材剪辑 / 文章讲述 / 链接导入）、上传、发送都在框里
+  const brief = '冰岛环岛自驾第一天的 Vlog，节奏轻快';
+  await page.getByRole('heading', { name: '今天想做一条什么视频？' }).waitFor({ timeout: 20_000 });
   await shot('01-home-entry');
   // 首页与侧栏/顶栏也是中英双语：切到英文看一眼再切回
   await page.getByRole('button', { name: '切换为英文界面' }).click();
-  await page.getByRole('heading', { name: 'Turn ideas into finished work.' }).waitFor({ timeout: 10_000 });
+  await page.getByRole('heading', { name: 'What video shall we make today?' }).waitFor({ timeout: 10_000 });
   await page.getByRole('navigation', { name: 'Main navigation' }).or(page.getByRole('complementary', { name: 'Main navigation' })).waitFor({ timeout: 10_000 });
   await shot('01b-home-english');
   await page.getByRole('button', { name: 'Switch the interface to Chinese' }).click();
-  await page.getByRole('link', { name: '进入共看片室' }).waitFor({ timeout: 10_000 });
-  await page.getByRole('link', { name: '进入共看片室' }).click();
+  await page.getByRole('radio', { name: '素材剪辑' }).waitFor({ timeout: 10_000 });
+  await page.getByRole('textbox', { name: '想做的视频' }).fill(brief);
+  await page.getByRole('button', { name: '开始创作' }).click();
   await page.getByRole('heading', { name: '新建一条视频' }).waitFor({ timeout: 20_000 });
+  // 想法预填作品名；清空后校验必填
+  await page.waitForFunction((value) => globalThis.document.querySelector('#studio-title')?.value === value, brief, { timeout: 10_000 });
+  await page.getByLabel('作品名称').fill('');
   await page.getByRole('button', { name: '开始' }).click();
   await page.getByText('请填写作品名称').waitFor();
   await page.getByLabel('作品名称').fill('冰岛环岛自驾 · 第一天');
@@ -82,6 +88,9 @@ try {
   await page.getByText('放入素材，或说说你想做什么。').waitFor({ timeout: 20_000 });
   const projectId = page.url().split('/').at(-1);
   const workspaceId = page.url().split('/').at(-3);
+  // 首页的那句想法预填在 AI 对话框里（不自动发送）
+  await page.waitForFunction((value) => globalThis.document.querySelector('[data-composer-input]')?.value === value, brief, { timeout: 10_000 });
+  await page.getByRole('textbox', { name: '告诉 AI 怎么改' }).fill('');
   pass('新建工程进入共看片室', `project ${projectId}`);
   await shot('03-empty-studio');
 

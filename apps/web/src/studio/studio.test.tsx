@@ -165,6 +165,26 @@ describe('V6-1c 共看片室', () => {
     expect(sdk.previews.request).not.toHaveBeenCalled();
   });
 
+  it('Stitch 布局：左侧 AI 对话栏（规则开关与上传在输入框旁）+ 画布工具条（框选 / 素材 / 快捷键）；首页带来的想法预填在输入框、不自动发送', async () => {
+    window.sessionStorage.setItem('ancs-studio-brief:prj_1', '冰岛自驾 Vlog，60 秒，节奏轻快');
+    const { sdk, startTurn } = client({ turns: [turn()] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const chat = await screen.findByRole('region', { name: '和 AI 说' });
+    await waitFor(() => expect((within(chat).getByRole('textbox', { name: '告诉 AI 怎么改' }) as HTMLTextAreaElement).value).toBe('冰岛自驾 Vlog，60 秒，节奏轻快'));
+    expect(window.sessionStorage.getItem('ancs-studio-brief:prj_1')).toBeNull();
+    expect(startTurn).not.toHaveBeenCalled();
+    const settings = within(chat).getByRole('group', { name: '这一轮的风格与规则' });
+    expect(within(settings).getByRole('group', { name: '制作规则：这条视频允许 AI 做什么' })).toBeTruthy();
+    expect(within(chat).getByRole('button', { name: '上传素材' })).toBeTruthy();
+    expect(within(chat).getByText('第一版：两段素材，共 6 秒。')).toBeTruthy();
+    const rail = screen.getByRole('toolbar', { name: '画布工具' });
+    expect((await within(rail).findByRole('button', { name: '框选画面' })).getAttribute('aria-pressed')).toBe('false');
+    expect(within(rail).getByRole('button', { name: '素材 2' }).getAttribute('aria-expanded')).toBe('false');
+    await userEvent.click(within(rail).getByRole('button', { name: '素材 2' }));
+    expect(screen.getByRole('complementary', { name: '素材' })).toBeTruthy();
+    expect(within(rail).getByRole('button', { name: '快捷键' })).toBeTruthy();
+  });
+
   it('未登录：给出登录入口；旧版工程没有主时间线：引导到旧编辑器', async () => {
     const signedOut = client({ extra: { studio: { state: vi.fn().mockRejectedValue(apiError(401, 'UNAUTHENTICATED')) } } });
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, signedOut.sdk);

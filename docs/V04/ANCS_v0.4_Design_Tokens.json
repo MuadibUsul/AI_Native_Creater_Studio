@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0",
   "documentVersion": "0.4",
-  "name": "ANCS Monochrome",
+  "name": "ANCS Canvas",
   "status": "IMPLEMENTATION_REFERENCE_NOT_INTEGRATED",
-  "source": "ANCS_AI_Native_v0.4.md §29; user-selected aesthetic, not Apple proprietary tokens",
+  "source": "ANCS_AI_Native_v0.4.md §29, superseded in part by docs/decisions/0019-stitch-canvas-design-language.md (owner request: follow Google Stitch interaction and visual language)",
   "appearance": {
     "default": "system",
     "fallback": "light",
@@ -22,43 +22,49 @@
   },
   "themes": {
     "light": {
-      "ui.bg.canvas": "#FFFFFF",
-      "ui.bg.subtle": "#F5F5F5",
+      "ui.bg.canvas": "#F8F9FA",
+      "ui.bg.subtle": "#F1F3F4",
       "ui.bg.elevated": "#FFFFFF",
-      "ui.bg.hover": "#EFEFEF",
-      "ui.fg.primary": "#171717",
-      "ui.fg.secondary": "#595959",
-      "ui.fg.muted": "#666666",
-      "ui.border.subtle": "#E5E5E5",
-      "ui.border.control": "#737373",
-      "ui.action.primary.bg": "#171717",
+      "ui.bg.hover": "#E8EAED",
+      "ui.fg.primary": "#1F1F1F",
+      "ui.fg.secondary": "#444746",
+      "ui.fg.muted": "#5F6368",
+      "ui.border.subtle": "#E3E3E3",
+      "ui.border.control": "#747775",
+      "ui.action.primary.bg": "#1F1F1F",
       "ui.action.primary.fg": "#FFFFFF",
-      "ui.action.primary.hover": "#383838",
-      "ui.selection.bg": "#E8E8E8",
-      "ui.focus.ring": "#171717",
-      "ui.media.matte": "#0A0A0A"
+      "ui.action.primary.hover": "#3C4043",
+      "ui.selection.bg": "#E3E3E6",
+      "ui.focus.ring": "#1F1F1F",
+      "ui.media.matte": "#0A0A0A",
+      "ui.ai.blue": "#1A73E8",
+      "ui.ai.violet": "#7C4DFF",
+      "ui.ai.teal": "#00897B"
     },
     "dark": {
-      "ui.bg.canvas": "#0A0A0A",
-      "ui.bg.subtle": "#111111",
-      "ui.bg.elevated": "#171717",
-      "ui.bg.hover": "#222222",
-      "ui.fg.primary": "#EDEDED",
-      "ui.fg.secondary": "#B3B3B3",
-      "ui.fg.muted": "#A3A3A3",
-      "ui.border.subtle": "#262626",
-      "ui.border.control": "#8C8C8C",
-      "ui.action.primary.bg": "#EDEDED",
-      "ui.action.primary.fg": "#171717",
+      "ui.bg.canvas": "#0E0E10",
+      "ui.bg.subtle": "#151517",
+      "ui.bg.elevated": "#1E1F22",
+      "ui.bg.hover": "#2A2B2F",
+      "ui.fg.primary": "#F1F3F4",
+      "ui.fg.secondary": "#BDC1C6",
+      "ui.fg.muted": "#9AA0A6",
+      "ui.border.subtle": "#2D2E31",
+      "ui.border.control": "#80868B",
+      "ui.action.primary.bg": "#F1F3F4",
+      "ui.action.primary.fg": "#202124",
       "ui.action.primary.hover": "#FFFFFF",
-      "ui.selection.bg": "#2A2A2A",
-      "ui.focus.ring": "#EDEDED",
-      "ui.media.matte": "#0A0A0A"
+      "ui.selection.bg": "#303134",
+      "ui.focus.ring": "#F1F3F4",
+      "ui.media.matte": "#0A0A0A",
+      "ui.ai.blue": "#7CACF8",
+      "ui.ai.violet": "#A78BFA",
+      "ui.ai.teal": "#5ED3E0"
     }
   },
-  "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", sans-serif",
+  "fontFamily": "\"Google Sans\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
   "fontFamilyMono": "ui-monospace, \"SF Mono\", SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace",
-  "fontFilesIncluded": false,
+  "fontFilesIncluded": true,
   "spacingPx": [
     4,
     8,
@@ -70,10 +76,13 @@
     64
   ],
   "radiiPx": {
-    "smallControl": 8,
-    "control": 10,
-    "overlay": 16,
-    "pill": 999
+    "smallControl": 10,
+    "control": 12,
+    "field": 14,
+    "overlay": 20,
+    "container": 28,
+    "pill": 999,
+    "button": "pill"
   },
   "controlHeightPx": {
     "default": 40,
@@ -86,19 +95,20 @@
   },
   "typography": {
     "pageTitle": {
-      "sizePx": 28,
-      "lineHeightPx": 36,
-      "weight": 600
+      "sizePx": 32,
+      "lineHeightPx": 40,
+      "weight": 400,
+      "trackingEm": -0.02
     },
     "smallScreenTitle": {
-      "sizePx": 24,
+      "sizePx": 26,
       "lineHeightPx": 32,
-      "weight": 600
+      "weight": 400
     },
     "sectionTitle": {
       "sizePx": 18,
       "lineHeightPx": 26,
-      "weight": 600
+      "weight": 500
     },
     "body": {
       "sizePx": 16,
@@ -107,8 +117,8 @@
     },
     "control": {
       "sizePx": 14,
-      "lineHeightPx": 22,
-      "weight": 400
+      "lineHeightPx": 20,
+      "weight": 500
     },
     "metadata": {
       "sizePx": 12,
@@ -119,6 +129,12 @@
       "sizePx": 24,
       "lineHeightPx": 32,
       "weight": 600
+    },
+    "display": {
+      "sizePx": "clamp(40, 5.2vw, 72)",
+      "lineHeight": 1.08,
+      "weight": 400,
+      "trackingEm": -0.03
     }
   },
   "motionMs": {
@@ -143,14 +159,14 @@
   },
   "elevation": {
     "light": {
-      "1": "0 1px 2px rgba(0, 0, 0, .06)",
-      "2": "0 1px 2px rgba(0, 0, 0, .04), 0 4px 12px rgba(0, 0, 0, .06)",
-      "3": "0 2px 8px rgba(0, 0, 0, .06), 0 16px 40px rgba(0, 0, 0, .14)"
+      "1": "0 1px 2px rgba(60, 64, 67, .08)",
+      "2": "0 1px 2px rgba(60, 64, 67, .08), 0 4px 16px rgba(60, 64, 67, .08)",
+      "3": "0 4px 12px rgba(60, 64, 67, .10), 0 24px 56px rgba(60, 64, 67, .18)"
     },
     "dark": {
-      "1": "0 1px 2px rgba(0, 0, 0, .5)",
-      "2": "inset 0 1px 0 rgba(255, 255, 255, .04), 0 1px 2px rgba(0, 0, 0, .5), 0 4px 12px rgba(0, 0, 0, .35)",
-      "3": "inset 0 1px 0 rgba(255, 255, 255, .05), 0 2px 8px rgba(0, 0, 0, .5), 0 16px 48px rgba(0, 0, 0, .55)"
+      "1": "inset 0 0 0 1px rgba(255, 255, 255, .06)",
+      "2": "inset 0 1px 0 rgba(255, 255, 255, .06), 0 2px 6px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35)",
+      "3": "inset 0 1px 0 rgba(255, 255, 255, .07), 0 8px 24px rgba(0, 0, 0, .5), 0 24px 64px rgba(0, 0, 0, .55)"
     },
     "rule": "1 = resting controls and cards, 2 = raised/selected items and the media frame, 3 = popovers, drawers and dialogs. Neutral black only; elevation never replaces a 3:1 control boundary."
   },
@@ -267,12 +283,14 @@
     }
   ],
   "prohibitions": [
-    "decorative gradients",
-    "neon",
-    "decorative background blur",
+    "gradients outside ui.ai.* identity uses and the canvas dot grid (see surfaces.aiAccent)",
+    "neon on regular controls",
+    "background blur outside floating chrome (see surfaces.glass)",
     "rainbow AI waveform",
+    "continuous decorative motion (shimmer only while AI works; aurora is static)",
+    "colored cards, KPIs or charts",
     "global grayscale/invert/brightness",
-    "using subtle borders as sole interactive boundary"
+    "using subtle borders as sole boundary of fields, toggles or icon-only buttons"
   ],
   "contentExceptions": [
     "original media",
@@ -285,12 +303,46 @@
   "notes": [
     "Static color checks are not browser/component/WCAG conformance validation.",
     "Integrate appearance initialization and persistence in the existing app.",
-    "Never embed/distribute proprietary font files."
+    "Only open-licensed font files may be bundled (Google Sans is OFL 1.1)."
   ],
   "revisions": [
     {
       "date": "2026-10-14",
       "change": "UI refresh: deeper dark layering (subtle/elevated/hover/border/selection), primary hover token, elevation, easing, mono font and pill radius; see docs/design/ui-refresh-2026-10.md"
+    },
+    {
+      "date": "2026-10-15",
+      "change": "ANCS Canvas (ADR 0019): Stitch-style dark-first palette with Google-grey neutrals, AI accent colours, glass and dot-grid surfaces, pill buttons, larger radii, Google Sans (OFL); see docs/design/stitch-redesign-2026-10.md"
     }
-  ]
+  ],
+  "fontFiles": {
+    "family": "Google Sans",
+    "license": "SIL Open Font License 1.1 (googlefonts/googlesans)",
+    "path": "apps/web/public/fonts/google-sans/",
+    "subsets": [
+      "latin",
+      "latin-ext"
+    ],
+    "weights": "variable 400–700",
+    "cjk": "system fallback (not bundled)"
+  },
+  "surfaces": {
+    "canvas": "Dot grid on ui.bg.canvas: 1px dots every 20px (dark rgba(255,255,255,.075), light rgba(32,33,36,.10)). App backgrounds only; never behind body text blocks without an elevated surface.",
+    "glass": {
+      "dark": {
+        "bg": "rgba(30, 31, 34, .72)",
+        "border": "rgba(232, 234, 237, .12)"
+      },
+      "light": {
+        "bg": "rgba(255, 255, 255, .78)",
+        "border": "rgba(31, 31, 31, .08)"
+      },
+      "filter": "blur(24px) saturate(150%)",
+      "rule": "Only for chrome floating over the canvas or media (top bar, tool rail, voice pill, floating timeline, dialog scrim). Content cards stay solid."
+    },
+    "aiAccent": {
+      "gradient": "90deg ui.ai.blue → ui.ai.violet → ui.ai.teal",
+      "rule": "AI identity only: ✦ mark, AI-working shimmer/outline, main prompt focus glow, one static aurora behind the home hero. Never on regular buttons, cards, KPIs, charts or body text; shimmer only while AI is working; reduced motion removes it."
+    }
+  }
 }

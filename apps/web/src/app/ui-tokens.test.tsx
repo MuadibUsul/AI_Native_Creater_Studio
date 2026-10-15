@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
@@ -26,13 +26,17 @@ function luminance(hex: string): number {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
+/** 自定义属性声明（--x: …;）里允许出现颜色、渐变与模糊：这是 token 的定义处（ADR 0019）；规则只能引用 token。 */
+const withoutTokenDeclarations = (source: string) => source.replace(/--[\w-]+\s*:[^;{}]*;/g, '');
+
 function visualViolations(source: string, scope: 'ui' | 'content'): string[] {
   if (scope === 'content') return [];
+  const rules = withoutTokenDeclarations(source);
   const issues: string[] = [];
-  if (/(?:linear|radial|conic)-gradient\(/.test(source)) issues.push('gradient');
-  if (/backdrop-filter\s*:\s*blur\(/.test(source)) issues.push('backdrop-blur');
-  if (/filter\s*:\s*(?:grayscale|invert|brightness)\(/.test(source)) issues.push('media-color-filter');
-  for (const [, hex] of source.matchAll(/(#[0-9a-fA-F]{3,4}(?:[0-9a-fA-F]{3,4})?)\b/g)) {
+  if (/(?:linear|radial|conic)-gradient\(/.test(rules)) issues.push('gradient');
+  if (/backdrop-filter\s*:\s*blur\(/.test(rules)) issues.push('backdrop-blur');
+  if (/filter\s*:\s*(?:grayscale|invert|brightness)\(/.test(rules)) issues.push('media-color-filter');
+  for (const [, hex] of rules.matchAll(/(#[0-9a-fA-F]{3,4}(?:[0-9a-fA-F]{3,4})?)\b/g)) {
     if (hex && !/^#(?:(.)\1{2,3}|(..)\2{2,3})$/i.test(hex)) {
       issues.push(`color:${hex}`);
     }
@@ -45,7 +49,7 @@ function isMediaContentSelector(selector: string): boolean {
 }
 
 function uiRules(source: string): { selector: string; body: string }[] {
-  return [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  return [...withoutTokenDeclarations(source).matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .map((rule) => ({ selector: rule[1]!.trim(), body: rule[2]! }))
     .filter((rule) => !isMediaContentSelector(rule.selector));
 }
@@ -68,6 +72,34 @@ function effectDebt(path: string, source: string): string[] {
       ...[...body.matchAll(/(?:backdrop-filter|filter)\s*:\s*blur\(/g)].map(() => `${path}|${selector}|blur`),
     ];
   });
+}
+
+// ADR 0019 画布设计语言的样式：渐变、模糊、彩色只能经 --ui-* token 引用（规则里不得直接写）
+const canvasCssFiles = [
+  'apps/web/src/app/dashboard.module.css',
+  'apps/web/src/studio/studio.module.css',
+  'apps/web/src/voice/voice.module.css',
+  'apps/web/src/review/review.module.css',
+  'apps/web/src/components/quiet-frame/public-entry.module.css',
+];
+
+// AI 身份色（渐变、光晕、极光、四角星）只出现在这些位置：AI 标识、AI 工作中、主输入框聚焦、首页与欢迎页主视觉背后、语音在听时
+const aiAccentAllowlist = [
+  'apps/web/src/app/dashboard.module.css|.aurora',
+  'apps/web/src/app/ui-tokens.css|.ui-ai-mark',
+  'apps/web/src/app/ui-tokens.css|.ui-ai-text',
+  'apps/web/src/app/ui-tokens.css|.ui-ai-working::after',
+  'apps/web/src/app/ui-tokens.css|.ui-prompt:focus-within',
+  'apps/web/src/components/quiet-frame/public-entry.module.css|.publicLanding :global(.landing-hero)::before',
+  'apps/web/src/studio/studio.module.css|.aiMessage::before',
+  "apps/web/src/voice/voice.module.css|.layer:is([data-phase='listening'], [data-phase='recognizing']) .pill",
+  'apps/web/src/voice/voice.module.css|.toggleOn, .toggleOn:hover:not(:disabled)',
+].sort();
+
+function aiAccentUses(path: string, source: string): string[] {
+  return uiRules(source)
+    .filter(({ body }) => /var\(--ui-ai-(?:gradient|gradient-loop|glow|aurora|mark-mask)\)/.test(body))
+    .map(({ selector }) => `${path}|${selector.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim()}`);
 }
 
 const legacyCss = 'apps/web/src/app/quiet-frame.css';
@@ -139,6 +171,24 @@ describe('v0.4 UI token foundation', () => {
       .toContain('apps/web/src/app/ui-tokens.css|.btn|blur');
     expect(effectDebt('content.css', '.media-content { background: linear-gradient(#ff0000, #0000ff); }')).toEqual([]);
     expect(effectDebt('mixed.css', '.media-content, .btn { background: linear-gradient(#ff0000, #0000ff); }')).toContain('mixed.css|.media-content, .btn|gradient');
+  });
+
+  it('ADR 0019 canvas styles reference effects only through tokens, and AI accents stay inside the allowlist', () => {
+    for (const path of canvasCssFiles) {
+      expect(visualViolations(read(path), 'ui'), path).toEqual([]);
+      expect(effectDebt(path, read(path)), path).toEqual([]);
+    }
+    const cssUnderSrc = (readdirSync(resolve(process.cwd(), 'apps/web/src'), { recursive: true }) as string[])
+      .filter((file) => file.endsWith('.css'))
+      .map((file) => join('apps/web/src', file).replaceAll('\\', '/'));
+    const uses = cssUnderSrc.flatMap((path) => aiAccentUses(path, read(path))).sort();
+    expect(uses).toEqual(aiAccentAllowlist);
+    expect(aiAccentUses('x.css', '.btn.primary { background: var(--ui-ai-gradient); }')).toEqual(['x.css|.btn.primary']);
+    // token 定义处可以写渐变与模糊，规则里直接写仍会被拦下
+    expect(visualViolations(':root { --ui-x: linear-gradient(#000, #fff); }', 'ui')).toEqual([]);
+    expect(visualViolations('.card { backdrop-filter: blur(8px); }', 'ui')).toContain('backdrop-blur');
+    expect(visualViolations('.card { color: #4C8DF6; }', 'ui')).toContain('color:#4C8DF6');
+    expect(read('apps/web/src/app/ui-tokens.css')).toMatch(/@font-face\s*\{[^}]*font-family:\s*"Google Sans"/);
   });
 
   it('fails when UI color debt grows, while media content colors stay outside the UI scan', () => {

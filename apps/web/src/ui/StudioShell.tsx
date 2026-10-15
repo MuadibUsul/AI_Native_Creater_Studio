@@ -37,9 +37,9 @@ function routeLabels(nav: Messages['shell']['nav']): Record<string, string> {
   };
 }
 
-/** 作品入口：素材剪辑作品进共看片室（V6），其余沿用旧版导演工作台 */
+/** 作品入口：素材剪辑与文章讲述作品进共看片室（V6），其余沿用旧版导演工作台 */
 function projectHref(base: string, project: { id: string; mode?: string }): string {
-  return project.mode === 'FOOTAGE_EDIT' ? `${base}/studio/${project.id}` : `${base}/p/${project.id}/storyboard`;
+  return project.mode === 'FOOTAGE_EDIT' || project.mode === 'HYBRID' ? `${base}/studio/${project.id}` : `${base}/p/${project.id}/storyboard`;
 }
 
 function Brand({ href = '/', label }: { href?: string; label: string }) {
@@ -267,8 +267,8 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
 export function StudioShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
   if (pathname === '/sign-in' || pathname === '/welcome') return <>{children}</>;
-  // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏
-  if (/^\/w\/[^/]+\/studio\/(?!new$)[^/]+$/.test(pathname)) return <>{children}</>;
+  // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏（新建页与"我的形象与声音"是普通页面，照常套外壳）
+  if (/^\/w\/[^/]+\/studio\/(?!new$|identity$)[^/]+$/.test(pathname)) return <>{children}</>;
   // V6-4 审片（手机网页优先）：同样是自带顶栏的单屏页面
   if (/^\/w\/[^/]+\/review\/[^/]+$/.test(pathname)) return <>{children}</>;
   return <PrivateShell pathname={pathname}>{children}</PrivateShell>;

@@ -1,90 +1,76 @@
-.dashboard :global(.composer) {
-  background: var(--ui-bg-elevated);
-  border-color: var(--ui-border-subtle);
-  box-shadow: none;
-}
+/* 首页（ADR 0019，参照 Stitch）：居中的大标题 + 一个大输入框（起点、上传、发送都在框里）+ 建议，下面是最近作品。 */
+.home { max-width: 1200px; }
 
-.dashboard :global(.composer textarea::placeholder) {
-  color: var(--ui-fg-muted);
-}
-
-.dashboard :global(.composer-tools .btn),
-.dashboard :global(.homeflow) {
-  color: var(--ui-fg-secondary);
-}
-
-.dashboard :global(.composer-tools .qf-mode-active) {
-  background: var(--ui-selection-bg);
-  color: var(--ui-fg-primary) !important;
-}
-
-.projectPreview {
+.hero {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  aspect-ratio: 16 / 9;
-  min-width: 0;
-  padding: 16px 20px;
-  border: 1px solid var(--ui-border-subtle);
-  border-radius: var(--ui-radius-control);
-  background: var(--ui-bg-subtle);
-  color: var(--ui-fg-primary);
-}
-
-.previewLabel,
-.previewNote {
-  font-size: var(--ui-type-metadata);
-  line-height: 1.5;
-  color: var(--ui-fg-secondary);
-}
-
-.previewLabel { letter-spacing: .08em; }
-
-.previewTitle {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  font-size: clamp(1.125rem, 2vw, 1.5rem);
-  line-height: 1.35;
-  font-weight: 600;
-}
-
-.dashboard :global(.project-card:hover) .projectPreview,
-.dashboard :global(.project-card:focus-visible) .projectPreview {
-  border-color: var(--ui-border-control);
-}
-
-@media (max-width: 760px) {
-  .dashboard :global(.composer-footer) {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .dashboard :global(.composer-tools) {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .dashboard :global(.composer-tools .btn),
-  .dashboard :global(.composer-footer > .primary) {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-/* V6-1c：共看片室入口（素材剪辑） */
-.studioEntry {
-  display: flex;
   align-items: center;
   gap: var(--ui-space-4);
-  margin-top: var(--ui-space-4);
-  padding: var(--ui-space-4) var(--ui-space-6);
+  padding: clamp(32px, 9vh, 112px) 0 var(--ui-space-12);
+  text-align: center;
+  isolation: isolate;
+}
+/* 主视觉背后的一团静止极光（AI 身份色，只在首页主输入框后面；不动） */
+.aurora {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 64%;
+  width: min(1100px, 120%);
+  height: 460px;
+  transform: translate(-50%, -50%);
+  background: var(--ui-ai-aurora);
+  filter: var(--ui-aurora-filter);
+  opacity: .9;
+  pointer-events: none;
+}
+.hero .heroTitle { max-width: 15em; font-size: var(--ui-type-display); line-height: 1.08; font-weight: 400; letter-spacing: var(--ui-tracking-display); }
+.heroSubtitle { max-width: 34em; font-size: clamp(1rem, 1.6vw, 1.25rem); line-height: 1.5; color: var(--ui-fg-secondary); }
+.heroState { width: min(640px, 100%); margin-top: var(--ui-space-6); text-align: left; }
+.workspacePick { display: inline-flex; align-items: center; gap: var(--ui-space-2); color: var(--ui-fg-secondary); }
+.workspacePick select { width: auto; min-height: 36px; border-radius: var(--ui-radius-pill); }
+
+.prompt { width: min(820px, 100%); margin-top: var(--ui-space-6); text-align: left; }
+.prompt textarea { min-height: 84px; max-height: 40vh; font-size: 20px; line-height: 1.5; }
+.modes { flex-wrap: wrap; }
+.suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ui-space-2); width: min(820px, 100%); }
+.suggestions :global(.ui-suggestion) { max-width: min(100%, 360px); }
+
+.recent { padding-bottom: var(--ui-space-12); }
+.recentHead { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-4); margin-bottom: var(--ui-space-4); }
+.recentHead h2 { font-size: 20px; font-weight: 500; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--ui-space-4); }
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 8px;
   border: 1px solid var(--ui-border-subtle);
   border-radius: var(--ui-radius-overlay);
   background: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-1);
+  color: var(--ui-fg-primary);
+  text-decoration: none;
+  transition: transform var(--ui-motion-feedback) var(--ui-ease-standard), box-shadow var(--ui-motion-feedback) var(--ui-ease-standard), border-color var(--ui-motion-feedback) var(--ui-ease-standard);
 }
-.studioEntry p { margin-top: 2px; }
-@media (max-width: 640px) {
-  .studioEntry { flex-wrap: wrap; padding: var(--ui-space-4); }
+.card:hover { transform: translateY(-2px); border-color: var(--ui-border-control); box-shadow: var(--ui-shadow-2); }
+.card:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }
+.thumb { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 14px; background: var(--ui-canvas-dots), var(--ui-bg-subtle); overflow: hidden; }
+.thumbFrame { display: grid; place-items: center; border: 1.5px solid var(--ui-border-control); border-radius: 8px; color: var(--ui-fg-muted); background: var(--ui-bg-elevated); }
+.thumbFrame :global(.icon) { width: 22px; height: 22px; }
+.cardBody { display: flex; flex-direction: column; gap: 6px; padding: 12px 8px 6px; min-width: 0; }
+.cardBody h3 { font-size: 15px; font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardMeta { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-2); font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+.edited { font-size: var(--ui-type-metadata); color: var(--ui-fg-muted); }
+
+@media (max-width: 760px) {
+  .hero { padding-top: var(--ui-space-6); gap: var(--ui-space-3); }
+  .prompt { margin-top: var(--ui-space-3); }
+  .prompt textarea { font-size: 17px; min-height: 96px; }
+  .modes :global(.icon) { display: none; }
+  .modes button { padding: 0 10px; }
+  .suggestions { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .recentHead { flex-wrap: wrap; }
 }
+@media (prefers-reduced-motion: reduce) { .card:hover { transform: none; } }

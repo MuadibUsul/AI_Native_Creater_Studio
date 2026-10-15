@@ -1,28 +1,62 @@
-/* Runtime UI palette. Keep values in sync with docs/V04/ANCS_v0.4_Design_Tokens.json.
-   These variables style the application only; brand/theme tokens and media pixels stay separate. */
-:root {
-  --ui-bg-canvas: #FFFFFF;
-  --ui-bg-subtle: #F5F5F5;
-  --ui-bg-elevated: #FFFFFF;
-  --ui-bg-hover: #EFEFEF;
-  --ui-fg-primary: #171717;
-  --ui-fg-secondary: #595959;
-  --ui-fg-muted: #666666;
-  --ui-border-subtle: #E5E5E5;
-  --ui-border-control: #737373;
-  --ui-action-primary-bg: #171717;
-  --ui-action-primary-fg: #FFFFFF;
-  --ui-action-primary-hover: #383838;
-  --ui-selection-bg: #E8E8E8;
-  --ui-focus-ring: #171717;
-  --ui-media-matte: #0A0A0A;
+/* Runtime UI palette — "ANCS Canvas" (docs/decisions/0019-stitch-canvas-design-language.md).
+   Keep theme values in sync with docs/V04/ANCS_v0.4_Design_Tokens.json (ui-tokens.test.tsx compares them value by value).
+   These variables style the application only; brand/theme tokens and media pixels stay separate.
+   Colour, gradient and blur values may only appear in --ui-* token declarations; rules reference tokens. */
 
-  --ui-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --ui-type-page-title: 1.75rem;
+@font-face {
+  font-family: "Google Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/google-sans/google-sans-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Google Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/google-sans/google-sans-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  --ui-bg-canvas: #F8F9FA;
+  --ui-bg-subtle: #F1F3F4;
+  --ui-bg-elevated: #FFFFFF;
+  --ui-bg-hover: #E8EAED;
+  --ui-fg-primary: #1F1F1F;
+  --ui-fg-secondary: #444746;
+  --ui-fg-muted: #5F6368;
+  --ui-border-subtle: #E3E3E3;
+  --ui-border-control: #747775;
+  --ui-action-primary-bg: #1F1F1F;
+  --ui-action-primary-fg: #FFFFFF;
+  --ui-action-primary-hover: #3C4043;
+  --ui-selection-bg: #E3E3E6;
+  --ui-focus-ring: #1F1F1F;
+  --ui-media-matte: #0A0A0A;
+  --ui-ai-blue: #1A73E8;
+  --ui-ai-violet: #7C4DFF;
+  --ui-ai-teal: #00897B;
+
+  --ui-tonal-bg: rgba(31, 31, 31, .055);
+  --ui-tonal-hover: rgba(31, 31, 31, .095);
+  --ui-glass-bg: rgba(255, 255, 255, .78);
+  --ui-glass-border: rgba(31, 31, 31, .08);
+  --ui-canvas-dot: rgba(32, 33, 36, .10);
+  --ui-scrim: rgba(32, 33, 36, .32);
+
+  --ui-font-family: "Google Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --ui-type-display: clamp(2.5rem, 5.2vw, 4.5rem);
+  --ui-type-page-title: 2rem;
   --ui-type-section-title: 1.125rem;
   --ui-type-body: 1rem;
   --ui-type-control: .875rem;
   --ui-type-metadata: .75rem;
+  --ui-tracking-display: -.03em;
+  --ui-tracking-title: -.02em;
   --ui-space-1: 4px;
   --ui-space-2: 8px;
   --ui-space-3: 12px;
@@ -31,9 +65,12 @@
   --ui-space-8: 32px;
   --ui-space-12: 48px;
   --ui-space-16: 64px;
-  --ui-radius-small: 8px;
-  --ui-radius-control: 10px;
-  --ui-radius-overlay: 16px;
+  --ui-radius-small: 10px;
+  --ui-radius-control: 12px;
+  --ui-radius-field: 14px;
+  --ui-radius-overlay: 20px;
+  --ui-radius-container: 28px;
+  --ui-radius-pill: 999px;
   --ui-control-height: 40px;
   --ui-control-height-compact: 32px;
   --ui-control-touch-target: 44px;
@@ -42,16 +79,59 @@
   --ui-motion-feedback: 120ms;
   --ui-motion-popover: 150ms;
   --ui-motion-drawer: 200ms;
-  /* 2026-10 refinement: easing, elevation, mono numerals, pill radius (docs/design/ui-refresh-2026-10.md) */
   --ui-ease-standard: cubic-bezier(.2, 0, 0, 1);
   --ui-ease-enter: cubic-bezier(.16, 1, .3, 1);
   --ui-ease-exit: cubic-bezier(.4, 0, 1, 1);
-  --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, .06);
-  --ui-shadow-2: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 12px rgba(0, 0, 0, .06);
-  --ui-shadow-3: 0 2px 8px rgba(0, 0, 0, .06), 0 16px 40px rgba(0, 0, 0, .14);
-  --ui-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --ui-radius-pill: 999px;
+  --ui-shadow-1: 0 1px 2px rgba(60, 64, 67, .08);
+  --ui-shadow-2: 0 1px 2px rgba(60, 64, 67, .08), 0 4px 16px rgba(60, 64, 67, .08);
+  --ui-shadow-3: 0 4px 12px rgba(60, 64, 67, .10), 0 24px 56px rgba(60, 64, 67, .18);
   color-scheme: light;
+}
+
+body.theme-dark {
+  --ui-bg-canvas: #0E0E10;
+  --ui-bg-subtle: #151517;
+  --ui-bg-elevated: #1E1F22;
+  --ui-bg-hover: #2A2B2F;
+  --ui-fg-primary: #F1F3F4;
+  --ui-fg-secondary: #BDC1C6;
+  --ui-fg-muted: #9AA0A6;
+  --ui-border-subtle: #2D2E31;
+  --ui-border-control: #80868B;
+  --ui-action-primary-bg: #F1F3F4;
+  --ui-action-primary-fg: #202124;
+  --ui-action-primary-hover: #FFFFFF;
+  --ui-selection-bg: #303134;
+  --ui-focus-ring: #F1F3F4;
+  --ui-media-matte: #0A0A0A;
+  --ui-ai-blue: #7CACF8;
+  --ui-ai-violet: #A78BFA;
+  --ui-ai-teal: #5ED3E0;
+
+  --ui-tonal-bg: rgba(232, 234, 237, .07);
+  --ui-tonal-hover: rgba(232, 234, 237, .12);
+  --ui-glass-bg: rgba(30, 31, 34, .72);
+  --ui-glass-border: rgba(232, 234, 237, .12);
+  --ui-canvas-dot: rgba(255, 255, 255, .075);
+  --ui-scrim: rgba(0, 0, 0, .55);
+  --ui-shadow-1: inset 0 0 0 1px rgba(255, 255, 255, .06);
+  --ui-shadow-2: inset 0 1px 0 rgba(255, 255, 255, .06), 0 2px 6px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  --ui-shadow-3: inset 0 1px 0 rgba(255, 255, 255, .07), 0 8px 24px rgba(0, 0, 0, .5), 0 24px 64px rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+
+/* Derived tokens are declared on body so they resolve against the active theme (custom properties compute where declared). */
+body {
+  --ui-glass-filter: blur(24px) saturate(150%);
+  --ui-scrim-filter: blur(6px);
+  --ui-aurora-filter: blur(48px);
+  --ui-canvas-dots: radial-gradient(circle at 1px 1px, var(--ui-canvas-dot) 1px, transparent 1.4px) 0 0 / 20px 20px;
+  --ui-ai-gradient: linear-gradient(90deg, var(--ui-ai-blue), var(--ui-ai-violet) 52%, var(--ui-ai-teal));
+  --ui-ai-gradient-loop: linear-gradient(90deg, var(--ui-ai-blue), var(--ui-ai-violet), var(--ui-ai-teal), var(--ui-ai-blue));
+  --ui-ai-glow: 0 0 0 1px color-mix(in srgb, var(--ui-ai-blue) 55%, transparent), 0 0 28px -4px color-mix(in srgb, var(--ui-ai-violet) 45%, transparent);
+  --ui-ai-aurora: radial-gradient(42% 60% at 30% 60%, color-mix(in srgb, var(--ui-ai-violet) 34%, transparent), transparent 70%), radial-gradient(40% 55% at 70% 55%, color-mix(in srgb, var(--ui-ai-blue) 30%, transparent), transparent 70%), radial-gradient(30% 40% at 50% 80%, color-mix(in srgb, var(--ui-ai-teal) 22%, transparent), transparent 70%);
+  --ui-ring-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  --ui-ai-mark-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1.5c.5 5.6 4.9 10 10.5 10.5-5.6.5-10 4.9-10.5 10.5C11.5 16.9 7.1 12.5 1.5 12 7.1 11.5 11.5 7.1 12 1.5Z'/%3E%3C/svg%3E");
 
   /* Compatibility aliases for the existing Quiet Frame components. */
   --bg: var(--ui-bg-canvas);
@@ -70,156 +150,129 @@
   --radius: var(--ui-radius-overlay);
 }
 
-body.theme-dark {
-  --ui-bg-canvas: #0A0A0A;
-  --ui-bg-subtle: #111111;
-  --ui-bg-elevated: #171717;
-  --ui-bg-hover: #222222;
-  --ui-fg-primary: #EDEDED;
-  --ui-fg-secondary: #B3B3B3;
-  --ui-fg-muted: #A3A3A3;
-  --ui-border-subtle: #262626;
-  --ui-border-control: #8C8C8C;
-  --ui-action-primary-bg: #EDEDED;
-  --ui-action-primary-fg: #171717;
-  --ui-action-primary-hover: #FFFFFF;
-  --ui-selection-bg: #2A2A2A;
-  --ui-focus-ring: #EDEDED;
-  --ui-media-matte: #0A0A0A;
-  --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
-  --ui-shadow-2: inset 0 1px 0 rgba(255, 255, 255, .04), 0 1px 2px rgba(0, 0, 0, .5), 0 4px 12px rgba(0, 0, 0, .35);
-  --ui-shadow-3: inset 0 1px 0 rgba(255, 255, 255, .05), 0 2px 8px rgba(0, 0, 0, .5), 0 16px 48px rgba(0, 0, 0, .55);
-  color-scheme: dark;
-
-  --bg: var(--ui-bg-canvas);
-  --panel: var(--ui-bg-elevated);
-  --sidebar: var(--ui-bg-subtle);
-  --text: var(--ui-fg-primary);
-  --muted: var(--ui-fg-secondary);
-  --line: var(--ui-border-subtle);
-  --accent: var(--ui-action-primary-bg);
-  --accent-soft: var(--ui-selection-bg);
-  --good: var(--ui-fg-primary);
-  --good-soft: var(--ui-bg-subtle);
-  --warn: var(--ui-fg-primary);
-  --warn-soft: var(--ui-bg-subtle);
-  --bad: var(--ui-fg-primary);
-  --radius: var(--ui-radius-overlay);
+/* ---------------------------------------------------------------------------
+   Base: Google Sans, dotted canvas, quiet headings.
+   --------------------------------------------------------------------------- */
+html { background: var(--ui-bg-canvas); }
+/* 深色主题的 token 声明在 body 上：html 的底色跟着切换，短页面下方与回弹区不露出浅色 */
+html:has(> body.theme-dark) { background: var(--ui-media-matte); color-scheme: dark; }
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--ui-font-family);
+  background: var(--ui-canvas-dots), var(--ui-bg-canvas);
+  background-attachment: fixed;
+  color: var(--ui-fg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+h1, h2, h3, h4 { font-family: var(--ui-font-family); color: var(--ui-fg-primary); }
+h1 { font-weight: 400; letter-spacing: var(--ui-tracking-title); }
+h2, h3 { font-weight: 500; letter-spacing: -.01em; }
+.eyebrow { letter-spacing: .02em; font-weight: 500; color: var(--ui-fg-secondary); text-transform: none; }
+.muted { color: var(--ui-fg-secondary); }
 
-body { font-family: var(--ui-font-family); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
-.sidebar { background: var(--ui-bg-subtle); }
-.topbar { background: var(--ui-bg-elevated); }
-.workspace-switch { background: var(--ui-bg-subtle); border-color: var(--ui-border-subtle); color: var(--ui-fg-primary); }
-.navitem:hover { background: var(--ui-bg-hover); }
-.navitem.active { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); border-color: var(--ui-border-subtle); }
-.circle { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-.skiplink { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); }
-.kbd { background: var(--ui-bg-elevated); color: var(--ui-fg-secondary); border-color: var(--ui-border-subtle); }
-.btn { min-height: var(--ui-control-height); border-radius: var(--ui-radius-control); transition-duration: var(--ui-motion-feedback); }
-.btn.small { min-height: var(--ui-control-height-compact); }
-.btn:not(.primary):not(.blue):hover { background: var(--ui-bg-hover); }
-.btn.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
-.btn.primary:hover:not(:disabled) { background: var(--ui-action-primary-hover); border-color: var(--ui-action-primary-hover); }
-.btn.blue { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); border-color: var(--ui-border-control); }
-.btn.blue:hover { background: var(--ui-bg-hover); }
-.textbtn { color: var(--ui-fg-primary); text-decoration: underline; text-underline-offset: 3px; }
-.switch[aria-checked="true"]:after { background: var(--ui-action-primary-fg); }
-.switch { background: var(--ui-border-control); }
-.switch:after { background: var(--ui-bg-elevated); }
-.segmented { background: var(--ui-bg-subtle); border-color: var(--ui-border-control); }
-.segmented button.active { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); }
-.chip.active { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
-.field { border-color: var(--ui-border-control); border-radius: var(--ui-radius-small); }
-.field::placeholder { color: var(--ui-fg-muted); }
-.panel { border-radius: var(--ui-radius-overlay); }
-.badge, .badge.blue, .badge.green, .badge.amber, .badge.red { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-.notice, .notice.amber, .notice.green, .diff-add, .diff-remove { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); }
-.panel:is([data-state="error"], [data-state="forbidden"], [data-state="conflict"], [data-state="unavailable"]) { border-inline-start: 3px solid var(--ui-border-control); }
-.diff-card header { background: var(--ui-bg-subtle); }
-.status-board div, .rounded-demo div { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); border-color: var(--ui-border-subtle); }
-.qf-mode-active { background: var(--ui-selection-bg) !important; box-shadow: inset 0 0 0 1px var(--ui-border-control); }
-.qf-command-list a:hover, .qf-command-list a:focus-visible, .qf-project-menu a:hover { background: var(--ui-bg-hover); }
-.project-tabs :is(button, a).active, .voice-row.selected, .setting-nav button.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-.scene-rail, .editor-center, .source-preview, .analysis-insight, .voice-hero { background: var(--ui-bg-subtle); }
-.inspector, .narration-line, .metriccard, .paper { background: var(--ui-bg-elevated); }
-.narration-line, .paper p, .paper .lead { color: var(--ui-fg-primary); }
-.paper [contenteditable]:focus { background: var(--ui-bg-hover); }
-.scene-card.active, .timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); }
-.timeline-clip, .timeline-clip:nth-child(even) { background: var(--ui-bg-subtle); border-color: var(--ui-border-control); color: var(--ui-fg-primary); }
-.timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); outline: 1px solid var(--ui-fg-primary); }
-.voice-hero { min-height: 0; }
-.voice-sphere { display: none; }
-.voice-avatar, .provider-icon, .platform-logo, .compact-select { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-.theme-dark .btn.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
-/* The legacy dark rules are more specific than the light aliases above. */
-body.theme-dark .topbar, body.theme-dark .projectbar { background: var(--ui-bg-elevated); }
-body.theme-dark .workspace-switch, body.theme-dark .navitem:hover { background: var(--ui-bg-hover); color: var(--ui-fg-primary); }
-body.theme-dark .navitem, body.theme-dark .navlabel, body.theme-dark .topbar .sample-note { color: var(--ui-fg-secondary); }
-body.theme-dark .navitem.active { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); border-color: var(--ui-border-subtle); }
-body.theme-dark .badge, body.theme-dark .badge.blue, body.theme-dark .badge.green, body.theme-dark .badge.amber, body.theme-dark .badge.red { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-body.theme-dark .page .panel, body.theme-dark .userrow { border-color: var(--ui-border-subtle); }
-body.theme-dark .btn.ghost { color: var(--ui-fg-primary); }
-body.theme-dark .diff-card header { background: var(--ui-bg-subtle); }
-body.theme-dark .segmented, body.theme-dark .compact-select { background: var(--ui-bg-subtle); }
-body.theme-dark .segmented button.active, body.theme-dark .project-tabs :is(button, a).active, body.theme-dark .setting-nav button.active, body.theme-dark .scene-card.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
-body.theme-dark .paper p, body.theme-dark .paper .lead, body.theme-dark .narration-line { color: var(--ui-fg-primary); }
-body.theme-dark .scene-rail, body.theme-dark .editor-center, body.theme-dark .source-preview, body.theme-dark .voice-hero, body.theme-dark .analysis-insight { background: var(--ui-bg-subtle); }
-body.theme-dark .inspector, body.theme-dark .narration-line, body.theme-dark .metriccard, body.theme-dark .paper { background: var(--ui-bg-elevated); }
-body.theme-dark .provider-icon, body.theme-dark .platform-logo { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+::selection { background: var(--ui-fg-primary); color: var(--ui-bg-canvas); }
+:where(html, body, div, section, aside, nav, ol, ul, textarea) { scrollbar-width: thin; scrollbar-color: var(--ui-border-control) transparent; }
+/* Line breaking: no line-start punctuation in Chinese; balanced headings; no one-word last lines in prose. */
+:lang(zh) { line-break: strict; }
+h1, h2, h3 { text-wrap: balance; }
+p, li, dd, figcaption { text-wrap: pretty; }
 
-/* Keep the project identity usable when native browser zoom reduces the CSS viewport. */
-.qf-project-identity {
-  flex: 1 1 240px;
-  min-width: 0;
-}
-
-.qf-project-identity .title {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (max-width: 760px) {
-  .projectbar > .qf-project-identity {
-    flex: 1 1 calc(100% - 170px);
-  }
-
-  .projectbar > .project-tabs {
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-}
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible {
   outline: 2px solid var(--ui-focus-ring);
   outline-offset: 3px;
 }
 
-@media (pointer: coarse) {
-  /* Legacy component selectors set 24–36px heights; touch targets must override them. */
-  .btn, .textbtn { min-height: var(--ui-control-touch-target) !important; }
-  .btn.icononly { min-width: var(--ui-control-touch-target); }
-  .segmented button, .switch { min-height: var(--ui-control-touch-target); }
-  .qf-design-actions { flex-wrap: wrap; }
-}
-@media (prefers-reduced-motion: reduce) {
-  :root { --ui-motion-feedback: 0ms; --ui-motion-popover: 0ms; --ui-motion-drawer: 0ms; }
-}
-
 /* ---------------------------------------------------------------------------
-   2026-10 UI refinement (docs/design/ui-refresh-2026-10.md).
-   Neutral only; every state keeps a non-colour cue (text, shape, outline or fill change).
+   Shared primitives (legacy class names, new look): pill buttons, tonal fills, rounded fields and cards.
+   Every state keeps a non-colour cue (text, fill/shape change or outline).
    --------------------------------------------------------------------------- */
-::selection { background: var(--ui-fg-primary); color: var(--ui-bg-canvas); }
-:where(html, body, div, section, aside, nav, ol, ul, textarea) { scrollbar-width: thin; scrollbar-color: var(--ui-border-control) transparent; }
+.btn {
+  min-height: var(--ui-control-height);
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-tonal-bg);
+  color: var(--ui-fg-primary);
+  font-family: inherit;
+  font-size: var(--ui-type-control);
+  font-weight: 500;
+  letter-spacing: .005em;
+  cursor: pointer;
+}
+.btn .icon { width: 18px; height: 18px; }
+.btn.small { min-height: var(--ui-control-height-compact); padding: 0 14px; font-size: 13px; }
+.btn.small .icon { width: 16px; height: 16px; }
+.btn.large { min-height: 48px; padding: 0 24px; border-radius: var(--ui-radius-pill); font-size: 15px; }
+.btn.icononly { width: var(--ui-control-height); min-width: var(--ui-control-height); padding: 0; }
+.btn.icononly.small { width: var(--ui-control-height-compact); min-width: var(--ui-control-height-compact); }
+.btn:not(.primary):not(.blue):hover:not(:disabled) { background: var(--ui-tonal-hover); }
+.btn.ghost, body.theme-dark .btn.ghost { background: transparent; color: var(--ui-fg-primary); }
+.btn.ghost:hover:not(:disabled) { background: var(--ui-tonal-bg); }
+.btn.primary, body.theme-dark .btn.primary, .theme-dark .btn.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
+.btn.primary:hover:not(:disabled) { background: var(--ui-action-primary-hover); border-color: var(--ui-action-primary-hover); }
+/* Outlined secondary (legacy .blue): visible control boundary on fields-like actions. */
+.btn.blue { background: transparent; color: var(--ui-fg-primary); border-color: var(--ui-border-control); }
+.btn.blue:hover { background: var(--ui-bg-hover); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.textbtn { color: var(--ui-fg-primary); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--ui-border-control); }
+.textbtn:hover { text-decoration-color: currentColor; }
 
-/* Line breaking: no line-start punctuation in Chinese; balanced headings; no one-word last lines in prose. */
-:lang(zh) { line-break: strict; }
-h1, h2, h3 { text-wrap: balance; }
-p, li, dd, figcaption { text-wrap: pretty; }
+/* Toggle buttons: pressed = filled selection surface (shape change), unpressed = transparent/tonal. */
+.btn:not(.primary)[aria-pressed="true"], body.theme-dark .btn.ghost:not(.primary)[aria-pressed="true"] { background: var(--ui-selection-bg); color: var(--ui-fg-primary); box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+
+.field {
+  min-height: var(--ui-control-height);
+  padding: 9px 14px;
+  border: 1px solid var(--ui-border-control);
+  border-color: var(--ui-border-control);
+  border-radius: var(--ui-radius-field);
+  background: var(--ui-bg-elevated);
+  color: var(--ui-fg-primary);
+  font-family: inherit;
+  font-size: var(--ui-type-control);
+}
+textarea.field { line-height: 1.5; }
+.field::placeholder { color: var(--ui-fg-muted); }
+.field:hover:not(:disabled):not(:focus) { border-color: var(--ui-fg-secondary); }
+.field:focus { border-color: var(--ui-fg-primary); }
+select.field {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23747775' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m4.5 6.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  cursor: pointer;
+}
+body.theme-dark select.field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239AA0A6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m4.5 6.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E"); }
+
+.panel, body.theme-dark .panel, body.theme-dark .page .panel { background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-overlay); box-shadow: var(--ui-shadow-1); }
+.panel:is([data-state="error"], [data-state="forbidden"], [data-state="conflict"], [data-state="unavailable"]) { border-inline-start: 3px solid var(--ui-border-control); }
+
+.chip { min-height: var(--ui-control-height-compact); display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-pill); background: var(--ui-tonal-bg); color: var(--ui-fg-secondary); font-size: 13px; font-weight: 500; }
+.chip:hover { color: var(--ui-fg-primary); background: var(--ui-tonal-hover); }
+.chip.active { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); border-color: var(--ui-action-primary-bg); }
+
+.segmented, body.theme-dark .segmented { display: inline-flex; gap: 2px; padding: 4px; border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-pill); background: var(--ui-tonal-bg); }
+.segmented button { min-height: var(--ui-control-height-compact); padding: 0 16px; border: 0; border-radius: var(--ui-radius-pill); background: transparent; color: var(--ui-fg-secondary); font-size: 13px; font-weight: 500; }
+.segmented button:hover { color: var(--ui-fg-primary); }
+.segmented button.active, body.theme-dark .segmented button.active { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); box-shadow: var(--ui-shadow-2); }
+body.theme-dark .segmented button.active { background: var(--ui-selection-bg); }
+
+.badge, .badge.blue, .badge.green, .badge.amber, .badge.red,
+body.theme-dark .badge, body.theme-dark .badge.blue, body.theme-dark .badge.green, body.theme-dark .badge.amber, body.theme-dark .badge.red { min-height: 22px; padding: 0 10px; border-radius: var(--ui-radius-pill); background: var(--ui-selection-bg); color: var(--ui-fg-primary); font-size: 12px; font-weight: 500; }
+.notice, .notice.amber, .notice.green, .diff-add, .diff-remove { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); border-radius: var(--ui-radius-control); border: 1px solid var(--ui-border-subtle); }
+.switch[aria-checked="true"]:after { background: var(--ui-action-primary-fg); }
+.switch { background: var(--ui-border-control); }
+.switch[aria-checked="true"] { background: var(--ui-action-primary-bg); }
+.switch:after { background: var(--ui-bg-elevated); }
+.kbd { background: var(--ui-bg-elevated); color: var(--ui-fg-secondary); border-color: var(--ui-border-subtle); font-family: var(--ui-font-mono); }
+.circle { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+.skiplink { background: var(--ui-bg-elevated); color: var(--ui-fg-primary); }
 
 /* One feedback curve for every control; press feedback only while the pointer is down. */
 .btn, .field, .textbtn, .chip, .segmented button, .navitem {
@@ -229,22 +282,171 @@ p, li, dd, figcaption { text-wrap: pretty; }
 }
 .btn:active:not(:disabled) { transform: scale(.97); }
 body[data-theme-switching] *, body[data-theme-switching] *::before, body[data-theme-switching] *::after { transition: none !important; }
-.btn.primary { box-shadow: var(--ui-shadow-1); }
-.btn.primary:disabled { box-shadow: none; }
-/* Toggle buttons: pressed = filled selection surface (shape change), unpressed = secondary text. */
-.btn:not(.primary)[aria-pressed="true"], body.theme-dark .btn.ghost:not(.primary)[aria-pressed="true"] { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
 
-/* Fields: hover strengthens the boundary, focus uses the primary ink plus the global focus ring. */
-.field:hover:not(:disabled):not(:focus) { border-color: var(--ui-fg-secondary); }
-.field:focus { border-color: var(--ui-fg-primary); }
-select.field {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23737373' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m4.5 6.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 14px;
-  cursor: pointer;
+/* Legacy surfaces that carried their own fills. */
+.diff-card header { background: var(--ui-bg-subtle); }
+.status-board div, .rounded-demo div { background: var(--ui-bg-subtle); color: var(--ui-fg-primary); border-color: var(--ui-border-subtle); }
+.qf-mode-active { background: var(--ui-selection-bg) !important; box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+.qf-command-list a { border-radius: var(--ui-radius-control); }
+.qf-command-list a:hover, .qf-command-list a:focus-visible, .qf-project-menu a:hover { background: var(--ui-tonal-bg); }
+.project-tabs :is(button, a), .setting-nav button { border-radius: var(--ui-radius-pill); }
+.project-tabs :is(button, a).active, .voice-row.selected, .setting-nav button.active,
+body.theme-dark .project-tabs :is(button, a).active, body.theme-dark .setting-nav button.active, body.theme-dark .scene-card.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+.scene-rail, .editor-center, .source-preview, .analysis-insight, .voice-hero,
+body.theme-dark .scene-rail, body.theme-dark .editor-center, body.theme-dark .source-preview, body.theme-dark .voice-hero, body.theme-dark .analysis-insight { background: var(--ui-bg-subtle); }
+.inspector, .narration-line, .metriccard, .paper,
+body.theme-dark .inspector, body.theme-dark .narration-line, body.theme-dark .metriccard, body.theme-dark .paper { background: var(--ui-bg-elevated); }
+.narration-line, .paper p, .paper .lead, body.theme-dark .paper p, body.theme-dark .paper .lead, body.theme-dark .narration-line { color: var(--ui-fg-primary); }
+.metriccard, .pack-card, .asset-item, .platform-row, .settings-row { border-radius: var(--ui-radius-overlay); }
+.paper [contenteditable]:focus { background: var(--ui-bg-hover); }
+.scene-card.active, .timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); }
+.timeline-clip, .timeline-clip:nth-child(even) { background: var(--ui-bg-subtle); border-color: var(--ui-border-control); color: var(--ui-fg-primary); }
+.timeline-clip.active { background: var(--ui-selection-bg); border-color: var(--ui-fg-primary); outline: 1px solid var(--ui-fg-primary); }
+.voice-hero { min-height: 0; }
+.voice-sphere { display: none; }
+.voice-avatar, .provider-icon, .platform-logo, .compact-select,
+body.theme-dark .provider-icon, body.theme-dark .platform-logo, body.theme-dark .compact-select { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
+body.theme-dark .modal, body.theme-dark .drawer { background: var(--ui-bg-elevated); }
+body.theme-dark .userrow { border-color: var(--ui-border-subtle); }
+
+/* ---------------------------------------------------------------------------
+   App shell: the sidebar and top bar sit directly on the dotted canvas (no walls);
+   navigation items are pills; content floats in rounded cards.
+   --------------------------------------------------------------------------- */
+.app { padding-left: 248px; }
+.sidebar, body.theme-dark .sidebar { width: 248px; padding: 18px 12px 14px; background: transparent; border-right: 0; }
+.logo { gap: 10px; color: var(--ui-fg-primary); }
+.logomark { width: 32px; height: 32px; border-radius: 10px; background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); }
+.logotext { font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
+.workspace-switch, body.theme-dark .workspace-switch { min-height: var(--ui-control-height); margin: 18px 0 10px; padding: 0 12px 0 6px; border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-pill); background: var(--ui-tonal-bg); color: var(--ui-fg-primary); }
+.workspace-switch:hover, body.theme-dark .workspace-switch:hover { background: var(--ui-tonal-hover); }
+.workspace-switch .circle { width: 28px; height: 28px; }
+.navlabel, body.theme-dark .navlabel { padding: 0 14px; margin: 14px 0 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ui-fg-muted); }
+.navitem, body.theme-dark .navitem { min-height: var(--ui-control-height); margin: 2px 0; padding: 0 14px; border: 0; border-radius: var(--ui-radius-pill); color: var(--ui-fg-secondary); font-size: 14px; font-weight: 500; }
+.navitem:hover, body.theme-dark .navitem:hover { background: var(--ui-tonal-bg); color: var(--ui-fg-primary); }
+.navitem.active, body.theme-dark .navitem.active { background: var(--ui-selection-bg); color: var(--ui-fg-primary); border: 0; box-shadow: none; }
+.navitem .icon { width: 18px; height: 18px; }
+.userrow { border-color: var(--ui-border-subtle); }
+.topbar, body.theme-dark .topbar, body.theme-dark .projectbar { height: 64px; padding: 0 32px; background: transparent; border-bottom: 0; }
+.top-actions { gap: 6px; }
+.breadcrumb { color: var(--ui-fg-secondary); font-size: 14px; }
+.breadcrumb strong { color: var(--ui-fg-primary); font-weight: 500; }
+.page { padding: 20px 40px 64px; }
+.page h1 { font-size: var(--ui-type-page-title); line-height: 1.25; }
+.sectionhead h2 { font-size: 22px; }
+.qf-overlay { background: var(--ui-scrim); backdrop-filter: var(--ui-scrim-filter); -webkit-backdrop-filter: var(--ui-scrim-filter); }
+.qf-layer { border-radius: var(--ui-radius-container); border-color: var(--ui-border-subtle); background: var(--ui-bg-elevated); box-shadow: var(--ui-shadow-3); padding: 24px 28px; }
+.qf-layer-right { border-radius: var(--ui-radius-container); }
+@media (max-width: 1250px) {
+  .app { padding-left: 220px; }
+  .sidebar, body.theme-dark .sidebar { width: 220px; padding: 18px 10px 14px; }
+  .topbar, body.theme-dark .topbar { padding: 0 24px; }
+  .page { padding: 16px 28px 56px; }
 }
-body.theme-dark select.field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%238C8C8C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='m4.5 6.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E"); }
+@media (max-width: 1050px) {
+  .app { padding-left: 76px; }
+  .sidebar, body.theme-dark .sidebar { width: 76px; padding: 18px 10px 14px; }
+  .navitem, body.theme-dark .navitem { justify-content: center; padding: 0; }
+  .navlabel, body.theme-dark .navlabel { display: none; }
+}
+@media (max-width: 760px) {
+  .app { padding-left: 0; }
+  .sidebar.mobile-open, body.theme-dark .sidebar.mobile-open { width: min(300px, 86vw); padding: 16px 12px; background: var(--ui-glass-bg); backdrop-filter: var(--ui-glass-filter); -webkit-backdrop-filter: var(--ui-glass-filter); border-right: 1px solid var(--ui-glass-border); box-shadow: var(--ui-shadow-3); border-radius: 0 var(--ui-radius-container) var(--ui-radius-container) 0; }
+  .sidebar.mobile-open .navitem { justify-content: flex-start; padding: 0 14px; }
+  .sidebar.mobile-open .navlabel { display: block; }
+  .topbar, body.theme-dark .topbar { height: 60px; padding: 0 14px; background: transparent; }
+  .page { padding: 12px 18px 48px; }
+  .page h1 { font-size: 26px; }
+  .qf-mobile-backdrop { background: var(--ui-scrim); }
+}
+
+/* Keep the project identity usable when native browser zoom reduces the CSS viewport. */
+.qf-project-identity { flex: 1 1 240px; min-width: 0; }
+.qf-project-identity .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .projectbar > .qf-project-identity { flex: 1 1 calc(100% - 170px); }
+  .projectbar > .project-tabs { justify-content: flex-start; overflow-x: auto; scrollbar-width: thin; }
+}
+
+/* ---------------------------------------------------------------------------
+   Canvas building blocks shared by home, studio, review and new-project screens.
+   --------------------------------------------------------------------------- */
+/* Floating chrome over the canvas or media. */
+.ui-glass { background: var(--ui-glass-bg); border: 1px solid var(--ui-glass-border); backdrop-filter: var(--ui-glass-filter); -webkit-backdrop-filter: var(--ui-glass-filter); box-shadow: var(--ui-shadow-2); }
+.ui-card { background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); border-radius: var(--ui-radius-overlay); box-shadow: var(--ui-shadow-1); }
+.ui-canvas { background: var(--ui-canvas-dots), var(--ui-bg-canvas); }
+
+/* The AI mark: a four-point spark filled with the AI gradient (identity, not decoration). */
+.ui-ai-mark { display: inline-block; flex: none; width: 1em; height: 1em; background: var(--ui-ai-gradient); -webkit-mask: var(--ui-ai-mark-mask) center / contain no-repeat; mask: var(--ui-ai-mark-mask) center / contain no-repeat; vertical-align: -.125em; }
+
+/* AI is working: a slow gradient sweep along the outline (only while working; reduced motion keeps a static outline). */
+.ui-ai-working { position: relative; }
+.ui-ai-working::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--ui-ai-gradient-loop) 0 0 / 300% 100%;
+  -webkit-mask: var(--ui-ring-mask);
+  -webkit-mask-composite: xor;
+  mask: var(--ui-ring-mask);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: uiAiSweep 2.4s linear infinite;
+}
+@keyframes uiAiSweep { to { background-position: 300% 0; } }
+.ui-ai-text { background: var(--ui-ai-gradient-loop) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: uiAiSweep 2.4s linear infinite; }
+
+/* Stitch-style prompt box: a large rounded glass field with tools in its footer. */
+.ui-prompt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 12px 22px;
+  border-radius: var(--ui-radius-container);
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  box-shadow: var(--ui-shadow-2);
+  transition: box-shadow var(--ui-motion-feedback) var(--ui-ease-standard), border-color var(--ui-motion-feedback) var(--ui-ease-standard);
+}
+.ui-prompt:focus-within { border-color: transparent; box-shadow: var(--ui-ai-glow), var(--ui-shadow-2); }
+.ui-prompt textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; color: var(--ui-fg-primary); font-family: inherit; font-size: 18px; line-height: 1.5; }
+.ui-prompt textarea::placeholder { color: var(--ui-fg-muted); }
+.ui-prompt-footer { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ui-prompt-footer > .ui-grow { flex: 1; min-width: 0; }
+/* Round icon button (+, mic, settings) and the round primary send button. */
+.ui-round { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ui-fg-primary); cursor: pointer; transition: background-color var(--ui-motion-feedback) var(--ui-ease-standard), transform var(--ui-motion-feedback) var(--ui-ease-standard); }
+.ui-round:hover:not(:disabled) { background: var(--ui-tonal-hover); }
+.ui-round:active:not(:disabled) { transform: scale(.94); }
+.ui-round:disabled { opacity: .45; cursor: not-allowed; }
+.ui-round .icon { width: 20px; height: 20px; }
+.ui-send { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); }
+.ui-send:hover:not(:disabled) { background: var(--ui-action-primary-hover); }
+.ui-send:disabled { background: var(--ui-tonal-hover); color: var(--ui-fg-muted); opacity: 1; }
+/* Pill segmented control inside prompts (App / Web in Stitch → footage / article here). */
+.ui-seg { display: inline-flex; gap: 2px; padding: 4px; border-radius: var(--ui-radius-pill); background: var(--ui-tonal-bg); }
+.ui-seg button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 14px; border: 0; border-radius: var(--ui-radius-pill); background: transparent; color: var(--ui-fg-secondary); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.ui-seg button .icon { width: 16px; height: 16px; }
+.ui-seg button[aria-checked="true"], .ui-seg button[aria-pressed="true"] { background: var(--ui-selection-bg); color: var(--ui-fg-primary); box-shadow: inset 0 0 0 1px var(--ui-glass-border); }
+.ui-seg button:hover { color: var(--ui-fg-primary); }
+/* Suggestion chips under a prompt. */
+.ui-suggestion { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 34px; padding: 0 14px 0 10px; border: 1px solid var(--ui-glass-border); border-radius: var(--ui-radius-pill); background: var(--ui-glass-bg); color: var(--ui-fg-primary); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; backdrop-filter: var(--ui-glass-filter); -webkit-backdrop-filter: var(--ui-glass-filter); }
+.ui-suggestion span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-suggestion:hover { background: var(--ui-tonal-hover); }
+
+@media (pointer: coarse) {
+  /* Legacy component selectors set 24–36px heights; touch targets must override them. */
+  .btn, .textbtn { min-height: var(--ui-control-touch-target) !important; }
+  .btn.icononly { min-width: var(--ui-control-touch-target); }
+  .segmented button, .switch { min-height: var(--ui-control-touch-target); }
+  .ui-round { width: var(--ui-control-touch-target); height: var(--ui-control-touch-target); }
+  .qf-design-actions { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --ui-motion-feedback: 0ms; --ui-motion-popover: 0ms; --ui-motion-drawer: 0ms; }
+  .ui-ai-working::after, .ui-ai-text { animation: none; }
+}

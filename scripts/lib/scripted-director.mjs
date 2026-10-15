@@ -46,7 +46,7 @@ export class ScriptedDirector {
       const failed = results.find((block) => block.isError);
       if (failed !== undefined) {
         if (failed.content.includes('PRODUCTION_POLICY_BLOCKED')) {
-          return this.#reply(zh ? '这个作品还没开启特效：点顶栏的"特效：关"打开后再说一次。' : 'Effects are off for this project. Turn them on with "Effects: off" in the top bar, then ask again.');
+          return this.#reply(zh ? '这个作品还没开启特效：点输入框上方的"特效：关"打开后再说一次。' : 'Effects are off for this project. Turn them on with "Effects: off" above the message box, then ask again.');
         }
         return this.#reply((zh ? '这次改不了：' : "Couldn't apply: ") + failed.content.slice(0, 160));
       }
@@ -142,7 +142,7 @@ export class ScriptedDirector {
     if (lastCall === 'quote_generation') {
       if (result.isError) {
         const reason = String(body.reason ?? '');
-        if (reason === 'PRODUCTION_POLICY_BLOCKED') return this.#reply(zh ? '这个作品还没允许付费生成：点顶栏的"生成：关"打开后再说一次。' : 'Paid generation is off for this project. Turn it on with "Generation: off" in the top bar, then ask again.');
+        if (reason === 'PRODUCTION_POLICY_BLOCKED') return this.#reply(zh ? '这个作品还没允许付费生成：点输入框上方的"生成：关"打开后再说一次。' : 'Paid generation is off for this project. Turn it on with "Generation: off" above the message box, then ask again.');
         if (reason.includes('CONSENT') || reason.includes('REFERENCE')) return this.#reply(zh ? '你的形象或声音还没准备好：先在"我的形象与声音"里上传照片和声音样本并授权。' : 'Your likeness or voice is not ready yet: add a photo and a voice sample and give consent on "My likeness & voice".');
         return this.#reply((zh ? '这次没法报价：' : "Couldn't quote: ") + String(body.error ?? '').slice(0, 160));
       }

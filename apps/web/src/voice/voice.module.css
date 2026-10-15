@@ -1,6 +1,7 @@
 /*
- * Issue #9 画布内悬浮语音条：浮在看片区底部预留出的边上（看片区开语音时自动加大下边距，画面按画幅缩进，
- * 语音条与反馈永远不压视频、字幕、时间带）。看片区底色在深浅主题下都是暗色哑光，所以这里用"哑光上"的配色。
+ * Issue #9 画布内悬浮语音条（ADR 0019：玻璃质感，跟随主题）：浮在看片屏幕下方预留出的边上
+ * （开语音时看片区自动加大下边距，画面按画幅缩进，语音条与反馈永远不压视频、字幕、时间带）。
+ * 正在听你说时语音条外沿亮起 AI 光晕（身份色，只在听的时候出现）。
  */
 .layer {
   position: absolute;
@@ -25,8 +26,11 @@
   margin: 0;
   padding: 3px 12px;
   border-radius: var(--ui-radius-pill);
-  background: rgba(10, 10, 10, .72);
-  color: var(--studio-on-matte, #F5F5F5);
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  color: var(--ui-fg-primary);
   font-size: 13px;
   line-height: 18px;
   text-align: center;
@@ -38,8 +42,8 @@
   overflow: hidden;
 }
 .caption b { font-weight: 500; }
-.detail { color: var(--studio-on-matte-muted, #B3B3B3); }
-.captionAlert { box-shadow: inset 0 0 0 1px var(--studio-on-matte-muted, #B3B3B3); }
+.detail { color: var(--ui-fg-secondary); }
+.captionAlert { border-color: var(--ui-border-control); box-shadow: inset 0 0 0 1px var(--ui-border-control); }
 
 .pill {
   pointer-events: auto;
@@ -50,10 +54,13 @@
   min-height: 44px;
   padding: 4px;
   border-radius: var(--ui-radius-pill);
-  background: rgba(20, 20, 20, .94);
-  border: 1px solid var(--studio-matte-line, #3A3A3A);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
-  color: var(--studio-on-matte, #F5F5F5);
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  box-shadow: var(--ui-shadow-3);
+  color: var(--ui-fg-primary);
+  transition: box-shadow var(--ui-motion-popover) var(--ui-ease-standard);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -91,23 +98,23 @@
   cursor: pointer;
 }
 .button svg { width: 16px; height: 16px; flex: none; }
-.button:hover:not(:disabled) { background: rgba(255, 255, 255, .1); }
+.button:hover:not(:disabled) { background: var(--ui-tonal-hover); }
 .button:disabled { opacity: .5; cursor: default; }
-.button:focus-visible { outline: 2px solid var(--studio-on-matte, #F5F5F5); outline-offset: 1px; }
-.button[aria-pressed='true'] { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
-.primary { background: var(--studio-on-matte, #F5F5F5); color: #0A0A0A; }
-.primary:hover:not(:disabled) { background: #FFFFFF; }
-.end { background: rgba(255, 255, 255, .12); }
+.button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 1px; }
+.button[aria-pressed='true'] { background: var(--ui-selection-bg); box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); }
+.primary:hover:not(:disabled) { background: var(--ui-action-primary-hover); }
+.end { background: var(--ui-tonal-bg); }
 .iconOnly { padding: 0; width: 34px; }
 .stopGlyph { width: 10px; height: 10px; border-radius: 2px; background: currentColor; flex: none; }
-.divider { width: 1px; height: 20px; margin: 0 4px; background: var(--studio-matte-line, #3A3A3A); flex: none; }
+.divider { width: 1px; height: 20px; margin: 0 4px; background: var(--ui-border-subtle); flex: none; }
 
 .badge {
   flex: none;
   padding: 2px 8px;
   border-radius: var(--ui-radius-pill);
-  border: 1px dashed rgba(255, 255, 255, .35);
-  color: var(--studio-on-matte-muted, #B3B3B3);
+  border: 1px dashed var(--ui-border-control);
+  color: var(--ui-fg-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -118,19 +125,22 @@
   height: 34px;
   padding: 0 28px 0 12px;
   border-radius: var(--ui-radius-pill);
-  border: 1px solid var(--studio-matte-line, #3A3A3A);
-  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B3B3B3' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--ui-border-subtle);
+  background: var(--ui-tonal-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
   color: inherit;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 .voicePicker select:disabled { cursor: default; background-image: none; padding-right: 12px; }
-.voicePicker select:focus-visible { outline: 2px solid var(--studio-on-matte, #F5F5F5); outline-offset: 1px; }
+.voicePicker select:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 1px; }
 .voicePicker option { color: #0A0A0A; background: #FFFFFF; }
 
 .visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .toggle { flex: none; }
+/* 麦克风开着：主色实心 + AI 光晕（身份色只在 AI 在听时出现） */
+.toggleOn, .toggleOn:hover:not(:disabled) { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); box-shadow: var(--ui-ai-glow); }
+.layer:is([data-phase='listening'], [data-phase='recognizing']) .pill { box-shadow: var(--ui-ai-glow), var(--ui-shadow-3); }
 
 /* 窄屏（手机）：按钮只留图标（读屏仍读完整名称），状态文字保留 */
 @media (max-width: 720px) {

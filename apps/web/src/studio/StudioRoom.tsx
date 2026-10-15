@@ -28,6 +28,7 @@ import { useReplySpeech } from '@/voice/useReplySpeech';
 import { useVoice } from '@/voice/useVoice';
 import { voicePhase, type QueuedUtterance } from '@/voice/voice-phase';
 import { studioKeys, useStrategyPacks, useStudioActions, useStudioPreview, useStudioState, useStudioTimeline, useStudioTurns, useTrialProposal, type StudioStrategyChoice } from './useStudio';
+import { takeStudioBrief } from './studio-brief';
 import styles from './studio.module.css';
 
 /**
@@ -91,6 +92,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const canEdit = workspace.data === undefined ? true : EDIT_ROLES.has(workspace.data.role);
 
   const stateQuery = useStudioState(workspaceId, projectId);
+  // 首页带来的一句想法：进入后预填在对话框里（读一次即删）
+  const [brief, setBrief] = useState<string | null>(null);
+  useEffect(() => { setBrief(takeStudioBrief(projectId)); }, [projectId]);
   const state = stateQuery.data;
   const { timeline } = useStudioTimeline(projectId, state?.sequenceId, state?.project.revision);
   const turnsQuery = useStudioTurns(workspaceId, state?.session?.id ?? null);
@@ -635,6 +639,50 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     />
   );
 
+  const ruleGroup = (
+    <StudioRuleGroup
+      label={t.rulesLabel}
+      rules={[
+        {
+          key: 'effects',
+          pressed: state.project.allowEffects,
+          disabled: !canEdit || actions.setEffectsAllowed.isPending,
+          title: state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff,
+          icon: <QuietIcon name="spark" />,
+          label: state.project.allowEffects ? t.effects.on : t.effects.off,
+          onToggle: () => {
+            setActionError(null);
+            actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
+          },
+        },
+        {
+          key: 'narration',
+          pressed: state.project.allowNarration,
+          disabled: !canEdit || actions.setNarrationAllowed.isPending,
+          title: state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff,
+          icon: <QuietIcon name="voice" />,
+          label: state.project.allowNarration ? t.narration.on : t.narration.off,
+          onToggle: () => {
+            setActionError(null);
+            actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
+          },
+        },
+        {
+          key: 'generation',
+          pressed: state.project.allowGeneratedVideo,
+          disabled: !canEdit || actions.setGenerationAllowed.isPending,
+          title: state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff,
+          icon: <QuietIcon name="film" />,
+          label: state.project.allowGeneratedVideo ? t.generation.on : t.generation.off,
+          onToggle: () => {
+            setActionError(null);
+            actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
+          },
+        },
+      ]}
+    />
+  );
+
   return (
     <div className={styles['room']} lang={locale} data-voice={voiceDock === null ? undefined : 'on'}>
       <header className={styles['topbar']}>
@@ -646,50 +694,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
           {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
-          <StudioRuleGroup
-            label={t.rulesLabel}
-            rules={[
-              {
-                key: 'effects',
-                pressed: state.project.allowEffects,
-                disabled: !canEdit || actions.setEffectsAllowed.isPending,
-                title: state.project.allowEffects ? t.effects.hintOn : t.effects.hintOff,
-                icon: <QuietIcon name="spark" />,
-                label: state.project.allowEffects ? t.effects.on : t.effects.off,
-                onToggle: () => {
-                  setActionError(null);
-                  actions.setEffectsAllowed.mutate(!state.project.allowEffects, { onError: () => setActionError(t.effects.failed) });
-                },
-              },
-              {
-                key: 'narration',
-                pressed: state.project.allowNarration,
-                disabled: !canEdit || actions.setNarrationAllowed.isPending,
-                title: state.project.allowNarration ? t.narration.hintOn : t.narration.hintOff,
-                icon: <QuietIcon name="voice" />,
-                label: state.project.allowNarration ? t.narration.on : t.narration.off,
-                onToggle: () => {
-                  setActionError(null);
-                  actions.setNarrationAllowed.mutate(!state.project.allowNarration, { onError: () => setActionError(t.narration.failed) });
-                },
-              },
-              {
-                key: 'generation',
-                pressed: state.project.allowGeneratedVideo,
-                disabled: !canEdit || actions.setGenerationAllowed.isPending,
-                title: state.project.allowGeneratedVideo ? t.generation.hintOn : t.generation.hintOff,
-                icon: <QuietIcon name="film" />,
-                label: state.project.allowGeneratedVideo ? t.generation.on : t.generation.off,
-                onToggle: () => {
-                  setActionError(null);
-                  actions.setGenerationAllowed.mutate(!state.project.allowGeneratedVideo, { onError: () => setActionError(t.generation.failed) });
-                },
-              },
-            ]}
-          />
-          <span className={styles['divider']} aria-hidden="true" />
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
-          <button type="button" className="btn small ghost" aria-expanded={footageOpen} onClick={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(!footageOpen); }}><QuietIcon name="layers" />{t.footageButton(state.footage.length)}</button>
           <button ref={tasksButtonRef} type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />
           <button type="button" className="btn small ghost" aria-label={messages.common.switchLanguageAria} onClick={() => setLocale(locale === 'zh-CN' ? 'en' : 'zh-CN')}><QuietIcon name="globe" />{messages.common.switchLanguage}</button>
@@ -700,112 +705,127 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         </div>
       </header>
 
-      <StudioCanvas
-        aspectRatio={state.project.aspectRatio}
-        mode={mode}
-        videoRef={videoRef}
-        shown={shown}
-        target={targetPreview}
-        targetFailed={targetPreview?.status === 'FAILED' || preview.request.isError}
-        trial={trial !== null && shown?.proposalId === trial.proposalId}
-        seconds={displaySeconds(playhead)}
-        uploads={uploads}
+      <StudioConversation
+        turns={turns}
+        proposal={proposal}
+        canUndoChange={canUndoChange}
+        notice={notice === null ? null : t.chat[notice]}
+        error={actionError}
+        pointerLabel={pointerLabel}
         canEdit={canEdit}
-        firstCutBusy={running || actions.send.isPending}
-        onAddFootage={() => fileInput.current?.click()}
-        onDropFiles={upload}
-        onFirstCut={() => send(article !== null ? t.canvas.articleFirstCutPrompt : t.canvas.firstCutPrompt)}
-        articleParagraphs={article?.paragraphs ?? 0}
-        onRetryPreview={preview.retry}
-        onVideoError={() => { reloadRef.current = true; preview.refresh(); }}
-        onTimeUpdate={syncFromVideo}
-        onLoaded={() => { const video = videoRef.current; if (video !== null) video.currentTime = Math.min(displaySeconds(playhead), video.duration || 0); }}
-        onPlayState={setPlaying}
-        region={frameRegion}
-        drawing={drawing}
-        onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
-        voiceDock={voiceDock}
+        sending={actions.send.isPending}
+        cancelling={actions.cancel.isPending}
+        adopting={actions.adopt.isPending}
+        discarding={actions.discard.isPending}
+        undoing={actions.undoChange.isPending}
+        onClearPointer={() => { setSelection({ range: null, clipId: null }); setFramed(null); setDrawing(false); }}
+        onSend={send}
+        onStop={stop}
+        onKeep={keep}
+        onDiscard={discard}
+        onUndoChange={undoChange}
+        strategies={strategies.data ?? []}
+        strategy={strategy}
+        onStrategyChange={setStrategy}
+        onLearnStrategy={() => { setFootageOpen(false); setTasksOpen(false); setDistillOpen(true); }}
+        generationCards={(
+          <StudioGenerationCards
+            generations={visibleGenerations(state.generations)}
+            budget={state.generationBudget}
+            workspaceId={workspaceId}
+            canEdit={canEdit}
+            pendingId={pendingGeneration}
+            error={generationError}
+            onAccept={acceptGeneration}
+            onDecline={declineGeneration}
+          />
+        )}
+        rules={ruleGroup}
+        onUpload={() => fileInput.current?.click()}
+        initialDraft={brief}
+        voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}
       />
 
-      <div className={styles['dock']}>
-        <div className={styles['transport']}>
-          <button type="button" className={`btn icononly small ${styles['play']}`} aria-label={playing ? t.transport.pause : t.transport.play} title={t.transport.playHint} aria-keyshortcuts="Space" disabled={shown === null} onClick={togglePlay}>
-            <QuietIcon name={playing ? 'pause' : 'play'} />
-          </button>
-          <span className={styles['clock']} aria-label={t.transport.position}>{formatClock(playhead)} <span>/ {strip === null ? '--:--.-' : formatClock(strip.duration)}</span></span>
+      <div className={styles['canvasColumn']}>
+        {/* 画布工具条（参照 Stitch 浮动工具条）：框选画面 / 素材 / 快捷键 */}
+        <div className={`${styles['rail']} ui-glass`} role="toolbar" aria-label={t.rail.label} aria-orientation="vertical">
           {shown !== null && canEdit ? (
-            <button type="button" className="btn small ghost" aria-pressed={drawing} title={t.canvas.markAreaHint} aria-keyshortcuts="M" onClick={() => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); }}>
-              <QuietIcon name="expand" />{drawing ? t.canvas.markAreaActive : t.canvas.markArea}
+            <button type="button" className={styles['railButton']} aria-pressed={drawing} aria-label={drawing ? t.canvas.markAreaActive : t.canvas.markArea} data-tip={`${t.canvas.markArea} · M`} aria-keyshortcuts="M" onClick={() => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); }}>
+              <QuietIcon name="expand" />
             </button>
           ) : null}
-          <span className={styles['spacer']} />
-          {shown !== null && shown.segments.reused > 0 ? <span className={styles['meta']}>{t.canvas.reused(shown.segments.reused, shown.segments.total)}</span> : null}
-          {trialChanges.length > 0 ? <span className={styles['meta']}>{t.strip.changes(trialChanges.length)}</span> : null}
-          {strip !== null ? (
-            <div className={styles['zoom']} role="group" aria-label={t.strip.zoomLevel}>
-              <button type="button" className="btn small ghost" aria-label={t.strip.zoomOut} aria-keyshortcuts="-" disabled={zoom <= STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(nextStripZoom(zoom, -1))}>−</button>
-              <span className={styles['zoomLevel']} aria-live="polite">{`${String(zoom)}×`}</span>
-              <button type="button" className="btn small ghost" aria-label={t.strip.zoomIn} aria-keyshortcuts="+" disabled={zoom >= STRIP_ZOOM_LEVELS[STRIP_ZOOM_LEVELS.length - 1]!} onClick={() => setZoom(nextStripZoom(zoom, 1))}>+</button>
-              <button type="button" className="btn small ghost" aria-keyshortcuts="0" disabled={zoom === STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(STRIP_ZOOM_LEVELS[0])}>{t.strip.zoomFit}</button>
-            </div>
-          ) : null}
-          <button type="button" className={`textbtn small ${styles['shortcutsButton']}`} aria-expanded={shortcutsOpen} aria-keyshortcuts="Shift+?" title={t.shortcuts.openHint} onClick={() => setShortcutsOpen(!shortcutsOpen)}>{t.shortcuts.open}</button>
+          <button type="button" className={styles['railButton']} aria-expanded={footageOpen} aria-label={t.footageButton(state.footage.length)} data-tip={t.footageButton(state.footage.length)} onClick={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(!footageOpen); }}>
+            <QuietIcon name="layers" />{state.footage.length > 0 ? <span className={styles['railCount']} aria-hidden="true">{state.footage.length}</span> : null}
+          </button>
+          <button type="button" className={`${styles['railButton']} ${styles['shortcutsButton']}`} aria-expanded={shortcutsOpen} aria-label={t.shortcuts.open} aria-keyshortcuts="Shift+?" data-tip={`${t.shortcuts.open} · ?`} onClick={() => setShortcutsOpen(!shortcutsOpen)}>
+            <QuietIcon name="keyboard" />
+          </button>
         </div>
-        {strip !== null ? (
-          <StudioTimeStrip
-            duration={strip.duration}
-            frameRate={strip.frameRate}
-            lanes={strip.lanes}
-            clips={strip.clips}
-            waveforms={waveforms}
-            clipLabel={footageName}
-            playhead={playhead}
-            selection={selection}
-            onSeek={seek}
-            onSelectionChange={setSelection}
-            zoom={zoom}
-            onZoomChange={setZoom}
-            changes={trialChanges}
-          />
-        ) : null}
-        <StudioConversation
-          turns={turns}
-          proposal={proposal}
-          canUndoChange={canUndoChange}
-          notice={notice === null ? null : t.chat[notice]}
-          error={actionError}
-          pointerLabel={pointerLabel}
+
+        <StudioCanvas
+          aspectRatio={state.project.aspectRatio}
+          mode={mode}
+          videoRef={videoRef}
+          shown={shown}
+          target={targetPreview}
+          targetFailed={targetPreview?.status === 'FAILED' || preview.request.isError}
+          trial={trial !== null && shown?.proposalId === trial.proposalId}
+          seconds={displaySeconds(playhead)}
+          uploads={uploads}
           canEdit={canEdit}
-          sending={actions.send.isPending}
-          cancelling={actions.cancel.isPending}
-          adopting={actions.adopt.isPending}
-          discarding={actions.discard.isPending}
-          undoing={actions.undoChange.isPending}
-          onClearPointer={() => { setSelection({ range: null, clipId: null }); setFramed(null); setDrawing(false); }}
-          onSend={send}
-          onStop={stop}
-          onKeep={keep}
-          onDiscard={discard}
-          onUndoChange={undoChange}
-          strategies={strategies.data ?? []}
-          strategy={strategy}
-          onStrategyChange={setStrategy}
-          onLearnStrategy={() => { setFootageOpen(false); setTasksOpen(false); setDistillOpen(true); }}
-          generationCards={(
-            <StudioGenerationCards
-              generations={visibleGenerations(state.generations)}
-              budget={state.generationBudget}
-              workspaceId={workspaceId}
-              canEdit={canEdit}
-              pendingId={pendingGeneration}
-              error={generationError}
-              onAccept={acceptGeneration}
-              onDecline={declineGeneration}
-            />
-          )}
-          voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}
+          firstCutBusy={running || actions.send.isPending}
+          onAddFootage={() => fileInput.current?.click()}
+          onDropFiles={upload}
+          onFirstCut={() => send(article !== null ? t.canvas.articleFirstCutPrompt : t.canvas.firstCutPrompt)}
+          articleParagraphs={article?.paragraphs ?? 0}
+          onRetryPreview={preview.retry}
+          onVideoError={() => { reloadRef.current = true; preview.refresh(); }}
+          onTimeUpdate={syncFromVideo}
+          onLoaded={() => { const video = videoRef.current; if (video !== null) video.currentTime = Math.min(displaySeconds(playhead), video.duration || 0); }}
+          onPlayState={setPlaying}
+          region={frameRegion}
+          drawing={drawing}
+          onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
+          voiceDock={voiceDock}
         />
-        {!canEdit ? <p className={styles['meta']}>{t.readOnly}</p> : null}
+
+        <div className={`${styles['dock']} ui-glass`}>
+          <div className={styles['transport']}>
+            <button type="button" className={`btn icononly small ${styles['play']}`} aria-label={playing ? t.transport.pause : t.transport.play} title={t.transport.playHint} aria-keyshortcuts="Space" disabled={shown === null} onClick={togglePlay}>
+              <QuietIcon name={playing ? 'pause' : 'play'} />
+            </button>
+            <span className={styles['clock']} aria-label={t.transport.position}>{formatClock(playhead)} <span>/ {strip === null ? '--:--.-' : formatClock(strip.duration)}</span></span>
+            <span className={styles['spacer']} />
+            {shown !== null && shown.segments.reused > 0 ? <span className={styles['meta']}>{t.canvas.reused(shown.segments.reused, shown.segments.total)}</span> : null}
+            {trialChanges.length > 0 ? <span className={styles['meta']}>{t.strip.changes(trialChanges.length)}</span> : null}
+            {strip !== null ? (
+              <div className={styles['zoom']} role="group" aria-label={t.strip.zoomLevel}>
+                <button type="button" className="btn small ghost" aria-label={t.strip.zoomOut} aria-keyshortcuts="-" disabled={zoom <= STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(nextStripZoom(zoom, -1))}>−</button>
+                <span className={styles['zoomLevel']} aria-live="polite">{`${String(zoom)}×`}</span>
+                <button type="button" className="btn small ghost" aria-label={t.strip.zoomIn} aria-keyshortcuts="+" disabled={zoom >= STRIP_ZOOM_LEVELS[STRIP_ZOOM_LEVELS.length - 1]!} onClick={() => setZoom(nextStripZoom(zoom, 1))}>+</button>
+                <button type="button" className="btn small ghost" aria-keyshortcuts="0" disabled={zoom === STRIP_ZOOM_LEVELS[0]} onClick={() => setZoom(STRIP_ZOOM_LEVELS[0])}>{t.strip.zoomFit}</button>
+              </div>
+            ) : null}
+          </div>
+          {strip !== null ? (
+            <StudioTimeStrip
+              duration={strip.duration}
+              frameRate={strip.frameRate}
+              lanes={strip.lanes}
+              clips={strip.clips}
+              waveforms={waveforms}
+              clipLabel={footageName}
+              playhead={playhead}
+              selection={selection}
+              onSeek={seek}
+              onSelectionChange={setSelection}
+              zoom={zoom}
+              onZoomChange={setZoom}
+              changes={trialChanges}
+            />
+          ) : null}
+          {!canEdit ? <p className={styles['meta']}>{t.readOnly}</p> : null}
+        </div>
       </div>
 
       <input

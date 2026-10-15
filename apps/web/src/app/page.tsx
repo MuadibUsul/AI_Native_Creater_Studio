@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
@@ -16,6 +16,22 @@ import type { Messages } from '@/i18n/messages';
 import styles from './dashboard.module.css';
 
 type DashboardText = Messages['dashboard'];
+type StartMode = 'footage' | 'article' | 'link';
+const START_MODES: StartMode[] = ['footage', 'article', 'link'];
+const MODE_ICONS: Record<StartMode, string> = { footage: 'film', article: 'text', link: 'link' };
+
+/** 素材剪辑与文章讲述的作品在共看片室打开（V6）；其余沿用旧版导演工作台 */
+function projectHref(workspaceId: string, project: { id: string; mode?: string; status: string }): string {
+  if (project.mode === 'FOOTAGE_EDIT' || project.mode === 'HYBRID') return `/w/${workspaceId}/studio/${project.id}`;
+  const stage = project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard';
+  return `/w/${workspaceId}/p/${project.id}/${stage}`;
+}
+
+/** 卡片缩略区里的画幅框（不画假内容，只表达这条视频的形状） */
+function aspectBox(aspectRatio: string): { width: string; height: string } {
+  const [width = 16, height = 9] = aspectRatio.split(':').map(Number);
+  return width >= height ? { width: '46%', height: `${String((46 * height) / width * 1.6)}%` } : { width: `${String((58 * width) / height / 1.6)}%`, height: '58%' };
+}
 
 // 目标时长是旧版生成作品的显示值（毫秒字段只用于展示，不参与时间线计算）
 function projectDuration(ms: number | null, t: DashboardText): string {
@@ -52,7 +68,7 @@ export default function DashboardPage() {
   const [workspaceName, setWorkspaceName] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
   const [source, setSource] = useState('');
-  const [sourceKind, setSourceKind] = useState<'url' | 'text' | 'file'>('url');
+  const [mode, setMode] = useState<StartMode>('footage');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest'>('recent');
   const effectiveWorkspaceId = selection.workspaceId ?? localWorkspaceId ?? workspaces.data?.[0]?.id ?? null;
   const projects = useQuery({
@@ -80,13 +96,35 @@ export default function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects(effectiveWorkspaceId ?? 'none') });
     },
   });
-  const start = (kind = sourceKind) => {
+  /**
+   * 开始：素材剪辑 / 文章讲述 → 共看片室新建页（想法或文章随草稿带过去，进入后预填）；链接导入 → 旧版导入流程。
+   * 草稿只放在本标签页的 sessionStorage，不上传。
+   */
+  const start = (chosen: StartMode, text: string) => {
     if (!effectiveWorkspaceId) return;
-    const resolvedKind = kind === 'url' && source.trim() && !/^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/i.test(source.trim()) ? 'text' : kind;
+    const value = text.trim();
     try {
-      window.sessionStorage.setItem('ancs-new-project-draft', JSON.stringify({ kind: resolvedKind, value: source }));
-    } catch { /* The new project page still works without session storage. */ }
-    window.location.href = `/w/${effectiveWorkspaceId}/new`;
+      if (chosen === 'link') {
+        const kind = value && !/^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/i.test(value) ? 'text' : 'url';
+        window.sessionStorage.setItem('ancs-new-project-draft', JSON.stringify({ kind, value }));
+      } else {
+        window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify(chosen === 'article' ? { start: 'article', article: value } : { start: 'footage', brief: value }));
+      }
+    } catch { /* The new project pages still work without session storage. */ }
+    if (chosen === 'link') window.location.href = `/w/${effectiveWorkspaceId}/new`;
+    else router.push(`/w/${effectiveWorkspaceId}/studio/new`);
+  };
+  const canStart = mode === 'footage' || source.trim().length > 0;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (canStart) start(mode, source);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 文章是多段文字：Ctrl/⌘ + Enter 提交；其余模式 Enter 提交、Shift + Enter 换行
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    if (mode === 'article' ? !(event.metaKey || event.ctrlKey) : event.shiftKey) return;
+    event.preventDefault();
+    if (canStart) start(mode, source);
   };
   const isUnauthenticated = session.isError && describeError(session.error).kind === 'unauthenticated';
   useEffect(() => {
@@ -106,53 +144,58 @@ export default function DashboardPage() {
     return sortOrder === 'recent' ? bTime - aTime : aTime - bTime;
   });
   const hasProjects = (projects.data?.length ?? 0) > 0;
-  return <div className={`page narrow ${styles['dashboard']}`} lang={locale}>
-    <div className="home-intro">
-      <div><div className="eyebrow mb16">{t.eyebrow}</div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
-    </div>
-    {workspaces.data?.length === 0 ? <div className="mt32"><StateBlock variant="empty" title={t.noWorkspaceTitle} description={t.noWorkspaceBody}>
-      <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
-        <input className="field" aria-label={t.workspaceNameLabel} placeholder={t.workspaceNamePlaceholder} value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} />
-        <button className="btn primary" type="submit" disabled={createWorkspace.isPending}>{t.createWorkspace}</button>
-      </form>
-      {createWorkspace.isError ? <p role="alert">{describeError(createWorkspace.error).message}</p> : null}
-    </StateBlock></div> : <>
-      {workspaces.data && workspaces.data.length > 1 ? <div className="qf-dashboard-workspace"><label htmlFor="workspace-select">{t.workspaceLabel}</label><select id="workspace-select" className="field" value={effectiveWorkspaceId ?? ''} onChange={(event) => { setLocalWorkspaceId(event.target.value); selection.selectWorkspace(event.target.value); }}>{workspaces.data.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}</select></div> : null}
-      <div className="composer">
-        <textarea id="home-source" aria-label={t.sourceLabel} placeholder={t.sourcePlaceholder} value={source} onChange={(event) => setSource(event.target.value)} />
-        <div className="composer-footer">
-          <div className="composer-tools">
-            <button type="button" aria-pressed={sourceKind === 'url'} className={`btn ghost small ${sourceKind === 'url' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('url')}><QuietIcon name="link" />{t.modeLink}</button>
-            <button type="button" className={`btn ghost small ${sourceKind === 'file' ? 'qf-mode-active' : ''}`} onClick={() => start('file')}><QuietIcon name="upload" />{t.modeUpload}</button>
-            <button type="button" aria-pressed={sourceKind === 'text'} className={`btn ghost small ${sourceKind === 'text' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('text')}><QuietIcon name="text" />{t.modeText}</button>
+  return <div className={`page ${styles['home']}`} lang={locale}>
+    <section className={styles['hero']} aria-labelledby="home-title">
+      <div className={styles['aurora']} aria-hidden="true" />
+      <h1 id="home-title" className={styles['heroTitle']}>{t.heroTitle}</h1>
+      <p className={styles['heroSubtitle']}>{t.heroSubtitle}</p>
+      {workspaces.data?.length === 0 ? <div className={styles['heroState']}><StateBlock variant="empty" title={t.noWorkspaceTitle} description={t.noWorkspaceBody}>
+        <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
+          <input className="field" aria-label={t.workspaceNameLabel} placeholder={t.workspaceNamePlaceholder} value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} />
+          <button className="btn primary" type="submit" disabled={createWorkspace.isPending}>{t.createWorkspace}</button>
+        </form>
+        {createWorkspace.isError ? <p role="alert">{describeError(createWorkspace.error).message}</p> : null}
+      </StateBlock></div> : <>
+        {workspaces.data && workspaces.data.length > 1 ? <div className={styles['workspacePick']}><label htmlFor="workspace-select">{t.workspaceLabel}</label><select id="workspace-select" className="field" value={effectiveWorkspaceId ?? ''} onChange={(event) => { setLocalWorkspaceId(event.target.value); selection.selectWorkspace(event.target.value); }}>{workspaces.data.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}</select></div> : null}
+        <form className={`ui-prompt ${styles['prompt']}`} onSubmit={submit}>
+          <textarea id="home-source" rows={3} aria-label={t.sourceLabel} placeholder={t.placeholders[mode]} value={source} onChange={(event) => setSource(event.target.value)} onKeyDown={onKeyDown} />
+          <div className="ui-prompt-footer">
+            <button type="button" className="ui-round" aria-label={t.addFootage} title={t.addFootage} onClick={() => start('footage', '')}><QuietIcon name="plus" /></button>
+            <div className={`ui-seg ${styles['modes']}`} role="radiogroup" aria-label={t.startLabel}>
+              {START_MODES.map((option) => <button key={option} type="button" role="radio" aria-checked={mode === option} onClick={() => setMode(option)}><QuietIcon name={MODE_ICONS[option]} /><span>{t.startModes[option]}</span></button>)}
+            </div>
+            <span className="ui-grow" />
+            <button type="submit" className="ui-round ui-send" aria-label={t.start} title={t.start} disabled={!canStart}><QuietIcon name="arrowUp" /></button>
           </div>
-          <button type="button" className="btn primary" onClick={() => start()}>{t.start} <QuietIcon name="arrow" /></button>
-        </div>
+        </form>
+        {mode === 'footage' ? <div className={styles['suggestions']} role="group" aria-label={t.suggestionsLabel}>
+          {t.suggestions.map((suggestion) => <button key={suggestion} type="button" className="ui-suggestion" onClick={() => setSource(suggestion)}><span className="ui-ai-mark" aria-hidden="true" /><span>{suggestion}</span></button>)}
+        </div> : null}
+      </>}
+    </section>
+    {workspaces.data?.length === 0 ? null : <section className={styles['recent']} aria-label={t.continueTitle}>
+      {/* 没有作品时不显示无意义的排序切换；"新建作品"始终保留（完整新建流程的入口）。
+          空状态里的"只建空项目"保留为次要操作：它是不导入内容就建项目的唯一入口，历史验收脚本 n02-15 也依赖它 */}
+      <div className={styles['recentHead']}>
+        <div className="row gap8"><h2>{t.continueTitle}</h2>{projects.data ? <span className="badge">{t.projectCount(projects.data.length)}</span> : null}</div>
+        <div className="row gap8">{hasProjects ? <button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? t.sortRecent : t.sortOldest} <QuietIcon name="down" /></button> : null}<Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />{t.newProject}</Link></div>
       </div>
-      <div className={styles['studioEntry']}>
-        <QuietIcon name="film" />
-        <div className="grow"><strong>{messages.home.studioTitle}</strong><p className="small muted">{messages.home.studioBody}</p></div>
-        <Link className="btn small" href={`/w/${effectiveWorkspaceId}/studio/new`}>{messages.home.studioAction}<QuietIcon name="arrow" /></Link>
-      </div>
-      <div className="homeflow"><QuietIcon name="shield" /><span>{t.flowNote}</span>{t.flowSteps.map((step, index) => <Fragment key={step}>{index > 0 ? <QuietIcon name="chevron" /> : null}<span>{step}</span></Fragment>)}</div>
-      <section className="mt40" aria-label={t.continueTitle}>
-        {/* 没有作品时不显示无意义的排序切换；"新建作品"始终保留（完整新建流程的入口）。
-            空状态里的"只建空项目"保留为次要操作（一屏只有一个主操作——上方的"开始创作"）：它是不导入内容就建项目的唯一入口，历史验收脚本 n02-15 也依赖它 */}
-        <div className="sectionhead"><div className="row gap16"><h2>{t.continueTitle}</h2>{projects.data ? <span className="badge">{t.projectCount(projects.data.length)}</span> : null}</div><div className="row gap8">{hasProjects ? <button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? t.sortRecent : t.sortOldest} <QuietIcon name="down" /></button> : null}<Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />{t.newProject}</Link></div></div>
-        {projects.isPending ? <StateBlock variant="loading" title={t.projectsLoading} /> : null}
-        {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title={t.projectsFailed} description={describeError(projects.error).message} action={{ label: t.retry, onClick: () => void projects.refetch() }} /> : null}
-        {projects.data?.length === 0 ? <StateBlock variant="empty" title={t.emptyTitle} description={t.emptyBody}><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label={t.projectTitleLabel} placeholder={t.projectTitlePlaceholder} value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn" type="submit" disabled={createProject.isPending}>{t.createProject}</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
-        <div className="project-grid">{ordered.map((project) => <Link className="project-card" href={project.mode === 'FOOTAGE_EDIT' ? `/w/${effectiveWorkspaceId}/studio/${project.id}` : `/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
-          <div className={styles['projectPreview']} aria-hidden="true"><span className={styles['previewLabel']}>{t.previewLabel}</span><strong className={styles['previewTitle']}>{project.title}</strong><span className={styles['previewNote']}>{t.noCover}</span></div>
-          <h3>{project.title}</h3><div className="project-meta"><span>{t.target(projectDuration(project.targetDurationMs ?? null, t), project.aspectRatio)}</span><span className="badge">{t.stages[project.status] ?? project.status}</span></div>
-          <div className="muted" style={{ fontSize: 10, marginTop: 8 }}>{project.updatedAt ? editedAt(project.updatedAt, t, locale) : t.editedUnknown}</div>
-        </Link>)}</div>
-      </section>
-      <div className="guide-row">
-        <div className="guide"><QuietIcon name="voice" /><div><strong>{t.guides.identityTitle}</strong><p>{t.guides.identityBody}</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/identity`}>{t.guides.identityLink} <QuietIcon name="arrow" /></Link></div></div>
-        <div className="guide"><QuietIcon name="layers" /><div><strong>{t.guides.assetsTitle}</strong><p>{t.guides.assetsBody}</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/assets`}>{t.guides.assetsLink} <QuietIcon name="arrow" /></Link></div></div>
-        <div className="guide"><QuietIcon name="box" /><div><strong>{t.guides.extensionsTitle}</strong><p>{t.guides.extensionsBody}</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/extensions`}>{t.guides.extensionsLink} <QuietIcon name="arrow" /></Link></div></div>
-      </div>
-    </>}
+      {projects.isPending ? <StateBlock variant="loading" title={t.projectsLoading} /> : null}
+      {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title={t.projectsFailed} description={describeError(projects.error).message} action={{ label: t.retry, onClick: () => void projects.refetch() }} /> : null}
+      {projects.data?.length === 0 ? <StateBlock variant="empty" title={t.emptyTitle} description={t.emptyBody}><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label={t.projectTitleLabel} placeholder={t.projectTitlePlaceholder} value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn" type="submit" disabled={createProject.isPending}>{t.createProject}</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
+      <div className={styles['grid']}>{ordered.map((project) => {
+        const kind = project.mode === 'FOOTAGE_EDIT' ? 'footage' : project.mode === 'HYBRID' ? 'article' : 'legacy';
+        return <Link className={styles['card']} href={projectHref(effectiveWorkspaceId ?? '', project)} key={project.id}>
+          <div className={styles['thumb']} aria-hidden="true">
+            <span className={styles['thumbFrame']} style={aspectBox(project.aspectRatio)}><QuietIcon name={kind === 'article' ? 'text' : 'film'} /></span>
+          </div>
+          <div className={styles['cardBody']}>
+            <h3>{project.title}</h3>
+            <div className={styles['cardMeta']}><span>{kind === 'footage' ? t.kindFootage(project.aspectRatio) : kind === 'article' ? t.kindArticle(project.aspectRatio) : t.target(projectDuration(project.targetDurationMs ?? null, t), project.aspectRatio)}</span><span className="badge">{t.stages[project.status] ?? project.status}</span></div>
+            <div className={styles['edited']}>{project.updatedAt ? editedAt(project.updatedAt, t, locale) : t.editedUnknown}</div>
+          </div>
+        </Link>;
+      })}</div>
+    </section>}
   </div>;
 }
