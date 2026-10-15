@@ -586,8 +586,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const voiceCaption: { main: string; detail: string | null; tone: 'normal' | 'alert' } | null =
     phase === 'error' && voice.error !== null ? { main: tv.errors[voice.error], detail: null, tone: 'alert' }
       : voiceFailed !== null ? { main: tv.failedUtterance(voiceFailed.text), detail: voiceFailed.failed, tone: 'alert' }
-        : voiceNotice !== null ? { main: voiceNotice, detail: null, tone: 'normal' }
-          : phase === 'recognizing' ? { main: voice.partial === '' ? '…' : voice.partial, detail: voice.held ? tv.held : voice.partial === '' ? null : voicePointing, tone: 'normal' }
+        // 用户正在说：边说边出的文字优先于一次性提示
+        : phase === 'recognizing' ? { main: voice.partial === '' ? '…' : voice.partial, detail: voice.held ? tv.held : voice.partial === '' ? null : voicePointing, tone: 'normal' }
+          : voiceNotice !== null ? { main: voiceNotice, detail: null, tone: 'normal' }
             : phase === 'thinking' ? { main: lastVoiceText === null ? tv.phases.thinking : tv.working(lastVoiceText), detail: voiceWaiting - (actions.send.isPending ? 1 : 0) > 0 ? tv.queued(voiceWaiting - (actions.send.isPending ? 1 : 0)) : null, tone: 'normal' }
               : phase === 'speaking' ? { main: tv.speakingHint, detail: null, tone: 'normal' }
                 : phase === 'listening' ? { main: tv.idleHint, detail: pointerLabel === null ? null : tv.pointing(pointerLabel), tone: 'normal' }

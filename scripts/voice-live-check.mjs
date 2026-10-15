@@ -10,7 +10,7 @@
 // - 费用：识别按音频时长、合成按字符、Claude 按 token；脚本只做固定的几句，不自动重试任何付费调用，结束时汇总用量写进 summary.json。
 // - Key 只放在请求头里，不打印、不写证据文件。
 //
-// 用法：node scripts/voice-live-check.mjs   证据写入 docs/verification/artifacts/v6-2/issue-9/
+// 用法：node scripts/voice-live-check.mjs   证据写入 docs/verification/artifacts/v6-2/issue-9/（ANCS_LIVE_ONLY=phone 只跑手机一段，写 summary-phone.json）
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -24,6 +24,7 @@ import { ScriptedDirector } from './lib/scripted-director.mjs';
 import { startStudioEnv, waitFor } from './lib/studio-env.mjs';
 
 const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? 'docs/verification/artifacts/v6-2/issue-9');
+const only = process.env.ANCS_LIVE_ONLY ?? 'all';
 const webPort = Number(process.env.ANCS_QF_WEB_PORT ?? 3000);
 const audioKey = process.env.OPENAI_API_KEY;
 const audioBase = process.env.ANCS_OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
@@ -291,7 +292,14 @@ try {
       for (const part of parts) if (part.left < box.right && part.right > box.left && part.top < box.bottom && part.bottom > box.top) overlaps.push(name);
     }
     const inView = parts.every((part) => part.left >= 0 && part.right <= globalThis.innerWidth && part.top >= 0 && part.bottom <= globalThis.innerHeight);
-    return { ok: overlaps.length === 0 && inView, overlaps, inView, checked: Object.entries(targets).filter(([, element]) => element != null).map(([name]) => name) };
+    // 语音条里的每个按钮都必须完整可见（不能靠横向滚动藏起来）
+    const pill = dockElement.querySelector('[role="toolbar"]');
+    const pillBox = pill.getBoundingClientRect();
+    const clipped = [...pill.querySelectorAll('button, select')].filter((control) => {
+      const box = control.getBoundingClientRect();
+      return box.left < pillBox.left - 1 || box.right > pillBox.right + 1 || box.top < pillBox.top - 1 || box.bottom > pillBox.bottom + 1;
+    }).map((control) => control.getAttribute('aria-label') ?? control.textContent);
+    return { ok: overlaps.length === 0 && inView && clipped.length === 0, overlaps, inView, clipped, checked: Object.entries(targets).filter(([, element]) => element != null).map(([name]) => name) };
   });
   const assertClear = async (label) => {
     const check = await rectsClear();
@@ -306,237 +314,241 @@ try {
     if (stoppedEntry.phase !== 'recognizing') throw new Error(`${label}: reply stopped into ${stoppedEntry.phase}, not because the user spoke`);
   };
 
-  // ================= 中文：桌面 · 浅色 =================
-  page = await openStudio({ viewport: { width: 1440, height: 900 } });
-  await page.getByRole('button', { name: /^片段 lake\.mp4/ }).first().click();
-  let t0 = await now();
-  await page.getByRole('button', { name: '开始语音' }).click();
-  await waitPhase('listening');
-  metrics.connect.push({ label: 'zh desktop', ms: Math.round((await firstAfter(t0, (entry) => entry.phase === 'listening', 1000, 'listening')).t - t0) });
-  if ((await dock().getByRole('combobox', { name: 'AI 的声音' }).locator('option').allTextContents()).join(',') !== 'Coral,Onyx,Nova') throw new Error('voice picker should list the configured real voices');
-  await dock().getByRole('combobox', { name: 'AI 的声音' }).selectOption('nova');
-  await assertClear('zh listening');
-  await shot('01-zh-desktop-light-listening');
-  pass('开麦：连续会话就绪（真实识别 + 真实合成）', `点"开始语音"到"在听" ${String(metrics.connect[0].ms)} ms；声音下拉只列真实可用的 Coral / Onyx / Nova，选 Nova；语音条不压画面、时间带、播放键与输入框`);
+  // ANCS_LIVE_ONLY=phone：只跑手机一段（布局改动后的复验，只花一轮 Claude）
+  if (only !== 'phone') {
+    // ================= 中文：桌面 · 浅色 =================
+    page = await openStudio({ viewport: { width: 1440, height: 900 } });
+    await page.getByRole('button', { name: /^片段 lake\.mp4/ }).first().click();
+    let t0 = await now();
+    await page.getByRole('button', { name: '开始语音' }).click();
+    await waitPhase('listening');
+    metrics.connect.push({ label: 'zh desktop', ms: Math.round((await firstAfter(t0, (entry) => entry.phase === 'listening', 1000, 'listening')).t - t0) });
+    if ((await dock().getByRole('combobox', { name: 'AI 的声音' }).locator('option').allTextContents()).join(',') !== 'Coral,Onyx,Nova') throw new Error('voice picker should list the configured real voices');
+    await dock().getByRole('combobox', { name: 'AI 的声音' }).selectOption('nova');
+    await assertClear('zh listening');
+    await shot('01-zh-desktop-light-listening');
+    pass('开麦：连续会话就绪（真实识别 + 真实合成）', `点"开始语音"到"在听" ${String(metrics.connect[0].ms)} ms；声音下拉只列真实可用的 Coral / Onyx / Nova，选 Nova；语音条不压画面、时间带、播放键与输入框`);
 
-  // 第一句：指着 lake.mp4 说"把这一段剪短一点"
-  const lakeClip = clipIdOf('lake.mp4');
-  const glacierClip = clipIdOf('glacier.mp4');
-  const first = await say('zh_edit1', { onTranscript: async () => { await shot('02-zh-desktop-light-recognizing'); } });
-  await waitPhase('thinking', 30_000).catch(() => undefined);
-  pass('第一句：边说边出 → 说完交给 AI', `开口 ${String(first.speechStartMs)} ms 后进入"正在听你说"；首个转写 ${String(first.firstTranscriptMs)} ms（"${first.firstTranscriptText}"）；说完到交出 ${String(first.endToDeliveredMs)} ms`);
+    // 第一句：指着 lake.mp4 说"把这一段剪短一点"
+    const lakeClip = clipIdOf('lake.mp4');
+    const glacierClip = clipIdOf('glacier.mp4');
+    const first = await say('zh_edit1', { onTranscript: async () => { await shot('02-zh-desktop-light-recognizing'); } });
+    await waitPhase('thinking', 30_000).catch(() => undefined);
+    pass('第一句：边说边出 → 说完交给 AI', `开口 ${String(first.speechStartMs)} ms 后进入"正在听你说"；首个转写 ${String(first.firstTranscriptMs)} ms（"${first.firstTranscriptText}"）；说完到交出 ${String(first.endToDeliveredMs)} ms`);
 
-  // 第二句（AI 还在处理第一句）：开口时指着 road，说到一半（"这里"之前）改指 glacier → 排队，按说"这里"那一刻的指向发出
-  await page.getByRole('button', { name: /^片段 road\.mp4/ }).first().click();
-  await page.waitForTimeout(300);
-  const second = await say('zh_edit2', {
-    duringSpeech: async () => { await page.waitForTimeout(150); await page.getByRole('button', { name: /^片段 glacier\.mp4/ }).first().click(); },
-  });
-  const queued = (await phaseLog()).some((entry) => entry.t >= second.endedAt - 50 && entry.caption.includes('排队'));
-  if (queued) await shot('03-zh-desktop-light-thinking-queued');
-  pass('第二句：说到一半换指向；AI 忙时排队', `${queued ? '已排队（"还有 1 句排队"）' : 'AI 已空闲，直接发出'}；首个转写 ${String(second.firstTranscriptMs)} ms；说完到交出 ${String(second.endToDeliveredMs)} ms`);
+    // 第二句（AI 还在处理第一句）：开口时指着 road，说到一半（"这里"之前）改指 glacier → 排队，按说"这里"那一刻的指向发出
+    await page.getByRole('button', { name: /^片段 road\.mp4/ }).first().click();
+    await page.waitForTimeout(300);
+    const second = await say('zh_edit2', {
+      duringSpeech: async () => { await page.waitForTimeout(150); await page.getByRole('button', { name: /^片段 glacier\.mp4/ }).first().click(); },
+    });
+    const queued = (await phaseLog()).some((entry) => entry.t >= second.endedAt - 50 && entry.caption.includes('排队'));
+    if (queued) await shot('03-zh-desktop-light-thinking-queued');
+    pass('第二句：说到一半换指向；AI 忙时排队', `${queued ? '已排队（"还有 1 句排队"）' : 'AI 已空闲，直接发出'}；首个转写 ${String(second.firstTranscriptMs)} ms；说完到交出 ${String(second.endToDeliveredMs)} ms`);
 
-  // 前两句的回应：真实 Claude 完成 → 网关用真实合成念出来（选的 Nova）；按 data-reply-turn 把出声对应到轮次
-  await firstAfter(first.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'first reply audio');
-  await assertClear('zh speaking');
-  await shot('04-zh-desktop-light-speaking');
-  let turns = await waitTurns(2, 'two voice turns');
-  const [firstTurn, secondTurn] = turns;
-  if (secondTurn === undefined || !(secondTurn.message.includes('音乐') || secondTurn.message.toLowerCase().includes('music'))) throw new Error(`second voice turn not found: ${turns.map((turn) => turn.message).join(' | ')}`);
-  await firstAfter(second.endedAt, (entry) => entry.phase !== 'speaking' && entry.phase !== 'thinking', 180_000, 'replies finished').catch(() => undefined);
-  for (const [turn, said] of [[firstTurn, first], [secondTurn, second]]) {
-    metrics.replies.push({ after: said.clip, turnStatus: turn.status, claudeSeconds: claudeSeconds(turn), userEndToFirstAudioMs: await replyLatency(turn, said.endedAt) });
+    // 前两句的回应：真实 Claude 完成 → 网关用真实合成念出来（选的 Nova）；按 data-reply-turn 把出声对应到轮次
+    await firstAfter(first.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'first reply audio');
+    await assertClear('zh speaking');
+    await shot('04-zh-desktop-light-speaking');
+    let turns = await waitTurns(2, 'two voice turns');
+    const [firstTurn, secondTurn] = turns;
+    if (secondTurn === undefined || !(secondTurn.message.includes('音乐') || secondTurn.message.toLowerCase().includes('music'))) throw new Error(`second voice turn not found: ${turns.map((turn) => turn.message).join(' | ')}`);
+    await firstAfter(second.endedAt, (entry) => entry.phase !== 'speaking' && entry.phase !== 'thinking', 180_000, 'replies finished').catch(() => undefined);
+    for (const [turn, said] of [[firstTurn, first], [secondTurn, second]]) {
+      metrics.replies.push({ after: said.clip, turnStatus: turn.status, claudeSeconds: claudeSeconds(turn), userEndToFirstAudioMs: await replyLatency(turn, said.endedAt) });
+    }
+    if (!secondTurn.pointer.clipIds.includes(glacierClip ?? '-')) throw new Error(`mid-sentence switch: "这里" bound to ${JSON.stringify(secondTurn.pointer)}, expected glacier ${String(glacierClip)}`);
+    if (!firstTurn.pointer.clipIds.includes(lakeClip ?? '-')) throw new Error(`first utterance bound to ${JSON.stringify(firstTurn.pointer)}, expected lake ${String(lakeClip)}`);
+    const spokenReply = replyEvents().find((event) => event.characters > 0);
+    pass('AI 回应：真实 Claude → 真实语音合成念出来（按轮次对应）', metrics.replies.map((reply) => `${reply.clip ?? reply.after}：${reply.turnStatus}，Claude ${String(reply.claudeSeconds)} s，说完到听见回应 ${reply.userEndToFirstAudioMs === null ? '未念（这一轮没有可念的回应）' : `${String(reply.userEndToFirstAudioMs)} ms`}`).join('；') + `；合成首块 ${String(spokenReply?.firstChunkMs ?? '?')} ms，声音 ${String(spokenReply?.voice ?? '?')}；第一句结局 ${outcome(firstTurn)}，第二句 ${outcome(secondTurn)}`);
+    pass('指向绑定：第一句绑 lake；第二句开口指 road、说"这里"前改指 glacier → 绑 glacier', `第一轮"${firstTurn.message}"→ ${firstTurn.pointer.clipIds.join(',')}；第二轮"${secondTurn.message}"→ ${secondTurn.pointer.clipIds.join(',')}`);
+
+    // 纠正：第三句
+    await firstAfter(await now(), (entry) => entry.phase === 'listening', 120_000, 'idle before correction');
+    const fix = await say('zh_fix');
+    turns = await waitTurns(3, 'correction turn');
+    const fixTurn = turns[2];
+    pass('纠正：作为新的一句交给 AI（带上前文）', `"${fixTurn.message}"（${outcome(fixTurn)}，AI："${(fixTurn.reply ?? '').slice(0, 60)}"）；首个转写 ${String(fix.firstTranscriptMs)} ms`);
+
+    // 打断：AI 念回应时开口 → 立刻停播（要打断的那一轮必须有回应可念；没有时再说一句明确的修改，打断它的回应）
+    let interrupted = { turn: fixTurn, said: fix };
+    if (fixTurn.status !== 'COMPLETED' || (fixTurn.reply ?? '').trim() === '') {
+      const extra = await say('zh_short');
+      const extraTurns = await waitTurns(turns.length + 1, 'extra turn to interrupt');
+      interrupted = { turn: extraTurns[extraTurns.length - 1], said: extra };
+      metrics.extraEdit = { reason: 'correction turn had no reply to interrupt', turn: interrupted.turn.message, outcome: outcome(interrupted.turn) };
+    }
+    await firstAfter(interrupted.said.endedAt, (entry) => entry.phase === 'speaking' && entry.replyTurn === interrupted.turn.id, 360_000, 'reply audio to interrupt');
+    metrics.replies.push({ after: interrupted.said.clip, turnStatus: interrupted.turn.status, claudeSeconds: claudeSeconds(interrupted.turn), userEndToFirstAudioMs: await replyLatency(interrupted.turn, interrupted.said.endedAt) });
+    await page.waitForTimeout(700);
+    const barge = await play('zh_barge');
+    const bargeOnset = barge + LEAD_SECONDS * 1000;
+    const stopped = await firstAfter(bargeOnset - 100, (entry) => entry.phase !== 'speaking', 10_000, 'barge-in stop');
+    await assertSpeakingAt(bargeOnset, stopped, 'zh barge-in');
+    metrics.bargeIns.push({ locale: 'zh-CN', speechOnsetToSilenceMs: Math.round(stopped.t - bargeOnset), phaseAfter: stopped.phase });
+    await shot('05-zh-desktop-light-barge-in');
+    await playEnded();
+    await firstAfter(bargeOnset, (entry) => entry.phase === 'thinking', 30_000, 'barge utterance delivered');
+    const stoppedReply = await waitFor(async () => replyEvents().find((event) => event.stopped === true), Boolean, { timeoutMs: 10_000, intervalMs: 200, label: 'stopped reply logged' }).catch(() => undefined);
+    pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `已下发 ${String(stoppedReply.audioSeconds)} s 音频后中止`}`.replace('网关记录被打断的回应 未见', '这一轮的音频网关已全部下发（合成快于播放），停的是浏览器里的播放'));
+
+    // 继续：打断那句的回应 → "停止说话"只停声音
+    const speaking4 = await firstAfter(stopped.t + 1, (entry) => entry.phase === 'speaking', 360_000, 'continue reply audio').catch(() => null);
+    await page.waitForTimeout(300);
+    if (speaking4 !== null && (await page.locator('[data-voice-dock]').getAttribute('data-phase')) === 'speaking') {
+      const before = await now();
+      await dock().getByRole('button', { name: '停止说话' }).click();
+      const silent = await firstAfter(before, (entry) => entry.phase !== 'speaking', 5000, 'stop speaking');
+      metrics.stopSpeaking = { clickToSilenceMs: Math.round(silent.t - before), phaseAfter: silent.phase };
+      await page.locator('[data-voice-caption]').filter({ hasText: '已停止说话' }).waitFor({ timeout: 5000 });
+      pass('停止说话：只停声音，不影响这一轮与试改', `点击到停声 ${String(metrics.stopSpeaking.clickToSilenceMs)} ms（之后阶段 ${silent.phase}）`);
+    } else {
+      pass('停止说话：这一轮的回应没赶上测（未测）', speaking4 === null ? '打断后那一轮没有可念的回应' : '回应在点击前已念完');
+    }
+    turns = await waitTurns(turns.length + 1, 'continue turn');
+
+    // 采用 / 撤销：改动只经试改，由用户明确采用
+    const keepButton = dock().getByRole('button', { name: '采用' });
+    if (!(await keepButton.waitFor({ timeout: 20_000 }).then(() => true, () => false))) {
+      // 真实 AI 这几轮没有留下试改（例如它说做不到，或拒绝了某一轮）：再说一句明确的修改，让采用 / 撤销有对象
+      const extra = await say('zh_short');
+      const extraTurns = await waitTurns(turns.length + 1, 'extra edit turn');
+      const extraTurn = extraTurns[extraTurns.length - 1];
+      metrics.extraEdit = { reason: 'no open trial after the continue turn', turn: extraTurn.message, outcome: outcome(extraTurn) };
+      pass('补一句明确的修改（前几轮没有留下试改）', `"${extraTurn.message}"（${outcome(extraTurn)}）；首个转写 ${String(extra.firstTranscriptMs)} ms`);
+      await keepButton.waitFor({ timeout: 60_000 });
+    }
+    const zhTurns = await voiceTurns();
+    metrics.zhTurnOutcomes = zhTurns.map((turn) => ({ message: turn.message, outcome: outcome(turn) }));
+    await shot('06-zh-desktop-light-trial');
+    const revisionBefore = (await client.studio.state(workspace.id, ref.projectId)).project.revision;
+    await keepButton.click();
+    await dock().getByRole('button', { name: '撤销改动' }).waitFor({ timeout: 60_000 });
+    const revisionAdopted = (await client.studio.state(workspace.id, ref.projectId)).project.revision;
+    await dock().getByRole('button', { name: '撤销改动' }).click();
+    await waitFor(() => client.studio.state(workspace.id, ref.projectId), (state) => state.project.revision > revisionAdopted, { timeoutMs: 60_000, label: 'undo' });
+    pass('采用 → 撤销：改动只在用户点"采用"后生效，可撤销', `revision ${String(revisionBefore)} → 采用 ${String(revisionAdopted)} → 撤销后 ${String((await client.studio.state(workspace.id, ref.projectId)).project.revision)}`);
+
+    // 结束语音（与停止说话 / 停止这一轮分开）
+    await dock().getByRole('button', { name: '结束语音' }).click();
+    await waitPhase('ended', 20_000);
+    await shot('07-zh-desktop-light-ended');
+    pass('结束语音：网关收尾后关闭 → "语音已结束"');
+
+    // ================= 错误与恢复（桌面 · 浅色） =================
+    const turnCount = async () => (await voiceTurns()).length;
+    // 1) 断线：网关断开所有连接
+    await page.getByRole('button', { name: '开始语音' }).click();
+    await waitPhase('listening');
+    let turnsBefore = await turnCount();
+    let asrBefore = usage.asrRequests;
+    await env.swapVoiceGateway(realVoice());
+    await waitPhase('error');
+    await page.locator('[data-voice-caption]').filter({ hasText: '语音连接断了' }).waitFor();
+    await shot('10-error-connection-lost');
+    await page.waitForTimeout(3000);
+    if (usage.asrRequests !== asrBefore || (await turnCount()) !== turnsBefore) throw new Error('connection drop must not trigger provider calls or turns');
+    await dock().getByRole('button', { name: '重新连接' }).click();
+    await waitPhase('listening');
+    if ((await turnCount()) !== turnsBefore) throw new Error('reconnect must not replay sent utterances');
+    pass('断线：如实说明；不自动重连、不自动调用付费服务；点"重新连接"开新会话，已交出的话不重复执行', `断线后 3 s 内识别请求 +0、轮次 +0；重连后轮次仍 ${String(turnsBefore)}`);
+
+    // 2) 会话过期 / 被撤销：之后说的话不交给 AI
+    const sessionParam = new URL(voiceSockets[voiceSockets.length - 1]).searchParams.get('session');
+    await closeVoiceSession(env.deps, { workspaceId: workspace.id, projectId: ref.projectId, sessionId: sessionParam });
+    await play('zh_short');
+    await page.locator('[data-voice-caption]').filter({ hasText: '语音会话已过期' }).waitFor({ timeout: 30_000 });
+    await shot('11-error-session-expired');
+    await playEnded();
+    await page.waitForTimeout(1500);
+    if ((await turnCount()) !== turnsBefore) throw new Error('an utterance from an expired session reached the AI');
+    pass('会话过期：网关在交出前复查会话门，这句不交给 AI，界面提示重新连接', `轮次仍 ${String(turnsBefore)}`);
+
+    // 3) 识别服务密钥失效：一次失败，不重试
+    await env.swapVoiceGateway({ recognizer: createOpenAiTranscriptionRecognizer({ apiKey: 'invalid-key-for-failure-test-000000', baseUrl: audioBase, model: asrModel, fetch: counting('asr-bad') }), log }); // secrets:check-ignore：故意无效的假 Key
+    await dock().getByRole('button', { name: '重新连接' }).click();
+    await waitPhase('listening');
+    await play('zh_short');
+    await page.locator('[data-voice-caption]').filter({ hasText: '密钥无效或已过期' }).waitFor({ timeout: 30_000 });
+    await shot('12-error-provider-auth');
+    await playEnded();
+    const badRequests = usage.badKeyAsrRequests;
+    await page.waitForTimeout(4000);
+    if (usage.badKeyAsrRequests !== badRequests) throw new Error('provider failure must not retry automatically');
+    if (await dock().getByRole('button', { name: '重新连接' }).count() !== 0) throw new Error('reconnect is pointless when the provider key is invalid');
+    pass('识别服务失败（密钥无效）：如实说明，不自动重试', `供应商请求 ${String(badRequests)} 次后停止；4 s 内无新请求；不提供"重新连接"（重连无用）`);
+
+    // 4) 服务端没配置识别
+    await env.swapVoiceGateway({ log });
+    await dock().getByRole('button', { name: '关闭' }).click();
+    await page.getByRole('button', { name: '开始语音' }).click();
+    await page.locator('[data-voice-caption]').filter({ hasText: '服务端尚未接入语音识别' }).waitFor({ timeout: 20_000 });
+    await shot('13-error-not-configured');
+    pass('未配置识别：明确说明，不回退测试替身');
+
+    // 5) 没有麦克风权限
+    await dock().getByRole('button', { name: '关闭' }).click();
+    await page.evaluate(() => { globalThis.__mic.deny = true; });
+    await page.getByRole('button', { name: '开始语音' }).click();
+    await page.locator('[data-voice-caption]').filter({ hasText: '没有麦克风权限' }).waitFor({ timeout: 20_000 });
+    await shot('14-error-permission-denied');
+    await page.evaluate(() => { globalThis.__mic.deny = false; });
+    await dock().getByRole('button', { name: '关闭' }).click();
+    pass('没有麦克风权限：说明原因，可在允许后重新连接');
+    await env.swapVoiceGateway(realVoice());
+
+    // 键盘：V 开始、Tab 进入语音条（可见焦点）、Enter 结束
+    await page.evaluate(() => { globalThis.document.activeElement?.blur(); });
+    await page.keyboard.press('v');
+    await waitPhase('listening');
+    let focusedInDock = false;
+    for (let index = 0; index < 60 && !focusedInDock; index += 1) {
+      await page.keyboard.press('Tab');
+      focusedInDock = await page.evaluate(() => globalThis.document.activeElement?.closest('[data-voice-dock]') !== null && globalThis.document.activeElement?.tagName === 'BUTTON');
+    }
+    if (!focusedInDock) throw new Error('voice dock buttons are not reachable with Tab');
+    const outline = await page.evaluate(() => globalThis.getComputedStyle(globalThis.document.activeElement).outlineStyle);
+    await shot('15-keyboard-focus');
+    await dock().getByRole('button', { name: '结束语音' }).focus();
+    await page.keyboard.press('Enter');
+    await waitPhase('ended', 20_000);
+    pass('键盘：V 开关语音；Tab 可进入语音条且有可见焦点；Enter 结束', `焦点样式 outline=${outline}`);
+    await page.close();
+
+    // ================= English · desktop · dark =================
+    page = await openStudio({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+    await page.getByRole('button', { name: '切换为英文界面' }).click();
+    if (!(await page.evaluate(() => globalThis.document.body.classList.contains('theme-dark')))) await page.getByRole('button', { name: 'Toggle light/dark' }).click();
+    await page.getByRole('button', { name: /^Clip lake\.mp4/ }).first().click();
+    t0 = await now();
+    await page.getByRole('button', { name: 'Start voice' }).click();
+    await waitPhase('listening');
+    metrics.connect.push({ label: 'en desktop', ms: Math.round((await firstAfter(t0, (entry) => entry.phase === 'listening', 1000, 'listening')).t - t0) });
+    await assertClear('en listening');
+    await shot('20-en-desktop-dark-listening');
+    const enEdit = await say('en_edit', { onTranscript: async () => { await shot('21-en-desktop-dark-recognizing'); } });
+    const enSpeaking = await firstAfter(enEdit.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'english reply audio');
+    metrics.replies.push({ after: 'en_edit', userEndToFirstAudioMs: Math.round(enSpeaking.t - enEdit.endedAt) });
+    await shot('22-en-desktop-dark-speaking');
+    await page.waitForTimeout(600);
+    const enBarge = await play('en_barge');
+    const enOnset = enBarge + LEAD_SECONDS * 1000;
+    const enStopped = await firstAfter(enOnset - 100, (entry) => entry.phase !== 'speaking', 10_000, 'english barge-in');
+    await assertSpeakingAt(enOnset, enStopped, 'en barge-in');
+    metrics.bargeIns.push({ locale: 'en', speechOnsetToSilenceMs: Math.round(enStopped.t - enOnset), phaseAfter: enStopped.phase });
+    await playEnded();
+    await firstAfter(enOnset, (entry) => entry.phase === 'thinking', 30_000, 'english barge delivered');
+    const enTurns = await waitFor(async () => {
+      const session = await currentSession();
+      return session === null ? [] : client.agent.listTurns(workspace.id, session.id);
+    }, (items) => items.length >= 2 && items.every((turn) => turn.status !== 'RUNNING'), { timeoutMs: 360_000, intervalMs: 1000, label: 'english turns' });
+    await shot('23-en-desktop-dark-after');
+    await page.locator('[data-voice-dock]').getByRole('button', { name: 'End voice' }).click();
+    await waitPhase('ended', 20_000);
+    pass('English: real speech in → real Claude → spoken reply → barge-in', `first transcript ${String(enEdit.firstTranscriptMs)} ms ("${enEdit.firstTranscriptText}"); end → audible reply ${String(metrics.replies.at(-1).userEndToFirstAudioMs)} ms; barge-in ${String(metrics.bargeIns.at(-1).speechOnsetToSilenceMs)} ms; turns: ${enTurns.slice(0, 2).map((turn) => `"${turn.message}"`).join(', ')}`);
+    await page.close();
+
   }
-  if (!secondTurn.pointer.clipIds.includes(glacierClip ?? '-')) throw new Error(`mid-sentence switch: "这里" bound to ${JSON.stringify(secondTurn.pointer)}, expected glacier ${String(glacierClip)}`);
-  if (!firstTurn.pointer.clipIds.includes(lakeClip ?? '-')) throw new Error(`first utterance bound to ${JSON.stringify(firstTurn.pointer)}, expected lake ${String(lakeClip)}`);
-  const spokenReply = replyEvents().find((event) => event.characters > 0);
-  pass('AI 回应：真实 Claude → 真实语音合成念出来（按轮次对应）', metrics.replies.map((reply) => `${reply.clip ?? reply.after}：${reply.turnStatus}，Claude ${String(reply.claudeSeconds)} s，说完到听见回应 ${reply.userEndToFirstAudioMs === null ? '未念（这一轮没有可念的回应）' : `${String(reply.userEndToFirstAudioMs)} ms`}`).join('；') + `；合成首块 ${String(spokenReply?.firstChunkMs ?? '?')} ms，声音 ${String(spokenReply?.voice ?? '?')}；第一句结局 ${outcome(firstTurn)}，第二句 ${outcome(secondTurn)}`);
-  pass('指向绑定：第一句绑 lake；第二句开口指 road、说"这里"前改指 glacier → 绑 glacier', `第一轮"${firstTurn.message}"→ ${firstTurn.pointer.clipIds.join(',')}；第二轮"${secondTurn.message}"→ ${secondTurn.pointer.clipIds.join(',')}`);
-
-  // 纠正：第三句
-  await firstAfter(await now(), (entry) => entry.phase === 'listening', 120_000, 'idle before correction');
-  const fix = await say('zh_fix');
-  turns = await waitTurns(3, 'correction turn');
-  const fixTurn = turns[2];
-  pass('纠正：作为新的一句交给 AI（带上前文）', `"${fixTurn.message}"（${outcome(fixTurn)}，AI："${(fixTurn.reply ?? '').slice(0, 60)}"）；首个转写 ${String(fix.firstTranscriptMs)} ms`);
-
-  // 打断：AI 念回应时开口 → 立刻停播（要打断的那一轮必须有回应可念；没有时再说一句明确的修改，打断它的回应）
-  let interrupted = { turn: fixTurn, said: fix };
-  if (fixTurn.status !== 'COMPLETED' || (fixTurn.reply ?? '').trim() === '') {
-    const extra = await say('zh_short');
-    const extraTurns = await waitTurns(turns.length + 1, 'extra turn to interrupt');
-    interrupted = { turn: extraTurns[extraTurns.length - 1], said: extra };
-    metrics.extraEdit = { reason: 'correction turn had no reply to interrupt', turn: interrupted.turn.message, outcome: outcome(interrupted.turn) };
-  }
-  await firstAfter(interrupted.said.endedAt, (entry) => entry.phase === 'speaking' && entry.replyTurn === interrupted.turn.id, 360_000, 'reply audio to interrupt');
-  metrics.replies.push({ after: interrupted.said.clip, turnStatus: interrupted.turn.status, claudeSeconds: claudeSeconds(interrupted.turn), userEndToFirstAudioMs: await replyLatency(interrupted.turn, interrupted.said.endedAt) });
-  await page.waitForTimeout(700);
-  const barge = await play('zh_barge');
-  const bargeOnset = barge + LEAD_SECONDS * 1000;
-  const stopped = await firstAfter(bargeOnset - 100, (entry) => entry.phase !== 'speaking', 10_000, 'barge-in stop');
-  await assertSpeakingAt(bargeOnset, stopped, 'zh barge-in');
-  metrics.bargeIns.push({ locale: 'zh-CN', speechOnsetToSilenceMs: Math.round(stopped.t - bargeOnset), phaseAfter: stopped.phase });
-  await shot('05-zh-desktop-light-barge-in');
-  await playEnded();
-  await firstAfter(bargeOnset, (entry) => entry.phase === 'thinking', 30_000, 'barge utterance delivered');
-  const stoppedReply = await waitFor(async () => replyEvents().find((event) => event.stopped === true), Boolean, { timeoutMs: 10_000, intervalMs: 200, label: 'stopped reply logged' }).catch(() => undefined);
-  pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `已下发 ${String(stoppedReply.audioSeconds)} s 音频后中止`}`.replace('网关记录被打断的回应 未见', '这一轮的音频网关已全部下发（合成快于播放），停的是浏览器里的播放'));
-
-  // 继续：打断那句的回应 → "停止说话"只停声音
-  const speaking4 = await firstAfter(stopped.t + 1, (entry) => entry.phase === 'speaking', 360_000, 'continue reply audio').catch(() => null);
-  await page.waitForTimeout(300);
-  if (speaking4 !== null && (await page.locator('[data-voice-dock]').getAttribute('data-phase')) === 'speaking') {
-    const before = await now();
-    await dock().getByRole('button', { name: '停止说话' }).click();
-    const silent = await firstAfter(before, (entry) => entry.phase !== 'speaking', 5000, 'stop speaking');
-    metrics.stopSpeaking = { clickToSilenceMs: Math.round(silent.t - before), phaseAfter: silent.phase };
-    await page.locator('[data-voice-caption]').filter({ hasText: '已停止说话' }).waitFor({ timeout: 5000 });
-    pass('停止说话：只停声音，不影响这一轮与试改', `点击到停声 ${String(metrics.stopSpeaking.clickToSilenceMs)} ms（之后阶段 ${silent.phase}）`);
-  } else {
-    pass('停止说话：这一轮的回应没赶上测（未测）', speaking4 === null ? '打断后那一轮没有可念的回应' : '回应在点击前已念完');
-  }
-  turns = await waitTurns(turns.length + 1, 'continue turn');
-
-  // 采用 / 撤销：改动只经试改，由用户明确采用
-  const keepButton = dock().getByRole('button', { name: '采用' });
-  if (!(await keepButton.waitFor({ timeout: 20_000 }).then(() => true, () => false))) {
-    // 真实 AI 这几轮没有留下试改（例如它说做不到，或拒绝了某一轮）：再说一句明确的修改，让采用 / 撤销有对象
-    const extra = await say('zh_short');
-    const extraTurns = await waitTurns(turns.length + 1, 'extra edit turn');
-    const extraTurn = extraTurns[extraTurns.length - 1];
-    metrics.extraEdit = { reason: 'no open trial after the continue turn', turn: extraTurn.message, outcome: outcome(extraTurn) };
-    pass('补一句明确的修改（前几轮没有留下试改）', `"${extraTurn.message}"（${outcome(extraTurn)}）；首个转写 ${String(extra.firstTranscriptMs)} ms`);
-    await keepButton.waitFor({ timeout: 60_000 });
-  }
-  const zhTurns = await voiceTurns();
-  metrics.zhTurnOutcomes = zhTurns.map((turn) => ({ message: turn.message, outcome: outcome(turn) }));
-  await shot('06-zh-desktop-light-trial');
-  const revisionBefore = (await client.studio.state(workspace.id, ref.projectId)).project.revision;
-  await keepButton.click();
-  await dock().getByRole('button', { name: '撤销改动' }).waitFor({ timeout: 60_000 });
-  const revisionAdopted = (await client.studio.state(workspace.id, ref.projectId)).project.revision;
-  await dock().getByRole('button', { name: '撤销改动' }).click();
-  await waitFor(() => client.studio.state(workspace.id, ref.projectId), (state) => state.project.revision > revisionAdopted, { timeoutMs: 60_000, label: 'undo' });
-  pass('采用 → 撤销：改动只在用户点"采用"后生效，可撤销', `revision ${String(revisionBefore)} → 采用 ${String(revisionAdopted)} → 撤销后 ${String((await client.studio.state(workspace.id, ref.projectId)).project.revision)}`);
-
-  // 结束语音（与停止说话 / 停止这一轮分开）
-  await dock().getByRole('button', { name: '结束语音' }).click();
-  await waitPhase('ended', 20_000);
-  await shot('07-zh-desktop-light-ended');
-  pass('结束语音：网关收尾后关闭 → "语音已结束"');
-
-  // ================= 错误与恢复（桌面 · 浅色） =================
-  const turnCount = async () => (await voiceTurns()).length;
-  // 1) 断线：网关断开所有连接
-  await page.getByRole('button', { name: '开始语音' }).click();
-  await waitPhase('listening');
-  let turnsBefore = await turnCount();
-  let asrBefore = usage.asrRequests;
-  await env.swapVoiceGateway(realVoice());
-  await waitPhase('error');
-  await page.locator('[data-voice-caption]').filter({ hasText: '语音连接断了' }).waitFor();
-  await shot('10-error-connection-lost');
-  await page.waitForTimeout(3000);
-  if (usage.asrRequests !== asrBefore || (await turnCount()) !== turnsBefore) throw new Error('connection drop must not trigger provider calls or turns');
-  await dock().getByRole('button', { name: '重新连接' }).click();
-  await waitPhase('listening');
-  if ((await turnCount()) !== turnsBefore) throw new Error('reconnect must not replay sent utterances');
-  pass('断线：如实说明；不自动重连、不自动调用付费服务；点"重新连接"开新会话，已交出的话不重复执行', `断线后 3 s 内识别请求 +0、轮次 +0；重连后轮次仍 ${String(turnsBefore)}`);
-
-  // 2) 会话过期 / 被撤销：之后说的话不交给 AI
-  const sessionParam = new URL(voiceSockets[voiceSockets.length - 1]).searchParams.get('session');
-  await closeVoiceSession(env.deps, { workspaceId: workspace.id, projectId: ref.projectId, sessionId: sessionParam });
-  await play('zh_short');
-  await page.locator('[data-voice-caption]').filter({ hasText: '语音会话已过期' }).waitFor({ timeout: 30_000 });
-  await shot('11-error-session-expired');
-  await playEnded();
-  await page.waitForTimeout(1500);
-  if ((await turnCount()) !== turnsBefore) throw new Error('an utterance from an expired session reached the AI');
-  pass('会话过期：网关在交出前复查会话门，这句不交给 AI，界面提示重新连接', `轮次仍 ${String(turnsBefore)}`);
-
-  // 3) 识别服务密钥失效：一次失败，不重试
-  await env.swapVoiceGateway({ recognizer: createOpenAiTranscriptionRecognizer({ apiKey: 'invalid-key-for-failure-test-000000', baseUrl: audioBase, model: asrModel, fetch: counting('asr-bad') }), log }); // secrets:check-ignore：故意无效的假 Key
-  await dock().getByRole('button', { name: '重新连接' }).click();
-  await waitPhase('listening');
-  await play('zh_short');
-  await page.locator('[data-voice-caption]').filter({ hasText: '密钥无效或已过期' }).waitFor({ timeout: 30_000 });
-  await shot('12-error-provider-auth');
-  await playEnded();
-  const badRequests = usage.badKeyAsrRequests;
-  await page.waitForTimeout(4000);
-  if (usage.badKeyAsrRequests !== badRequests) throw new Error('provider failure must not retry automatically');
-  if (await dock().getByRole('button', { name: '重新连接' }).count() !== 0) throw new Error('reconnect is pointless when the provider key is invalid');
-  pass('识别服务失败（密钥无效）：如实说明，不自动重试', `供应商请求 ${String(badRequests)} 次后停止；4 s 内无新请求；不提供"重新连接"（重连无用）`);
-
-  // 4) 服务端没配置识别
-  await env.swapVoiceGateway({ log });
-  await dock().getByRole('button', { name: '关闭' }).click();
-  await page.getByRole('button', { name: '开始语音' }).click();
-  await page.locator('[data-voice-caption]').filter({ hasText: '服务端尚未接入语音识别' }).waitFor({ timeout: 20_000 });
-  await shot('13-error-not-configured');
-  pass('未配置识别：明确说明，不回退测试替身');
-
-  // 5) 没有麦克风权限
-  await dock().getByRole('button', { name: '关闭' }).click();
-  await page.evaluate(() => { globalThis.__mic.deny = true; });
-  await page.getByRole('button', { name: '开始语音' }).click();
-  await page.locator('[data-voice-caption]').filter({ hasText: '没有麦克风权限' }).waitFor({ timeout: 20_000 });
-  await shot('14-error-permission-denied');
-  await page.evaluate(() => { globalThis.__mic.deny = false; });
-  await dock().getByRole('button', { name: '关闭' }).click();
-  pass('没有麦克风权限：说明原因，可在允许后重新连接');
-  await env.swapVoiceGateway(realVoice());
-
-  // 键盘：V 开始、Tab 进入语音条（可见焦点）、Enter 结束
-  await page.evaluate(() => { globalThis.document.activeElement?.blur(); });
-  await page.keyboard.press('v');
-  await waitPhase('listening');
-  let focusedInDock = false;
-  for (let index = 0; index < 60 && !focusedInDock; index += 1) {
-    await page.keyboard.press('Tab');
-    focusedInDock = await page.evaluate(() => globalThis.document.activeElement?.closest('[data-voice-dock]') !== null && globalThis.document.activeElement?.tagName === 'BUTTON');
-  }
-  if (!focusedInDock) throw new Error('voice dock buttons are not reachable with Tab');
-  const outline = await page.evaluate(() => globalThis.getComputedStyle(globalThis.document.activeElement).outlineStyle);
-  await shot('15-keyboard-focus');
-  await dock().getByRole('button', { name: '结束语音' }).focus();
-  await page.keyboard.press('Enter');
-  await waitPhase('ended', 20_000);
-  pass('键盘：V 开关语音；Tab 可进入语音条且有可见焦点；Enter 结束', `焦点样式 outline=${outline}`);
-  await page.close();
-
-  // ================= English · desktop · dark =================
-  page = await openStudio({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
-  await page.getByRole('button', { name: '切换为英文界面' }).click();
-  if (!(await page.evaluate(() => globalThis.document.body.classList.contains('theme-dark')))) await page.getByRole('button', { name: 'Toggle light/dark' }).click();
-  await page.getByRole('button', { name: /^Clip lake\.mp4/ }).first().click();
-  t0 = await now();
-  await page.getByRole('button', { name: 'Start voice' }).click();
-  await waitPhase('listening');
-  metrics.connect.push({ label: 'en desktop', ms: Math.round((await firstAfter(t0, (entry) => entry.phase === 'listening', 1000, 'listening')).t - t0) });
-  await assertClear('en listening');
-  await shot('20-en-desktop-dark-listening');
-  const enEdit = await say('en_edit', { onTranscript: async () => { await shot('21-en-desktop-dark-recognizing'); } });
-  const enSpeaking = await firstAfter(enEdit.endedAt, (entry) => entry.phase === 'speaking', 360_000, 'english reply audio');
-  metrics.replies.push({ after: 'en_edit', userEndToFirstAudioMs: Math.round(enSpeaking.t - enEdit.endedAt) });
-  await shot('22-en-desktop-dark-speaking');
-  await page.waitForTimeout(600);
-  const enBarge = await play('en_barge');
-  const enOnset = enBarge + LEAD_SECONDS * 1000;
-  const enStopped = await firstAfter(enOnset - 100, (entry) => entry.phase !== 'speaking', 10_000, 'english barge-in');
-  await assertSpeakingAt(enOnset, enStopped, 'en barge-in');
-  metrics.bargeIns.push({ locale: 'en', speechOnsetToSilenceMs: Math.round(enStopped.t - enOnset), phaseAfter: enStopped.phase });
-  await playEnded();
-  await firstAfter(enOnset, (entry) => entry.phase === 'thinking', 30_000, 'english barge delivered');
-  const enTurns = await waitFor(async () => {
-    const session = await currentSession();
-    return session === null ? [] : client.agent.listTurns(workspace.id, session.id);
-  }, (items) => items.length >= 2 && items.every((turn) => turn.status !== 'RUNNING'), { timeoutMs: 360_000, intervalMs: 1000, label: 'english turns' });
-  await shot('23-en-desktop-dark-after');
-  await page.locator('[data-voice-dock]').getByRole('button', { name: 'End voice' }).click();
-  await waitPhase('ended', 20_000);
-  pass('English: real speech in → real Claude → spoken reply → barge-in', `first transcript ${String(enEdit.firstTranscriptMs)} ms ("${enEdit.firstTranscriptText}"); end → audible reply ${String(metrics.replies.at(-1).userEndToFirstAudioMs)} ms; barge-in ${String(metrics.bargeIns.at(-1).speechOnsetToSilenceMs)} ms; turns: ${enTurns.slice(0, 2).map((turn) => `"${turn.message}"`).join(', ')}`);
-  await page.close();
 
   // ================= 手机 · 浅色 / 深色 =================
   page = await openStudio({ viewport: { width: 390, height: 844 }, mobile: true });
@@ -580,7 +592,7 @@ try {
     },
     usage: { ...usage, asrAudioSeconds: Number(usage.asrAudioSeconds.toFixed(1)), claudeTokens: metrics.claudeTurns.reduce((sum, turn) => ({ input: sum.input + (turn.usage?.inputTokens ?? 0), output: sum.output + (turn.usage?.outputTokens ?? 0), cacheRead: sum.cacheRead + (turn.usage?.cacheReadInputTokens ?? 0) }), { input: 0, output: 0, cacheRead: 0 }) },
   };
-  await writeFile(join(evidenceDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  await writeFile(join(evidenceDir, only === 'phone' ? 'summary-phone.json' : 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   pass('用量', `识别 ${String(usage.asrRequests)} 次 / 计费音频 ${usage.asrAudioSeconds.toFixed(1)} s；回应合成 ${String(usage.ttsRequests)} 次 / ${String(usage.ttsCharacters)} 字符；测试语音合成 ${String(usage.clipTtsRequests)} 次；Claude ${String(metrics.claudeTurns.length)} 轮，输入 ${String(summary.usage.claudeTokens.input)} / 输出 ${String(summary.usage.claudeTokens.output)} token`);
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
   console.log(`\nIssue #9 live voice check passed (${String(results.length)} checks). Evidence: ${evidenceDir}`);

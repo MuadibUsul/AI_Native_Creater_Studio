@@ -260,6 +260,10 @@ describe('V6-2 / Issue #9 连续语音（浏览器侧）', () => {
     sdkClient.listTurns.mockResolvedValue([turn({ status: 'FAILED', reply: null, error: { code: 'VALIDATION_FAILED', message: 'the model declined this request' } })]);
     await waitFor(() => expect(caption()).toBe('刚才那句 AI 没能完成，原因在对话里。'), { timeout: 4000 });
     expect(speak).not.toHaveBeenCalled();
+    // 用户接着开口：边说边出的文字优先于提示
+    act(() => socket.receive({ type: 'speech-start', atSeconds: 9 }));
+    act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_y', revision: 1, text: '那就', isFinal: false }));
+    expect(caption()).toBe('那就');
   });
 
   it('一句发失败：停在队首如实说明，重试用同一个幂等键（不会重复执行），也可以不要了', async () => {

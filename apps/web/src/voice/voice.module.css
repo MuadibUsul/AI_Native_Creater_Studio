@@ -135,6 +135,8 @@
 /* 窄屏（手机）：按钮只留图标（读屏仍读完整名称），状态文字保留 */
 @media (max-width: 720px) {
   .label { display: none; }
+  .pill { flex-wrap: wrap; justify-content: center; row-gap: 2px; border-radius: 22px; overflow-x: visible; }
+  .divider { display: none; }
   .button { padding: 0; width: 34px; }
   .primary:not(.iconOnly):has(> span:not(.label)) { width: auto; padding: 0 12px; }
   .status { padding: 0 8px; }

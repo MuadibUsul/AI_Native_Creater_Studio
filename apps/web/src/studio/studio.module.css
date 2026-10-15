@@ -500,7 +500,9 @@
   .shortcutsButton { display: none; }
   .zoom :global(.btn.small:last-child) { display: none; }
   /* Issue #9：手机上开着语音时看片区至少留出一块能看清的高度，下方区域改为滚动（语音条与反馈只占画面下方一小条） */
-  .room[data-voice='on'] { grid-template-rows: auto minmax(min(300px, 44vh), 1fr) minmax(0, auto); }
+  .room[data-voice='on'] { grid-template-rows: auto minmax(min(360px, 50vh), 1fr) minmax(0, auto); }
   .room[data-voice='on'] .dock { min-height: 0; overflow-y: auto; }
-  .stage[data-voice='on'] { padding-bottom: 88px; }
+  .room[data-voice='on'] .dock > * { flex-shrink: 0; }
+  /* 手机上语音条换成两行（所有按钮都看得见，不靠横向滚动藏起来） */
+  .stage[data-voice='on'] { padding-bottom: 128px; }
 }
