@@ -275,6 +275,11 @@ export const workerEnvSchema = z.object({
   /** Claude API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回、不下发客户端） */
   ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
   /**
+   * Claude 走兼容 Anthropic Messages 协议的网关时的基址（如企业代理或模型聚合网关，填到 /v1 之前，例 https://gateway.example.com）。
+   * 不填 = 直连 Anthropic。导演与视觉理解（driver=anthropic）都用它；密钥仍是 ANTHROPIC_API_KEY（填网关发的 Key）。
+   */
+  ANCS_ANTHROPIC_BASE_URL: z.string().url('ANCS_ANTHROPIC_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_ANTHROPIC_BASE_URL 必须是 https').optional(),
+  /**
    * Google Gemini API Key（https://ai.google.dev）：导演 / 视觉理解（driver=gemini）、讲述配音（ANCS_NARRATION_DRIVER=gemini）、
    * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
    */
@@ -488,8 +493,26 @@ export const realtimeEnvSchema = z.object({
   /** 浏览器来源白名单（逗号分隔完整 origin）；留空 = BETTER_AUTH_URL 的 origin（非生产另加本地 Web 端口） */
   ANCS_ALLOWED_ORIGINS: z.string().optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
-  /** 流式语音识别驱动：deepgram = 真实 Deepgram（需 DEEPGRAM_API_KEY）；留空 = 不装配（连接时明确报"未配置"） */
-  ANCS_REALTIME_ASR_DRIVER: z.enum(['deepgram'], { message: 'ANCS_REALTIME_ASR_DRIVER 仅支持 deepgram' }).optional(),
+  /**
+   * 流式语音识别驱动：deepgram = 真实 Deepgram 流式识别（需 DEEPGRAM_API_KEY）；
+   * openai = OpenAI 兼容的转写接口（/audio/transcriptions，需 OPENAI_API_KEY；网关自己断句、说话中定时出临时转写）；
+   * 留空 = 不装配（连接时明确报"未配置"）
+   */
+  ANCS_REALTIME_ASR_DRIVER: z.enum(['deepgram', 'openai'], { message: 'ANCS_REALTIME_ASR_DRIVER 仅支持 deepgram | openai' }).optional(),
+  /** OpenAI 兼容接口的 Key（官方或兼容网关发的 Key；只在网关进程内存中使用） */
+  OPENAI_API_KEY: z.string().min(16, 'OPENAI_API_KEY 过短').optional(),
+  /** OpenAI 兼容接口基址（含 /v1，缺省 https://api.openai.com/v1；兼容网关填它的地址） */
+  ANCS_OPENAI_BASE_URL: z.string().url('ANCS_OPENAI_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_OPENAI_BASE_URL 必须是 https').optional(),
+  /** openai 识别的转写模型（缺省 gpt-4o-transcribe；whisper-1 会带回逐词时间，其余模型的词时间由网关按断句估算） */
+  ANCS_REALTIME_ASR_MODEL: nonEmpty('ANCS_REALTIME_ASR_MODEL').optional(),
+  /** 说话中出临时转写的间隔（毫秒，缺省 900；0 = 只在一句话说完时转写一次） */
+  ANCS_REALTIME_ASR_INTERIM_MS: z.coerce.number().int().min(0).max(10_000).optional(),
+  /** AI 语音回应的合成驱动：openai = OpenAI 兼容 /audio/speech（需 OPENAI_API_KEY）；留空 = 客户端用浏览器朗读并如实标注 */
+  ANCS_REALTIME_TTS_DRIVER: z.enum(['openai'], { message: 'ANCS_REALTIME_TTS_DRIVER 仅支持 openai' }).optional(),
+  /** 语音回应模型（缺省 gpt-4o-mini-tts） */
+  ANCS_REALTIME_TTS_MODEL: nonEmpty('ANCS_REALTIME_TTS_MODEL').optional(),
+  /** 可切换的声音（JSON 数组 [{"id":"coral","name":"Coral"}]；只列实际可用的声音，缺省只有 coral） */
+  ANCS_REALTIME_TTS_VOICES_JSON: nonEmpty('ANCS_REALTIME_TTS_VOICES_JSON').optional(),
   DEEPGRAM_API_KEY: z.string().min(16, 'DEEPGRAM_API_KEY 过短').optional(),
   /** 各语言的流式模型（缺省：中文 nova-2，英文 nova-3） */
   ANCS_DEEPGRAM_LIVE_MODEL_ZH: nonEmpty('ANCS_DEEPGRAM_LIVE_MODEL_ZH').optional(),
@@ -499,10 +522,23 @@ export const realtimeEnvSchema = z.object({
 
 export type RealtimeEnv = z.infer<typeof realtimeEnvSchema>;
 
+function parseJsonOrNull(text: string): unknown {
+  try { return JSON.parse(text) as unknown; } catch { return null; }
+}
+
 export function crossCheckRealtimeEnv(value: RealtimeEnv): EnvIssue[] {
   const issues: EnvIssue[] = [];
   if (value.ANCS_REALTIME_ASR_DRIVER === 'deepgram' && value.DEEPGRAM_API_KEY === undefined) {
     issues.push({ variable: 'DEEPGRAM_API_KEY', message: 'ANCS_REALTIME_ASR_DRIVER=deepgram 时必须配置 DEEPGRAM_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if ((value.ANCS_REALTIME_ASR_DRIVER === 'openai' || value.ANCS_REALTIME_TTS_DRIVER === 'openai') && value.OPENAI_API_KEY === undefined) {
+    issues.push({ variable: 'OPENAI_API_KEY', message: '识别或语音回应选择 openai 时必须配置 OPENAI_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_REALTIME_TTS_VOICES_JSON !== undefined) {
+    const voices = parseJsonOrNull(value.ANCS_REALTIME_TTS_VOICES_JSON);
+    if (!z.array(z.object({ id: z.string().min(1).max(64), name: z.string().min(1).max(80) }).strict()).min(1).max(20).safeParse(voices).success) {
+      issues.push({ variable: 'ANCS_REALTIME_TTS_VOICES_JSON', message: 'ANCS_REALTIME_TTS_VOICES_JSON 必须是 1–20 个 {"id","name"} 组成的 JSON 数组' });
+    }
   }
   if (value.ANCS_ALLOWED_ORIGINS !== undefined && value.ANCS_ALLOWED_ORIGINS.split(',').map((item) => item.trim()).filter((item) => item !== '').some((item) => originOf(item) !== item.replace(/\/+$/, '').toLowerCase())) {
     issues.push({ variable: 'ANCS_ALLOWED_ORIGINS', message: 'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）' });

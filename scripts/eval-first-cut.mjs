@@ -29,6 +29,9 @@ const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = resolve('.artifacts/eval/first-cut', runId);
 await mkdir(outDir, { recursive: true });
 
+/** 自定义 Anthropic 兼容网关（ANCS_ANTHROPIC_BASE_URL，与 Worker 同一变量；不填 = 直连） */
+const anthropicGateway = process.env.ANCS_ANTHROPIC_BASE_URL ? { baseURL: process.env.ANCS_ANTHROPIC_BASE_URL } : {};
+
 async function createDirector() {
   if (values.model === 'scripted') return { director: new ScriptedDirector(), implementation: 'SCRIPTED', model: 'scripted-director' };
   if (values.model === 'gemini') {
@@ -43,7 +46,7 @@ async function createDirector() {
   if (!apiKey) throw new Error('--model anthropic needs ANTHROPIC_API_KEY in the environment (never pass keys on the command line)');
   const { AnthropicAgentModel } = await import('../packages/providers/anthropic/dist/index.js');
   const model = process.env.ANCS_AGENT_MODEL ?? 'claude-opus-5-5';
-  return { director: new AnthropicAgentModel({ apiKey, model }), implementation: 'REAL', model };
+  return { director: new AnthropicAgentModel({ apiKey, model, ...anthropicGateway }), implementation: 'REAL', model };
 }
 
 async function optionalAdapters() {
@@ -51,7 +54,7 @@ async function optionalAdapters() {
   if (process.env.ANTHROPIC_API_KEY && values.model === 'anthropic') {
     const { AnthropicAgentModel } = await import('../packages/providers/anthropic/dist/index.js');
     const { createModelVisualAnalysisAdapter } = await import('../apps/worker/dist/model-visual-analysis.js');
-    adapters.mediaVisualAnalysisAdapter = createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: process.env.ANTHROPIC_API_KEY, model: process.env.ANCS_VISION_MODEL ?? 'claude-haiku-5-5' }) });
+    adapters.mediaVisualAnalysisAdapter = createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: process.env.ANTHROPIC_API_KEY, model: process.env.ANCS_VISION_MODEL ?? 'claude-haiku-5-5', ...anthropicGateway }) });
   }
   if (process.env.GEMINI_API_KEY && values.model === 'gemini') {
     const { GeminiAgentModel } = await import('../packages/providers/gemini/dist/index.js');

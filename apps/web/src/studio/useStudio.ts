@@ -159,7 +159,7 @@ export function useStudioActions(workspaceId: string, projectId: string) {
 
   /** 说一句话：会话语言与界面语言不一致时新开会话（AI 按会话语言回应）。 */
   const send = useMutation({
-    mutationFn: async (input: { state: StudioState; message: string; pointer: AgentPointer; locale: AgentLocale; strategy: StudioStrategyChoice | null }) => {
+    mutationFn: async (input: { state: StudioState; message: string; pointer: AgentPointer; locale: AgentLocale; strategy: StudioStrategyChoice | null; idempotencyKey?: string }) => {
       const session = input.state.session !== null && input.state.session.locale === input.locale
         ? input.state.session
         : await client.agent.createSession(workspaceId, projectId, { sequenceId: input.state.sequenceId, locale: input.locale }, { idempotencyKey: randomKey('session') });
@@ -167,7 +167,7 @@ export function useStudioActions(workspaceId: string, projectId: string) {
         message: input.message,
         pointer: input.pointer,
         ...(input.strategy === null ? {} : { strategyPackId: input.strategy.packId, strategyKnobs: input.strategy.knobs }),
-      }, { idempotencyKey: randomKey('turn') });
+      }, { idempotencyKey: input.idempotencyKey ?? randomKey('turn') });
       return { session, turn };
     },
     onSuccess: async ({ session, turn }) => {

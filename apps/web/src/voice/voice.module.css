@@ -1,21 +1,148 @@
-/* V6-2 语音状态行（共看片室对话栏上方）。只用 ui.* 语义 token。 */
-.bar {
+/*
+ * Issue #9 画布内悬浮语音条：浮在看片区底部预留出的边上（看片区开语音时自动加大下边距，画面按画幅缩进，
+ * 语音条与反馈永远不压视频、字幕、时间带）。看片区底色在深浅主题下都是暗色哑光，所以这里用"哑光上"的配色。
+ */
+.layer {
+  position: absolute;
+  left: 50%;
+  bottom: var(--ui-space-3);
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 2 * var(--ui-space-3));
+  max-width: 880px;
+  pointer-events: none;
+  animation: dockIn 160ms ease-out;
+}
+@keyframes dockIn { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.caption {
+  pointer-events: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 12px;
+  border-radius: var(--ui-radius-pill);
+  background: rgba(10, 10, 10, .72);
+  color: var(--studio-on-matte, #F5F5F5);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.caption b { font-weight: 500; }
+.detail { color: var(--studio-on-matte-muted, #B3B3B3); }
+.captionAlert { box-shadow: inset 3px 0 0 var(--studio-on-matte, #F5F5F5); text-align: left; }
+
+.pill {
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--ui-space-2) var(--ui-space-3);
-  min-height: 32px;
-  font-size: var(--ui-type-metadata);
-  color: var(--ui-fg-secondary);
+  gap: 2px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px;
+  border-radius: var(--ui-radius-pill);
+  background: rgba(20, 20, 20, .94);
+  border: 1px solid var(--studio-matte-line, #3A3A3A);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+  color: var(--studio-on-matte, #F5F5F5);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.status { display: inline-flex; align-items: center; gap: var(--ui-space-2); color: var(--ui-fg-primary); font-weight: 500; }
-.meter { width: 4px; height: 14px; border-radius: 2px; background: var(--ui-fg-primary); transform-origin: bottom; transition: transform 80ms linear; }
-@media (prefers-reduced-motion: reduce) { .meter { transition: none; } }
-.heard { color: var(--ui-fg-secondary); overflow-wrap: anywhere; }
-.heard b { color: var(--ui-fg-primary); font-weight: 500; }
-.hint { color: var(--ui-fg-muted); }
-.badge { padding: 1px 6px; border-radius: 6px; border: 1px dashed var(--ui-border-control); color: var(--ui-fg-secondary); }
-.error { color: var(--ui-fg-primary); border-left: 3px solid var(--ui-fg-primary); padding-left: var(--ui-space-2); }
-.spacer { flex: 1; }
-.readAloud { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.pill::-webkit-scrollbar { display: none; }
+
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 0 10px 0 10px; min-height: 32px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.statusLabel { min-width: 4.5em; }
+.phaseIcon { width: 16px; height: 16px; }
+
+.meter { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.meter span { width: 3px; height: 16px; border-radius: 2px; background: currentColor; transform: scaleY(.25); transform-origin: center; }
+
+.dots { display: inline-flex; gap: 3px; }
+.dots span { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .35; animation: dot 1s infinite ease-in-out; }
+.dots span:nth-child(2) { animation-delay: .15s; }
+.dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--ui-radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.button svg { width: 16px; height: 16px; flex: none; }
+.button:hover:not(:disabled) { background: rgba(255, 255, 255, .1); }
+.button:disabled { opacity: .5; cursor: default; }
+.button:focus-visible { outline: 2px solid var(--studio-on-matte, #F5F5F5); outline-offset: 1px; }
+.button[aria-pressed='true'] { background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.primary { background: var(--studio-on-matte, #F5F5F5); color: #0A0A0A; }
+.primary:hover:not(:disabled) { background: #FFFFFF; }
+.end { background: rgba(255, 255, 255, .12); }
+.iconOnly { padding: 0; width: 34px; }
+.stopGlyph { width: 10px; height: 10px; border-radius: 2px; background: currentColor; flex: none; }
+.divider { width: 1px; height: 20px; margin: 0 4px; background: var(--studio-matte-line, #3A3A3A); flex: none; }
+
+.badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--ui-radius-pill);
+  border: 1px dashed rgba(255, 255, 255, .35);
+  color: var(--studio-on-matte-muted, #B3B3B3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.voicePicker { position: relative; display: inline-flex; flex: none; }
+.voicePicker select {
+  appearance: none;
+  height: 34px;
+  padding: 0 28px 0 12px;
+  border-radius: var(--ui-radius-pill);
+  border: 1px solid var(--studio-matte-line, #3A3A3A);
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B3B3B3' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.voicePicker select:disabled { cursor: default; background-image: none; padding-right: 12px; }
+.voicePicker select:focus-visible { outline: 2px solid var(--studio-on-matte, #F5F5F5); outline-offset: 1px; }
+.voicePicker option { color: #0A0A0A; background: #FFFFFF; }
+
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .toggle { flex: none; }
+
+/* 窄屏（手机）：按钮只留图标（读屏仍读完整名称），状态文字保留 */
+@media (max-width: 720px) {
+  .label { display: none; }
+  .button { padding: 0; width: 34px; }
+  .primary:not(.iconOnly):has(> span:not(.label)) { width: auto; padding: 0 12px; }
+  .status { padding: 0 8px; }
+  .statusLabel { min-width: 0; }
+  .caption { font-size: 12px; line-height: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer { animation: none; }
+  .dots span { animation: none; opacity: .8; }
+}

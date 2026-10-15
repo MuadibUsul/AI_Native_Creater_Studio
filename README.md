@@ -50,7 +50,11 @@ ANCS_ASR_DRIVER=deepgram       # 可选：素材语音转写
 DEEPGRAM_API_KEY=…
 # 实时语音：API 与 Realtime Gateway 两个进程都配同一把会话密钥（≥32 字符），网关另配识别驱动
 ANCS_VOICE_SESSION_SECRET=…
-ANCS_REALTIME_ASR_DRIVER=deepgram
+ANCS_REALTIME_ASR_DRIVER=deepgram   # 或 openai（OpenAI 兼容转写接口，网关自己断句）
+# AI 语音回应（服务端合成，可被开口打断）：openai = OpenAI 兼容 /audio/speech；不配 = 浏览器朗读并如实标注
+# ANCS_REALTIME_TTS_DRIVER=openai
+# OPENAI_API_KEY=…                  # 识别 / 合成共用；兼容网关另配 ANCS_OPENAI_BASE_URL（含 /v1）
+# Claude 走兼容网关：ANCS_ANTHROPIC_BASE_URL=https://…（填到 /v1 之前）
 ```
 
 想直接粘贴 YouTube 等平台链接学风格：Worker 机器装 `yt-dlp`，放行平台域名，并配置（不需要密钥）：
@@ -110,6 +114,7 @@ cd apps/web && npx next start -p 3000
 |---|---|
 | `node scripts/studio-browser-check.mjs` | 共看片室端到端：真实浏览器 + 真实 API/Worker/FFmpeg，脚本导演；截图写入 `docs/verification/artifacts/v6-1c/`（需要支持 H.264 的 Chrome，`ANCS_BROWSER_EXECUTABLE` 指定） |
 | `node scripts/voice-browser-check.mjs` | 实时语音端到端：Chrome 假麦克风 → AudioWorklet → 网关 → 流式识别（本地同协议假服务）→ 指代绑定 → 试改；中英文；截图写入 `docs/verification/artifacts/v6-2/` |
+| `node scripts/voice-live-check.mjs` | Issue #9 连续语音的**真实服务**验收（需 `OPENAI_API_KEY` + `ANTHROPIC_API_KEY`，会产生少量识别 / 合成 / Claude 费用）：真实识别 → 真实 Claude → 真实合成念回应 → 开口打断 → 采用 / 撤销 → 结束；断线、过期、密钥失效、未配置、无权限；桌面 / 手机、浅色 / 深色；延迟与用量写入 `docs/verification/artifacts/v6-2/issue-9/summary.json` |
 | `node scripts/effects-browser-check.mjs` | 代码生成特效端到端：项目规则开关 → 框选画面 → 特效试改（预览像素校验）→ 改颜色 → 采用，真实 API/Worker/FFmpeg + 真实特效渲染子进程，脚本导演；截图写入 `docs/verification/artifacts/v6-3/` |
 | `node scripts/narration-browser-check.mjs` | 文章转视频端到端：新建页贴文章 → AI 讲述 + 图解卡（真实 flite 合成 + 真实特效渲染）→ 预览音量与卡片画面校验 → 采用；中英、深色、手机宽度；截图写入 `docs/verification/artifacts/v6-5/` |
 | `node scripts/generation-browser-check.mjs` | 付费生成端到端：顶栏"生成"开关 → 框出区域说"换成……"→ 报价卡 → 确认 → 只取框内的生成层（圈外测量）→ 采用；我的形象与声音（上传、声明、授权）→ 数字人画中画；中英、深色、手机宽度；脚本导演 + FFmpeg 测试替身；截图写入 `docs/verification/artifacts/v6-7/` |

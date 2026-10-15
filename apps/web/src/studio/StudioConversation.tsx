@@ -50,8 +50,7 @@ export interface ConversationProps {
   onLearnStrategy?: () => void;
   /** V6-7/V6-8：付费生成的报价卡（确认/放弃/进行中/结果） */
   generationCards?: ReactNode;
-  /** V6-2 语音：状态行（对话框上方）与麦克风开关（发送按钮旁） */
-  voiceBar?: ReactNode;
+  /** V6-2 语音：麦克风开关（发送按钮旁）；语音条本身浮在画布底部（Issue #9） */
   voiceToggle?: ReactNode;
 }
 
@@ -155,7 +154,6 @@ export function StudioConversation(props: ConversationProps) {
       ) : null}
       {props.generationCards ?? null}
       {props.strategies.length > 0 ? <StudioStrategyPicker packs={props.strategies} value={props.strategy} disabled={!props.canEdit} onChange={props.onStrategyChange} {...(props.onLearnStrategy !== undefined ? { onLearn: props.onLearnStrategy } : {})} /> : null}
-      {props.voiceBar ?? null}
       <div className={styles['composer']}>
         <div className={styles['composerField']}>
           <span className={`${styles['chip']} ${props.pointerLabel !== null ? styles['chipActive'] : ''}`}>

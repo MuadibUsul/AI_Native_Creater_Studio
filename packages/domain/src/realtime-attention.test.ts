@@ -32,6 +32,9 @@ describe('realtime attention', () => {
     expect(findDeicticWords(words(['把', 0.1], ['这', 0.4], ['里', 0.5], ['剪短', 0.7]), 'zh-CN')).toEqual([{ word: '这里', at: 0.4 }]);
     expect(findDeicticWords(words(['从这里', 0.2], ['到', 0.8], ['这里', 1.4]), 'zh-CN')).toEqual([{ word: '这里', at: 0.2 }, { word: '这里', at: 1.4 }]);
     expect(findDeicticWords(words(['这样', 0.2], ['就好', 0.5]), 'zh-CN')).toEqual([]);
+    // 识别服务偶尔给出繁体：同样认得出指代词与未闭合的结尾
+    expect(findDeicticWords(words(['把', 0.1], ['這', 0.4], ['一', 0.5], ['段', 0.6], ['剪短', 0.7]), 'zh-CN')).toEqual([{ word: '這一段', at: 0.4 }]);
+    expect(isUnclosedUtterance('音樂小一點，然後', 'zh-CN')).toBe(true);
     expect(findDeicticWords(words(['move', 0.1], ['this', 0.3], ['here.', 0.9]), 'en')).toEqual([{ word: 'this', at: 0.3 }, { word: 'here', at: 0.9 }]);
   });
 

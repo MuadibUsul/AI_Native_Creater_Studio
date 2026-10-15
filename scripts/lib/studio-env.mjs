@@ -36,7 +36,9 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
  *   generation?: { provider?: object, behavior?: () => string } }} options
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
- *   voice：启动 Realtime Gateway；流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）。
+ *   voice：启动 Realtime Gateway。`{ script }` = 流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）；
+ *   `{ recognizer?, synthesizer?, log? }` = 调用方给出识别 / 合成（如真实 OpenAI 兼容接口）；不给识别即"未配置"。
+ *   返回的 swapVoiceGateway() 换一套识别 / 合成：旧网关立即断开所有连接（浏览器看到的是断线），新网关接在同一端口上。
  */
 export async function startStudioEnv(options) {
   const db = createDb(resolveTestDatabaseUrl());
@@ -63,11 +65,22 @@ export async function startStudioEnv(options) {
 
   // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
   let realtime = null;
+  const gatewayFor = (voice) => createRealtimeGateway({
+    deps: { db: db.db, voiceSessionSecret: voiceSecret },
+    ...(voice.recognizer === undefined ? {} : { recognizer: voice.recognizer }),
+    ...(voice.synthesizer === undefined ? {} : { synthesizer: voice.synthesizer }),
+    ...(voice.log === undefined ? {} : { log: voice.log }),
+    allowedOrigins: [baseUrl],
+  });
   if (options.voice !== undefined) {
-    const apiKey = randomBytes(16).toString('hex');
-    const fakeAsr = await startFakeDeepgramLive({ apiKey, script: options.voice.script });
-    const recognizer = { ...createDeepgramLiveRecognizer({ apiKey, baseUrl: fakeAsr.url }), providerId: 'deepgram-local-fake', implementation: 'SCRIPTED' };
-    const gateway = createRealtimeGateway({ deps: { db: db.db, voiceSessionSecret: voiceSecret }, recognizer, allowedOrigins: [baseUrl] });
+    let fakeAsr = null;
+    let voice = options.voice;
+    if (options.voice.script !== undefined) {
+      const apiKey = randomBytes(16).toString('hex');
+      fakeAsr = await startFakeDeepgramLive({ apiKey, script: options.voice.script });
+      voice = { recognizer: { ...createDeepgramLiveRecognizer({ apiKey, baseUrl: fakeAsr.url }), providerId: 'deepgram-local-fake', implementation: 'SCRIPTED' } };
+    }
+    const gateway = gatewayFor(voice);
     const server = createServer((_request, response) => { response.writeHead(404); response.end(); });
     gateway.attach(server, { exclusive: true });
     const port = await new Promise((done) => server.listen(0, '127.0.0.1', () => done(server.address().port)));
@@ -139,7 +152,14 @@ export async function startStudioEnv(options) {
     deps,
     workDir,
     /** 语音：本地假识别服务的连接记录（查询参数、音频字节数等） */
-    voiceAsrConnections: realtime?.fakeAsr.connections ?? [],
+    voiceAsrConnections: realtime?.fakeAsr?.connections ?? [],
+    /** 换一套语音识别 / 合成（{ recognizer?, synthesizer?, log? }）：旧网关断开所有连接，新网关接在同一端口 */
+    async swapVoiceGateway(voice) {
+      if (realtime === null) throw new Error('voice gateway was not started');
+      await realtime.gateway.close();
+      realtime.gateway = gatewayFor(voice);
+      realtime.gateway.attach(realtime.server, { exclusive: true });
+    },
     /** 新建内部用户并返回已登录的 SDK 客户端 */
     async signedInClient(email) {
       const password = randomBytes(24).toString('base64url');
@@ -160,7 +180,7 @@ export async function startStudioEnv(options) {
       if (realtime !== null) {
         await realtime.gateway.close().catch(() => undefined);
         await new Promise((done) => realtime.server.close(done));
-        await realtime.fakeAsr.close().catch(() => undefined);
+        await realtime.fakeAsr?.close().catch(() => undefined);
       }
       await new Promise((done) => proxy.close(done));
       await db.close();

@@ -442,6 +442,7 @@ export {
 export type { ClipDigests } from './content-protection.js';
 export {
   VOICE_ADAPTER_CAPABILITIES,
+  VOICE_REPLY_MAX_CHARACTERS,
   VOICE_SESSION_CREDENTIAL_HEADER,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,
@@ -453,7 +454,10 @@ export {
   resolveVoiceCapabilities,
   revokeVoiceSession,
   sealUtterance,
+  spokenReplyExcerpt,
   verifyVoiceSessionCredential,
+  voiceSessionGate,
+  voiceReplyText,
 } from './voice-session.js';
 export { alignVoiceUtterance, negotiateVoiceSessionCapabilities } from './voice-alignment.js';
 export type { AlignVoiceUtteranceInput } from './voice-alignment.js';

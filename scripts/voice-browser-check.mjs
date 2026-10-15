@@ -95,12 +95,13 @@ try {
   const composition = (await client.projects.state(ref.projectId, { schemaVersion: '1.0' })).document.composition;
   const videoTracks = new Set(composition.tracks.filter((track) => track.kind === 'VIDEO').map((track) => track.id));
   const lakeClipId = composition.clips.find((clip) => clip.assetVersionId === lakeFootage?.footageId && videoTracks.has(clip.trackId))?.id ?? null;
+  const dock = page.locator('[data-voice-dock]');
+  const caption = page.locator('[data-voice-caption]');
   await page.getByRole('button', { name: /^片段 lake\.mp4/ }).first().click();
   await page.getByRole('button', { name: '开始语音' }).click();
-  await page.getByText('正在听，边看边说').waitFor({ timeout: 20_000 });
-  await page.getByText('语音识别：测试替身').waitFor();
-  await page.getByText('把这里', { exact: true }).waitFor({ timeout: 20_000 });
-  await page.getByText(/^指的是：片段「lake\.mp4」（说"这里"时）$/).waitFor();
+  await dock.getByText('语音识别：测试替身').waitFor({ timeout: 20_000 });
+  await caption.filter({ hasText: '把这里' }).waitFor({ timeout: 20_000 });
+  await caption.filter({ hasText: '指的是：片段「lake.mp4」（说"这里"时）' }).waitFor();
   await shot('01-listening-partial');
   await page.getByRole('button', { name: /^片段 glacier\.mp4/ }).first().click();
   await page.getByText('试改好了，看看预览。').waitFor({ timeout: 60_000 });
@@ -113,16 +114,17 @@ try {
   const zhConnection = env.voiceAsrConnections[0];
   pass('中文：边说边出 → "这里"绑定说出那一刻的片段 → 作为一轮发出 → 试改', `指向 lake（说"这里"后已改指 glacier）；识别参数 ${zhConnection.query.get('model')}/${zhConnection.query.get('language')}，收到音频 ${(zhConnection.audioBytes / 32_000).toFixed(1)} s`);
 
-  // 2. 关麦：网关收尾后关闭
-  await page.getByRole('button', { name: '结束语音' }).click();
+  // 2. 结束语音：网关收尾后关闭 → 语音条显示"语音已结束"后收起
+  await dock.getByRole('button', { name: '结束语音' }).click();
+  await dock.getByText('语音已结束').waitFor({ timeout: 20_000 });
   await page.getByRole('button', { name: '开始语音' }).waitFor({ timeout: 20_000 });
   pass('关麦', '网关收到 CloseStream 后关闭连接');
 
   // 3. 英文：以 but 结尾先保留，后半句接上成一句
   await page.getByRole('button', { name: '切换为英文界面' }).click();
   await page.getByRole('button', { name: 'Start voice' }).click();
-  await page.getByText('Listening — talk while you watch').waitFor({ timeout: 20_000 });
-  await page.getByText('Sounds unfinished — keep going…').waitFor({ timeout: 20_000 });
+  await dock.getByText('Speech recognition: test double').waitFor({ timeout: 20_000 });
+  await caption.filter({ hasText: 'Sounds unfinished — keep going…' }).waitFor({ timeout: 20_000 });
   await shot('03-english-held');
   // 界面换成英文后，AI 会话按英文新开（AI 用会话语言回应）：在最新的会话里找
   const english = await waitFor(async () => {
@@ -130,8 +132,9 @@ try {
     return session === null ? [] : client.agent.listTurns(workspace.id, session.id);
   }, (items) => items.some((turn) => turn.message === 'Make this shorter, but keep the sound.'), { timeoutMs: 30_000, label: 'english voice turn' });
   const enTurn = english.find((turn) => turn.message === 'Make this shorter, but keep the sound.');
-  await page.getByRole('button', { name: 'End voice' }).click();
   await shot('04-english-sent');
+  await dock.getByRole('button', { name: 'End voice' }).click();
+  await dock.getByText('Voice ended').waitFor({ timeout: 20_000 });
   const enConnection = env.voiceAsrConnections[1];
   pass('英文：未说完先保留，后半句接上', `"${enTurn.message}"；识别参数 ${enConnection.query.get('model')}/${enConnection.query.get('language')}`);
 

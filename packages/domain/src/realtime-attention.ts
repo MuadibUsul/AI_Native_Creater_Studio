@@ -11,9 +11,11 @@ import type { AgentPointer, RealtimeAttention, RealtimePointerSample, RealtimeWo
  * 这里不猜：词级时间缺失时只用开口时的选择，并如实标注证据种类。
  */
 
-const ZH_DEICTIC = ['这一段', '这一块', '这个', '这里', '这儿', '这段', '这边', '这块', '这句', '这张', '那个', '那里', '那儿', '那段', '那边', '那句', '刚才'];
+const ZH_DEICTIC_SIMPLIFIED = ['这一段', '这一块', '这个', '这里', '这儿', '这段', '这边', '这块', '这句', '这张', '那个', '那里', '那儿', '那段', '那边', '那句', '刚才'];
+/** 识别服务偶尔给出繁体（"這裡"）：繁体写法同样是指代词 */
+const ZH_DEICTIC = [...ZH_DEICTIC_SIMPLIFIED, '這一段', '這一塊', '這個', '這裡', '這裏', '這兒', '這段', '這邊', '這塊', '這句', '這張', '那個', '那裡', '那裏', '那兒', '那段', '那邊', '那句', '剛才'];
 const EN_DEICTIC = new Set(['this', 'here', 'these', 'there', 'that', 'those']);
-const ZH_UNCLOSED = ['但是', '不过', '除了', '不对', '不是', '而且', '然后', '还有', '或者', '以及', '另外'];
+const ZH_UNCLOSED = ['但是', '不过', '除了', '不对', '不是', '而且', '然后', '还有', '或者', '以及', '另外', '不過', '不對', '然後', '還有'];
 const EN_UNCLOSED = ['but', 'except', 'and', 'or', 'then', 'not', 'also', 'actually', 'no wait', 'wait'];
 /** 点击可以略晚于说出指代词（边说边点） */
 const GRACE_SECONDS = 0.3;

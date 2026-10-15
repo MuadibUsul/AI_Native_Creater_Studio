@@ -58,6 +58,8 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
 }
 .stageDrop { outline: 2px dashed var(--studio-on-matte-muted); outline-offset: -12px; }
+/* Issue #9：开着语音时给底部的悬浮语音条（一行反馈 + 语音条）留出位置；画面按画幅缩进，不被遮挡 */
+.stage[data-voice='on'] { padding-bottom: 104px; }
 .frame { position: relative; background: #000; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 12px 32px rgba(0, 0, 0, .45); }
 .video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .badge {

@@ -23,9 +23,10 @@ import { STRIP_ZOOM_LEVELS, StudioTimeStrip, nextStripZoom, type StripClip, type
 import { displaySeconds, formatClock, formatUsdMicros, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 import { StudioShortcuts } from './StudioShortcuts';
 import { StudioTaskNotice, StudioTasks, studioTaskRows, useStudioExports, useTaskNotice } from './StudioTasks';
-import { StudioVoiceBar, VoiceToggle } from '@/voice/StudioVoiceBar';
+import { StudioVoiceDock, VoiceToggle } from '@/voice/StudioVoiceBar';
 import { useReplySpeech } from '@/voice/useReplySpeech';
 import { useVoice } from '@/voice/useVoice';
+import { voicePhase, type QueuedUtterance } from '@/voice/voice-phase';
 import { studioKeys, useStrategyPacks, useStudioActions, useStudioPreview, useStudioState, useStudioTimeline, useStudioTurns, useTrialProposal, type StudioStrategyChoice } from './useStudio';
 import styles from './studio.module.css';
 
@@ -45,6 +46,8 @@ interface StudioKeyboardState {
   overlayOpen: boolean;
   toggleMark: () => void;
   clearPointer: () => void;
+  canVoice: boolean;
+  toggleVoice: () => void;
 }
 const EDIT_ROLES = new Set(['OWNER', 'ADMIN', 'EDITOR']);
 
@@ -221,7 +224,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [zoom, setZoom] = useState<number>(STRIP_ZOOM_LEVELS[0]);
   const [shortcutsHeld, setShortcutsHeld] = useState(false);
-  const keyboard = useRef<StudioKeyboardState>({ playhead: ZERO, duration: null, canMark: false, overlayOpen: false, toggleMark: () => undefined, clearPointer: () => undefined });
+  const keyboard = useRef<StudioKeyboardState>({ playhead: ZERO, duration: null, canMark: false, overlayOpen: false, toggleMark: () => undefined, clearPointer: () => undefined, canVoice: false, toggleVoice: () => undefined });
   useEffect(() => {
     let holdTimer: ReturnType<typeof setTimeout> | null = null;
     const stopHold = () => {
@@ -272,6 +275,12 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           return;
         case 'End':
           if (state.duration !== null) moveTo(stepFrames({ time: state.duration, frameRate, delta: 0, bounds: { start: ZERO, end: state.duration } }));
+          return;
+        case 'v':
+        case 'V':
+          if (!state.canVoice) return;
+          event.preventDefault();
+          state.toggleVoice();
           return;
         case 'm':
         case 'M':
@@ -353,39 +362,78 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [pendingGeneration, setPendingGeneration] = useState<string | null>(null);
   const voiceTurns = useRef(new Set<string>());
-  const send = (message: string, override?: { pointer: AgentPointer; byVoice: boolean }) => {
+  const send = (message: string, override?: { pointer: AgentPointer; voiceUtteranceId: string; onSent: () => void; onFailed: (error: unknown) => void }) => {
     if (state === undefined) return;
     setNotice(null);
     setActionError(null);
-    actions.send.mutate({ state, message, pointer: override?.pointer ?? pointer, locale, strategy }, {
-      onSuccess: ({ turn }) => { if (override?.byVoice === true) voiceTurns.current.add(turn.id); },
-      onError: (error) => setActionError(mutationErrorText(error, t)),
+    actions.send.mutate({
+      state, message, pointer: override?.pointer ?? pointer, locale, strategy,
+      // 语音的一句：用网关的句子 id 做这一轮的幂等键（重试、重连都不会让同一句执行两次）
+      ...(override === undefined ? {} : { idempotencyKey: `voice-turn-${override.voiceUtteranceId}` }),
+    }, {
+      onSuccess: ({ turn }) => { if (override !== undefined) { voiceTurns.current.add(turn.id); override.onSent(); } },
+      onError: (error) => { setActionError(mutationErrorText(error, t)); override?.onFailed(error); },
     });
   };
 
-  // 说（V6-2）：语音一句话说完 → 带着按发话时刻绑定的指向，作为一轮对话发出；开口即打断 AI 的朗读
+  // 说（V6-2 / Issue #9）：语音一直开着，一句话说完 → 带着按发话时刻绑定的指向排队，作为一轮对话发出（与打字同一路径）。
+  // AI 还在处理上一句时先排着，上一轮结束再按顺序发；发失败的一句停在队首等用户重试或丢弃，不自动重发。开口即打断 AI 的语音回应。
   const speech = useReplySpeech(locale);
   const [readAloud, setReadAloud] = useState(true);
+  const [voiceQueue, setVoiceQueue] = useState<QueuedUtterance[]>([]);
+  const [lastVoiceText, setLastVoiceText] = useState<string | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const voice = useVoice({
     workspaceId, projectId, locale,
-    onUtterance: ({ text, attention }) => send(text, { pointer: attention.pointer, byVoice: true }),
+    onUtterance: ({ utteranceId, text, attention }) => setVoiceQueue((queue) => (queue.some((item) => item.id === utteranceId) ? queue : [...queue, { id: utteranceId, text, pointer: attention.pointer, failed: null }])),
     onSpeechStart: speech.stop,
   });
+  const turnRunning = latest?.status === 'RUNNING';
+  const voiceHead = voiceQueue[0];
+  const sendingVoice = useRef<string | null>(null);
+  useEffect(() => {
+    if (voiceHead === undefined || voiceHead.failed !== null || turnRunning || actions.send.isPending || state === undefined || sendingVoice.current === voiceHead.id) return;
+    const head = voiceHead;
+    sendingVoice.current = head.id;
+    setLastVoiceText(head.text);
+    send(head.text, {
+      pointer: head.pointer,
+      voiceUtteranceId: head.id,
+      onSent: () => { sendingVoice.current = null; setVoiceQueue((queue) => queue.filter((item) => item.id !== head.id)); },
+      onFailed: (error) => { sendingVoice.current = null; setVoiceQueue((queue) => queue.map((item) => (item.id === head.id ? { ...item, failed: mutationErrorText(error, t) } : item))); },
+    });
+    // send 每次渲染都是新函数，不放进依赖：只在队首或忙闲变化时发
+  }, [voiceHead, turnRunning, actions.send.isPending, state === undefined]);
+  const tv = t.voice;
+  const { notice: voiceServerNotice, clearNotice: clearVoiceServerNotice } = voice;
+  useEffect(() => {
+    if (voiceServerNotice === null) return;
+    setVoiceNotice(tv.notices[voiceServerNotice]);
+    clearVoiceServerNotice();
+  }, [voiceServerNotice, clearVoiceServerNotice, tv]);
+  useEffect(() => {
+    if (voiceNotice === null) return;
+    const timer = setTimeout(() => setVoiceNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [voiceNotice]);
   const pointerKey = JSON.stringify(pointer);
   const playheadSeconds = displaySeconds(playhead);
   const { notePointer } = voice;
   useEffect(() => {
     if (voice.state === 'listening') notePointer(JSON.parse(pointerKey) as AgentPointer, shown === null ? null : playheadSeconds, pointerLabel);
   }, [voice.state, notePointer, pointerKey, playheadSeconds, pointerLabel, shown]);
-  // 用语音发出的那一轮有了回应 → 朗读（只读一次）
+  // 用语音发出的那一轮有了回应 → 念出来（只念一次）：优先服务端语音合成（网关按这一轮的 id 读回应），没配置时用浏览器朗读并如实标注；
+  // 用户正在说、或语音已经结束时不插话
   const spoken = useRef(new Set<string>());
+  const { active: voiceActive, hearing: voiceHearing, speak: voiceSpeak } = voice;
   useEffect(() => {
     for (const turn of turns) {
       if (!voiceTurns.current.has(turn.id) || spoken.current.has(turn.id) || turn.status === 'RUNNING') continue;
       spoken.current.add(turn.id);
-      if (readAloud && turn.reply !== null) speech.speak(turn.reply);
+      if (!readAloud || !voiceActive || voiceHearing || turn.reply === null || turn.reply.trim() === '') continue;
+      if (!voiceSpeak(turn.id)) speech.speak(turn.reply);
     }
-  }, [turns, readAloud, speech]);
+  }, [turns, readAloud, speech, voiceActive, voiceHearing, voiceSpeak]);
   const voiceAttentionLabel = (() => {
     const attention = voice.attention;
     if (attention === null) return null;
@@ -484,6 +532,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     overlayOpen: exportOpen || footageOpen || distillOpen || tasksOpen,
     toggleMark: () => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); },
     clearPointer: () => { setSelection({ range: null, clipId: null }); setFramed(null); setDrawing(false); },
+    canVoice: canEdit && voice.state !== 'finishing',
+    toggleVoice: () => { if (voice.active) voice.stop(); else void voice.start(); },
   };
 
   if (stateQuery.isPending) {
@@ -517,6 +567,69 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const cost = state.cost;
   const activeTasks = taskRows.filter((row) => row.status === 'running').length;
   const failedTasks = taskRows.filter((row) => row.status === 'failed').length;
+
+  // Issue #9 语音条：阶段（互斥）、画布边缘的一行反馈、可用的操作
+  const voiceAiSpeaking = voice.reply.state === 'playing' || speech.speaking;
+  const voiceWaiting = voiceQueue.filter((item) => item.failed === null).length;
+  const phase = voicePhase({
+    state: voice.state,
+    hearing: voice.hearing || voice.partial !== '',
+    aiSpeaking: voiceAiSpeaking,
+    aiWorking: running || actions.send.isPending || voiceWaiting > 0 || voice.reply.state === 'preparing',
+  });
+  const voiceFailed = voiceHead !== undefined && voiceHead.failed !== null ? voiceHead : null;
+  const voicePointing = voice.attention === null ? null
+    : voice.attention.word !== null && voiceAttentionLabel !== null ? tv.pointingAt(voiceAttentionLabel, voice.attention.word)
+      : tv.pointing(voiceAttentionLabel ?? tv.wholeVideo);
+  const voiceCaption: { main: string; detail: string | null; tone: 'normal' | 'alert' } | null =
+    phase === 'error' && voice.error !== null ? { main: tv.errors[voice.error], detail: null, tone: 'alert' }
+      : voiceFailed !== null ? { main: tv.failedUtterance(voiceFailed.text), detail: voiceFailed.failed, tone: 'alert' }
+        : voiceNotice !== null ? { main: voiceNotice, detail: null, tone: 'normal' }
+          : phase === 'recognizing' ? { main: voice.partial === '' ? '…' : voice.partial, detail: voice.held ? tv.held : voice.partial === '' ? null : voicePointing, tone: 'normal' }
+            : phase === 'thinking' ? { main: lastVoiceText === null ? tv.phases.thinking : tv.working(lastVoiceText), detail: voiceWaiting - (actions.send.isPending ? 1 : 0) > 0 ? tv.queued(voiceWaiting - (actions.send.isPending ? 1 : 0)) : null, tone: 'normal' }
+              : phase === 'speaking' ? { main: tv.speakingHint, detail: null, tone: 'normal' }
+                : phase === 'listening' ? { main: tv.idleHint, detail: pointerLabel === null ? null : tv.pointing(pointerLabel), tone: 'normal' }
+                  : null;
+  const stopVoiceSpeaking = () => {
+    voice.stopSpeaking();
+    speech.stop();
+    setVoiceNotice(tv.notices.STOPPED_SPEAKING);
+  };
+  const stopVoiceTurn = () => {
+    const dropped = voiceQueue.length;
+    setVoiceQueue([]);
+    voice.stopSpeaking();
+    speech.stop();
+    if (latest !== undefined && running) stop(latest);
+    setVoiceNotice(dropped > 0 ? tv.notices.TURN_STOPPED_QUEUE(dropped) : tv.notices.TURN_STOPPED);
+  };
+  const voiceDock = phase === 'off' ? null : (
+    <StudioVoiceDock
+      phase={phase}
+      error={voice.error}
+      caption={voiceCaption}
+      levelRef={voice.levelRef}
+      badges={[
+        ...(voice.asr !== null && voice.asr.implementation !== 'REAL' ? [tv.asrScripted] : []),
+        ...(voice.tts !== null && voice.tts.implementation !== 'REAL' ? [tv.ttsScripted] : []),
+      ]}
+      mark={{ visible: shown !== null && canEdit, active: drawing, onToggle: () => { if (!drawing) videoRef.current?.pause(); setDrawing(!drawing); } }}
+      voices={voice.tts === null ? null : { list: voice.tts.voices, value: voice.voiceId, onChange: voice.setVoiceId }}
+      browserVoice={voice.tts === null && speech.supported}
+      readAloud={{ enabled: readAloud, onToggle: () => { if (readAloud) { voice.stopSpeaking(); speech.stop(); } setReadAloud(!readAloud); } }}
+      stopSpeaking={voiceAiSpeaking || voice.reply.state === 'preparing' ? stopVoiceSpeaking : null}
+      stopTurn={canEdit && (running || voiceWaiting > 0) ? stopVoiceTurn : null}
+      trial={trial !== null && !running && canEdit ? { onKeep: () => keep(trial), onDiscard: () => discard(trial), busy: actions.adopt.isPending || actions.discard.isPending } : null}
+      undo={canUndoChange && canEdit && !running ? { onUndo: undoChange, busy: actions.undoChange.isPending } : null}
+      failed={voiceFailed === null ? null : {
+        onRetry: () => setVoiceQueue((queue) => queue.map((item) => (item.id === voiceFailed.id ? { ...item, failed: null } : item))),
+        onDrop: () => setVoiceQueue((queue) => queue.filter((item) => item.id !== voiceFailed.id)),
+      }}
+      onEnd={voice.stop}
+      onReconnect={() => void voice.start()}
+      onDismiss={voice.dismiss}
+    />
+  );
 
   return (
     <div className={styles['room']} lang={locale}>
@@ -607,6 +720,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         region={frameRegion}
         drawing={drawing}
         onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
+        voiceDock={voiceDock}
       />
 
       <div className={styles['dock']}>
@@ -683,19 +797,6 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
               error={generationError}
               onAccept={acceptGeneration}
               onDecline={declineGeneration}
-            />
-          )}
-          voiceBar={(
-            <StudioVoiceBar
-              state={voice.state}
-              error={voice.error}
-              partial={voice.partial}
-              held={voice.held}
-              attention={voice.attention}
-              attentionLabel={voiceAttentionLabel}
-              scripted={voice.asr !== null && voice.asr.implementation !== 'REAL'}
-              level={voice.level}
-              readAloud={{ supported: speech.supported, enabled: readAloud, speaking: speech.speaking, onToggle: setReadAloud, onStop: speech.stop }}
             />
           )}
           voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}

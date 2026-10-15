@@ -122,8 +122,10 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
  * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（anthropic 缺密钥在 env 校验中启动失败）；
  * 未配置时装配"未配置"端口：AI 轮次明确失败（501），不回退 Mock。密钥只在本进程内存中。
  */
+/** Claude 经兼容 Anthropic Messages 协议的网关时的基址（不配 = 直连 Anthropic） */
+const anthropicGateway = config.ANCS_ANTHROPIC_BASE_URL === undefined ? {} : { baseURL: config.ANCS_ANTHROPIC_BASE_URL };
 const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
-  ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5' })
+  ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5', ...anthropicGateway })
   : config.ANCS_AGENT_DRIVER === 'gemini' && config.GEMINI_API_KEY !== undefined
     ? new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'gemini-flash-latest' })
     : unconfiguredAgentModel();
@@ -237,7 +239,7 @@ if (inventoryIssues.length > 0) {
 }
 console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
 const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
-  ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5' }), ...ffmpegPaths })
+  ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5', ...anthropicGateway }), ...ffmpegPaths })
   : visualDriver === 'gemini' && config.GEMINI_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_VISION_MODEL ?? 'gemini-flash-lite-latest' }), ...ffmpegPaths })
   : visualDriver === 'process' && config.ANCS_VISUAL_ANALYSIS_EXECUTABLE !== undefined

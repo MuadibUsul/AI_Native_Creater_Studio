@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -289,3 +289,36 @@ describe('V5-M4 Edge 配置', () => {
   });
 });
 
+describe('Issue #9 语音网关 / 自定义模型网关配置', () => {
+  const realtimeBase = { DATABASE_URL: validApiEnv.DATABASE_URL, ANCS_VOICE_SESSION_SECRET: 'v'.repeat(40) }; // secrets:check-ignore：测试假值
+
+  it('Anthropic 兼容网关地址：只收 https 完整 URL；不填 = 直连', () => {
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ANTHROPIC_BASE_URL: 'https://gateway.example.com/v1' }).value?.ANCS_ANTHROPIC_BASE_URL).toBe('https://gateway.example.com/v1');
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ANTHROPIC_BASE_URL: 'http://gateway.example.com' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_ANTHROPIC_BASE_URL']);
+    expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it('openai 识别 / 合成缺 OPENAI_API_KEY → 启动失败（不回退 Mock）；声音列表必须是 1–20 个 {id,name}', () => {
+    const asr = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_ASR_DRIVER: 'openai' });
+    expect(crossCheckRealtimeEnv(asr.value!).map((issue) => issue.variable)).toEqual(['OPENAI_API_KEY']);
+    const tts = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'openai' });
+    expect(crossCheckRealtimeEnv(tts.value!).map((issue) => issue.variable)).toEqual(['OPENAI_API_KEY']);
+    const keyed = validateEnv(realtimeEnvSchema, {
+      ...realtimeBase,
+      ANCS_REALTIME_ASR_DRIVER: 'openai',
+      ANCS_REALTIME_TTS_DRIVER: 'openai',
+      OPENAI_API_KEY: 'o'.repeat(40), // secrets:check-ignore：测试假值
+      ANCS_REALTIME_TTS_VOICES_JSON: '[{"id":"coral","name":"Coral"},{"id":"onyx","name":"Onyx"}]',
+      ANCS_REALTIME_ASR_INTERIM_MS: '600',
+    });
+    expect(keyed.ok).toBe(true);
+    expect(keyed.value?.ANCS_REALTIME_ASR_INTERIM_MS).toBe(600);
+    expect(crossCheckRealtimeEnv(keyed.value!)).toEqual([]);
+    for (const voices of ['[]', 'not json', '[{"id":"coral"}]']) {
+      const bad = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_VOICES_JSON: voices });
+      expect(crossCheckRealtimeEnv(bad.value!).map((issue) => issue.variable)).toEqual(['ANCS_REALTIME_TTS_VOICES_JSON']);
+    }
+    expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_OPENAI_BASE_URL: 'http://gateway.example.com/v1' }).ok).toBe(false);
+    expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'browser' }).ok).toBe(false);
+  });
+});

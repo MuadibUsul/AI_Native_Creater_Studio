@@ -2812,6 +2812,7 @@ export type { ApplyReviewRequest, ApplyReviewResponse, CreateReviewNoteRequest, 
 export {
   REALTIME_ATTENTION_EVIDENCE,
   REALTIME_CLOSE_CODES,
+  REALTIME_REPLY_END_REASONS,
   REALTIME_SAMPLE_RATE,
   REALTIME_VOICE_PATH,
   realtimeAttentionEvidenceSchema,
@@ -2819,6 +2820,7 @@ export {
   realtimeClientMessageSchema,
   realtimePointerSampleSchema,
   realtimeServerMessageSchema,
+  realtimeVoiceSchema,
   realtimeWordSchema,
 } from './realtime.js';
 export type {
@@ -2827,11 +2829,13 @@ export type {
   RealtimeClientMessage,
   RealtimePointerSample,
   RealtimeServerMessage,
+  RealtimeVoice,
   RealtimeWord,
   StreamingAsrEvents,
   StreamingAsrResult,
   StreamingAsrSession,
   StreamingSpeechRecognizer,
+  StreamingSpeechSynthesizer,
 } from './realtime.js';
 export {
   EFFECT_CODEGEN_MODES,

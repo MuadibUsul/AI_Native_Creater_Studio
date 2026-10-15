@@ -101,6 +101,8 @@ export function StudioCanvas(props: {
   /** 正在框选：画面上覆盖一层拖动框选 */
   drawing: boolean;
   onRegion: (region: FrameRegion) => void;
+  /** Issue #9：浮在看片区底部的语音条；有它时看片区下边距加大，画面按画幅缩进让出位置（不压视频与字幕） */
+  voiceDock?: ReactNode;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.canvas;
@@ -248,6 +250,7 @@ export function StudioCanvas(props: {
     <div
       ref={stageRef}
       className={`${styles['stage']} ${dragging ? styles['stageDrop'] : ''}`}
+      data-voice={props.voiceDock !== undefined && props.voiceDock !== null ? 'on' : undefined}
       onDragOver={onDragOver}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
@@ -255,6 +258,7 @@ export function StudioCanvas(props: {
       role="region"
     >
       {content}
+      {props.voiceDock ?? null}
       {dragging ? <span className={styles['visuallyHidden']} role="status">{t.dropHere}</span> : null}
     </div>
   );

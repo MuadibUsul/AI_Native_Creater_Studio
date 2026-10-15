@@ -14,8 +14,9 @@ import {
   type RealtimeWord,
   type StreamingAsrSession,
   type StreamingSpeechRecognizer,
+  type StreamingSpeechSynthesizer,
 } from '@ancs/contracts';
-import { bindAttention, isUnclosedUtterance, joinTranscript, verifyVoiceSessionCredential, type DomainDeps } from '@ancs/domain';
+import { bindAttention, isUnclosedUtterance, joinTranscript, verifyVoiceSessionCredential, voiceReplyText, voiceSessionGate, type DomainDeps } from '@ancs/domain';
 
 /**
  * V6-2 Realtime Gateway：浏览器的麦克风音频 → 流式语音识别 → 边说边出的转写 + 按发话时刻绑定的指向 →
@@ -24,6 +25,8 @@ import { bindAttention, isUnclosedUtterance, joinTranscript, verifyVoiceSessionC
  * - 鉴权：只认 API 签发的语音会话短期凭证（同一把 ANCS_VOICE_SESSION_SECRET）；浏览器来源必须在白名单内；
  * - 网关不读写工程、不调用 AI、不采用任何东西；长期 Provider Key 只在本进程；
  * - 一句话以未闭合的词结尾（"但是/不对/除了…"）先保留，等后半句（最多 holdMs）。
+ * - AI 的语音回应（Issue #9）：`speak` 只带一轮的 id，回应文字在本会话所属作品里读；边合成边下发，
+ *   `stop-speaking` 或用户开口（`speech-start`）立即中止并丢弃未发出的音频。同一时刻只念一轮。
  */
 
 const MAX_POINTER_SAMPLES = 4000;
@@ -32,6 +35,8 @@ const START_TIMEOUT_MS = 10_000;
 export interface RealtimeGatewayOptions {
   deps: DomainDeps;
   recognizer?: StreamingSpeechRecognizer;
+  /** AI 语音回应的合成（不配 = ready.tts 为 null，客户端退回浏览器朗读） */
+  synthesizer?: StreamingSpeechSynthesizer;
   /** 允许的浏览器来源（完整 origin）；没有 Origin 头的非浏览器客户端不受此限 */
   allowedOrigins: readonly string[];
   /** 未说完的话最多等多久（毫秒，缺省 4000） */
@@ -77,8 +82,52 @@ export function createRealtimeGateway(options: RealtimeGatewayOptions): Realtime
     );
   };
 
-  function handleConnection(ws: WebSocket, scope: { workspaceId: string; projectId: string; sessionId: string }) {
+  function handleConnection(ws: WebSocket, scope: { workspaceId: string; projectId: string; sessionId: string; generation: number; expiresAt: Date }) {
     const send = (message: RealtimeServerMessage) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message)); };
+    // 会话门（Issue #9）：凭证只在握手时校验；到期那一刻、以及交出每一句话之前复查（过期/撤销/关闭/换代都立刻生效）
+    let sessionClosed = false;
+    const closeForSession = (reason: string) => {
+      if (sessionClosed) return;
+      sessionClosed = true;
+      stopReply();
+      log('session_gate_closed', { session: scope.sessionId, reason });
+      send({ type: 'error', code: 'SESSION_EXPIRED', message: 'the voice session has expired or was closed; reconnect to continue', retryable: false });
+      if (ws.readyState === ws.OPEN) ws.close(REALTIME_CLOSE_CODES.CREDENTIAL_INVALID, 'voice session expired');
+    };
+    const expiryTimer = setTimeout(() => closeForSession('VOICE_SESSION_EXPIRED'), Math.max(0, Math.min(scope.expiresAt.getTime() - Date.now(), 2_147_000_000)));
+    // 正在念的一轮回应（同一时刻只有一个）；中止 = 停止合成、不再下发
+    let reply: { turnId: string; controller: AbortController } | null = null;
+    const stopReply = () => { reply?.controller.abort(); };
+    const speak = async (turnId: string, voiceId: string | null) => {
+      stopReply();
+      const synthesizer = options.synthesizer;
+      if (synthesizer === undefined) { send({ type: 'reply-end', turnId, reason: 'failed', message: 'speech replies are not configured on the server' }); return; }
+      const text = await voiceReplyText(options.deps, { workspaceId: scope.workspaceId, projectId: scope.projectId, turnId }).catch(() => null);
+      if (text === null) { send({ type: 'reply-end', turnId, reason: 'failed', message: 'no reply to read for this turn' }); return; }
+      const voice = synthesizer.voices.find((item) => item.id === voiceId) ?? synthesizer.voices[0]!;
+      const controller = new AbortController();
+      const current = { turnId, controller };
+      reply = current;
+      const started = Date.now();
+      let firstChunkMs: number | null = null;
+      let bytes = 0;
+      send({ type: 'reply-start', turnId, sampleRate: synthesizer.sampleRate, voiceId: voice.id });
+      try {
+        await synthesizer.synthesize({ text, voiceId: voice.id, locale, signal: controller.signal }, (chunk) => {
+          if (controller.signal.aborted || ws.readyState !== ws.OPEN) return;
+          if (firstChunkMs === null) firstChunkMs = Date.now() - started;
+          bytes += chunk.byteLength;
+          ws.send(chunk, { binary: true });
+        });
+        send({ type: 'reply-end', turnId, reason: controller.signal.aborted ? 'stopped' : 'done', message: null });
+      } catch (error) {
+        send({ type: 'reply-end', turnId, reason: controller.signal.aborted ? 'stopped' : 'failed', message: controller.signal.aborted ? null : 'speech reply failed' });
+        if (!controller.signal.aborted) log('reply_failed', { session: scope.sessionId, code: (error as { code?: unknown }).code ?? 'UNKNOWN' });
+      } finally {
+        if (reply === current) reply = null;
+        log('reply', { session: scope.sessionId, characters: text.length, voice: voice.id, firstChunkMs, totalMs: Date.now() - started, audioSeconds: Number((bytes / 2 / synthesizer.sampleRate).toFixed(2)), stopped: controller.signal.aborted });
+      }
+    };
     let locale: 'zh-CN' | 'en' = 'zh-CN';
     let asr: StreamingAsrSession | null = null;
     let started = false;
@@ -87,6 +136,8 @@ export function createRealtimeGateway(options: RealtimeGatewayOptions): Realtime
     let utterance: { id: string; finals: string[]; words: RealtimeWord[]; partial: string; partialWords: RealtimeWord[]; start: number; revision: number; hold: NodeJS.Timeout | null } | null = null;
     const startTimer = setTimeout(() => { if (!started) ws.close(REALTIME_CLOSE_CODES.PROTOCOL_ERROR, 'start message expected'); }, START_TIMEOUT_MS);
 
+    /** 正在过会话门的句子：关麦收尾时等它们交出后再关连接 */
+    const deliveries = new Set<Promise<void>>();
     const currentText = () => (utterance === null ? '' : joinTranscript([...utterance.finals, utterance.partial], locale));
     const attentionNow = () => bindAttention({
       words: utterance === null ? [] : [...utterance.words, ...utterance.partialWords],
@@ -102,12 +153,27 @@ export function createRealtimeGateway(options: RealtimeGatewayOptions): Realtime
       if (text.length === 0) return;
       const attention = bindAttention({ words: current.words, samples, sampleRate: REALTIME_SAMPLE_RATE, locale, utteranceStart: current.start });
       send({ type: 'transcript', utteranceId: current.id, revision: current.revision + 1, text, isFinal: true });
-      send({ type: 'utterance', utteranceId: current.id, text, attention });
-      log('utterance', { session: scope.sessionId, evidence: attention.evidence, characters: text.length });
+      // 交出之前复查会话门：会话已失效的一句不交给 AI（查不了库也不交：如实请用户再说一次，不自动重试）
+      const delivery = voiceSessionGate(options.deps, { sessionId: scope.sessionId, generation: scope.generation }).then(
+        (gate) => {
+          if (!gate.open) { closeForSession(gate.reason); return; }
+          send({ type: 'utterance', utteranceId: current.id, text, attention });
+          log('utterance', { session: scope.sessionId, evidence: attention.evidence, characters: text.length });
+        },
+        () => send({ type: 'error', code: 'SESSION_CHECK_FAILED', message: 'could not confirm the voice session; please say that again', retryable: true }),
+      );
+      deliveries.add(delivery);
+      void delivery.finally(() => deliveries.delete(delivery));
     };
 
     /** 一句话说完（服务端端点 / UtteranceEnd / 关麦）：未闭合就先保留，等后半句 */
     const finalize = (force: boolean) => {
+      if (utterance !== null && utterance.finals.length === 0 && utterance.partial === '' && utterance.hold === null) {
+        // 这一段最终什么也没识别出来（噪声）：清掉临时显示，不交出
+        send({ type: 'transcript', utteranceId: utterance.id, revision: utterance.revision + 1, text: '', isFinal: true });
+        utterance = null;
+        return;
+      }
       if (utterance === null || utterance.finals.length === 0) return;
       const text = joinTranscript(utterance.finals, locale);
       if (!force && isUnclosedUtterance(text, locale)) {
@@ -152,13 +218,30 @@ export function createRealtimeGateway(options: RealtimeGatewayOptions): Realtime
             if (result.speechFinal) finalize(false);
           },
           onUtteranceEnd() { finalize(false); },
-          onError(error) { send({ type: 'error', code: error.code, message: error.message, retryable: error.retryable }); },
+          onSpeechStart(atSeconds) {
+            // 用户开口：先停掉正在念的回应（不等转写），再告诉客户端立刻停播
+            stopReply();
+            send({ type: 'speech-start', atSeconds });
+          },
+          onError(error) {
+            // 可重试的失败只丢掉这一句（如实告诉用户再说一次；不自动重试）；不可重试的失败客户端会结束会话
+            if (error.retryable && utterance !== null && utterance.hold === null) {
+              send({ type: 'transcript', utteranceId: utterance.id, revision: utterance.revision + 1, text: '', isFinal: true });
+              utterance = null;
+            }
+            send({ type: 'error', code: error.code, message: error.message, retryable: error.retryable });
+          },
           onClose() {
             finalize(true);
-            if (ending && ws.readyState === ws.OPEN) ws.close(1000, 'done');
+            if (ending) void Promise.allSettled([...deliveries]).then(() => { if (ws.readyState === ws.OPEN) ws.close(1000, 'done'); });
           },
         });
-        send({ type: 'ready', asr: { providerId: options.recognizer.providerId, implementation: options.recognizer.implementation, model: options.recognizer.model } });
+        const synthesizer = options.synthesizer;
+        send({
+          type: 'ready',
+          asr: { providerId: options.recognizer.providerId, implementation: options.recognizer.implementation, model: options.recognizer.model },
+          tts: synthesizer === undefined ? null : { providerId: synthesizer.providerId, implementation: synthesizer.implementation, model: synthesizer.model, voices: [...synthesizer.voices] },
+        });
       } catch (error) {
         const detail = error as { code?: unknown; message?: unknown; retryable?: unknown };
         send({ type: 'error', code: typeof detail.code === 'string' ? detail.code : 'ASR_CONNECT_FAILED', message: 'could not start speech recognition', retryable: detail.retryable !== false });
@@ -186,13 +269,19 @@ export function createRealtimeGateway(options: RealtimeGatewayOptions): Realtime
         if (samples.length > MAX_POINTER_SAMPLES) samples.splice(0, samples.length - MAX_POINTER_SAMPLES);
       } else if (message.type === 'end') {
         ending = true;
+        stopReply();
         if (asr === null) ws.close(1000, 'done');
         else asr.finish();
+      } else if (message.type === 'stop-speaking') {
+        stopReply();
+      } else if (message.type === 'speak') {
+        if (started && !ending) void speak(message.turnId, message.voiceId);
       }
-      // stop-speaking：AI 的语音回应目前由浏览器朗读，本地已停播；网关没有未播放的服务端音频需要丢弃
     });
     ws.on('close', () => {
       clearTimeout(startTimer);
+      clearTimeout(expiryTimer);
+      stopReply();
       if (utterance?.hold) clearTimeout(utterance.hold);
       asr?.close();
     });
