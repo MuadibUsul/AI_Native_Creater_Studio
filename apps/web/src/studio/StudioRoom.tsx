@@ -632,7 +632,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   );
 
   return (
-    <div className={styles['room']} lang={locale}>
+    <div className={styles['room']} lang={locale} data-voice={voiceDock === null ? undefined : 'on'}>
       <header className={styles['topbar']}>
         <Link className="btn icononly ghost small" href={`/?workspaceId=${encodeURIComponent(workspaceId)}`} aria-label={t.back}><QuietIcon name="chevron" style={{ transform: 'rotate(180deg)' }} /></Link>
         <div className={styles['titleGroup']}>

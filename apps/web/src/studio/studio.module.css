@@ -66,6 +66,10 @@
   position: absolute;
   top: var(--ui-space-3);
   left: var(--ui-space-3);
+  max-width: calc(100% - 2 * var(--ui-space-3));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   padding: 3px 10px;
   border-radius: var(--ui-radius-pill);
   font-size: var(--ui-type-metadata);
@@ -495,4 +499,8 @@
   .strategyHint { flex-basis: 100%; white-space: normal; }
   .shortcutsButton { display: none; }
   .zoom :global(.btn.small:last-child) { display: none; }
+  /* Issue #9：手机上开着语音时看片区至少留出一块能看清的高度，下方区域改为滚动（语音条与反馈只占画面下方一小条） */
+  .room[data-voice='on'] { grid-template-rows: auto minmax(min(300px, 44vh), 1fr) minmax(0, auto); }
+  .room[data-voice='on'] .dock { min-height: 0; overflow-y: auto; }
+  .stage[data-voice='on'] { padding-bottom: 88px; }
 }

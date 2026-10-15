@@ -39,7 +39,7 @@
 }
 .caption b { font-weight: 500; }
 .detail { color: var(--studio-on-matte-muted, #B3B3B3); }
-.captionAlert { box-shadow: inset 3px 0 0 var(--studio-on-matte, #F5F5F5); text-align: left; }
+.captionAlert { box-shadow: inset 0 0 0 1px var(--studio-on-matte-muted, #B3B3B3); }
 
 .pill {
   pointer-events: auto;
@@ -139,7 +139,7 @@
   .primary:not(.iconOnly):has(> span:not(.label)) { width: auto; padding: 0 12px; }
   .status { padding: 0 8px; }
   .statusLabel { min-width: 0; }
-  .caption { font-size: 12px; line-height: 16px; }
+  .caption { font-size: 12px; line-height: 16px; -webkit-line-clamp: 1; line-clamp: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

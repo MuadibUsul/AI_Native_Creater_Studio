@@ -220,6 +220,7 @@ export function useVoice(options: {
         case 'speech-start':
           player.stop();
           setHearing(true);
+          setAttention(null); // 新的一句：不再显示上一句绑定的指向
           callbacks.current.onSpeechStart?.();
           return;
         case 'transcript':
@@ -238,7 +239,7 @@ export function useVoice(options: {
           return;
         case 'utterance':
           resetUtterance();
-          setAttention(message.attention);
+          setAttention(null);
           callbacks.current.onUtterance({ utteranceId: message.utteranceId, text: message.text, attention: message.attention });
           return;
         case 'reply-start':

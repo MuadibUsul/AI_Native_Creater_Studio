@@ -234,7 +234,12 @@ try {
       await new Promise((done) => setTimeout(done, 40));
     }
   };
-  const currentSession = async () => (await client.studio.state(workspace.id, ref.projectId)).session;
+  const currentSession = async () => {
+    const session = (await client.studio.state(workspace.id, ref.projectId)).session;
+    if (session !== null) sessionsSeen.add(session.id);
+    return session;
+  };
+  const sessionsSeen = new Set([ref.sessionId]);
   const voiceTurns = async () => {
     const session = await currentSession();
     return session === null ? [] : (await client.agent.listTurns(workspace.id, session.id)).filter((turn) => turn.message !== '用这些素材剪出第一版。');
@@ -356,8 +361,8 @@ try {
   await shot('05-zh-desktop-light-barge-in');
   await playEnded();
   await firstAfter(bargeOnset, (entry) => entry.phase === 'thinking', 30_000, 'barge utterance delivered');
-  const stoppedReply = replyEvents().find((event) => event.stopped === true);
-  pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `念了 ${String(stoppedReply.audioSeconds)} s 后中止`}`);
+  const stoppedReply = await waitFor(async () => replyEvents().find((event) => event.stopped === true), Boolean, { timeoutMs: 10_000, intervalMs: 200, label: 'stopped reply logged' }).catch(() => undefined);
+  pass('打断：AI 说话时开口，回应立即停下，这句话接着交给 AI', `开口到停声 ${String(metrics.bargeIns[0].speechOnsetToSilenceMs)} ms（阶段 → ${stopped.phase}）；网关记录被打断的回应 ${stoppedReply === undefined ? '未见' : `已下发 ${String(stoppedReply.audioSeconds)} s 音频后中止`}`);
 
   // 继续：打断那句的回应 → "停止说话"只停声音
   const speaking4 = await firstAfter(stopped.t + 1, (entry) => entry.phase === 'speaking', 360_000, 'continue reply audio');
@@ -528,7 +533,8 @@ try {
 
   // ================= 用量 =================
   const allTurns = [];
-  for (const session of [ref.sessionId, (await currentSession())?.id].filter(Boolean)) allTurns.push(...await client.agent.listTurns(workspace.id, session));
+  await currentSession();
+  for (const session of sessionsSeen) allTurns.push(...await client.agent.listTurns(workspace.id, session));
   const seen = new Set();
   for (const turn of allTurns) {
     if (seen.has(turn.id) || turn.message === '用这些素材剪出第一版。') continue;

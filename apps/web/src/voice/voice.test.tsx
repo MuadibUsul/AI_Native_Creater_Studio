@@ -205,7 +205,10 @@ describe('V6-2 / Issue #9 连续语音（浏览器侧）', () => {
     expect(phase()).toBe('recognizing');
     act(() => socket.audio(4800));
     expect(played).toHaveLength(2);
-    act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_3', revision: 1, text: '', isFinal: true }));
+    // 新的一句：不再显示上一句绑定的指向（实测发现的回归）
+    act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_3', revision: 1, text: '再', isFinal: false }));
+    expect(caption()).toBe('再');
+    act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_3', revision: 2, text: '', isFinal: true }));
 
     // 停止这一轮：让 AI 停下正在跑的第二轮（不是结束语音）
     await waitFor(() => expect(phase()).toBe('thinking'));

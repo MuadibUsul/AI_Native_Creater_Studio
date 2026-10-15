@@ -160,7 +160,7 @@ export function StudioVoiceDock(props: VoiceDockProps) {
               <QuietIcon name="check" /><span className={styles['label']}>{t.keep}</span>
             </button>
             <button type="button" className={styles['button']} disabled={props.trial.busy} aria-label={t.discard} onClick={props.trial.onDiscard}>
-              <QuietIcon name="close" /><span className={styles['label']}>{t.discard}</span>
+              <QuietIcon name="undo" /><span className={styles['label']}>{t.discard}</span>
             </button>
           </>
         ) : null}
