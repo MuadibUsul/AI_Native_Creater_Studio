@@ -2770,7 +2770,9 @@ export {
   STUDIO_ANALYSIS_STATES,
   STUDIO_ASPECT_RATIOS,
   createStudioProjectRequestSchema,
+  fetchStudioArticleRequestSchema,
   studioAnalysisStateSchema,
+  studioArticleDraftSchema,
   studioAspectRatioSchema,
   studioEffectSchema,
   studioNarrationSchema,
@@ -2779,7 +2781,7 @@ export {
   studioStateSchema,
   undoChangeResponseSchema,
 } from './studio.js';
-export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export type { CreateStudioProjectRequest, FetchStudioArticleRequest, StudioAnalysisState, StudioArticleDraft, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
 export {
   STRATEGY_ERROR_REASONS,
   STRATEGY_PACK_KINDS,

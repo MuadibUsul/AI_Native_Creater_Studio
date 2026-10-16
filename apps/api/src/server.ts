@@ -250,7 +250,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerFinalRenderRoutes(instance, authDeps);
         registerAgentRoutes(instance, authDeps);
         registerPreviewRoutes(instance, { ...authDeps, ...(storageDeps === undefined ? {} : { storage: storageDeps }) });
-        registerStudioRoutes(instance, authDeps);
+        registerStudioRoutes(instance, authDeps, contentDeps?.articleFetcher === undefined ? {} : { articleFetcher: contentDeps.articleFetcher });
         registerGenerationRoutes(instance, authDeps);
         registerReviewRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);

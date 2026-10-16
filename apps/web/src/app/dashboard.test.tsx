@@ -143,6 +143,12 @@ describe('Dashboard', () => {
     await userEvent.clear(screen.getByRole('textbox', { name: '想做的视频' }));
     expect(screen.getByRole('button', { name: '开始创作' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('group', { name: '试试这样说' })).toBeNull();
+    // 链接导入：同样进共看片室新建页（服务端抓正文），不再走旧版模板脚本
+    await userEvent.click(screen.getByRole('radio', { name: '链接导入' }));
+    await userEvent.type(screen.getByRole('textbox', { name: '想做的视频' }), 'https://news.example/a');
+    await userEvent.click(screen.getByRole('button', { name: '开始创作' }));
+    expect(push).toHaveBeenLastCalledWith('/w/ws_1/studio/new');
+    expect(JSON.parse(window.sessionStorage.getItem('ancs-studio-draft') ?? 'null')).toEqual({ start: 'link', url: 'https://news.example/a' });
   });
 
   it('失败：错误块可重试（重新调用 SDK）', async () => {

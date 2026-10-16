@@ -78,6 +78,8 @@ import {
   strategyPackSchema,
   strategyPackSummarySchema,
   createStudioProjectRequestSchema,
+  fetchStudioArticleRequestSchema,
+  studioArticleDraftSchema,
   studioProjectRefSchema,
   studioStateSchema,
   applyReviewResponseSchema,
@@ -395,6 +397,8 @@ import {
   type StrategyPack,
   type StrategyPackSummary,
   type CreateStudioProjectRequest,
+  type FetchStudioArticleRequest,
+  type StudioArticleDraft,
   type StudioProjectRef,
   type StudioState,
   type ApplyReviewRequest,
@@ -1480,6 +1484,8 @@ export interface AncsClient {
     undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
     /** 显式修改项目制作规则的"允许"开关（V6-3：例如素材工程开启程序化特效）；返回修改后的规则 */
     updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
+    /** 从链接导入文章原文（服务端抓取并抽正文，不建工程；用户核对后随 create 的 article 提交） */
+    fetchArticle(workspaceId: string, input: FetchStudioArticleRequest): Promise<StudioArticleDraft>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -3123,6 +3129,11 @@ export function createClient(options: ClientOptions): AncsClient {
           idempotencyKey: mutation?.idempotencyKey,
         }),
       state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
+      fetchArticle: (workspaceId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/studio-article-drafts`, studioArticleDraftSchema, {
+          body: input,
+          bodySchema: fetchStudioArticleRequestSchema,
+        }),
       undoChange: (workspaceId, projectId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
       updateProductionPolicy: (workspaceId, projectId, input, mutation) =>

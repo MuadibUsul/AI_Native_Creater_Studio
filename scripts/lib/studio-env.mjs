@@ -33,7 +33,8 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
  *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite', synthesizer?: (probe: object) => object },
- *   generation?: { provider?: object, behavior?: () => string } }} options
+ *   generation?: { provider?: object, behavior?: () => string }, articleFetcher?: object }} options
+ *   articleFetcher：从链接导入文章用的网页抓取器（真实抓取器会拦下本机地址，验收脚本注入脚本化抓取器）。
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
  *   voice：启动 Realtime Gateway。`{ script }` = 流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）；
@@ -61,7 +62,7 @@ export async function startStudioEnv(options) {
   const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl });
   const storage = new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') });
   const voiceSecret = randomBytes(32).toString('hex');
-  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret } });
+  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }) });
 
   // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
   let realtime = null;

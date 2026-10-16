@@ -49,7 +49,11 @@ function pixel(file, seconds, x, y) {
 
 try {
   await mkdir(evidenceDir, { recursive: true });
-  env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v65-', effects: { codegen: 'disabled' }, narration: {} });
+  // 从链接导入：真实抓取器会拦下本机地址（SSRF 守卫），这里注入脚本化抓取器返回一篇文章网页
+  const articleUrl = 'https://news.example/fresh-water';
+  const articleHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Fresh water</title><script>tracking()</script></head><body><nav>Home</nav><article>${ARTICLE.split('\n\n').map((paragraph) => `<p>${paragraph}</p>`).join('')}</article></body></html>`;
+  const articleFetcher = { kind: 'scripted', fetch: async ({ url }) => { if (url !== articleUrl) throw new Error(`unexpected url ${url}`); return { finalUrl: url, contentType: 'text/html; charset=utf-8', bytes: new TextEncoder().encode(articleHtml) }; } };
+  env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v65-', effects: { codegen: 'disabled' }, narration: {}, articleFetcher });
   const { client, password } = await env.signedInClient(email);
   const workspace = await client.workspaces.create({ name: '文章转视频验收' });
 
@@ -65,11 +69,16 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 20_000 });
 
-  // 1. 新建：从文章开始
-  await page.goto(`${env.baseUrl}/w/${workspace.id}/studio/new`, { waitUntil: 'networkidle' });
-  await page.getByLabel('作品名称').fill('Fresh water');
-  await page.getByRole('radio', { name: /从文章开始/ }).click();
-  await page.getByLabel('文章或讲稿').fill(ARTICLE);
+  // 1. 首页"链接导入" → 新建页自动抓取正文（标题取网页标题；脚本、导航不进原文）→ 核对后开始
+  await page.goto(`${env.baseUrl}/?workspaceId=${workspace.id}`, { waitUntil: 'networkidle' });
+  await page.getByRole('radio', { name: '链接导入' }).click();
+  await page.getByRole('textbox', { name: '想做的视频' }).fill(articleUrl);
+  await page.getByRole('button', { name: '开始创作' }).click();
+  await page.getByText('已从 news.example 导入 3 段正文。请核对，AI 只会用这里的内容。').waitFor({ timeout: 30_000 });
+  if ((await page.getByLabel('文章或讲稿').inputValue()) !== ARTICLE) throw new Error(`imported text differs: ${await page.getByLabel('文章或讲稿').inputValue()}`);
+  if ((await page.getByLabel('作品名称').inputValue()) !== 'Fresh water') throw new Error('title should come from the page title');
+  if ((await page.getByRole('radio', { name: /从文章开始/ }).getAttribute('aria-checked')) !== 'true') throw new Error('article start should be chosen');
+  pass('首页链接导入 → 抓取正文给人核对', `${articleUrl}：3 段正文、标题取网页标题；网页脚本与导航不进原文`);
   const narrationChecked = await page.getByRole('checkbox', { name: 'AI 配音讲述' }).isChecked();
   if (!narrationChecked) throw new Error('voice-over should be chosen by default');
   await shot('01-new-from-article');

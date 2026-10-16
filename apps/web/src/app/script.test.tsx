@@ -109,6 +109,27 @@ describe('Script', () => {
     expect(await screen.findByText('开场与核心事实')).toBeTruthy();
   });
 
+  it('测试替身生成的稿子如实标出（不当作 AI 结果），并引导到文章讲述（带上来源链接）；真实模型生成的照常显示', async () => {
+    const source = { id: 'src_1', workspaceId: 'ws_1', projectId: 'prj_1', url: 'https://example.com/a', title: '原文', publisher: 'example.com', author: null, publishedAt: null, retrievedAt: '2026-10-07T00:00:00Z', contentHash: 'a'.repeat(64), excerpt: '摘录', snapshotKind: 'live_fetch', note: null };
+    const mocked = mockClient({ ...editableWorkspace, narrative: { current: vi.fn().mockResolvedValue(plan([block()])) }, content: { sources: vi.fn().mockResolvedValue([source]) }, evidence: { claims: vi.fn().mockResolvedValue([]), citations: vi.fn().mockResolvedValue([]) } });
+    const view = renderWithClient(<ScriptPage />, mocked);
+    expect(await screen.findByText('这份稿子是测试替身按模板拼出来的，不能用')).toBeTruthy();
+    expect(screen.getByText('测试替身生成 · 不是真实 AI 结果')).toBeTruthy();
+    expect(screen.queryByText('AI 草稿 · 请核对事实')).toBeNull();
+    await screen.findByText('原文');
+    const action = screen.getByRole('link', { name: '用这篇文章新建（文章讲述）' });
+    expect(action.getAttribute('href')).toBe('/w/ws_1/studio/new');
+    action.addEventListener('click', (event) => event.preventDefault());
+    await userEvent.click(action);
+    expect(JSON.parse(window.sessionStorage.getItem('ancs-studio-draft') ?? 'null')).toEqual({ start: 'link', url: 'https://example.com/a' });
+    view.unmount();
+
+    const real = mockClient({ ...editableWorkspace, narrative: { current: vi.fn().mockResolvedValue({ ...plan([block()]), generation: { method: 'LLM', providerId: 'anthropic', modelVersion: 'claude', promptVersion: 'narrative-v1' } }) }, content: { sources: vi.fn().mockResolvedValue([]) }, evidence: { claims: vi.fn().mockResolvedValue([]), citations: vi.fn().mockResolvedValue([]) } });
+    renderWithClient(<ScriptPage />, real);
+    expect(await screen.findByText('AI 草稿 · 请核对事实')).toBeTruthy();
+    expect(screen.queryByText('这份稿子是测试替身按模板拼出来的，不能用')).toBeNull();
+  });
+
   it('锁定后编辑禁用；并发锁定导致保存 409 时保留文本草稿', async () => {
     const updateBlock = vi
       .fn()
@@ -217,7 +238,7 @@ describe('Script (English UI)', () => {
     expect(screen.getByText('Script draft')).toBeTruthy();
     expect(screen.getByText('1 / 2 paragraphs locked')).toBeTruthy();
     expect(screen.getAllByText('About 1 min 05 s').length).toBeGreaterThan(0);
-    expect(screen.getByText('AI draft · Check the facts')).toBeTruthy();
+    expect(screen.getByText('Made by a test double · not a real AI result')).toBeTruthy();
     expect(screen.getByText('Draft · About 4 s')).toBeTruthy();
     expect(screen.getByText('Approved · About 4 s')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Lock' })).toBeTruthy();

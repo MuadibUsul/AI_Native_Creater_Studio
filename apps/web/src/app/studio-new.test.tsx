@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { mockClient, renderWithClient } from '@/test-utils.js';
+import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -43,5 +43,38 @@ describe('新建作品', () => {
     await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', {
       title: '淡水', aspectRatio: '16:9', locale: 'zh-CN', article: { title: '淡水', text: 'Water covers 71 percent of the Earth.' }, narration: false,
     }, expect.anything()));
+  });
+
+  it('从链接导入：服务端抓到的正文填进文章框给人核对；建工程时带上来源；抓不到时说明原因', async () => {
+    const create = vi.fn().mockResolvedValue({ projectId: 'prj_3', sequenceId: 'seq_3', sessionId: 'ses_3' });
+    const fetchArticle = vi.fn()
+      .mockRejectedValueOnce(apiError(403, 'FORBIDDEN', 'blocked', { reason: 'BLOCKED_TARGET' }))
+      .mockResolvedValue({ title: '中美谈判背后潜藏的机会', text: '第一段正文。\n\n第二段正文。', sourceUrl: 'https://news.example/a', publisher: 'news.example', paragraphs: 2, truncated: false });
+    renderWithClient(<NewStudioProjectPage />, mockClient({ studio: { create, fetchArticle } }));
+    await userEvent.click(screen.getByRole('radio', { name: /从文章开始/ }));
+    await userEvent.type(screen.getByLabelText('从链接导入'), 'http://10.0.0.1/a');
+    await userEvent.click(screen.getByRole('button', { name: '导入正文' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('这个地址不能访问（内网地址或被安全规则拦下）。');
+    await userEvent.clear(screen.getByLabelText('从链接导入'));
+    await userEvent.type(screen.getByLabelText('从链接导入'), 'https://news.example/a{Enter}');
+    await waitFor(() => expect((screen.getByLabelText('文章或讲稿') as HTMLTextAreaElement).value).toBe('第一段正文。\n\n第二段正文。'));
+    expect(fetchArticle).toHaveBeenLastCalledWith('ws_1', { url: 'https://news.example/a' });
+    expect((screen.getByLabelText('作品名称') as HTMLInputElement).value).toBe('中美谈判背后潜藏的机会');
+    expect(screen.getByText('已从 news.example 导入 2 段正文。请核对，AI 只会用这里的内容。')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '开始' }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', {
+      title: '中美谈判背后潜藏的机会', aspectRatio: '16:9', locale: 'zh-CN',
+      article: { title: '中美谈判背后潜藏的机会', text: '第一段正文。\n\n第二段正文。', sourceUrl: 'https://news.example/a' }, narration: true,
+    }, expect.anything()));
+  });
+
+  it('首页"链接导入"带来的链接：进入即抓取正文（只读一次草稿）', async () => {
+    window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify({ start: 'link', url: 'https://news.example/b' }));
+    const fetchArticle = vi.fn().mockResolvedValue({ title: '标题', text: '正文。', sourceUrl: 'https://news.example/b', publisher: 'news.example', paragraphs: 1, truncated: true });
+    renderWithClient(<NewStudioProjectPage />, mockClient({ studio: { create: vi.fn(), fetchArticle } }));
+    await waitFor(() => expect(fetchArticle).toHaveBeenCalledWith('ws_1', { url: 'https://news.example/b' }));
+    expect(screen.getByRole('radio', { name: /从文章开始/ }).getAttribute('aria-checked')).toBe('true');
+    expect(await screen.findByText(/文章太长，只导入了前面的部分。/)).toBeTruthy();
+    expect(window.sessionStorage.getItem('ancs-studio-draft')).toBeNull();
   });
 });

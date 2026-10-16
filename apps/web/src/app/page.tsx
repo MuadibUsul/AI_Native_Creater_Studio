@@ -97,22 +97,19 @@ export default function DashboardPage() {
     },
   });
   /**
-   * 开始：素材剪辑 / 文章讲述 → 共看片室新建页（想法或文章随草稿带过去，进入后预填）；链接导入 → 旧版导入流程。
-   * 草稿只放在本标签页的 sessionStorage，不上传。
+   * 开始：三种起点都进共看片室新建页（V6）——想法预填作品名并在进入后预填到对话框；文章预填到文章框；
+   * 链接由服务端抓取正文后填进文章框给用户核对（不再走旧版导入 + 模板脚本）。草稿只放在本标签页的 sessionStorage，不上传。
    */
   const start = (chosen: StartMode, text: string) => {
     if (!effectiveWorkspaceId) return;
     const value = text.trim();
+    const draft = chosen === 'article' ? { start: 'article', article: value }
+      : chosen === 'link' ? { start: 'link', url: value }
+        : { start: 'footage', brief: value };
     try {
-      if (chosen === 'link') {
-        const kind = value && !/^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/i.test(value) ? 'text' : 'url';
-        window.sessionStorage.setItem('ancs-new-project-draft', JSON.stringify({ kind, value }));
-      } else {
-        window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify(chosen === 'article' ? { start: 'article', article: value } : { start: 'footage', brief: value }));
-      }
-    } catch { /* The new project pages still work without session storage. */ }
-    if (chosen === 'link') window.location.href = `/w/${effectiveWorkspaceId}/new`;
-    else router.push(`/w/${effectiveWorkspaceId}/studio/new`);
+      window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify(draft));
+    } catch { /* The new project page still works without session storage. */ }
+    router.push(`/w/${effectiveWorkspaceId}/studio/new`);
   };
   const canStart = mode === 'footage' || source.trim().length > 0;
   const submit = (event: FormEvent) => {

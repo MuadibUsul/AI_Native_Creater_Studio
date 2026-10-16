@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
-import { projectArticleSchema } from './narration.js';
+import { MAX_ARTICLE_CHARS, projectArticleSchema } from './narration.js';
 import { generationBudgetSchema, generationSchema } from './paid-generation.js';
 
 /**
@@ -27,6 +27,25 @@ export const createStudioProjectRequestSchema = z.object({
   narration: z.boolean().optional(),
 }).strict().refine((value) => value.narration === undefined || value.article !== undefined, { message: 'narration is chosen together with an article', path: ['narration'] });
 export type CreateStudioProjectRequest = z.input<typeof createStudioProjectRequestSchema>;
+
+/**
+ * 从链接导入文章（文章讲述的起点）：服务端按 SSRF 守卫抓取页面、抽出正文，返回给用户核对后再建工程；不写库。
+ * 正文超过 MAX_ARTICLE_CHARS 时按段截断（truncated 为真）。
+ */
+export const fetchStudioArticleRequestSchema = z.object({
+  url: z.string().trim().min(1).max(2048),
+}).strict();
+export type FetchStudioArticleRequest = z.infer<typeof fetchStudioArticleRequestSchema>;
+
+export const studioArticleDraftSchema = z.object({
+  title: z.string().max(200),
+  text: z.string().min(1).max(MAX_ARTICLE_CHARS),
+  sourceUrl: z.string().url().max(2048),
+  publisher: z.string().max(200),
+  paragraphs: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+}).strict();
+export type StudioArticleDraft = z.infer<typeof studioArticleDraftSchema>;
 
 export const studioProjectRefSchema = z.object({
   projectId: opaqueIdSchema,
@@ -91,7 +110,11 @@ export const studioStateSchema = z.object({
     /** 项目制作规则是否允许付费生成画面（数字人出镜、生成镜头、选区重绘；V6-7/V6-8） */
     allowGeneratedVideo: z.boolean(),
     /** 从文章开始的工程：文章概况（原文在工程简报里） */
-    article: z.object({ title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative() }).strict().nullable(),
+    article: z.object({
+      title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative(),
+      /** 从链接导入的文章：来源地址 */
+      sourceUrl: z.string().max(2048).nullable().optional(),
+    }).strict().nullable(),
   }).strict(),
   sequenceId: opaqueIdSchema,
   /** 该序列最近的 AI 会话；没有时为空（只读读面不代建，界面在第一次说话前经 agent 接口建会话） */

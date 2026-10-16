@@ -7,15 +7,18 @@ import {
   ERROR_CODES,
   createStudioProjectRequestSchema,
   errorEnvelopeSchema,
+  fetchStudioArticleRequestSchema,
   opaqueIdSchema,
   productionPolicySchema,
+  studioArticleDraftSchema,
   studioProjectRefSchema,
   studioStateSchema,
   undoChangeResponseSchema,
   updateProductionPolicyRequestSchema,
+  type ArticleFetcher,
 } from '@ancs/contracts';
 import { projects } from '@ancs/db';
-import { createStudioProject, getStudioState, undoLastChange, updateProjectProductionPolicy, type DomainDeps } from '@ancs/domain';
+import { createStudioProject, fetchStudioArticle, getStudioState, undoLastChange, updateProjectProductionPolicy, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -24,6 +27,8 @@ import type { AuthDeps } from '../plugins/auth.js';
  * - GET  /workspaces/:id/projects/:projectId/studio：工作台状态（工程、序列、会话、素材上传/理解进度、AI 成本）；
  * - POST /workspaces/:id/projects/:projectId/undo-change：撤销"这次修改"（同一版本号的全部事件一组撤销）；
  * - PATCH /workspaces/:id/projects/:projectId/production-policy：用户显式修改制作规则的"允许"开关（V6-3 开启特效；写工作区事件）。
+ * - POST /workspaces/:id/studio-article-drafts：从链接导入文章原文（SSRF 守卫抓取 + 抽正文，不写库；需要 project:write，
+ *   避免只读成员把服务端当成抓取代理）。没有装配抓取器 → 501。
  * 其余动作复用既有接口：对话走 agent，试看走 previews，采用/撤回走 proposals，导出走 final-renders。
  * 鉴权：读 project:read，写 project:write；跨工作区 → 404（反枚举）。
  */
@@ -31,10 +36,19 @@ import type { AuthDeps } from '../plugins/auth.js';
 const workspaceParams = z.object({ id: opaqueIdSchema });
 const projectParams = workspaceParams.extend({ projectId: opaqueIdSchema });
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
+const FETCH_ERROR_RESPONSES = { ...ERROR_RESPONSES, 400: errorEnvelopeSchema, 413: errorEnvelopeSchema, 415: errorEnvelopeSchema, 501: errorEnvelopeSchema, 502: errorEnvelopeSchema };
 
-export function registerStudioRoutes(app: FastifyInstance, deps: AuthDeps): void {
+export function registerStudioRoutes(app: FastifyInstance, deps: AuthDeps, extra: { articleFetcher?: ArticleFetcher } = {}): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const domain: DomainDeps = { db: deps.db };
+
+  typed.post('/workspaces/:id/studio-article-drafts', {
+    schema: { tags: ['projects'], summary: '从链接导入文章原文（文章讲述的起点；不写库）', params: workspaceParams, body: fetchStudioArticleRequestSchema, response: { 200: studioArticleDraftSchema, ...FETCH_ERROR_RESPONSES } },
+  }, async (request) => {
+    await app.requireWorkspace(request, request.params.id, 'project:write');
+    if (extra.articleFetcher === undefined) throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '文章抓取器未配置', 501);
+    return fetchStudioArticle({ db: deps.db, articleFetcher: extra.articleFetcher }, { url: request.body.url });
+  });
 
   const requireProject = async (workspaceId: string, projectId: string): Promise<void> => {
     const rows = await deps.db.select({ id: projects.id }).from(projects)

@@ -387,6 +387,8 @@
 .start strong { font-weight: 500; }
 .start span { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
 .start[aria-checked="true"] { border-color: var(--ui-fg-primary); box-shadow: inset 0 0 0 1px var(--ui-fg-primary); background: var(--ui-selection-bg); }
+.linkRow { display: flex; gap: var(--ui-space-2); }
+.linkRow input { flex: 1; min-width: 0; }
 .checkRow { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
 .checkRow input { width: 16px; height: 16px; }
 

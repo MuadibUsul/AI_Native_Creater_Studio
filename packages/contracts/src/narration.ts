@@ -24,6 +24,8 @@ export const NARRATION_TRACK_PREFIX = 'VO';
 export const projectArticleSchema = z.object({
   title: z.string().trim().max(200).default(''),
   text: z.string().trim().min(1).max(MAX_ARTICLE_CHARS),
+  /** 从链接导入时的来源（抓取后的最终地址）；粘贴的文章没有 */
+  sourceUrl: z.string().url().max(2048).optional(),
 }).strict();
 export type ProjectArticle = z.infer<typeof projectArticleSchema>;
 

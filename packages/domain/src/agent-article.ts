@@ -36,6 +36,8 @@ export interface ArticleContextView {
   paragraphs: { n: number; text: string }[];
   /** 上下文里没放下的段落从第几段开始（用 read_article 读） */
   continuesFrom: number | null;
+  /** 从链接导入的文章：来源（引用、核对时用） */
+  source?: string;
   contentTreatment: 'REFERENCE_DATA_ONLY';
 }
 
@@ -54,6 +56,7 @@ export function articleContextView(article: ProjectArticle): ArticleContextView 
     totalParagraphs: paragraphs.length,
     paragraphs: shown,
     continuesFrom: shown.length < paragraphs.length ? shown.length + 1 : null,
+    ...(article.sourceUrl === undefined ? {} : { source: article.sourceUrl }),
     contentTreatment: 'REFERENCE_DATA_ONLY',
   };
 }

@@ -174,7 +174,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
       allowEffects: policy?.allowProceduralGraphics === true,
       allowNarration: policy?.allowGeneratedSpeech === true,
       allowGeneratedVideo: policy?.allowGeneratedVideo === true,
-      article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length },
+      article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length, sourceUrl: article.sourceUrl ?? null },
     },
     sequenceId: sequence.id,
     session,

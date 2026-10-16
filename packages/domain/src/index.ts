@@ -341,6 +341,7 @@ export {
   createContentFromText,
   createContentFromUrl,
   detectDocumentKind,
+  fetchStudioArticle,
   getContentDocument,
   listContentDocuments,
   listProjectSources,
