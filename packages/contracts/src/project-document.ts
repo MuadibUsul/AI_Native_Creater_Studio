@@ -5,6 +5,7 @@ import { frameRateSchema, mediaRangeSchema, mediaTimeSchema } from './common/med
 import { revisionSchema } from './common/revision.js';
 import { identitySnapshotSchema, sceneGraphSchema, sourceReferenceSchema } from './scene-graph.js';
 import { privacyTierSchema } from './workspaces.js';
+import { projectArticleSchema } from './narration.js';
 import { clipSchema, sequenceSchema, trackSchema } from './composition.js';
 import {
   animationBindingSchema,
@@ -27,6 +28,8 @@ export const projectBriefSchema = z.object({
   audience: z.string().max(1_000).default(''),
   language: z.string().max(40).nullable().default(null),
   notes: z.string().max(8_000).default(''),
+  /** V6-5：从文章开始的工程，文章原文（AI 的参考数据；图解里的数字只能出自这里） */
+  article: projectArticleSchema.nullable().default(null),
 });
 export type ProjectBrief = z.infer<typeof projectBriefSchema>;
 
@@ -63,6 +66,27 @@ export const productionPolicyOverridesSchema = productionPolicySchema
   .partial()
   .strict();
 export type ProductionPolicyOverrides = z.infer<typeof productionPolicyOverridesSchema>;
+
+/**
+ * 用户显式修改项目制作规则（V6-3 起：例如素材工程开启"程序化特效"）。只改各项"允许"开关，
+ * 不改工程模式；服务端在每次相应能力调用时仍按当前规则拦截。每次修改记审计事件。
+ */
+export const updateProductionPolicyRequestSchema = productionPolicySchema.pick({
+  allowGeneratedVideo: true,
+  allowGeneratedImage: true,
+  allowGeneratedSpeech: true,
+  allowVoiceReplacement: true,
+  allowScriptRewrite: true,
+  allowGeneratedMusic: true,
+  allowGeneratedSfx: true,
+  allowProceduralGraphics: true,
+  allowCaptions: true,
+  allowGenerativeFill: true,
+  allowFrameInterpolation: true,
+  allowExternalStock: true,
+  allowExternalAnalysis: true,
+}).partial().strict().refine((value) => Object.keys(value).length > 0, 'at least one policy switch is required');
+export type UpdateProductionPolicyRequest = z.infer<typeof updateProductionPolicyRequestSchema>;
 
 export function defaultProductionPolicy(mode: ProjectMode): ProductionPolicy {
   const shared = {

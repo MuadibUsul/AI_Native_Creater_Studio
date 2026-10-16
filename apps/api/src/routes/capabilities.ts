@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { capabilitiesResponseSchema } from '@ancs/contracts';
+import { capabilitiesResponseSchema, type ProviderInventoryEntry } from '@ancs/contracts';
 import type { ExtensionRegistry } from '@ancs/extensions';
 
 export interface ExtensionsDeps {
   extensions: ExtensionRegistry;
+  /** 装配的外部能力驱动与实现种类（V5-M3；不含任何凭据） */
+  providers?: readonly ProviderInventoryEntry[];
 }
 
 /**
@@ -34,6 +36,7 @@ export function registerCapabilityRoutes(app: FastifyInstance, deps: ExtensionsD
         ...snapshot,
         outputFormatAvailability:
           requested === undefined ? null : deps.extensions.availability(requested),
+        providers: [...(deps.providers ?? [])],
       };
     },
   );

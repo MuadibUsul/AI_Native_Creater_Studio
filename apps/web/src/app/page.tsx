@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
@@ -10,34 +10,49 @@ import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StateBlock } from '@/ui/StateBlock';
 import { useWorkspaceSelection } from '@/ui/StudioShell';
+import { useI18n } from '@/i18n/I18nProvider';
+import type { Locale } from '@/i18n/locale';
+import type { Messages } from '@/i18n/messages';
 import styles from './dashboard.module.css';
 
-const stageLabel: Record<string, string> = {
-  DRAFT: '草稿', SCRIPTING: '脚本中', STORYBOARDING: '分镜中',
-  GENERATING_AUDIO: '声音生成中', GENERATING_ASSETS: '素材生成中',
-  READY_FOR_REVIEW: '待审核', RENDER_QUEUED: '排队中',
-  RENDERING: '成片中', READY: '待审核', FAILED: '需处理', ARCHIVED: '已归档',
-};
+type DashboardText = Messages['dashboard'];
+type StartMode = 'footage' | 'article' | 'link';
+const START_MODES: StartMode[] = ['footage', 'article', 'link'];
+const MODE_ICONS: Record<StartMode, string> = { footage: 'film', article: 'text', link: 'link' };
 
-function projectDuration(ms: number | null): string {
-  if (ms === null) return '时长待定';
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.floor((ms % 60_000) / 1000);
-  return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`;
+/** 素材剪辑与文章讲述的作品在共看片室打开（V6）；其余沿用旧版导演工作台 */
+function projectHref(workspaceId: string, project: { id: string; mode?: string; status: string }): string {
+  if (project.mode === 'FOOTAGE_EDIT' || project.mode === 'HYBRID') return `/w/${workspaceId}/studio/${project.id}`;
+  const stage = project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard';
+  return `/w/${workspaceId}/p/${project.id}/${stage}`;
 }
 
-function editedAt(value: string): string {
+/** 卡片缩略区里的画幅框（不画假内容，只表达这条视频的形状） */
+function aspectBox(aspectRatio: string): { width: string; height: string } {
+  const [width = 16, height = 9] = aspectRatio.split(':').map(Number);
+  return width >= height ? { width: '46%', height: `${String((46 * height) / width * 1.6)}%` } : { width: `${String((58 * width) / height / 1.6)}%`, height: '58%' };
+}
+
+// 目标时长是旧版生成作品的显示值（毫秒字段只用于展示，不参与时间线计算）
+function projectDuration(ms: number | null, t: DashboardText): string {
+  if (ms === null) return t.durationUnknown;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.floor((ms % 60_000) / 1000);
+  return seconds > 0 ? t.durationMinutesSeconds(minutes, seconds) : t.durationMinutes(minutes);
+}
+
+function editedAt(value: string, t: DashboardText, locale: Locale): string {
   const at = new Date(value);
-  if (Number.isNaN(at.getTime())) return '更新时间未知';
+  if (Number.isNaN(at.getTime())) return t.editedUnknown;
   const now = new Date();
   const minutes = Math.floor((now.getTime() - at.getTime()) / 60_000);
-  if (minutes >= 0 && minutes < 60) return `${Math.max(1, minutes)} 分钟前编辑`;
-  const clock = at.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  if (at.toDateString() === now.toDateString()) return `今天 ${clock} 编辑`;
+  if (minutes >= 0 && minutes < 60) return t.editedMinutesAgo(Math.max(1, minutes));
+  const clock = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (at.toDateString() === now.toDateString()) return t.editedToday(clock);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (at.toDateString() === yesterday.toDateString()) return `昨天 ${clock} 编辑`;
-  return `${at.toLocaleDateString('zh-CN')} ${clock} 编辑`;
+  if (at.toDateString() === yesterday.toDateString()) return t.editedYesterday(clock);
+  return t.editedOn(at.toLocaleDateString(locale), clock);
 }
 
 export default function DashboardPage() {
@@ -47,11 +62,13 @@ export default function DashboardPage() {
   const session = useSession();
   const workspaces = useWorkspaces();
   const selection = useWorkspaceSelection();
+  const { messages, locale } = useI18n();
+  const t = messages.dashboard;
   const [localWorkspaceId, setLocalWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
   const [source, setSource] = useState('');
-  const [sourceKind, setSourceKind] = useState<'url' | 'text' | 'file'>('url');
+  const [mode, setMode] = useState<StartMode>('footage');
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest'>('recent');
   const effectiveWorkspaceId = selection.workspaceId ?? localWorkspaceId ?? workspaces.data?.[0]?.id ?? null;
   const projects = useQuery({
@@ -71,7 +88,7 @@ export default function DashboardPage() {
     mutationFn: async (title: string) => {
       const workspaceId = effectiveWorkspaceId ?? '';
       const channels = await client.channels.list(workspaceId);
-      const channel = channels[0] ?? (await client.channels.create(workspaceId, { name: '默认栏目' }));
+      const channel = channels[0] ?? (await client.channels.create(workspaceId, { name: messages.entry.newProject.defaultChannel }));
       return client.projects.create(workspaceId, { title, channelId: channel.id });
     },
     onSuccess: () => {
@@ -79,24 +96,46 @@ export default function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.projects(effectiveWorkspaceId ?? 'none') });
     },
   });
-  const start = (kind = sourceKind) => {
+  /**
+   * 开始：素材剪辑 / 文章讲述 → 共看片室新建页（想法或文章随草稿带过去，进入后预填）；链接导入 → 旧版导入流程。
+   * 草稿只放在本标签页的 sessionStorage，不上传。
+   */
+  const start = (chosen: StartMode, text: string) => {
     if (!effectiveWorkspaceId) return;
-    const resolvedKind = kind === 'url' && source.trim() && !/^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/i.test(source.trim()) ? 'text' : kind;
+    const value = text.trim();
     try {
-      window.sessionStorage.setItem('ancs-new-project-draft', JSON.stringify({ kind: resolvedKind, value: source }));
-    } catch { /* The new project page still works without session storage. */ }
-    window.location.href = `/w/${effectiveWorkspaceId}/new`;
+      if (chosen === 'link') {
+        const kind = value && !/^(?:[a-z][a-z0-9+.-]*:\/\/|www\.)/i.test(value) ? 'text' : 'url';
+        window.sessionStorage.setItem('ancs-new-project-draft', JSON.stringify({ kind, value }));
+      } else {
+        window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify(chosen === 'article' ? { start: 'article', article: value } : { start: 'footage', brief: value }));
+      }
+    } catch { /* The new project pages still work without session storage. */ }
+    if (chosen === 'link') window.location.href = `/w/${effectiveWorkspaceId}/new`;
+    else router.push(`/w/${effectiveWorkspaceId}/studio/new`);
+  };
+  const canStart = mode === 'footage' || source.trim().length > 0;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (canStart) start(mode, source);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 文章是多段文字：Ctrl/⌘ + Enter 提交；其余模式 Enter 提交、Shift + Enter 换行
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    if (mode === 'article' ? !(event.metaKey || event.ctrlKey) : event.shiftKey) return;
+    event.preventDefault();
+    if (canStart) start(mode, source);
   };
   const isUnauthenticated = session.isError && describeError(session.error).kind === 'unauthenticated';
   useEffect(() => {
     if (isUnauthenticated) router.replace('/welcome');
   }, [isUnauthenticated, router]);
   if (isUnauthenticated) return null;
-  if (session.isPending || workspaces.isPending) return <div className="page narrow"><StateBlock variant="loading" title="正在加载工作区…" /></div>;
-  if (session.isError) return <div className="page narrow"><StateBlock variant="error" title="会话暂不可用" description={describeError(session.error).message} action={{ label: '重试', onClick: () => void session.refetch() }} /></div>;
+  if (session.isPending || workspaces.isPending) return <div className="page narrow"><StateBlock variant="loading" title={t.loadingWorkspaces} /></div>;
+  if (session.isError) return <div className="page narrow"><StateBlock variant="error" title={t.sessionUnavailable} description={describeError(session.error).message} action={{ label: t.retry, onClick: () => void session.refetch() }} /></div>;
   if (workspaces.isError) {
     const error = describeError(workspaces.error);
-    return <div className="page narrow"><StateBlock variant={error.kind === 'unavailable' ? 'unavailable' : 'error'} title="加载工作区失败" description={error.message} diagnostics={error.code ?? undefined} action={{ label: '重试', onClick: () => void workspaces.refetch() }} /></div>;
+    return <div className="page narrow"><StateBlock variant={error.kind === 'unavailable' ? 'unavailable' : 'error'} title={t.workspacesFailed} description={error.message} diagnostics={error.code ?? undefined} action={{ label: t.retry, onClick: () => void workspaces.refetch() }} /></div>;
   }
 
   const ordered = [...(projects.data ?? [])].sort((a, b) => {
@@ -104,46 +143,59 @@ export default function DashboardPage() {
     const bTime = Date.parse(b.updatedAt ?? '') || 0;
     return sortOrder === 'recent' ? bTime - aTime : aTime - bTime;
   });
-  return <div className={`page narrow ${styles['dashboard']}`}>
-    <div className="home-intro">
-      <div><div className="eyebrow mb16">YOUR NEXT GOOD STORY</div><h1>把观点，变成作品。</h1><p>从素材、文章或想法开始，继续你的作品。</p></div>
-    </div>
-    {workspaces.data?.length === 0 ? <div className="mt32"><StateBlock variant="empty" title="还没有工作区" description="工作区是项目、预算与成员的边界。">
-      <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
-        <input className="field" aria-label="工作区名称" placeholder="例如：财经观察" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} />
-        <button className="btn primary" type="submit" disabled={createWorkspace.isPending}>创建工作区</button>
-      </form>
-      {createWorkspace.isError ? <p role="alert">{describeError(createWorkspace.error).message}</p> : null}
-    </StateBlock></div> : <>
-      {workspaces.data && workspaces.data.length > 1 ? <div className="qf-dashboard-workspace"><label htmlFor="workspace-select">工作区</label><select id="workspace-select" className="field" value={effectiveWorkspaceId ?? ''} onChange={(event) => { setLocalWorkspaceId(event.target.value); selection.selectWorkspace(event.target.value); }}>{workspaces.data.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}</select></div> : null}
-      <div className="composer">
-        <textarea id="home-source" aria-label="文章链接或创作想法" placeholder="粘贴文章链接，或写下你的想法…" value={source} onChange={(event) => setSource(event.target.value)} />
-        <div className="composer-footer">
-          <div className="composer-tools">
-            <button type="button" aria-pressed={sourceKind === 'url'} className={`btn ghost small ${sourceKind === 'url' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('url')}><QuietIcon name="link" />文章链接</button>
-            <button type="button" className={`btn ghost small ${sourceKind === 'file' ? 'qf-mode-active' : ''}`} onClick={() => start('file')}><QuietIcon name="upload" />上传资料</button>
-            <button type="button" aria-pressed={sourceKind === 'text'} className={`btn ghost small ${sourceKind === 'text' ? 'qf-mode-active' : ''}`} onClick={() => setSourceKind('text')}><QuietIcon name="text" />粘贴正文</button>
+  const hasProjects = (projects.data?.length ?? 0) > 0;
+  return <div className={`page ${styles['home']}`} lang={locale}>
+    <section className={styles['hero']} aria-labelledby="home-title">
+      <div className={styles['aurora']} aria-hidden="true" />
+      <h1 id="home-title" className={styles['heroTitle']}>{t.heroTitle}</h1>
+      <p className={styles['heroSubtitle']}>{t.heroSubtitle}</p>
+      {workspaces.data?.length === 0 ? <div className={styles['heroState']}><StateBlock variant="empty" title={t.noWorkspaceTitle} description={t.noWorkspaceBody}>
+        <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
+          <input className="field" aria-label={t.workspaceNameLabel} placeholder={t.workspaceNamePlaceholder} value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} />
+          <button className="btn primary" type="submit" disabled={createWorkspace.isPending}>{t.createWorkspace}</button>
+        </form>
+        {createWorkspace.isError ? <p role="alert">{describeError(createWorkspace.error).message}</p> : null}
+      </StateBlock></div> : <>
+        {workspaces.data && workspaces.data.length > 1 ? <div className={styles['workspacePick']}><label htmlFor="workspace-select">{t.workspaceLabel}</label><select id="workspace-select" className="field" value={effectiveWorkspaceId ?? ''} onChange={(event) => { setLocalWorkspaceId(event.target.value); selection.selectWorkspace(event.target.value); }}>{workspaces.data.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}</select></div> : null}
+        <form className={`ui-prompt ${styles['prompt']}`} onSubmit={submit}>
+          <textarea id="home-source" rows={3} aria-label={t.sourceLabel} placeholder={t.placeholders[mode]} value={source} onChange={(event) => setSource(event.target.value)} onKeyDown={onKeyDown} />
+          <div className="ui-prompt-footer">
+            <button type="button" className="ui-round" aria-label={t.addFootage} title={t.addFootage} onClick={() => start('footage', '')}><QuietIcon name="plus" /></button>
+            <div className={`ui-seg ${styles['modes']}`} role="radiogroup" aria-label={t.startLabel}>
+              {START_MODES.map((option) => <button key={option} type="button" role="radio" aria-checked={mode === option} onClick={() => setMode(option)}><QuietIcon name={MODE_ICONS[option]} /><span>{t.startModes[option]}</span></button>)}
+            </div>
+            <span className="ui-grow" />
+            <button type="submit" className="ui-round ui-send" aria-label={t.start} title={t.start} disabled={!canStart}><QuietIcon name="arrowUp" /></button>
           </div>
-          <button type="button" className="btn primary" onClick={() => start()}>开始创作 <QuietIcon name="arrow" /></button>
-        </div>
+        </form>
+        {mode === 'footage' ? <div className={styles['suggestions']} role="group" aria-label={t.suggestionsLabel}>
+          {t.suggestions.map((suggestion) => <button key={suggestion} type="button" className="ui-suggestion" onClick={() => setSource(suggestion)}><span className="ui-ai-mark" aria-hidden="true" /><span>{suggestion}</span></button>)}
+        </div> : null}
+      </>}
+    </section>
+    {workspaces.data?.length === 0 ? null : <section className={styles['recent']} aria-label={t.continueTitle}>
+      {/* 没有作品时不显示无意义的排序切换；"新建作品"始终保留（完整新建流程的入口）。
+          空状态里的"只建空项目"保留为次要操作：它是不导入内容就建项目的唯一入口，历史验收脚本 n02-15 也依赖它 */}
+      <div className={styles['recentHead']}>
+        <div className="row gap8"><h2>{t.continueTitle}</h2>{projects.data ? <span className="badge">{t.projectCount(projects.data.length)}</span> : null}</div>
+        <div className="row gap8">{hasProjects ? <button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? t.sortRecent : t.sortOldest} <QuietIcon name="down" /></button> : null}<Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />{t.newProject}</Link></div>
       </div>
-      <div className="homeflow"><QuietIcon name="shield" /><span>先看脚本与草稿，再确认付费生成</span><span>导入内容</span><QuietIcon name="chevron" /><span>确认脚本</span><QuietIcon name="chevron" /><span>分镜与成片</span></div>
-      <section className="mt40" aria-label="继续创作">
-        <div className="sectionhead"><div className="row gap16"><h2>继续创作</h2>{projects.data ? <span className="badge">{projects.data.length} 个作品</span> : null}</div><div className="row gap8"><button className="btn ghost small" onClick={() => setSortOrder(sortOrder === 'recent' ? 'oldest' : 'recent')}>{sortOrder === 'recent' ? '最近编辑' : '最早编辑'} <QuietIcon name="down" /></button><Link className="btn small" href={`/w/${effectiveWorkspaceId}/new`}><QuietIcon name="plus" />新建作品</Link></div></div>
-        {projects.isPending ? <StateBlock variant="loading" title="正在加载项目…" /> : null}
-        {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title="加载项目失败" description={describeError(projects.error).message} action={{ label: '重试', onClick: () => void projects.refetch() }} /> : null}
-        {projects.data?.length === 0 ? <StateBlock variant="empty" title="该工作区还没有项目" description="新建作品后，可以导入素材或内容，再决定如何剪辑与生成。"><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label="项目标题" placeholder="例如：利率周报视频" value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn primary" type="submit" disabled={createProject.isPending}>创建项目</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
-        <div className="project-grid">{ordered.map((project) => <Link className="project-card" href={`/w/${effectiveWorkspaceId}/p/${project.id}/${project.status === 'READY' || project.status === 'READY_FOR_REVIEW' ? 'render' : project.status === 'DRAFT' || project.status === 'SCRIPTING' ? 'script' : 'storyboard'}`} key={project.id}>
-          <div className={styles['projectPreview']} aria-hidden="true"><span className={styles['previewLabel']}>PROJECT</span><strong className={styles['previewTitle']}>{project.title}</strong><span className={styles['previewNote']}>尚无封面</span></div>
-          <h3>{project.title}</h3><div className="project-meta"><span>目标 {projectDuration(project.targetDurationMs ?? null)} · {project.aspectRatio}</span><span className="badge">{stageLabel[project.status] ?? project.status}</span></div>
-          <div className="muted" style={{ fontSize: 10, marginTop: 8 }}>{project.updatedAt ? editedAt(project.updatedAt) : '更新时间未知'}</div>
-        </Link>)}</div>
-      </section>
-      <div className="guide-row">
-        <div className="guide"><QuietIcon name="voice" /><div><strong>让作品听起来像你</strong><p>设置旁白风格与已授权声音</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/identity`}>设置创作者身份 <QuietIcon name="arrow" /></Link></div></div>
-        <div className="guide"><QuietIcon name="layers" /><div><strong>素材，随作品积累</strong><p>来源、授权与历史版本一起保留</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/assets`}>打开素材库 <QuietIcon name="arrow" /></Link></div></div>
-        <div className="guide"><QuietIcon name="box" /><div><strong>长视频之外，按需扩展</strong><p>短视频、播客与发布不打断创作</p><Link className="textbtn small" href={`/w/${effectiveWorkspaceId}/extensions`}>浏览扩展工具 <QuietIcon name="arrow" /></Link></div></div>
-      </div>
-    </>}
+      {projects.isPending ? <StateBlock variant="loading" title={t.projectsLoading} /> : null}
+      {projects.isError ? <StateBlock variant={describeError(projects.error).kind === 'forbidden' ? 'forbidden' : 'error'} title={t.projectsFailed} description={describeError(projects.error).message} action={{ label: t.retry, onClick: () => void projects.refetch() }} /> : null}
+      {projects.data?.length === 0 ? <StateBlock variant="empty" title={t.emptyTitle} description={t.emptyBody}><form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (projectTitle.trim()) createProject.mutate(projectTitle.trim()); }}><input className="field" aria-label={t.projectTitleLabel} placeholder={t.projectTitlePlaceholder} value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /><button className="btn" type="submit" disabled={createProject.isPending}>{t.createProject}</button></form>{createProject.isError ? <p role="alert">{describeError(createProject.error).message}</p> : null}</StateBlock> : null}
+      <div className={styles['grid']}>{ordered.map((project) => {
+        const kind = project.mode === 'FOOTAGE_EDIT' ? 'footage' : project.mode === 'HYBRID' ? 'article' : 'legacy';
+        return <Link className={styles['card']} href={projectHref(effectiveWorkspaceId ?? '', project)} key={project.id}>
+          <div className={styles['thumb']} aria-hidden="true">
+            <span className={styles['thumbFrame']} style={aspectBox(project.aspectRatio)}><QuietIcon name={kind === 'article' ? 'text' : 'film'} /></span>
+          </div>
+          <div className={styles['cardBody']}>
+            <h3>{project.title}</h3>
+            <div className={styles['cardMeta']}><span>{kind === 'footage' ? t.kindFootage(project.aspectRatio) : kind === 'article' ? t.kindArticle(project.aspectRatio) : t.target(projectDuration(project.targetDurationMs ?? null, t), project.aspectRatio)}</span><span className="badge">{t.stages[project.status] ?? project.status}</span></div>
+            <div className={styles['edited']}>{project.updatedAt ? editedAt(project.updatedAt, t, locale) : t.editedUnknown}</div>
+          </div>
+        </Link>;
+      })}</div>
+    </section>}
   </div>;
 }

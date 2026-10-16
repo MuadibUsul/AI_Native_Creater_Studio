@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import { useI18n } from '@/i18n/I18nProvider';
 import { TeamManagement } from '@/ui/TeamManagement';
 import styles from '@/components/quiet-frame/legacy.module.css';
 
@@ -10,5 +11,6 @@ import styles from '@/components/quiet-frame/legacy.module.css';
 
 export default function TeamPage() {
   const params = useParams<{ workspaceId: string }>();
-  return <div className="page narrow"><header className="sectionhead"><div><div className="eyebrow mb16">WORKSPACE / PEOPLE</div><h1>团队与隐私</h1><p>管理成员、邀请、席位和工作区隐私。</p></div></header><div className={styles['surface']}><TeamManagement workspaceId={params.workspaceId} /></div></div>;
+  const t = useI18n().messages.workspaceAdmin.teamPage;
+  return <div className="page narrow"><header className="sectionhead"><div><div className="eyebrow mb16">{t.eyebrow}</div><h1>{t.title}</h1><p>{t.lead}</p></div></header><div className={styles['surface']}><TeamManagement workspaceId={params.workspaceId} /></div></div>;
 }

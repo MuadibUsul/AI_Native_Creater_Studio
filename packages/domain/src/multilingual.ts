@@ -17,7 +17,7 @@ import {
   type UpsertTerminologyRequest,
 } from '@ancs/contracts';
 import { narrationTranslations, terminologyEntries } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getCurrentMasterNarration } from './alignment.js';
 import { getPlan } from './narrative.js';
 

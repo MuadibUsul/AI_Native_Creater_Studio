@@ -103,6 +103,20 @@ describe('API 路由（Fastify inject；无数据库模式）', () => {
     await app.close();
   });
 
+  it('GET /api/v1/capabilities：报告装配的外部能力驱动及实现种类（V5-M3；客户端据此显示 Mock 标识）', async () => {
+    const providerInventory = [
+      { capability: 'llm', driver: 'mock', implementation: 'MOCK' as const },
+      { capability: 'asr', driver: 'deepgram', implementation: 'REAL' as const },
+    ];
+    const app = await buildServer({ providerInventory });
+    const listed = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect((listed.json() as { providers: unknown[] }).providers).toEqual(providerInventory);
+    const bare = await buildServer();
+    expect(((await bare.inject({ method: 'GET', url: '/api/v1/capabilities' })).json() as { providers: unknown[] }).providers).toEqual([]);
+    await app.close();
+    await bare.close();
+  });
+
   it('GET /api/v1/capabilities：注入注册表后列出 Pack 并报告可用性', async () => {
     const registry = createBuiltInRegistry();
     registry.registerPack(testPack);

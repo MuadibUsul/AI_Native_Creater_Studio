@@ -3,6 +3,7 @@
 import { useState, type ReactElement } from 'react';
 import type { z } from 'zod';
 import { getComponent } from '@ancs/scene-components';
+import { useI18n } from '@/i18n/I18nProvider';
 import ui from './Monochrome.module.css';
 
 /**
@@ -12,16 +13,7 @@ import ui from './Monochrome.module.css';
 
 type FieldKind = 'text' | 'number' | 'boolean' | 'json';
 
-const FIELD_LABELS: Record<string, string> = {
-  title: '标题', subtitle: '副标题', index: '序号', headline: '主标题',
-  quote: '引言', attribution: '署名', caption: '画面说明', sourceLabel: '来源标签',
-  unit: '单位', series: '数据序列', items: '内容条目', points: '要点',
-  events: '事件', steps: '步骤', nodes: '节点', regions: '区域',
-  documentTitle: '文档标题', highlightedText: '重点文字', excerpt: '摘录',
-  assetId: '素材 ID', assetUrl: '素材地址', presenterName: '主持人名称',
-  scale: '缩放', offsetX: '水平偏移', offsetY: '垂直偏移',
-};
-const FIELD_KINDS: Record<FieldKind, string> = { text: '文本', number: '数值', boolean: '是 / 否', json: '结构化数据' };
+// 字段显示名与类型名随界面语言取自 messages.projectFlow.propForm（fieldLabels / fieldKinds）。
 
 interface FieldSpec {
   name: string;
@@ -50,7 +42,9 @@ export interface PropFormProps {
   disabled?: boolean;
 }
 
-export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, submitLabel = '保存属性', disabled = false }: PropFormProps): ReactElement {
+export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, submitLabel, disabled = false }: PropFormProps): ReactElement {
+  const t = useI18n().messages.projectFlow.propForm;
+  const fieldLabels = t.fieldLabels;
   const definition = getComponent(sceneType, componentVersion ?? undefined);
   const [drafts, setDrafts] = useState<Record<string, string>>(() => {
     const entries: Record<string, string> = {};
@@ -62,7 +56,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
   const [feedback, setFeedback] = useState<string | null>(null);
 
   if (definition === null) {
-    return <p data-testid="propform-unregistered" className={`text-sm ${ui['notice']}`}>组件未注册（{sceneType}），无法编辑属性。</p>;
+    return <p data-testid="propform-unregistered" className={`text-sm ${ui['notice']}`}>{t.unregistered(sceneType)}</p>;
   }
 
   const fields = fieldsFromProps(definition.defaults as Record<string, unknown>);
@@ -77,7 +71,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
         else if (field.kind === 'json') next[field.name] = raw.trim() === '' ? null : JSON.parse(raw);
         else next[field.name] = raw === '' ? null : raw;
       } catch {
-        setFeedback(`字段「${field.name}」不是合法的 JSON`);
+        setFeedback(t.invalidJson(field.name));
         return;
       }
     }
@@ -85,7 +79,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
     const parsed = definition.inputSchema.safeParse(next);
     if (!parsed.success) {
       const messages = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
-      setFeedback(messages.join('；'));
+      setFeedback(messages.join(t.issueSeparator));
       onSubmit(next, { ok: false, messages });
       return;
     }
@@ -105,13 +99,13 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
       {fields.map((field) => (
         <label key={field.name} className="flex flex-col gap-1 text-sm">
           <span className={ui['primaryText']}>
-            {FIELD_LABELS[field.name] ?? field.name}
-            <span className={`ml-2 text-xs ${ui['mutedText']}`}>{FIELD_LABELS[field.name] === undefined ? '技术字段 · ' : ''}{FIELD_KINDS[field.kind]}</span>
+            {fieldLabels[field.name] ?? field.name}
+            <span className={`ml-2 text-xs ${ui['mutedText']}`}>{fieldLabels[field.name] === undefined ? t.technicalField : ''}{t.fieldKinds[field.kind]}</span>
           </span>
           {field.kind === 'boolean' ? (
             <select
               name={field.name}
-              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
+              aria-label={`${fieldLabels[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? 'false'}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
               className={ui['field']}
@@ -122,7 +116,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
           ) : field.kind === 'json' ? (
             <textarea
               name={field.name}
-              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
+              aria-label={`${fieldLabels[field.name] ?? field.name} (${field.name})`}
               rows={6}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
@@ -131,7 +125,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
           ) : (
             <input
               name={field.name}
-              aria-label={`${FIELD_LABELS[field.name] ?? field.name} (${field.name})`}
+              aria-label={`${fieldLabels[field.name] ?? field.name} (${field.name})`}
               value={drafts[field.name] ?? ''}
               onChange={(event) => setDrafts((current) => ({ ...current, [field.name]: event.target.value }))}
               className={ui['field']}
@@ -149,7 +143,7 @@ export function PropForm({ sceneType, componentVersion, initialProps, onSubmit, 
         disabled={disabled}
         className={`self-start ${ui['primaryButton']}`}
       >
-        {submitLabel}
+        {submitLabel ?? t.submit}
       </button>
     </form>
   );

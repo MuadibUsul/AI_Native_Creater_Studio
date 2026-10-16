@@ -55,6 +55,33 @@ export interface LocalSignedToken {
 
 export const DEFAULT_MAX_LOCAL_UPLOAD_BYTES = 64 * 1024 * 1024;
 
+/** 本地存储驱动的已校验配置切片（API、Worker、清理 CLI 共用同一规则）。 */
+export interface LocalStorageEnv {
+  BETTER_AUTH_SECRET: string;
+  ANCS_STORAGE_SECRET?: string | undefined;
+  ANCS_STORAGE_LOCAL_DIR?: string | undefined;
+  ANCS_STORAGE_PUBLIC_BASE_URL?: string | undefined;
+  BETTER_AUTH_URL?: string | undefined;
+  PORT?: number | undefined;
+}
+
+/**
+ * 签名 URL 的 HMAC 密钥：显式 `ANCS_STORAGE_SECRET` 优先；否则由会话密钥派生（作用域隔离，仅限非生产——
+ * 生产由 env 交叉校验要求显式配置）。**唯一实现**：API 签发、Worker 与清理 CLI 校验必须同一把密钥。
+ */
+export function deriveStorageSigningSecret(env: Pick<LocalStorageEnv, 'ANCS_STORAGE_SECRET' | 'BETTER_AUTH_SECRET'>): string {
+  return env.ANCS_STORAGE_SECRET ?? createHmac('sha256', env.BETTER_AUTH_SECRET).update('storage-local-v1').digest('hex');
+}
+
+/** 由已校验配置得到本地驱动选项（根目录、公开基址、签名密钥同一规则）。 */
+export function localStorageOptionsFromEnv(env: LocalStorageEnv): LocalStorageOptions {
+  return {
+    rootDir: resolve(env.ANCS_STORAGE_LOCAL_DIR ?? '.storage'),
+    publicBaseUrl: env.ANCS_STORAGE_PUBLIC_BASE_URL ?? env.BETTER_AUTH_URL ?? `http://localhost:${String(env.PORT ?? 3001)}`,
+    signingSecret: deriveStorageSigningSecret(env),
+  };
+}
+
 const base64url = (input: Buffer | string): string =>
   (typeof input === 'string' ? Buffer.from(input, 'utf8') : input).toString('base64url');
 

@@ -36,8 +36,17 @@ export {
   sequenceTimeToSourcePts,
   addMediaTime,
   subtractMediaTime,
+  // 精确有理秒（V5 §7：服务端后端的时间计算也只走唯一时间库）
+  timeToFraction,
+  addFractions,
+  subtractFractions,
+  compareFractions,
+  // V6：AI 工具以十进制秒交流的精确边界
+  parseDecimalSeconds,
+  isDecimalSecondsText,
+  mediaTimeToDisplaySecondsText,
 } from './common/media-time.js';
-export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding } from './common/media-time.js';
+export type { Rational, FrameRate, MediaTime, MediaRange, MediaRounding, Fraction } from './common/media-time.js';
 export { revisionSchema } from './common/revision.js';
 export type { Revision } from './common/revision.js';
 export { moneySchema, creditsSchema } from './common/money.js';
@@ -89,6 +98,7 @@ export {
   projectBriefSchema,
   productionPolicySchema,
   productionPolicyOverridesSchema,
+  updateProductionPolicyRequestSchema,
   defaultProductionPolicy,
   semanticSceneSchema,
   semanticPlanSchema,
@@ -102,6 +112,7 @@ export type {
   ProjectBrief,
   ProductionPolicy,
   ProductionPolicyOverrides,
+  UpdateProductionPolicyRequest,
   ProjectDocument,
   GovernedGenerationCapability,
 } from './project-document.js';
@@ -172,6 +183,7 @@ export {
 } from './unified-media-index.js';
 export type { UnifiedMediaIndexKind, MediaIndexRecord, MediaIndexCapability, UnifiedMediaIndexPage, MediaEvidenceConsumer, MediaEvidenceRequest, MediaEvidenceBundle } from './unified-media-index.js';
 export {
+  MEDIA_ANALYSIS_ERROR_CODES,
   MEDIA_ANALYSIS_STAGES,
   MEDIA_ANALYSIS_STAGE_STATUSES,
   mediaAnalysisStageNameSchema,
@@ -828,6 +840,7 @@ export {
   EDIT_OPERATION_AVAILABILITIES,
   EDIT_COMPENSATION_MODES,
   EDIT_OPERATION_REGISTRY,
+  LEGACY_SCENE_WRITE_OPERATIONS,
   editExecutionBackendSchema,
   editOperationAvailabilitySchema,
   editCompensationModeSchema,
@@ -902,6 +915,7 @@ export {
   avCutKindSchema,
   splitAvCutOperationSchema,
   createTrackOperationSchema,
+  setSequenceDurationOperationSchema,
   moveTrackOperationSchema,
   NON_EMPTY_TRACK_POLICIES,
   nonEmptyTrackPolicySchema,
@@ -923,7 +937,7 @@ export {
   updateAudioRegionChangesSchema,
   updateAudioRegionOperationSchema,
 } from './composition-edits.js';
-export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
+export type { UpdateClipChanges, UpdateAudioRegionChanges, ClipInsertMode, InsertClipOperation, DeleteClipOperation, SplitClipOperation, TrimClipOperation, MoveClipOperation, DuplicateClipOperation, ReplaceClipSourceOperation, SlipClipOperation, SlideClipOperation, RollClipOperation, ClipRippleAction, RippleClipOperation, AvCutKind, SplitAvCutOperation, CreateTrackOperation, SetSequenceDurationOperation, MoveTrackOperation, NonEmptyTrackPolicy, DeleteTrackOperation, UpdateTrackOperation, SetAvLinkOperation, SetClipTransformOperation, SetClipCropOperation, SetClipOpacityOperation, ApplyAudioCrossfadeOperation, SplitCaptionOperation, CaptionCutMode, CutCaptionRangeOperation, DeleteCaptionOperation, CreateCaptionOperation } from './composition-edits.js';
 
 export {
   OBJECT_LOCK_DIMENSIONS,
@@ -1223,6 +1237,10 @@ export {
 } from './ops.js';
 export type { OpsOverview, OpsAlert, OpsAuditKind, OpsAuditEntry, OpsAdminAction } from './ops.js';
 
+// Provider 种类显式化与生产装配守卫（V5-M3）
+export { PROVIDER_IMPLEMENTATIONS, providerImplementationSchema, providerInventoryEntrySchema, checkProviderInventory } from './provider-kind.js';
+export type { ProviderImplementation, ProviderInventoryEntry } from './provider-kind.js';
+
 // 部署环境配置契约（P08-01 / §50）
 export {
   validateEnv,
@@ -1231,9 +1249,70 @@ export {
   apiEnvSchema,
   workerEnvSchema,
   crossCheckWorkerEnv,
+  crossCheckRealtimeEnv,
+  originOf,
+  realtimeEnvSchema,
   crossCheckApiEnv,
+  resolveAllowedOrigins,
+  retentionCliEnvSchema,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv } from './env.js';
+export {
+  COMPOSITION_FINAL_RENDER_ERROR_REASONS,
+  COMPOSITION_FINAL_RENDER_STEPS,
+  COMPOSITION_FINAL_RENDER_WORKFLOW,
+  COMPOSITION_FINAL_RENDER_WORKFLOW_VERSION,
+  WORKFLOW_ADVANCE_JOB_TYPE,
+  WORKFLOW_ERROR_CLASSES,
+  WORKFLOW_ERROR_REASONS,
+  WORKFLOW_RUN_STATUSES,
+  WORKFLOW_STEP_STATUSES,
+  WORKFLOW_TERMINAL_STATUSES,
+  startCompositionFinalRenderRequestSchema,
+  workflowErrorClassSchema,
+  workflowRunSchema,
+  workflowRunStatusSchema,
+  workflowStepRecordSchema,
+  workflowStepStatusSchema,
+} from './workflow.js';
+export type { StartCompositionFinalRenderRequest, WorkflowErrorClass, WorkflowRun, WorkflowRunStatus, WorkflowStepRecord } from './workflow.js';
+export {
+  FINAL_RENDER_CAPTION_DELIVERIES,
+  RENDER_PLAN_AUDIO_RULES,
+  RENDER_PLAN_EXECUTION_FILE_KINDS,
+  RENDER_PLAN_EXECUTION_RESULT_VERSION,
+  RENDER_PLAN_HASHED_FIELDS,
+  RENDER_PLAN_IR_VERSION,
+  finalRenderProfileSchema,
+  renderBackendCapabilitiesSchema,
+  renderPlanExecutionFileSchema,
+  renderPlanExecutionResultSchema,
+  stereoPanCoefficients,
+  renderPlanAnimatedTargetSchema,
+  renderPlanAudioEntrySchema,
+  renderPlanCaptionSchema,
+  renderPlanSchema,
+  renderPlanSourceSchema,
+  renderPlanVideoLayerSchema,
+  renderPlanVideoSegmentSchema,
+  renderRequirementSchema,
+} from './render-plan.js';
+export type {
+  FinalRenderProfile,
+  FinalRenderProfileInput,
+  RenderBackendCapabilities,
+  RenderPlanExecutionFile,
+  RenderPlanExecutionResult,
+  RenderPlanExecutor,
+  StereoPanCoefficients,
+  RenderPlan,
+  RenderPlanAudioEntry,
+  RenderPlanCaption,
+  RenderPlanSource,
+  RenderPlanVideoLayer,
+  RenderPlanVideoSegment,
+  RenderRequirement,
+} from './render-plan.js';
 
 // 审批与受控导出契约（P07-06 / §87、§54）
 export {
@@ -2611,3 +2690,278 @@ export type {
   PlaybackSyncSample,
   PlaybackSyncVerdict,
 } from './playback-sync-report.js';
+export {
+  AGENT_EFFORTS,
+  AGENT_ERROR_REASONS,
+  AGENT_IMAGE_MEDIA_TYPES,
+  agentImageSchema,
+  AGENT_LOCALES,
+  AGENT_MODEL_FAILURE_KINDS,
+  AGENT_MODEL_PRICES,
+  AGENT_STOP_REASONS,
+  AGENT_TOOL_EFFECTS,
+  AGENT_TOOL_PERMISSIONS,
+  AGENT_TURN_PURPOSES,
+  AGENT_TURN_STATUSES,
+  AGENT_TURN_WORKFLOW,
+  AGENT_TURN_WORKFLOW_VERSION,
+  AgentModelFailure,
+  agentContentBlockSchema,
+  agentLocaleSchema,
+  agentModelCostMicros,
+  agentModelMessageSchema,
+  agentModelUsageSchema,
+  agentPointerSchema,
+  agentSessionSchema,
+  agentStopReasonSchema,
+  agentToolCallRecordSchema,
+  agentToolDescriptorSchema,
+  agentToolEffectSchema,
+  agentToolNameSchema,
+  agentToolPermissionSchema,
+  agentTurnSchema,
+  agentTurnPurposeSchema,
+  agentTurnStatusSchema,
+  createAgentSessionRequestSchema,
+  projectAgentCostSchema,
+  startAgentTurnRequestSchema,
+} from './agent.js';
+export type {
+  AgentAbortSignal,
+  AgentContentBlock,
+  AgentFrameSampler,
+  AgentImage,
+  AgentEffort,
+  AgentLocale,
+  AgentModelAdapter,
+  AgentModelFailureKind,
+  AgentModelMessage,
+  AgentModelPrice,
+  AgentModelRequest,
+  AgentModelResponse,
+  AgentModelToolSpec,
+  AgentModelUsage,
+  AgentPointer,
+  AgentSession,
+  AgentStopReason,
+  AgentToolDescriptor,
+  AgentToolEffect,
+  AgentTurn,
+  AgentTurnPurpose,
+  AgentTurnStatus,
+  CreateAgentSessionRequest,
+  ProjectAgentCost,
+  StartAgentTurnRequest,
+} from './agent.js';
+export {
+  PREVIEW_ERROR_REASONS,
+  PREVIEW_RENDER_JOB_TYPE,
+  PREVIEW_SEGMENT_SECONDS,
+  PREVIEW_SOURCES,
+  PREVIEW_STATUSES,
+  previewClipSchema,
+  previewRenderJobInputSchema,
+  previewStatusSchema,
+  requestSequencePreviewSchema,
+  sequencePreviewSchema,
+} from './preview.js';
+export type { PreviewClip, PreviewRenderJobInput, PreviewStatus, RequestSequencePreview, SequencePreview } from './preview.js';
+export {
+  STUDIO_ANALYSIS_STATES,
+  STUDIO_ASPECT_RATIOS,
+  createStudioProjectRequestSchema,
+  studioAnalysisStateSchema,
+  studioAspectRatioSchema,
+  studioEffectSchema,
+  studioNarrationSchema,
+  studioFootageSchema,
+  studioProjectRefSchema,
+  studioStateSchema,
+  undoChangeResponseSchema,
+} from './studio.js';
+export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export {
+  STRATEGY_ERROR_REASONS,
+  STRATEGY_PACK_KINDS,
+  bilingualTextSchema,
+  editingDnaSchema,
+  strategyKnobSchema,
+  strategyKnobValuesSchema,
+  strategyPackKindSchema,
+  strategyPackSchema,
+  strategyPackSummarySchema,
+  styleRubricItemSchema,
+} from './strategy.js';
+export type { BilingualText, EditingDna, StrategyKnob, StrategyKnobValues, StrategyPack, StrategyPackKind, StrategyPackSummary } from './strategy.js';
+export {
+  REVIEW_ERROR_REASONS,
+  REVIEW_NOTE_STATUSES,
+  REVIEW_ROUND_STATUSES,
+  applyReviewRequestSchema,
+  applyReviewResponseSchema,
+  createReviewNoteRequestSchema,
+  reviewNoteSchema,
+  reviewNoteStatusSchema,
+  reviewRegionSchema,
+  reviewRoundSchema,
+  reviewRoundStatusSchema,
+  reviewStateSchema,
+  updateReviewNoteRequestSchema,
+} from './review.js';
+export type { ApplyReviewRequest, ApplyReviewResponse, CreateReviewNoteRequest, ReviewNote, ReviewNoteStatus, ReviewRegion, ReviewRound, ReviewRoundStatus, ReviewState, UpdateReviewNoteRequest } from './review.js';
+export {
+  REALTIME_ATTENTION_EVIDENCE,
+  REALTIME_CLOSE_CODES,
+  REALTIME_REPLY_END_REASONS,
+  REALTIME_SAMPLE_RATE,
+  REALTIME_VOICE_PATH,
+  realtimeAttentionEvidenceSchema,
+  realtimeAttentionSchema,
+  realtimeClientMessageSchema,
+  realtimePointerSampleSchema,
+  realtimeServerMessageSchema,
+  realtimeVoiceSchema,
+  realtimeWordSchema,
+} from './realtime.js';
+export type {
+  RealtimeAttention,
+  RealtimeAttentionEvidence,
+  RealtimeClientMessage,
+  RealtimePointerSample,
+  RealtimeServerMessage,
+  RealtimeVoice,
+  RealtimeWord,
+  StreamingAsrEvents,
+  StreamingAsrResult,
+  StreamingAsrSession,
+  StreamingSpeechRecognizer,
+  StreamingSpeechSynthesizer,
+} from './realtime.js';
+export {
+  EFFECT_CODEGEN_MODES,
+  EFFECT_COVERAGE,
+  EFFECT_ERROR_REASONS,
+  EFFECT_PARAM_KINDS,
+  MAX_EFFECT_SECONDS,
+  MAX_EFFECT_TEXT_PARAM,
+  effectLayerMetadataSchema,
+  effectParamSchema,
+  effectRegionSchema,
+  effectTemplateSchema,
+} from './effects.js';
+export type { AgentEffectPorts, AgentEffectRenderer, EffectCodegenMode, EffectLayerMetadata, EffectParam, EffectRegion, EffectRenderRequest, EffectTemplate } from './effects.js';
+export { frameRegionSchema } from './frame-region.js';
+export type { FrameRegion } from './frame-region.js';
+export {
+  MAX_ARTICLE_CHARS,
+  MAX_NARRATION_CHARS,
+  NARRATION_ERROR_REASONS,
+  NARRATION_TRACK_PREFIX,
+  narrationMetadataSchema,
+  narrationVoiceSchema,
+  projectArticleSchema,
+} from './narration.js';
+export type {
+  AgentNarrationPorts,
+  NarrationMetadata,
+  NarrationSynthesisRequest,
+  NarrationSynthesisResult,
+  NarrationSynthesizer,
+  NarrationVoice,
+  ProjectArticle,
+} from './narration.js';
+export {
+  DISTILL_ERROR_REASONS,
+  DISTILL_STEPS,
+  MAX_DISTILL_REFERENCES,
+  MAX_REFERENCE_ANALYSIS_SECONDS,
+  REFERENCE_DISTILL_WORKFLOW,
+  REFERENCE_DISTILL_WORKFLOW_VERSION,
+  REFERENCE_FETCH_FAILURES,
+  ReferenceFetchError,
+  distillReferenceInputSchema,
+  distillRunSchema,
+  distillStepSchema,
+  referenceMeasurementSchema,
+  startDistillRequestSchema,
+  updateStrategyPackRequestSchema,
+} from './distill.js';
+export type {
+  DistillReferenceInput,
+  DistillRun,
+  ReferenceAnalyzer,
+  ReferenceFetchFailure,
+  ReferenceFetcher,
+  ReferenceMeasurement,
+  StartDistillRequest,
+  UpdateStrategyPackRequest,
+} from './distill.js';
+export {
+  AVATAR_FRAMINGS,
+  AVATAR_VOICE_TRACK_PREFIX,
+  GENERATION_ERROR_REASONS,
+  GENERATION_KINDS,
+  GENERATION_QUOTE_TTL_MINUTES,
+  GENERATION_STATUSES,
+  GENERATION_TRACK_PREFIX,
+  MAX_GENERATION_PROMPT_CHARS,
+  MAX_GENERATION_SECONDS,
+  MICROS_PER_CREDIT,
+  OUTSIDE_REGION_CHANGE_THRESHOLD,
+  PAID_GENERATION_WORKFLOW,
+  PAID_GENERATION_WORKFLOW_VERSION,
+  PaidGenerationFailure,
+  requestNeverSent,
+  acceptGenerationRequestSchema,
+  avatarClipRequestSchema,
+  generationBudgetSchema,
+  generationCostSourceSchema,
+  generationKindSchema,
+  generationOfferSchema,
+  generationRequestSchema,
+  generationSchema,
+  generationStatusSchema,
+  videoRegionRequestSchema,
+  videoShotRequestSchema,
+} from './paid-generation.js';
+export type {
+  AcceptGenerationRequest,
+  AgentGenerationPorts,
+  Generation,
+  GenerationBudget,
+  GenerationKind,
+  GenerationOffer,
+  GenerationRequest,
+  GenerationStatus,
+  PaidGenerationExecutor,
+  PaidGenerationJob,
+  PaidGenerationProduct,
+} from './paid-generation.js';
+export {
+  IDENTITY_CONSENT_KINDS,
+  IDENTITY_CONSENT_STATEMENTS,
+  IDENTITY_CONSENT_STATEMENT_VERSION,
+  IDENTITY_CONSENT_SUBJECTS,
+  IDENTITY_PROFILE_ERROR_REASONS,
+  IDENTITY_REFERENCE_MIME_PREFIX,
+  createIdentityProfileRequestSchema,
+  grantIdentityConsentRequestSchema,
+  identityConsentKindSchema,
+  identityConsentLocaleSchema,
+  identityConsentRecordSchema,
+  identityConsentSubjectSchema,
+  identityProfileSchema,
+  identityReferenceSchema,
+  revokeIdentityConsentRequestSchema,
+  setIdentityReferenceRequestSchema,
+} from './identity-profile.js';
+export type {
+  CreateIdentityProfileRequest,
+  GrantIdentityConsentRequest,
+  IdentityConsentKind,
+  IdentityConsentRecord,
+  IdentityProfile,
+  IdentityReference,
+  RevokeIdentityConsentRequest,
+  SetIdentityReferenceRequest,
+} from './identity-profile.js';

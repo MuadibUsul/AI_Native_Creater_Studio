@@ -61,6 +61,16 @@ describe('轨道', () => {
     expect(result.events.map((event) => `${event.action}:${event.objectId}`)).toEqual(['UPDATE_TRACK:a1', 'UPDATE_TRACK:c1', 'CREATE_TRACK:v2']);
   });
 
+  it('move_track：整体重排、位置连续唯一；目标轨记 MOVE_TRACK、让位轨记 UPDATE_TRACK', () => {
+    const s = state();
+    const result = apply(s, { op: 'move_track', trackId: 'c1', position: 0 });
+    const after = applyKernelResult(s, result);
+    expect(positions(after)).toEqual({ c1: 0, v1: 1, a1: 2 });
+    expect(result.events.map((event) => `${event.action}:${event.objectId}`).sort()).toEqual(['MOVE_TRACK:c1', 'UPDATE_TRACK:a1', 'UPDATE_TRACK:v1']);
+    // 超出范围的位置落到末尾
+    expect(positions(applyKernelResult(s, apply(s, { op: 'move_track', trackId: 'v1', position: 99 })))).toEqual({ a1: 0, c1: 1, v1: 2 });
+  });
+
   it('update_track 改 position 按重排语义落位（修复：目标轨位置不再漏写）', () => {
     const s = state();
     const result = apply(s, { op: 'update_track', trackId: 'c1', changes: { position: 0, muted: true } });
@@ -78,6 +88,17 @@ describe('轨道', () => {
     expect(after.clips[0]!.trackId).toBe('v2');
     expect(positions(after)).toEqual({ v2: 0, a1: 1 });
   });
+
+  it('delete_track：轨道上仍有字幕/音频区域/视觉对象 → 409（V5-M2 修复：不再交给外键级联静默删除）', () => {
+    const withCaption = state({ captions: [caption('cap', r(0, 1_000), [word('一', 0, 1_000)])] });
+    expect(reasonOf(() => apply(withCaption, { op: 'delete_track', trackId: 'c1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }))).toBe('TRACK_NOT_EMPTY');
+    const withRegion = state({ tracks: [track('v1', 'VIDEO', 0), track('a1', 'AUDIO', 1), track('a2', 'AUDIO', 2)], audioRegions: [region('ar', r(0, 1_000))] });
+    expect(reasonOf(() => apply(withRegion, { op: 'delete_track', trackId: 'a1', nonEmptyPolicy: 'MOVE_CLIPS', destinationTrackId: 'a2' }))).toBe('TRACK_NOT_EMPTY');
+    const withVisual = state({ unmanagedTrackObjects: new Map([['v1', 2]]) });
+    expect(reasonOf(() => apply(withVisual, { op: 'delete_track', trackId: 'v1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }))).toBe('TRACK_NOT_EMPTY');
+    // 空轨道照常删除
+    expect(apply(state(), { op: 'delete_track', trackId: 'c1', nonEmptyPolicy: 'REJECT', destinationTrackId: null }).writes[0]).toMatchObject({ type: 'delete' });
+  });
 });
 
 describe('片段参数、AV 链接与 update_clip', () => {
@@ -88,6 +109,19 @@ describe('片段参数、AV 链接与 update_clip', () => {
     const after = applyKernelResult(s, apply(s, { op: 'set_clip_opacity', clipId: 'x', opacity: 0.3 }));
     expect((after.clips[0]!.parameters as { opacity: number }).opacity).toBe(0.3);
     expect(rangeToTicks(after.clips[0]!.sequenceRange, MS)).toEqual({ start: 0n, end: 1_000n });
+  });
+
+  it('set_clip_transform：合并到既有参数（保留透明度），不改时间；STYLE 锁阻止', () => {
+    const s = state({ clips: [clip('x', 'v1', r(0, 1_000))] });
+    const withOpacity = applyKernelResult(s, apply(s, { op: 'set_clip_opacity', clipId: 'x', opacity: 0.5 }));
+    const transform = { position: { x: 0.1, y: -0.05 }, scale: { x: 1.5, y: 1.5 }, rotationDeg: 30, anchor: { x: 0.5, y: 0.5 } };
+    const result = apply(withOpacity, { op: 'set_clip_transform', clipId: 'x', transform });
+    expect(result.events.map((event) => event.action)).toEqual(['SET_CLIP_TRANSFORM']);
+    const after = applyKernelResult(withOpacity, result);
+    expect(after.clips[0]!.parameters).toMatchObject({ transform, opacity: 0.5 });
+    expect(rangeToTicks(after.clips[0]!.sequenceRange, MS)).toEqual({ start: 0n, end: 1_000n });
+    const locked = state({ clips: [clip('x', 'v1', r(0, 1_000))], locks: new Map([['CLIP:x', ['STYLE']]]) });
+    expect(() => apply(locked, { op: 'set_clip_transform', clipId: 'x', transform })).toThrow(ApiFailure);
   });
 
   it('set_av_link：一视频一音频且时长相等才能关联', () => {
@@ -177,5 +211,37 @@ describe('CUT_CONTENT 收缝尊重锁（V5-M1 修复：旧实现不检查轨道�
       captions: [caption('cap', r(0, 1_500), words)], clips: [clip('early', 'v2', r(0, 400))],
     });
     expect(() => apply(s, cut)).not.toThrow();
+  });
+});
+
+describe('序列时长（V6-1 set_sequence_duration）', () => {
+  it('延长与缩短：写入序列实体、记 UPDATE_SEQUENCE（含前后快照）；后续操作看到新时长', () => {
+    const s = state({ clips: [clip('k1', 'v1', r(0, 4000))] });
+    const longer = apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(90_000) });
+    const afterLonger = applyKernelResult(s, longer);
+    expect(afterLonger.sequences.get('seq')?.duration).toEqual(t(90_000));
+    expect(longer.events.map((event) => `${event.action}:${event.objectKind}:${event.objectId}`)).toEqual(['UPDATE_SEQUENCE:SEQUENCE:seq']);
+    expect(longer.events[0]?.snapshots['before']).toEqual({ entity: 'sequence', value: { id: 'seq', duration: t(60_000) } });
+    // 延长后可以插入到原终点之后（同一批次的后续操作读到新时长）
+    const inserted = apply(afterLonger, { op: 'insert_clip', sequenceId: 'seq', trackId: 'v1', assetVersionId: 'av', nestedSequenceId: null, sourceStreamId: null, sourceRange: r(0, 5000), mode: 'OVERWRITE', sequenceStart: t(70_000), linkAudio: false, audioTrackId: null, createdClipId: 'k2' });
+    expect(inserted.writes.some((write) => write.type === 'insert' && write.after.value.id === 'k2')).toBe(true);
+    // 缩短到内容终点：允许；时长换算到序列时基精确保存
+    const shorter = applyKernelResult(s, apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: { ticks: '4', timebase: { num: 1, den: 1 } } }));
+    expect(shorter.sequences.get('seq')?.duration).toEqual(t(4000));
+  });
+
+  it('拒绝：非正时长、序列时基无法精确表示、内容越过新终点、嵌套引用越界、序列被锁', () => {
+    const s = state({
+      sequences: new Map([['seq', { id: 'seq', duration: t(60_000) }], ['inner', { id: 'inner', duration: t(10_000) }]]),
+      clips: [clip('k1', 'v1', r(0, 4000)), clip('nest', 'v1', r(5000, 13_000), { assetVersionId: null, nestedSequenceId: 'inner', sourceRange: r(0, 8000) })],
+      captions: [caption('cap1', r(20_000, 22_000), [word('好', 20_000, 22_000)])],
+    });
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(0) }))).toBe('SEQUENCE_DURATION_NOT_POSITIVE');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: { ticks: '1', timebase: { num: 1, den: 3 } } }))).toBe('TIME_NOT_REPRESENTABLE');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(21_000) }))).toBe('SEQUENCE_CONTENT_BEYOND_DURATION');
+    expect(reasonOf(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'inner', duration: t(6000) }))).toBe('NESTED_REFERENCE_BEYOND_DURATION');
+    const locked = state({ locks: new Map([['SEQUENCE:seq', ['DURATION']]]) });
+    expect(reasonOf(() => apply(locked, { op: 'set_sequence_duration', sequenceId: 'seq', duration: t(30_000) }))).toBe('EDIT_IMPACT_LOCKED');
+    expect(() => apply(s, { op: 'set_sequence_duration', sequenceId: 'nope', duration: t(30_000) })).toThrow(ApiFailure);
   });
 });

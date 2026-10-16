@@ -1,4 +1,5 @@
 import { AncsApiError } from '@ancs/sdk';
+import { MESSAGES } from '@/i18n/messages';
 
 /**
  * 错误 → 界面状态判定（P05-03 状态矩阵：失败/无权限/冲突可操作）。
@@ -13,6 +14,11 @@ export interface UiError {
   code: string | null;
   status: number | null;
   details: Record<string, unknown>;
+}
+
+/** 本地兜底文案跟随界面语言（<html lang> 由服务端首屏与语言切换同步设置）；服务端返回的错误原样显示。 */
+function fallbackText() {
+  return MESSAGES[typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'zh-CN'].common;
 }
 
 export function describeError(error: unknown): UiError {
@@ -38,9 +44,9 @@ export function describeError(error: unknown): UiError {
     return { kind, message: error.message, code: error.code, status: error.status, details: error.details };
   }
   if (error instanceof Error && (error.name === 'TypeError' || error.message.includes('fetch'))) {
-    return { kind: 'unavailable', message: '无法连接业务 API（请确认 API 已启动且地址正确）', code: null, status: null, details: {} };
+    return { kind: 'unavailable', message: fallbackText().apiUnavailable, code: null, status: null, details: {} };
   }
-  return { kind: 'unknown', message: error instanceof Error ? error.message : '未知错误', code: null, status: null, details: {} };
+  return { kind: 'unknown', message: error instanceof Error ? error.message : fallbackText().unknownError, code: null, status: null, details: {} };
 }
 
 /** 冲突（409 VERSION_CONFLICT）需要"刷新后重试"的明确动作。 */

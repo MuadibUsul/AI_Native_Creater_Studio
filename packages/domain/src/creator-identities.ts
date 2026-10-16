@@ -12,7 +12,7 @@ import {
 } from '@ancs/contracts';
 import { avatarIdentities, brandIdentities, creatorIdentities, voiceIdentities } from '@ancs/db';
 import { assertIdentityQuota } from './plans.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * CreatorIdentity 服务（P01-04 / 规范 §6.1）。

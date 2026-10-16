@@ -24,7 +24,7 @@ import { getProject } from './projects.js';
 import { getSpeechProfile } from './speech-profiles.js';
 import { buildDirectorScenes, resolveDirectorPolicy } from './director.js';
 import { resolveProviderRoute } from './credentials.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Speech Director（P04-06 / 规范 §94、§6.4、§95；计划 §8 P04-06）。

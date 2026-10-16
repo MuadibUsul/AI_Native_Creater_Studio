@@ -14,7 +14,7 @@ import {
   type ValidationResult,
 } from '@ancs/contracts';
 import { projectVersions, publications, renderApprovals, renders } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assertProjectVersionAssetRights } from './asset-lifecycle.js';
 
 /**

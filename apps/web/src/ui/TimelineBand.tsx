@@ -16,6 +16,7 @@ import {
   type TemporalSelection,
   type TimelineViewport,
 } from '@ancs/contracts';
+import { useI18n } from '@/i18n/I18nProvider';
 import ui from './Monochrome.module.css';
 
 /**
@@ -83,6 +84,7 @@ export function TimelineBand({
   onSelectionChange,
   onClipSelect,
 }: TimelineBandProps) {
+  const t = useI18n().messages.projectFlow.timelineBand;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<{ anchorXPx: number; focusXPx: number } | null>(null);
   const scrubbingRef = useRef(false);
@@ -179,7 +181,7 @@ export function TimelineBand({
       style={{ width: `${String(viewport.widthPx)}px` }}
     >
       <div className="flex items-center justify-between px-2 pt-2 text-xs">
-        <span className={ui['primaryText']}>横向时间带</span>
+        <span className={ui['primaryText']}>{t.title}</span>
         <div className="flex items-center gap-2">
           {/* N04-04：逐帧步进（分数帧率不丢帧；时间码按标称帧率显示） */}
           {frameRate !== undefined ? (
@@ -187,7 +189,7 @@ export function TimelineBand({
               <button
                 type="button"
                 data-testid="timeline-step-prev"
-                aria-label="上一帧"
+                aria-label={t.prevFrame}
                 disabled={disabled || playhead === null}
                 onClick={() => { if (playhead !== null) onPlayheadChange?.(stepFrames({ time: playhead, frameRate, delta: -1, bounds: frameBounds ?? { start: viewport.start, end: viewport.end } })); }}
                 className={`px-1 ${ui['button']}`}
@@ -195,7 +197,7 @@ export function TimelineBand({
               <button
                 type="button"
                 data-testid="timeline-step-next"
-                aria-label="下一帧"
+                aria-label={t.nextFrame}
                 disabled={disabled || playhead === null}
                 onClick={() => { if (playhead !== null) onPlayheadChange?.(stepFrames({ time: playhead, frameRate, delta: 1, bounds: frameBounds ?? { start: viewport.start, end: viewport.end } })); }}
                 className={`px-1 ${ui['button']}`}
@@ -206,7 +208,7 @@ export function TimelineBand({
             </>
           ) : null}
           <span data-testid="timeline-selection-label" className={ui['mutedText']}>
-            {selectionLabel === null ? '未选择时间段（拖动选择带或 Shift+拖动叠加）' : `时间选区：${selectionLabel}`}
+            {selectionLabel === null ? t.noSelection : t.selection(selectionLabel)}
           </span>
         </div>
       </div>
@@ -216,7 +218,7 @@ export function TimelineBand({
         <div
           data-testid="timeline-ruler"
           role="slider"
-          aria-label="时间标尺（播放头）"
+          aria-label={t.rulerAria}
           aria-valuemin={0}
           aria-valuemax={1000}
           aria-valuenow={playhead === null ? 0 : Math.round(xAtSequenceTime(viewport, playhead))}
@@ -240,7 +242,7 @@ export function TimelineBand({
         {/* 专用选择带：拖动选时段；Shift+拖动叠加多区间 */}
         <div
           data-testid="timeline-selection-track"
-          aria-label="时间选区带"
+          aria-label={t.selectionTrackAria}
           className={`relative h-5 cursor-crosshair border-b ${ui['divider']} ${ui['inset']}`}
           onPointerDown={handleSelectionDown}
           onPointerMove={handleSelectionMove}
@@ -252,7 +254,7 @@ export function TimelineBand({
         <div data-testid="timeline-lanes" className="relative mt-1 flex flex-col gap-1">
           {lanes.length === 0 ? (
             <p data-testid="timeline-lanes-empty" className={`px-1 text-xs ${ui['mutedText']}`}>
-              暂无片段/轨道数据。
+              {t.lanesEmpty}
             </p>
           ) : (
             lanes.map((lane) => (
@@ -268,7 +270,7 @@ export function TimelineBand({
                       key={clip.id}
                       type="button"
                       data-testid={`timeline-clip-${clip.id}`}
-                      aria-label={`片段 ${clip.label}`}
+                      aria-label={t.clipAria(clip.label)}
                       disabled={disabled}
                       onClick={() => onClipSelect?.(clip.id)}
                       className={`absolute top-0 h-6 overflow-hidden rounded-sm border px-1 text-left text-[10px] ${ui['button']}`}
@@ -320,9 +322,9 @@ export function TimelineBand({
           onClick={() => onSelectionChange?.(null)}
           className={ui['button']}
         >
-          清除时间选区
+          {t.clearSelection}
         </button>
-        <span className={ui['mutedText']}>播放头：{playhead === null ? '—' : formatTime(playhead)}</span>
+        <span className={ui['mutedText']}>{t.playhead(playhead === null ? '—' : formatTime(playhead))}</span>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { ApiFailure, ERROR_CODES, ASSET_SEARCH_MAX_BYTES, STOCK_ERROR_REASONS, stockAcquisitionResultSchema, stockSearchResultSchema, type AssetSearchProvider, type StockAcquisitionResult, type StockSearchRequest, type StockSearchResult } from '@ancs/contracts';
 import { assetVersions, assets, outboxEvents } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { requireStorage } from './assets.js';
 
 /**

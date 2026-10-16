@@ -219,6 +219,8 @@ function operationImpacts(operation: EditOperation, ordered: readonly EditCandid
         dimensions: uniqueDimensions(operation.changes.position === undefined ? ['STYLE'] : ['STYLE', 'POSITION']),
         direct: true, via: null,
       }];
+    case 'set_sequence_duration':
+      return [{ objectKind: 'SEQUENCE', objectId: operation.sequenceId, dimensions: uniqueDimensions(['DURATION']), direct: true, via: null }];
     case 'set_av_link':
       return operation.clipIds.map((clipId) => ({ objectKind: 'CLIP' as const, objectId: clipId, dimensions: uniqueDimensions(['CONTENT']), direct: true, via: null }));
     case 'create_caption':
@@ -450,6 +452,7 @@ export function validateEditOperationCandidate(input: {
       case 'move_track':
       case 'delete_track':
       case 'update_track':
+      case 'set_sequence_duration':
       case 'set_av_link':
       case 'update_animation':
       case 'update_audio_region': break;

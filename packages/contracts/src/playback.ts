@@ -36,6 +36,12 @@ export const PLAYBACK_CAPABILITY_FLAGS = [
   'CAPTIONS_BURNED_IN',
   'GRAPHICS_COMPONENT_RENDER',
   'MULTI_TRACK_COMPOSITE',
+  /** 关键帧动画（V5-M4：RenderPlan 显式列出；尚无后端实现时一律声明不支持） */
+  'KEYFRAME_ANIMATION',
+  /** 变速/倒放（源区间与序列区间非 1:1 正向） */
+  'TIME_REMAP',
+  /** 嵌套序列片段 */
+  'NESTED_SEQUENCE',
 ] as const;
 export const playbackCapabilityFlagSchema = z.enum(PLAYBACK_CAPABILITY_FLAGS);
 export type PlaybackCapabilityFlag = z.infer<typeof playbackCapabilityFlagSchema>;
@@ -119,6 +125,8 @@ export const playbackSnapshotSchema = z.object({
   sequenceId: opaqueIdSchema,
   /** 与工程文档同一 revision（防止播放器持有隐藏状态） */
   documentRevision: z.number().int().nonnegative(),
+  /** 来源 RenderPlan 的内容哈希（V5-M4：预览、服务端合成与终渲染消费同一 IR；可据此逐项对照） */
+  planHash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   frameRate: z.object({ num: z.number().int().positive(), den: z.number().int().positive() }).strict(),
   duration: mediaTimeSchema,
   capabilities: playbackCapabilitiesSchema,

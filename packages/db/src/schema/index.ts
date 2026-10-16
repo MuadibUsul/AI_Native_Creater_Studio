@@ -39,6 +39,10 @@ export {
 export { projectVersions, projects, scenes } from './projects.js';
 export { projectSequences, sequenceTracks, sequenceClips } from './composition.js';
 export { projectObjectLocks } from './object-locks.js';
+export { projectOpLog, referenceEdges } from './op-log.js';
+export { workflowRuns, workflowSteps } from './workflow.js';
+export { agentSessions, agentTurns, agentTurnMessages } from './agent.js';
+export { previewSegments, sequencePreviews } from './previews.js';
 export { projectCompositionMigrations, projectVersionCompositionProjections } from './composition-migration.js';
 export {
   compositionAnimationBindings,
@@ -78,3 +82,6 @@ export { renderQaReports } from './render-qa.js';
 export { renderApprovals } from './render-approvals.js';
 export { plans, workspaceSubscriptions } from './plans.js';
 export { billingEvents, creditPacks, workspaceBillingStates } from './payments.js';
+export { strategyPacks } from './strategy.js';
+export { reviewNotes, reviewRounds } from './review.js';
+export { generationRequests, identityConsentRecords, identityReferences } from './paid-generation.js';

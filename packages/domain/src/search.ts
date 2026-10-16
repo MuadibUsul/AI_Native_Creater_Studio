@@ -10,7 +10,7 @@ import {
   type SearchResultItem,
 } from '@ancs/contracts';
 import { assets, projectSources, projects, scenes } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 工作区搜索（P10-06 / 规范 §62；REQ-62-01）。

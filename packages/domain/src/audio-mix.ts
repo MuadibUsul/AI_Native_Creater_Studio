@@ -10,7 +10,7 @@ import {
   mediaTimeSchema,
 } from '@ancs/contracts';
 import { compositionAudioRegions, sequenceTracks } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * N03-06 基础混音计划（片段/区域级）。

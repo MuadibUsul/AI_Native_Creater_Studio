@@ -221,6 +221,19 @@ describe('资产安全（§51：cross-workspace / Signed URL scope / credential 
     }
     expect(download.url.startsWith(`${baseUrl}/api/v1/storage/download?token=`)).toBe(true);
 
+    // 字节范围（视频拖动进度依赖它）：单段 206 + Content-Range；越界 416；无 Range 时整份 200
+    const whole = await fetch(download.url);
+    const bytes = new Uint8Array(await whole.arrayBuffer());
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+    const partial = await fetch(download.url, { headers: { range: 'bytes=2-5' } });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get('content-range')).toBe(`bytes 2-5/${String(bytes.length)}`);
+    expect([...new Uint8Array(await partial.arrayBuffer())]).toEqual([...bytes.subarray(2, 6)]);
+    const outside = await fetch(download.url, { headers: { range: `bytes=${String(bytes.length)}-` } });
+    expect(outside.status).toBe(416);
+    expect(outside.headers.get('content-range')).toBe(`bytes */${String(bytes.length)}`);
+
     // 客户端（SDK）不含任何存储配置项：只有服务端签发的 URL
     expect(Object.keys(owner.client)).not.toContain('storage');
   });

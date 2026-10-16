@@ -11,7 +11,7 @@ import {
   type RenderApproval,
 } from '@ancs/contracts';
 import { assetVersions, assets, projects, renderApprovals } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getRender } from './render.js';
 
 /**

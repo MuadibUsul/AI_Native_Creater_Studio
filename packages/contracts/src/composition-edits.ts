@@ -248,6 +248,18 @@ export const createTrackOperationSchema = z.object({
 
 export type CreateTrackOperation = z.infer<typeof createTrackOperationSchema>;
 
+/**
+ * V6：设定序列时长（成片长度）。AI 初剪与用户都通过它改变成片长度；可撤销（反演为原时长）。
+ * 缩短时序列内任何对象（片段/字幕/音频区域）不得越过新的终点，被嵌套引用时不得短于引用的源范围。
+ */
+export const setSequenceDurationOperationSchema = z.object({
+  op: z.literal('set_sequence_duration'),
+  sequenceId: opaqueIdSchema,
+  duration: mediaTimeSchema,
+}).strict();
+
+export type SetSequenceDurationOperation = z.infer<typeof setSequenceDurationOperationSchema>;
+
 export const moveTrackOperationSchema = z.object({
   op: z.literal('move_track'),
   trackId: opaqueIdSchema,

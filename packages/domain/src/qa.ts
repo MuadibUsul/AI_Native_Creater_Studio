@@ -19,7 +19,7 @@ import {
   type RenderRecord,
 } from '@ancs/contracts';
 import { assetVersions, assets, jobs, projectSources, projectVersions, renderQaReports } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assembleSceneGraph } from './projects.js';
 import { getCurrentMasterNarration, getMasterNarrationById } from './alignment.js';
 import { getRender, transitionRender } from './render.js';

@@ -13,7 +13,7 @@ import { jobs, projects, scenes } from '@ancs/db';
 import { createJob, toJobDto } from './jobs.js';
 import { resolveProviderRoute } from './credentials.js';
 import { assertProjectGenerationAllowed } from './project-document.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 显式生成动作（P06-05 / §2.8、§14.4、§16、§45）。

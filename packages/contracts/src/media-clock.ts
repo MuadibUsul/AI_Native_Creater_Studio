@@ -208,8 +208,9 @@ export const audioGainEnvelopeSchema = z.object({
 export type AudioGainEnvelope = z.infer<typeof audioGainEnvelopeSchema>;
 
 /**
- * 片段内某时刻的线性增益（dB）：淡入/淡出各自线性爬升/回落，其余为 `gainDb`。
- * 淡入淡出重叠时取**较小者**（不会因为重叠而超过目标增益）。
+ * 片段内某时刻的增益（dB）：淡入/淡出为**等功率**曲线（与 RenderPlan `RENDER_PLAN_AUDIO_RULES.fadeCurve`、
+ * 终渲染 `afade curve=qsin` 同一语义：淡入幅度 sin(πp/2)，淡出 cos 的镜像），其余为 `gainDb`。
+ * 淡入淡出重叠时取**较小者**（不会因为重叠而超过目标增益）；幅度为 0 时记为 -96 dB（静音）。
  */
 export function gainDbAt(input: {
   envelope: AudioGainEnvelope;
@@ -221,13 +222,14 @@ export function gainDbAt(input: {
   const target = envelope.gainDb;
   const local = Math.max(0, input.localMs);
   const duration = Math.max(0, input.durationMs);
-  let factor = 1;
-  if (envelope.fadeInMs > 0 && local < envelope.fadeInMs) factor = Math.min(factor, local / envelope.fadeInMs);
+  let amplitude = 1;
+  if (envelope.fadeInMs > 0 && local < envelope.fadeInMs) amplitude = Math.min(amplitude, Math.sin(((local / envelope.fadeInMs) * Math.PI) / 2));
   const fadeOutStart = duration - envelope.fadeOutMs;
   if (envelope.fadeOutMs > 0 && local > fadeOutStart) {
-    factor = Math.min(factor, Math.max(0, (duration - local) / envelope.fadeOutMs));
+    amplitude = Math.min(amplitude, Math.sin((Math.max(0, (duration - local) / envelope.fadeOutMs) * Math.PI) / 2));
   }
-  // 线性因子作用于**dB 到静音的插值**：factor=0 → -96dB（视为静音）
   const silenceDb = -96;
-  return factor >= 1 ? target : silenceDb + (target - silenceDb) * factor;
+  if (amplitude >= 1) return target;
+  if (amplitude <= 0) return silenceDb;
+  return Math.max(silenceDb, target + 20 * Math.log10(amplitude));
 }

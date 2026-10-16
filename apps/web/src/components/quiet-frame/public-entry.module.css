@@ -1,15 +1,38 @@
 .publicLanding {
-  background: var(--ui-bg-canvas);
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--ui-canvas-dots), var(--ui-bg-canvas);
+  background-attachment: fixed;
   color: var(--ui-fg-primary);
 }
 
+/* ADR 0019：顶栏与页脚直接放在点阵画布上；产品示意是一块浮起的大圆角面板，背后一团静止的 AI 极光 */
 .publicLanding :global(.landing-nav),
-.publicLanding :global(.landing-values),
+.publicLanding :global(.landing-values) {
+  border-color: transparent;
+  background: transparent;
+}
 .publicLanding :global(.landing-product),
 .publicLanding :global(.mini-inspector) {
   border-color: var(--ui-border-subtle);
   background: var(--ui-bg-elevated);
 }
+.publicLanding :global(.landing-product) { border-radius: var(--ui-radius-container); box-shadow: var(--ui-shadow-3); overflow: hidden; }
+.publicLanding :global(.landing-hero) { position: relative; isolation: isolate; }
+.publicLanding :global(.landing-hero)::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 360px;
+  width: min(1100px, 110%);
+  height: 520px;
+  transform: translateX(-50%);
+  background: var(--ui-ai-aurora);
+  filter: var(--ui-aurora-filter);
+  pointer-events: none;
+}
+.publicLanding :global(.landing-hero h1) { font-weight: 400; letter-spacing: var(--ui-tracking-display); }
 
 .publicLanding :global(.landing-hero h1 span) { color: var(--ui-fg-primary); }
 .publicLanding :global(.landing-values) { color: var(--ui-fg-secondary); }
@@ -60,3 +83,4 @@
 .designSystem :global(.status-board div) {
   border-color: var(--ui-border-subtle);
 }
+.publicLanding :global(.landing-buttons) { flex-wrap: wrap; justify-content: center; }

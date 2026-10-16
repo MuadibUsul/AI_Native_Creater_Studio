@@ -1,0 +1,51 @@
+{
+  "id": "explainer",
+  "description": "V6-5 文章转解说视频：从文章开始（无素材），AI 写讲述稿、配音、配图解卡。英文文章用 FFmpeg 内置 flite 讲述即可跑通；中文用例需要部署方接入的中文配音（没有时 AI 应如实说明）。数据图只能用文章里的数字（服务端校验）。",
+  "cases": [
+    {
+      "id": "fresh-water-en",
+      "title": "Fresh water",
+      "aspectRatio": "16:9",
+      "locale": "en",
+      "article": {
+        "title": "Fresh water",
+        "text": "Water covers about 71 percent of the surface of the Earth. Yet very little of it is fresh.\n\nOnly 2.5 percent of all water is fresh water, and most of that is frozen in glaciers and ice caps.\n\nRivers and lakes hold a tiny share. Protecting them protects the water we drink."
+      },
+      "request": "Make a first explainer video from the article.",
+      "targetSeconds": null,
+      "strategy": null
+    },
+    {
+      "id": "fresh-water-en-explainer-style",
+      "title": "Fresh water · explainer style",
+      "aspectRatio": "9:16",
+      "locale": "en",
+      "article": {
+        "title": "Fresh water",
+        "text": "Water covers about 71 percent of the surface of the Earth. Yet very little of it is fresh.\n\nOnly 2.5 percent of all water is fresh water, and most of that is frozen in glaciers and ice caps.\n\nRivers and lakes hold a tiny share. Protecting them protects the water we drink."
+      },
+      "request": "Make a first explainer video from the article.",
+      "targetSeconds": null,
+      "strategy": {
+        "packId": "builtin:explainer",
+        "knobs": {
+          "cards": "data_first"
+        }
+      }
+    },
+    {
+      "id": "city-trees-zh",
+      "title": "城市的树",
+      "aspectRatio": "16:9",
+      "locale": "zh-CN",
+      "article": {
+        "title": "城市的树",
+        "text": "2023 年，这座城市在河边种下了 1,200 棵树。\n\n一棵成年的树每年能吸收大约 22 公斤二氧化碳，还能在夏天让街道降温。\n\n种树不难，难的是让它们活下来：前三年的浇水和养护最关键。"
+      },
+      "request": "根据文章做出第一版解说视频。",
+      "targetSeconds": null,
+      "strategy": null,
+      "requiresVoiceLanguage": "zh"
+    }
+  ]
+}

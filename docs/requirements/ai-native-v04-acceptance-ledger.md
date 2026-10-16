@@ -196,9 +196,9 @@
 | N09-06 | 封面、字幕、母版包与多规格 | N09-03, N03-07 | TODO | — |
 | N09-07 | 合成中断恢复与结果验收状态 | N09-03, N09-04 | TODO | — |
 | N09-08 | G1/G2完整发布门验证 | N09-05, N09-06, N09-07, N05-08, N07-08 | TODO | — |
-| N09-09 | 共享RenderPlan与混合后端分区 | N01-09, N03-11, N09-03 | TODO | — |
-| N09-10 | FFmpeg媒体图与Remotion图形合成后端 | N09-09, N09-04, N03-08 | TODO | — |
-| N09-11 | 浏览器预览与混合终渲染逐能力对照 | N09-10, N03-16 | TODO | — |
+| N09-09 | 共享RenderPlan与混合后端分区 | N01-09, N03-11, N09-03 | IN_PROGRESS（V5-M4：内核 `compileRenderPlan` 编译唯一 RenderPlan，planHash 对同一内容稳定、不支持需求显式 501；预览快照/合成计划/FFmpeg 终渲染共用。冻结 ProjectDocument 输入（依赖 N09-03）、色彩与 graphics/预渲染子图分区未做） | [V5-M4 证据](../verification/V5-M4.md) |
+| N09-10 | FFmpeg媒体图与Remotion图形合成后端 | N09-09, N09-04, N03-08 | IN_PROGRESS（V5-M4：FFmpeg 受限参数化媒体图——多层合成/变换/裁切/透明度/增益/等功率淡变/声像，侧载字幕；真实编解码一致性用例通过。Remotion 图形层（alpha）、字幕烧录与技术 QA（N09-04）未做） | [V5-M4 证据](../verification/V5-M4.md) |
+| N09-11 | 浏览器预览与混合终渲染逐能力对照 | N09-10, N03-16 | IN_PROGRESS（V5-M4：同一 RenderPlan 的 baseline 投影与 FFmpeg 终渲染逐帧源帧号相等、音频起点/增益/声像/等功率淡变对照通过（精简集）；真实浏览器呈现侧对照与全能力矩阵未做） | [V5-M4 证据](../verification/V5-M4.md) |
 
 ### N10
 

@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { apiError, mockClient, renderWithClient } from '@/test-utils';
 import { DeliveryRender } from './delivery-render';
 
@@ -131,5 +132,27 @@ describe('Quiet Frame render approval', () => {
     expect((screen.getByRole('button', { name: '创建新渲染' }) as HTMLButtonElement).disabled).toBe(true);
     expect(create).not.toHaveBeenCalled();
     expect(synthesizeMasterNarration).not.toHaveBeenCalled();
+  });
+
+  it('renders the review page in English without Chinese interface text', async () => {
+    const client = mockClient({
+      ...prerequisites(),
+      renders: { list: vi.fn().mockResolvedValue([{ ...base, id: 'rnd_1' }]), qaReport: vi.fn().mockResolvedValue(passingQa), approval: vi.fn().mockResolvedValue(null) },
+      projects: { renderPrecheck: vi.fn().mockResolvedValue(failingQa) },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><DeliveryRender workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    expect(await screen.findByText('Narration ready')).toBeTruthy();
+    await screen.findByTestId('qa-report');
+    expect(screen.getByRole('heading', { name: 'The final pass is yours.' })).toBeTruthy();
+    expect(screen.getByText(/Script revision 1 · 4\.5s · 0 narration segments · Provider timestamps/)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Render profile' })).toBeTruthy();
+    expect(screen.getAllByText('Studio HD · 1080p').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('button', { name: 'Approve this version' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /I've reviewed this real render/ })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Pre-render check' }));
+    expect(await screen.findByText(/The precheck found blockers/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Create new render' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

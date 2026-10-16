@@ -1,0 +1,47 @@
+{
+  "id": "entertainment",
+  "description": "V6-8 娱乐类通用初剪评测集模板（V6 §4.1 第三类：3 秒钩子、极快节奏、大字幕、音效密集、推拉变焦、持续悬念）。把你有权使用的原片（挑战、开箱、整蛊、反应类，最好有人说话）放进仓库根目录的 Videos/（已在 .gitignore 中，不入库），复制本文件为 entertainment.json 并改路径。以不选策略的用例为主（V6 §6.5），一个用例选用可选预设 builtin:entertainment 对照；需要真实导演（--model anthropic）与语音转写（DEEPGRAM_API_KEY）才有意义。",
+  "cases": [
+    {
+      "id": "challenge-general",
+      "title": "挑战视频 · 不选策略",
+      "aspectRatio": "9:16",
+      "locale": "zh-CN",
+      "footage": [
+        { "path": "Videos/fun-challenge-01.mp4" },
+        { "path": "Videos/fun-challenge-02.mp4" },
+        { "path": "Videos/fun-challenge-03.mp4" }
+      ],
+      "request": "剪一条 45 秒左右的短视频，开头 3 秒就要抓住人，结尾揭晓结果。",
+      "targetSeconds": 45,
+      "strategy": null
+    },
+    {
+      "id": "reaction-general-en",
+      "title": "Reaction video · no strategy",
+      "aspectRatio": "16:9",
+      "locale": "en",
+      "footage": [
+        { "path": "Videos/fun-reaction-01.mp4" },
+        { "path": "Videos/fun-reaction-02.mp4" }
+      ],
+      "request": "Make a punchy 60-second cut that keeps people watching until the reveal.",
+      "targetSeconds": 60,
+      "strategy": null
+    },
+    {
+      "id": "challenge-entertainment-style",
+      "title": "挑战视频 · 选用“高能娱乐”（更密）",
+      "aspectRatio": "9:16",
+      "locale": "zh-CN",
+      "footage": [
+        { "path": "Videos/fun-challenge-01.mp4" },
+        { "path": "Videos/fun-challenge-02.mp4" },
+        { "path": "Videos/fun-challenge-03.mp4" }
+      ],
+      "request": "剪一条 45 秒左右的短视频，开头 3 秒就要抓住人，结尾揭晓结果。",
+      "targetSeconds": 45,
+      "strategy": { "packId": "builtin:entertainment", "knobs": { "pacing": "intense", "captions": "big" } }
+    }
+  ]
+}

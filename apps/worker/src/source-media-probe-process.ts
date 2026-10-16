@@ -6,6 +6,7 @@ import {
   type SourceMediaProbe,
   type SourceMediaProbeResult,
 } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 export interface FfmpegSourceMediaProbeOptions {
   ffprobePath?: string;
@@ -31,7 +32,7 @@ async function runBoundedProcess(input: {
   maxOutputBytes: number;
 }): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(input.executable, input.args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(input.executable, input.args, { env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '';
     let stderr = '';
     let outputBytes = 0;

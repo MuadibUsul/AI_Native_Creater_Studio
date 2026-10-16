@@ -14,13 +14,13 @@
 .qf-consent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .qf-consent-grid > div { min-width: 0; }
 .qf-statement { white-space: pre-wrap; max-height: 170px; overflow: auto; }
-.qf-error { color: #a64035; }
+.qf-error { color: var(--ui-fg-primary); }
 .qf-pack-status { margin-left: auto; }
 .qf-pack-card { display: flex; flex-direction: column; }
 .qf-pack-card > p { flex: 1; }
 .qf-pack-note { max-width: 75ch; }
-.qf-pack-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; margin: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); background: var(--panel); box-shadow: 0 28px 80px #0a150d40; }
-.qf-pack-dialog::backdrop { background: #1420178c; }
+.qf-pack-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; margin: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); background: var(--panel); box-shadow: 0 28px 80px rgba(0, 0, 0, 0.25); }
+.qf-pack-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 .qf-pack-card .pack-icon { background: var(--ui-selection-bg); color: var(--ui-fg-primary); border: 1px solid var(--ui-border-subtle); }
 .qf-pack-card .qf-pack-status.green { background: var(--ui-selection-bg); color: var(--ui-fg-primary); }
 .qf-identity-onboarding { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--ui-border-subtle); }

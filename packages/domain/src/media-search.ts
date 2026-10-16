@@ -14,7 +14,7 @@ import {
   type MediaSegmentSearchResult,
 } from '@ancs/contracts';
 import { assets, assetVersions, mediaIndexEntries, mediaIndexRuns, mediaRangeTags, mediaTranscriptRuns, mediaTranscriptVersions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
 const chineseOrdinal = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'] as const;

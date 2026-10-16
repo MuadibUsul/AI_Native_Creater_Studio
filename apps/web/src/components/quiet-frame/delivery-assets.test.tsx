@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { mockClient, renderWithClient, testFile } from '@/test-utils';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { DeliveryAssets } from './delivery-assets';
 
 describe('Quiet Frame asset flow', () => {
@@ -407,5 +408,99 @@ describe('Quiet Frame asset flow', () => {
     await userEvent.click(confirmButton);
     await waitFor(() => expect(applyRelink).toHaveBeenCalledWith('ws_1', target.id, expect.objectContaining({ targetVersionId: 'av_missing', candidateAssetId: candidate.id, confirmationText: '确认替换' })));
     expect(await screen.findByText('原件在线')).toBeTruthy();
+  });
+
+  it('renders the library, upload dialog and Finance entry in English without Chinese copy', async () => {
+    const asset = { id: 'ast_image', workspaceId: 'ws_1', projectId: 'prj_1', assetType: 'SOURCE_IMAGE', origin: 'USER_UPLOAD', status: 'READY', metadata: { filename: 'cover.png' }, license: { type: 'USER_OWNED' } };
+    const generation = { id: 'gen_1', providerId: 'external-studio', providerJobId: 'job_42', status: 'SUBMITTED' };
+    const client = mockClient({
+      assets: { list: vi.fn().mockResolvedValue([asset]), uploadResumable: vi.fn(), cancelUpload: vi.fn() },
+      billing: { externalResults: vi.fn().mockResolvedValue([generation]) },
+      finance: { listDataSources: vi.fn().mockResolvedValue({ items: [] }), listTemplates: vi.fn().mockResolvedValue({ items: [] }), listArtifacts: vi.fn().mockResolvedValue({ items: [] }) },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><DeliveryAssets workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    const card = await screen.findByRole('button', { name: 'View asset cover.png' });
+    expect(screen.getByRole('heading', { name: 'Good material deserves a home.' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Filter by asset type' }).textContent).toBe('All assetsImagesChartsAudioDocumentsVideo');
+    expect(card.textContent).toContain('Illustration · not the asset itself');
+    expect(card.textContent).toContain('Uploaded');
+    expect(card.textContent).toContain('User owned');
+    expect(card.textContent).toContain('Ready');
+    expect(screen.getByRole('button', { name: 'Search segments' })).toBeTruthy();
+    expect(await screen.findByText('Job job_42 · SUBMITTED')).toBeTruthy();
+    expect(screen.getByLabelText('Asset to rebind for gen_1')).toBeTruthy();
+    await userEvent.click(screen.getByText('Finance chart assets'));
+    expect(await screen.findByText('1. Data source and license')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Upload assets' }));
+    const dialog = screen.getByRole('dialog', { name: 'Upload assets' });
+    await userEvent.upload(screen.getByLabelText('Choose files'), [testFile('a.png', 'A', 'image/png'), testFile('b.png', 'B', 'image/png')]);
+    expect(screen.getByText('2 files selected')).toBeTruthy();
+    expect(screen.getAllByText((_text, element) => element?.tagName === 'SPAN' && element.textContent?.includes('Waiting to upload') === true)).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Start upload' })).toBeTruthy();
+    expect(dialog.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('renders the asset detail panels in English, including lifecycle, relink, analysis, index and transcript', async () => {
+    const license = { type: 'USER_OWNED', holder: 'Creator', attribution: 'Photo by Creator', sourceUrl: null, termsUrl: null, notes: null, confirmedBy: 'usr_1', confirmedAt: '2026-10-09T00:00:00.000Z', userOwnedDeclared: true, permittedUses: ['EDIT', 'PUBLISH'], expiresAt: null };
+    const asset = { id: 'ast_en', workspaceId: 'ws_1', projectId: 'prj_1', sceneId: null, assetType: 'USER_UPLOAD', origin: 'USER_UPLOAD', status: 'READY', retentionClass: 'KEEP_USER_SOURCE', sensitivityClass: 'INTERNAL', privacyDeletionRequestedAt: null, metadata: { filename: 'interview.mp4' }, currentVersionId: 'av_source', createdAt: '2026-10-09T00:00:00.000Z', updatedAt: '2026-10-09T00:00:00.000Z', license };
+    const mediaProbe = { status: 'READY', streams: [{ index: 0, type: 'VIDEO', codecName: 'h264', width: 320, height: 180, averageFrameRate: { numerator: 24, denominator: 1 }, cadence: 'CONSTANT' }, { index: 1, type: 'AUDIO', codecName: 'aac', sampleRate: 48000, channels: 2 }], capabilities: { upload: 'AVAILABLE', decode: 'AVAILABLE', preview: 'PROXY_REQUIRED', export: 'AVAILABLE', reasons: [] } };
+    const reference = { kind: 'SCENE', projectId: 'prj_1', projectTitle: 'Project One', projectRevision: 7, sceneId: 'scn_1', sceneRevision: 3, role: 'visual', projectVersionId: null, versionNumber: null, versionReason: null };
+    const stages = ['PROBE', 'PROXY', 'WAVEFORM', 'ASR', 'SHOT', 'SAMPLING', 'VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'].map((stage) => ({
+      stage, status: stage === 'PROBE' ? 'READY' : stage === 'ASR' ? 'FAILED' : 'DISABLED', dependencies: [], coveragePermille: stage === 'PROBE' ? 1000 : 0, checkpoint: null,
+      detectorConfigHash: 'a'.repeat(64), inputFingerprint: 'b'.repeat(64), jobId: null, budgetMicrocents: null, spentMicrocents: 0, errorSummary: null,
+      invalidatedAt: null, startedAt: null, completedAt: null, updatedAt: '2026-10-09T00:00:00.000Z',
+    }));
+    const transcript = { runId: 'mtr_1', sourceAssetVersionId: 'av_source', processorVersion: 'source-transcript-v1', status: 'READY', errorSummary: null, currentVersion: { id: 'mtv_1', version: 1, source: 'ASR', provider: 'scripted-test-only', model: 'fixture-v1', language: 'en', terminology: [], affectedSegmentIds: [], createdAt: '2026-10-09T00:00:00.000Z', speakers: [{ id: 'speaker-1', displayName: null, identityState: 'UNKNOWN', confidencePermille: 700 }], words: [], segments: [{ id: 'mts_1', ordinal: 0, text: 'The price is 120', speakerId: 'speaker-1', wordStartOrdinal: 0, wordEndOrdinal: 0, evidence: 'ASR_INFERENCE', reviewState: 'UNREVIEWED', sourceStartPts: '1000', sourceEndPts: '2000', timeBase: { numerator: 1, denominator: 1000 } }] } };
+    const client = mockClient({
+      assets: {
+        list: vi.fn().mockResolvedValue([asset]),
+        get: vi.fn().mockResolvedValue({ ...asset, versions: [{ id: 'av_source', mimeType: 'video/mp4', probeStatus: 'READY', mediaProbe }] }),
+        downloadUrl: vi.fn().mockResolvedValue({ url: 'https://storage.local/source.mp4', expiresAt: '2099-01-01T00:00:00.000Z' }),
+        playbackUrl: vi.fn().mockResolvedValue({ assetId: asset.id, sourceVersionId: 'av_source', rendition: 'PROXY', renditionVersionId: 'av_proxy', mimeType: 'video/mp4', url: 'https://storage.local/proxy.mp4', expiresAt: '2099-01-01T00:00:00.000Z', proxyStatus: 'READY', proxyProfileKey: 'web-edit-video-720p-v1', timeMappings: [{ schemaVersion: '1.0', kind: 'PTS_AFFINE', streamType: 'VIDEO', sourceStreamIndex: 0, proxyStreamIndex: 0, sourceTimeBase: { numerator: 1, denominator: 15360 }, proxyTimeBase: { numerator: 1, denominator: 90000 }, sourceOriginPts: '0', proxyOriginPts: '0', sourceDurationTicks: '61440', proxyDurationTicks: '360000', anchors: [] }], message: null }),
+        mediaIndex: vi.fn().mockResolvedValue({ runId: 'mix_1', sourceAssetVersionId: 'av_source', processorVersion: 'source-index-v1', status: 'READY', coveragePermille: 1000, checkpointMs: 4000, errorSummary: null, nextCursor: null, items: [{ id: 'mie_1', kind: 'THUMBNAIL', ordinal: 0, sourceStartPts: '15360', sourceEndPts: '30720', timeBase: { numerator: 1, denominator: 15360 }, confidencePermille: 1000, payload: { sourceStartMs: 1000, sourceEndMs: 2000 }, previewUrl: null, previewExpiresAt: null }] }),
+        transcript: vi.fn().mockResolvedValue(transcript),
+        analysisStages: vi.fn().mockResolvedValue({ assetId: asset.id, sourceAssetVersionId: 'av_source', playable: true, deterministicEditingReady: true, stages }),
+        listRangeTags: vi.fn().mockResolvedValue({ items: [] }),
+        lifecycle: vi.fn().mockResolvedValue({ asset, licenseState: 'ACTIVE', references: [reference], derivations: [], gcProtected: true, gcProtectionReasons: ['ACTIVE_SCENE_REFERENCE'] }),
+        relinkState: vi.fn().mockResolvedValue({ assetId: asset.id, versions: [{ assetVersionId: 'av_source', versionNumber: 1, current: true, availability: 'MISSING', checksumSha256: 'a'.repeat(64), durationMs: 5_000, tracks: [], activeClipReferences: 2 }] }),
+      },
+      billing: { externalResults: vi.fn().mockResolvedValue([]) },
+    });
+    renderWithClient(<I18nProvider initialLocale="en"><DeliveryAssets workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    await userEvent.click(await screen.findByRole('button', { name: 'View asset interview.mp4' }));
+    const dialog = screen.getByRole('dialog', { name: 'interview.mp4' });
+    expect(await screen.findByText('Progressive analysis · Ready to edit')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry this stage' })).toBeTruthy();
+    const lifecycle = await screen.findByRole('region', { name: 'Source, rights and media lifecycle' });
+    expect(lifecycle.textContent).toContain('License active');
+    expect(lifecycle.textContent).toContain('Editing, Publishing');
+    expect(lifecycle.textContent).toContain('No expiry set');
+    expect(lifecycle.textContent).toContain('Attribution: Photo by Creator');
+    expect(lifecycle.textContent).toContain('Project One · current scene');
+    expect(lifecycle.textContent).toContain('Role visual · still used by the scene');
+    expect((await screen.findByRole('region', { name: 'Original availability and relinking' })).textContent).toContain('1 version missing');
+    expect(screen.getByLabelText('Missing version').textContent).toBe('Version 1 · current · 2 active clip references');
+    const capabilities = await screen.findByRole('region', { name: 'Media capabilities' });
+    expect(capabilities.textContent).toContain('UploadReady to use');
+    expect(capabilities.textContent).toContain('PreviewNeeds a preview proxy');
+    expect(capabilities.textContent).toContain('Audio #1 · aac · 48000 Hz · 2 ch');
+    expect((await screen.findByRole('region', { name: 'Edit proxy' })).textContent).toContain('Video PTS mapping · 1/15360 → 1/90000');
+    expect(await screen.findByRole('button', { name: 'Play Thumbnails 00:01 to 00:02' })).toBeTruthy();
+    const transcriptRegion = await screen.findByRole('region', { name: 'Source transcript' });
+    expect(await screen.findByText('Machine recognition · needs review')).toBeTruthy();
+    expect(transcriptRegion.textContent).toContain('Unknown speaker · Machine recognition');
+    expect(screen.getByRole('button', { name: 'Play the transcript segment starting at 00:01' })).toBeTruthy();
+    expect((await screen.findByRole('region', { name: 'Range tags' })).textContent).toContain('No range tags yet.');
+    expect(screen.getByRole('link', { name: 'Download original' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Go to storyboard' })).toBeTruthy();
+    await userEvent.click(screen.getByText('Deletion and privacy'));
+    await userEvent.click(screen.getByRole('button', { name: 'Request privacy deletion' }));
+    expect(screen.getByLabelText('Type the asset ID to confirm')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit source and rights' }));
+    expect(screen.getByLabelText('Rights type').textContent).toBe('User ownedLicensedPublic domainPlatform termsNot confirmed yet');
+    expect(screen.getByLabelText('Sensitivity').textContent).toBe('PublicInternalSensitiveRestricted');
+    expect(dialog.textContent).not.toMatch(/[一-鿿]/);
   });
 });

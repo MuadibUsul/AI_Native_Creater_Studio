@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Player } from '@remotion/player';
 import type { SceneGraph } from '@ancs/contracts';
 import { timelineOf, VideoComposition, type CompositionSceneInput } from '@ancs/remotion-core';
+import { useI18n } from '@/i18n/I18nProvider';
 
 /**
  * 预览播放器（P05-04）：Remotion Player 消费 Scene Graph；
@@ -25,6 +26,7 @@ export interface PreviewPlayerProps {
 
 export function PreviewPlayer({ graph, resolveAssetUrl, width = 720 }: PreviewPlayerProps) {
   const timing = useMemo(() => timelineOf(graph), [graph]);
+  const { messages } = useI18n();
   const height = Math.round((width * graph.format.height) / graph.format.width);
 
   return (
@@ -47,7 +49,7 @@ export function PreviewPlayer({ graph, resolveAssetUrl, width = 720 }: PreviewPl
         }}
       />
       <p className="mt-1 text-xs text-slate-500">
-        {timing.durationInFrames} 帧 · {timing.fps}fps · {timing.durationMs} ms · 预览为本地渲染（不触发 Provider 调用）
+        {messages.projectFlow.previewPlayer.timing(timing.durationInFrames, timing.fps, timing.durationMs)}
       </p>
     </div>
   );

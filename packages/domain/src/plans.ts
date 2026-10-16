@@ -21,7 +21,8 @@ import {
   type WorkspaceSubscription,
 } from '@ancs/contracts';
 import { assetVersions, channels, creatorIdentities, customMotionComponentVersions, plans, workspaceMembers, workspaceSubscriptions, workspaces } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
+import { deploymentPolicy } from './deployment-policy.js';
 
 /**
  * 套餐与权益服务（P09-01 / 规范 §73、§35—36、§31）。
@@ -34,17 +35,11 @@ import type { DomainDeps } from './channels.js';
  */
 
 /**
- * 未订阅 workspace 的默认套餐（部署配置 ANCS_DEFAULT_PLAN；默认 ENTERPRISE = 预上线内部模式）。
+ * 未订阅 workspace 的默认套餐（部署策略 ANCS_DEFAULT_PLAN，由进程入口注入；默认 ENTERPRISE = 预上线内部模式）。
  * **SaaS 上线门（P09-06）要求正式环境置为 FREE（或注册流程显式分配）**——默认值即默认额度口径。
  */
 export function defaultPlanKeyForUnsubscribed(): PlanKey {
-  const raw = process.env['ANCS_DEFAULT_PLAN'];
-  if (raw === undefined || raw === '') return 'ENTERPRISE';
-  const allowed: readonly string[] = ['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'];
-  if (!allowed.includes(raw)) {
-    throw new ApiFailure(ERROR_CODES.INTERNAL, `ANCS_DEFAULT_PLAN 非法：${raw}（允许 FREE/CREATOR/PRO/STUDIO/ENTERPRISE）`, 500);
-  }
-  return raw as PlanKey;
+  return deploymentPolicy().defaultPlan;
 }
 
 const toPlanDto = (row: typeof plans.$inferSelect): Plan =>

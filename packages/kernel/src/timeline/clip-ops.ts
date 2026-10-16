@@ -36,7 +36,7 @@ export function insertClip(work: WorkingTimeline, operation: Op<'insert_clip'>, 
     work.assertSourceRangeUsable({ assetVersionId: operation.assetVersionId, nestedSequenceId: null, range: insertSourceRange });
     sourceHasAudio = work.state.sources.assetVersions.get(operation.assetVersionId)?.hasAudio ?? false;
   } else if (operation.nestedSequenceId !== null) {
-    const nested = work.state.sequences.get(operation.nestedSequenceId)?.duration;
+    const nested = work.sequences.get(operation.nestedSequenceId)?.duration;
     if (!nested || compareMediaTime(insertSourceRange.end, nested) > 0) {
       throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'clip source range exceeds nested sequence duration', 422, { reason: 'SOURCE_RANGE_OUT_OF_BOUNDS' });
     }

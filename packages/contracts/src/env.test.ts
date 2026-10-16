@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckWorkerEnv, formatEnvFailure, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -87,6 +87,8 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     ANCS_OPS_ENVIRONMENT: 'PRODUCTION',
     // 生产必须显式配置凭据信封密钥（见 0010：不得与会话密钥共用一把）
     ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, // secrets:check-ignore：测试专用假密钥（非真实凭据）
+    // 生产必须显式配置存储签名密钥（V5-M3：不得从会话密钥派生）
+    ANCS_STORAGE_SECRET: 'S'.repeat(32), // secrets:check-ignore：测试专用假密钥（非真实凭据）
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -125,5 +127,198 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     const result = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_SAAS_MODE: 'production' });
     expect(result.ok).toBe(false);
     expect(result.issues.find((issue) => issue.variable === 'ANCS_SAAS_MODE')?.message).toContain('仅支持 internal | live');
+  });
+});
+
+describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值', () => {
+  const secret = 'S'.repeat(32); // secrets:check-ignore：测试专用假密钥（非真实凭据）
+
+  it('生产 API/Worker 未显式配置存储签名密钥 → 启动失败；配置后通过', () => {
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_SECRET']);
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production' });
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_CREDENTIAL_KEYS', 'ANCS_STORAGE_SECRET']);
+    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    expect(crossCheckWorkerEnv(fixed.value!)).toEqual([]);
+  });
+
+  it('旧变量名 PLATFORM_PROVIDER_KEYS 从未生效 → 启动失败并提示改名（不静默忽略凭据配置）', () => {
+    const result = validateEnv(apiEnvSchema, { ...validApiEnv, PLATFORM_PROVIDER_KEYS: 'openai:sk-test' });
+    expect(crossCheckApiEnv(result.value!).find((issue) => issue.variable === 'PLATFORM_PROVIDER_KEYS')?.message).toContain('ANCS_PLATFORM_PROVIDER_KEYS');
+    const renamed = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_PLATFORM_PROVIDER_KEYS: 'openai:sk-test' });
+    expect(crossCheckApiEnv(renamed.value!)).toEqual([]);
+  });
+
+  it('Worker 数值配置按上下界校验（非法值启动失败，不再变成 NaN 租约）；心跳必须短于租约', () => {
+    const bad = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_LEASE_SECONDS: 'abc', ANCS_WORKER_TICK_MS: '10' });
+    expect(bad.issues.map((issue) => issue.variable).sort()).toEqual(['ANCS_WORKER_LEASE_SECONDS', 'ANCS_WORKER_TICK_MS']);
+    const defaults = validateEnv(workerEnvSchema, validApiEnv);
+    expect(defaults.value).toMatchObject({ ANCS_WORKER_TICK_MS: 1000, ANCS_WORKER_LEASE_SECONDS: 60 });
+    const slowHeartbeat = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_LEASE_SECONDS: '10', ANCS_WORKER_HEARTBEAT_MS: '10000' });
+    expect(crossCheckWorkerEnv(slowHeartbeat.value!).map((issue) => issue.variable)).toEqual(['ANCS_WORKER_HEARTBEAT_MS']);
+  });
+
+  it('V6-5/V6-7/V6-8 Fish Audio、HeyGen 与视频生成：缺密钥/缺声音/缺报价依据 → 启动失败；报价依据只接受真实实现', () => {
+    const fish = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_NARRATION_DRIVER: 'fish' });
+    expect(crossCheckWorkerEnv(fish.value!).map((issue) => issue.variable)).toEqual(['FISH_AUDIO_API_KEY', 'ANCS_NARRATION_VOICES_JSON']);
+    const voices = JSON.stringify([{ id: 'abc123', name: 'Mine', languages: ['zh', 'en'], description: 'cloned' }]);
+    const fishReady = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_NARRATION_DRIVER: 'fish', FISH_AUDIO_API_KEY: 'f'.repeat(32), ANCS_NARRATION_VOICES_JSON: voices }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(fishReady.value!)).toEqual([]);
+    const heygen = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_DRIVER: 'heygen' });
+    expect(crossCheckWorkerEnv(heygen.value!).map((issue) => issue.variable)).toEqual(['HEYGEN_API_KEY', 'FISH_AUDIO_API_KEY']);
+    const offer = { kind: 'AVATAR_CLIP', providerId: 'heygen', implementation: 'REAL', model: 'm', perSecondMicros: { min: 1, max: 2 }, maxSeconds: 20 };
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify(offer) }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify({ ...offer, implementation: 'SCRIPTED' }) }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AVATAR_OFFER_JSON: JSON.stringify({ ...offer, kind: 'VIDEO_SHOT' }) }).ok).toBe(false);
+    const video = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(video.value!).map((issue) => issue.variable)).toEqual(['ANCS_GENERATION_EXECUTABLE', 'ANCS_GENERATION_OFFERS_JSON']);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_OFFERS_JSON: JSON.stringify([{ ...offer, kind: 'VIDEO_SHOT', implementation: 'SCRIPTED' }]) }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_PASS_ENV: 'VENDOR_KEY, OTHER_KEY' }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_GENERATION_PASS_ENV: 'bad name' }).ok).toBe(false);
+  });
+
+  it('ASR 驱动显式选择：deepgram 缺密钥 / process 缺可执行文件 → 启动失败', () => {
+    const deepgram = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'deepgram' });
+    expect(crossCheckWorkerEnv(deepgram.value!).map((issue) => issue.variable)).toEqual(['DEEPGRAM_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'deepgram', DEEPGRAM_API_KEY: 'k'.repeat(40) }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    const process = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(process.value!).map((issue) => issue.variable)).toEqual(['ANCS_ASR_EXECUTABLE']);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'whisper' }).ok).toBe(false);
+  });
+
+  it('V6 导演模型驱动显式选择：anthropic 缺密钥 → 启动失败；未知驱动拒绝；不配置则不装配（不回退 Mock）', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'anthropic' });
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['ANTHROPIC_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'anthropic', ANTHROPIC_API_KEY: 'a'.repeat(40), ANCS_AGENT_MODEL: 'claude-opus-5-5' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'mock' }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_AGENT_DRIVER).toBeUndefined();
+    const vision = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'anthropic' });
+    expect(crossCheckWorkerEnv(vision.value!).map((issue) => issue.variable)).toEqual(['ANTHROPIC_API_KEY']);
+    const processVision = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'process' });
+    expect(crossCheckWorkerEnv(processVision.value!).map((issue) => issue.variable)).toEqual(['ANCS_VISUAL_ANALYSIS_EXECUTABLE']);
+  });
+
+  it('Gemini：导演 / 视觉 / 讲述选 gemini 缺 GEMINI_API_KEY → 启动失败（逐项说明）；Veo 报价依据必须带时长档位且不超过单次上限', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'gemini', ANCS_VISUAL_ANALYSIS_DRIVER: 'gemini', ANCS_NARRATION_DRIVER: 'gemini' });
+    const issues = crossCheckWorkerEnv(missing.value!);
+    expect(issues.map((issue) => issue.variable)).toEqual(['GEMINI_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY']);
+    expect(issues.map((issue) => issue.message.split('=')[0])).toEqual(['ANCS_AGENT_DRIVER', 'ANCS_VISUAL_ANALYSIS_DRIVER', 'ANCS_NARRATION_DRIVER']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'gemini', ANCS_VISUAL_ANALYSIS_DRIVER: 'gemini', ANCS_NARRATION_DRIVER: 'gemini', GEMINI_API_KEY: 'g'.repeat(39), ANCS_AGENT_MODEL: 'gemini-flash-latest' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+
+    const veo = { kind: 'VIDEO_SHOT', providerId: 'veo', implementation: 'REAL', model: 'veo-3.1-fast-generate-preview', perSecondMicros: { min: 150_000, max: 150_000 }, maxSeconds: 8, durationOptions: [4, 6, 8] };
+    const veoOnly = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VEO_OFFER_JSON: JSON.stringify(veo) });
+    expect(veoOnly.ok).toBe(true);
+    expect(crossCheckWorkerEnv(veoOnly.value!).map((issue) => issue.variable)).toEqual(['GEMINI_API_KEY']);
+    const { durationOptions: _options, ...withoutOptions } = veo;
+    for (const bad of [withoutOptions, { ...veo, durationOptions: [4, 6, 10] }, { ...veo, kind: 'VIDEO_REGION' }, { ...veo, implementation: 'SCRIPTED' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VEO_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+  });
+
+  it('Runway 选区重绘：报价依据只接受 VIDEO_REGION 真实实现；缺 RUNWAYML_API_SECRET 启动失败；地址必须是 https', () => {
+    const runway = { kind: 'VIDEO_REGION', providerId: 'runway', implementation: 'REAL', model: 'gen4_aleph', perSecondMicros: { min: 150_000, max: 150_000 }, maxSeconds: 5 };
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(runway) });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['RUNWAYML_API_SECRET']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(runway), RUNWAYML_API_SECRET: 'k'.repeat(40) }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    for (const bad of [{ ...runway, kind: 'VIDEO_SHOT' }, { ...runway, implementation: 'SCRIPTED' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_RUNWAY_BASE_URL: 'http://api.dev.runwayml.com/v1' }).ok).toBe(false);
+  });
+
+  it('火山方舟 Seedance：报价依据必须带整数秒档位；缺 ARK_API_KEY 启动失败；地址必须是 https；分辨率形如 720p', () => {
+    const seedance = { kind: 'VIDEO_SHOT', providerId: 'seedance', implementation: 'REAL', model: 'doubao-seedance-2-5-260628', perSecondMicros: { min: 50_000, max: 50_000 }, maxSeconds: 10, durationOptions: [5, 10] };
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(seedance) });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['ARK_API_KEY']);
+    const keyed = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(seedance), ARK_API_KEY: 'a'.repeat(40), ANCS_SEEDANCE_RESOLUTION: '720p', ANCS_SEEDANCE_GENERATE_AUDIO: '0' }); // secrets:check-ignore：测试假值
+    expect(crossCheckWorkerEnv(keyed.value!)).toEqual([]);
+    for (const bad of [{ ...seedance, durationOptions: [4.5] }, { ...seedance, durationOptions: undefined }, { ...seedance, kind: 'AVATAR_CLIP' }]) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_OFFER_JSON: JSON.stringify(bad) }).ok).toBe(false);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ARK_BASE_URL: 'http://ark.example.com/api/v3' }).ok).toBe(false);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ARK_BASE_URL: 'https://ark.ap-southeast.bytepluses.com/api/v3' }).ok).toBe(true);
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_SEEDANCE_RESOLUTION: 'hd' }).ok).toBe(false);
+  });
+
+  it('空白值视为未配置：可选项回到缺省，必填项报告未配置（复制 .env.example 的空行不会启动失败）', () => {
+    const blankOptional = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: '', ANCS_STORAGE_SECRET: '  ', ANCS_PLATFORM_PROVIDER_KEYS: '' });
+    expect(blankOptional.ok).toBe(true);
+    expect(blankOptional.value?.ANCS_VOICE_SESSION_SECRET).toBeUndefined();
+    const blankRequired = validateEnv(apiEnvSchema, { ...validApiEnv, DATABASE_URL: '' });
+    expect(blankRequired.issues.map((issue) => issue.variable)).toEqual(['DATABASE_URL']);
+  });
+
+  it('语音会话签名密钥纳入 API 配置校验（过短即失败）', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: 'short' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_VOICE_SESSION_SECRET']);
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_VOICE_SESSION_SECRET: secret }).ok).toBe(true);
+  });
+});
+
+describe('V5-M4 Edge 配置', () => {
+  it('允许来源：显式配置优先（逐项必须是完整 origin）；缺省为 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 端口', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_ALLOWED_ORIGINS: 'https://app.example.com/path' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_ALLOWED_ORIGINS']);
+    const explicit = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_ALLOWED_ORIGINS: 'https://app.example.com, https://studio.example.com' }).value!;
+    expect(resolveAllowedOrigins(explicit)).toEqual(['https://app.example.com', 'https://studio.example.com']);
+    const production = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', BETTER_AUTH_URL: 'https://api.example.com/base' }).value!;
+    expect(resolveAllowedOrigins(production)).toEqual(['https://api.example.com']);
+    const development = validateEnv(apiEnvSchema, validApiEnv).value!;
+    expect(resolveAllowedOrigins(development)).toEqual(['http://localhost:3001', 'http://localhost:3000', 'http://127.0.0.1:3000']);
+  });
+
+  it('originOf：小写、省略默认端口、去掉路径；非 http(s) 为 null（平台中立，不依赖全局 URL）', () => {
+    expect(originOf('HTTPS://App.Example.com:443/path?q=1')).toBe('https://app.example.com');
+    expect(originOf('http://localhost:80')).toBe('http://localhost');
+    expect(originOf('http://127.0.0.1:3000/')).toBe('http://127.0.0.1:3000');
+    expect(originOf('http://[::1]:3000')).toBe('http://[::1]:3000');
+    expect(originOf('javascript:alert(1)')).toBeNull();
+    expect(originOf('ftp://example.com')).toBeNull();
+    expect(originOf('https://exa mple.com')).toBeNull();
+  });
+
+  it('生产不得关闭限流；可信代理跳数有上界', () => {
+    const off = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_RATE_LIMIT: 'off' }).value!;
+    expect(crossCheckApiEnv(off).map((issue) => issue.variable)).toContain('ANCS_RATE_LIMIT');
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_TRUST_PROXY_HOPS: '9' }).ok).toBe(false);
+    expect(validateEnv(apiEnvSchema, validApiEnv).value?.ANCS_TRUST_PROXY_HOPS).toBe(0);
+  });
+});
+
+describe('Issue #9 语音网关 / 自定义模型网关配置', () => {
+  const realtimeBase = { DATABASE_URL: validApiEnv.DATABASE_URL, ANCS_VOICE_SESSION_SECRET: 'v'.repeat(40) }; // secrets:check-ignore：测试假值
+
+  it('Anthropic 兼容网关地址：只收 https 完整 URL；不填 = 直连', () => {
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ANTHROPIC_BASE_URL: 'https://gateway.example.com/v1' }).value?.ANCS_ANTHROPIC_BASE_URL).toBe('https://gateway.example.com/v1');
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ANTHROPIC_BASE_URL: 'http://gateway.example.com' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_ANTHROPIC_BASE_URL']);
+    expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it('openai 识别 / 合成缺 OPENAI_API_KEY → 启动失败（不回退 Mock）；声音列表必须是 1–20 个 {id,name}', () => {
+    const asr = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_ASR_DRIVER: 'openai' });
+    expect(crossCheckRealtimeEnv(asr.value!).map((issue) => issue.variable)).toEqual(['OPENAI_API_KEY']);
+    const tts = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'openai' });
+    expect(crossCheckRealtimeEnv(tts.value!).map((issue) => issue.variable)).toEqual(['OPENAI_API_KEY']);
+    const keyed = validateEnv(realtimeEnvSchema, {
+      ...realtimeBase,
+      ANCS_REALTIME_ASR_DRIVER: 'openai',
+      ANCS_REALTIME_TTS_DRIVER: 'openai',
+      OPENAI_API_KEY: 'o'.repeat(40), // secrets:check-ignore：测试假值
+      ANCS_REALTIME_TTS_VOICES_JSON: '[{"id":"coral","name":"Coral"},{"id":"onyx","name":"Onyx"}]',
+      ANCS_REALTIME_ASR_INTERIM_MS: '600',
+    });
+    expect(keyed.ok).toBe(true);
+    expect(keyed.value?.ANCS_REALTIME_ASR_INTERIM_MS).toBe(600);
+    expect(crossCheckRealtimeEnv(keyed.value!)).toEqual([]);
+    for (const voices of ['[]', 'not json', '[{"id":"coral"}]']) {
+      const bad = validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_VOICES_JSON: voices });
+      expect(crossCheckRealtimeEnv(bad.value!).map((issue) => issue.variable)).toEqual(['ANCS_REALTIME_TTS_VOICES_JSON']);
+    }
+    expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_OPENAI_BASE_URL: 'http://gateway.example.com/v1' }).ok).toBe(false);
+    expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'browser' }).ok).toBe(false);
   });
 });

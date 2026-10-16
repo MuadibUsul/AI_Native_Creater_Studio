@@ -9,14 +9,15 @@ import {
   type MediaStreamProbe,
   type SourceMediaIndexer,
 } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 export interface FfmpegMediaIndexerOptions { ffmpegPath?: string; timeoutMs?: number; maxOutputBytes?: number }
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_OUTPUT_BYTES = 32 * 1024 * 1024;
 
-async function run(input: { executable: string; args: string[]; timeoutMs: number; maxOutputBytes: number; binary?: boolean }): Promise<{ code: number | null; stdout: Buffer; stderr: string }> {
+async function run(input: { executable: string; args: string[]; timeoutMs: number; maxOutputBytes: number }): Promise<{ code: number | null; stdout: Buffer; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(input.executable, input.args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(input.executable, input.args, { env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const chunks: Buffer[] = [];
     let stderr = '';
     let bytes = 0;
@@ -27,6 +28,48 @@ async function run(input: { executable: string; args: string[]; timeoutMs: numbe
     child.stderr.on('data', (chunk: Buffer) => { bytes += chunk.byteLength; if (bytes > input.maxOutputBytes) fail('媒体索引工具输出超过上限'); else stderr += chunk.toString('utf8'); });
     child.on('error', () => fail('媒体索引工具无法启动'));
     child.on('close', (code) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ code, stdout: Buffer.concat(chunks), stderr }); });
+  });
+}
+
+/**
+ * 波形峰值（每 10 ms 一个值，0–1000 = 该窗口内采样绝对值的最大值）。
+ * 流式读取 16 kHz 单声道 PCM 并逐窗口取峰值，不缓存整段音频，所以长素材也不受输出上限影响。
+ * （此前直接把音频重采样到 100 Hz 取样本值：重采样的低通会滤掉 50 Hz 以上的声音，读数接近 0，并不是响度。）
+ */
+const PEAK_SAMPLE_RATE = 16_000;
+const PEAK_WINDOW_SAMPLES = PEAK_SAMPLE_RATE / 100;
+export async function audioPeakEnvelope(input: { executable: string; sourcePath: string; timeoutMs: number }): Promise<number[]> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(input.executable, ['-nostdin', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath, '-map', '0:a:0', '-ac', '1', '-ar', String(PEAK_SAMPLE_RATE), '-f', 's16le', 'pipe:1'], { env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const peaks: number[] = [];
+    let windowPeak = 0;
+    let windowCount = 0;
+    let carry: Buffer | null = null;
+    let stderrBytes = 0;
+    let settled = false;
+    const fail = (message: string): void => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGKILL'); reject(new Error(message)); };
+    const timer = setTimeout(() => fail('媒体索引处理超时'), input.timeoutMs);
+    child.stdout.on('data', (chunk: Buffer) => {
+      const data: Buffer = carry === null ? chunk : Buffer.concat([carry, chunk]);
+      const usable = data.byteLength - (data.byteLength % 2);
+      for (let offset = 0; offset < usable; offset += 2) {
+        const sample = Math.abs(data.readInt16LE(offset));
+        if (sample > windowPeak) windowPeak = sample;
+        windowCount += 1;
+        if (windowCount === PEAK_WINDOW_SAMPLES) { peaks.push(Math.min(1000, Math.round((windowPeak / 32768) * 1000))); windowPeak = 0; windowCount = 0; }
+      }
+      carry = usable < data.byteLength ? data.subarray(usable) : null;
+    });
+    child.stderr.on('data', (chunk: Buffer) => { stderrBytes += chunk.byteLength; if (stderrBytes > 64 * 1024) fail('媒体索引工具输出超过上限'); });
+    child.on('error', () => fail('媒体索引工具无法启动'));
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) { reject(new Error('波形分析失败')); return; }
+      if (windowCount > 0) peaks.push(Math.min(1000, Math.round((windowPeak / 32768) * 1000)));
+      resolve(peaks);
+    });
   });
 }
 
@@ -88,13 +131,10 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
       }
 
       if (audio) {
-        const waveform = await run({ executable: ffmpegPath, args: ['-nostdin', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath, '-map', '0:a:0', '-ac', '1', '-ar', '100', '-f', 'f32le', 'pipe:1'], timeoutMs, maxOutputBytes, binary: true });
-        if (waveform.code !== 0) throw new Error('波形分析失败');
-        const values = new Float32Array(waveform.stdout.buffer, waveform.stdout.byteOffset, Math.floor(waveform.stdout.byteLength / 4));
+        const values = await audioPeakEnvelope({ executable: ffmpegPath, sourcePath: input.sourcePath, timeoutMs });
         const chunkSize = 256;
         for (let offset = 0, ordinal = 0; offset < values.length; offset += chunkSize, ordinal += 1) {
-          const slice = values.subarray(offset, Math.min(values.length, offset + chunkSize));
-          const peaks = Array.from(slice, (value) => Math.round(Math.min(1, Math.abs(value)) * 1000));
+          const peaks = values.slice(offset, Math.min(values.length, offset + chunkSize));
           const start = clampMs(offset * 10, total); const end = clampMs(Math.min(values.length, offset + chunkSize) * 10, total);
           entries.push({ kind: 'WAVEFORM', ordinal, sourceStartPts: ticksAt(start, audio), sourceEndPts: ticksAt(end, audio), timeBase: baseOf(audio), streamId: `audio:${String(audio.index)}`, confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end, sampleIntervalMs: 10, peaks }, localFilename: null });
         }

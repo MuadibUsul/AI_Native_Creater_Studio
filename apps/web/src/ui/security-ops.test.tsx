@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { OpsSession } from '@ancs/contracts';
 import { apiError, mockClient, renderWithClient } from '@/test-utils.js';
 import { SecurityOps } from '@/ui/SecurityOps';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 const session = (roles: OpsSession['roles']): OpsSession => ({
   id: 'opss_test', principalId: 'oppr_test', environment: 'TEST', roles,
@@ -98,5 +99,49 @@ describe('N15-03 限定范围运营诊断', () => {
     expect(screen.getByText('当前角色暂无可用诊断')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
     expect(projects).not.toHaveBeenCalled();
+  });
+
+  it('英文界面：运营查询与支持摘要全部为英文，时间按英文格式显示', async () => {
+    const projects = vi.fn().mockResolvedValue([project('ws_a')]);
+    const storage = vi.fn().mockResolvedValue({ workspaceId: 'ws_a', bytesUsed: 1048576, assetCount: 2 });
+    const supportGrants = vi.fn().mockResolvedValue([{
+      id: 'sag_a', workspaceId: 'ws_a', scope: 'SUMMARY_READ', status: 'ACTIVE',
+      createdAt: '2026-10-08T08:00:00.000Z', expiresAt: '2099-10-08T08:00:00.000Z',
+    }]);
+    const supportView = vi.fn().mockResolvedValue({
+      workspaceId: 'ws_a', viewedAt: '2026-10-08T08:15:00.000Z',
+      counts: { members: 3, projects: 2, assets: 4, storageBytesUsed: 1048576, creditsBalance: 100 },
+    });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><SecurityOps session={session(['PRODUCTION_OPERATOR', 'SUPPORT_L2'])} /></I18nProvider>, mockClient({
+      admin: { projects, storage, supportGrants, supportView },
+    }));
+    expect(screen.getByText('Enter an authorized workspace ID. Nothing is queried until you submit.')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+
+    const [workspaceInput, supportWorkspaceInput] = screen.getAllByLabelText('Workspace ID');
+    await userEvent.type(workspaceInput!, 'ws_a');
+    await userEvent.click(screen.getByRole('button', { name: 'Look up workspace' }));
+    expect(await screen.findByText('prj_ws_a')).toBeTruthy();
+    expect(screen.getByTestId('admin-storage').textContent).toBe('Storage used 1.0 MiBAssets 2');
+    expect(screen.getByRole('columnheader', { name: 'Project ID' })).toBeTruthy();
+    expect(screen.getByText('Project status · ws_a')).toBeTruthy();
+    expect(screen.getByTestId('admin-projects').textContent).toContain(new Date('2026-10-08T08:00:00.000Z').toLocaleString('en'));
+
+    await userEvent.type(supportWorkspaceInput!, 'ws_a');
+    await userEvent.type(screen.getByLabelText('Ticket ID'), 'ticket_a');
+    await userEvent.click(screen.getByRole('button', { name: 'Look up grants' }));
+    expect(await screen.findByText('sag_a')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm and open support summary' }));
+    const summary = await screen.findByTestId('support-view');
+    expect(summary.textContent).toContain('Redacted support summary');
+    expect(summary.textContent).toContain(`Viewed ${new Date('2026-10-08T08:15:00.000Z').toLocaleString('en')}`);
+    expect(summary.textContent).toContain('This access has been logged and is visible to workspace members.');
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('英文界面：其他角色看到英文说明', () => {
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><SecurityOps session={session(['PLATFORM_OWNER'])} /></I18nProvider>, mockClient({ admin: {} }));
+    expect(screen.getByText('No diagnostics available for your role')).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 });

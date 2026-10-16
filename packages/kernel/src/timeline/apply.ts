@@ -1,7 +1,7 @@
 import { WorkingTimeline } from './support.js';
 import { deleteClip, duplicateClip, insertClip, moveClip, replaceClipSource, splitClip, trimClip } from './clip-ops.js';
 import { rippleClip, rollClip, slideClip, slipClip, splitAvCut } from './refine-ops.js';
-import { createTrack, deleteTrack, moveTrack, setAvLink, setClipParameters, updateClip, updateTrack } from './structure-ops.js';
+import { createTrack, deleteTrack, moveTrack, setAvLink, setClipParameters, setSequenceDuration, updateClip, updateTrack } from './structure-ops.js';
 import {
   applyAudioCrossfade,
   createCaption,
@@ -36,6 +36,7 @@ export function applyTimelineOperation(state: TimelineState, operation: KernelTi
     case 'move_track': moveTrack(work, operation); break;
     case 'delete_track': deleteTrack(work, operation); break;
     case 'update_track': updateTrack(work, operation); break;
+    case 'set_sequence_duration': setSequenceDuration(work, operation); break;
     case 'set_clip_transform':
     case 'set_clip_crop':
     case 'set_clip_opacity': setClipParameters(work, operation); break;
@@ -55,6 +56,7 @@ export function applyTimelineOperation(state: TimelineState, operation: KernelTi
 /** 依次应用写入后的结果状态（供试改、属性测试与客户端乐观预览使用）。 */
 export function applyKernelResult(state: TimelineState, result: KernelResult): TimelineState {
   const maps = {
+    sequence: new Map(state.sequences),
     clip: new Map(state.clips.map((item) => [item.id, item])),
     track: new Map(state.tracks.map((item) => [item.id, item])),
     audioRegion: new Map(state.audioRegions.map((item) => [item.id, item])),
@@ -69,6 +71,7 @@ export function applyKernelResult(state: TimelineState, result: KernelResult): T
   }
   return {
     ...state,
+    sequences: maps.sequence,
     clips: [...maps.clip.values()],
     tracks: [...maps.track.values()],
     audioRegions: [...maps.audioRegion.values()],

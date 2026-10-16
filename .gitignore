@@ -30,3 +30,7 @@ tmp/
 .artifacts/
 # 本地测试视频（用户提供/自找的真实素材；体积大，不入库）
 /Videos/
+
+# 本地 Redis 快照（开发/测试时 redis-server 在仓库根启动会写出）
+dump.rdb
+provider-smoke-output/

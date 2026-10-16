@@ -20,6 +20,8 @@ export const mediaIndexRuns = pgTable(
     coveragePermille: integer('coverage_permille').notNull().default(0),
     checkpointMs: integer('checkpoint_ms').notNull().default(0),
     errorSummary: text('error_summary'),
+    /** 机器可读错误码（CAPABILITY_NOT_CONFIGURED = 驱动未配置） */
+    errorCode: text('error_code'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { narrationVoiceSchema } from './narration.js';
+import { generationOfferSchema } from './paid-generation.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -24,9 +26,12 @@ export interface EnvValidationResult<T> {
 /**
  * 校验环境配置（收集全部问题；不抛异常——由调用方决定退出）。
  * `env` 为待校验的原始键值（通常是 process.env 的白名单切片）。
+ * 空白值视为**未配置**（与 `.env.example` 中留空的行、`VAR=` 形式的部署配置一致）：
+ * 可选项回到缺省行为，必填项报告"未配置"，而不是报"过短"。
  */
 export function validateEnv<Shape extends z.ZodRawShape>(schema: z.ZodObject<Shape>, env: Record<string, string | undefined>): EnvValidationResult<z.infer<z.ZodObject<Shape>>> {
-  const parsed = schema.safeParse(env);
+  const configured = Object.fromEntries(Object.entries(env).filter(([, value]) => value !== undefined && value.trim() !== ''));
+  const parsed = schema.safeParse(configured);
   if (parsed.success) {
     return { ok: true, value: parsed.data, issues: [] };
   }
@@ -57,6 +62,20 @@ export function formatEnvFailure(app: string, issues: readonly EnvIssue[]): stri
 }
 
 const nonEmpty = (label: string): z.ZodString => z.string().min(1, `${label} 未配置`);
+
+/**
+ * URL 的 origin（scheme://host[:port]，小写，省略默认端口）；不是 http(s) URL 返回 null。
+ * 不使用全局 `URL`：本包平台中立，编辑内核等纯核心包以无 DOM/Node 类型的配置编译它。
+ */
+export function originOf(value: string): string | null {
+  const match = /^(https?):\/\/(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(?:[/?#].*)?$/i.exec(value.trim());
+  if (match === null) return null;
+  const scheme = match[1]!.toLowerCase();
+  const host = match[2]!.toLowerCase();
+  const port = match[3];
+  const defaultPort = scheme === 'https' ? '443' : '80';
+  return port === undefined || port === defaultPort ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
+}
 
 /** API 与 Worker 共用的基础连接配置。 */
 export const baseEnvShape = {
@@ -89,7 +108,14 @@ export const apiEnvSchema = z.object({
   ANCS_NATIVE_CLIENTS: z.string().optional(),
   /** Webhook 验签密钥（JSON；由 parseWebhookVerifiers 进一步校验） */
   ANCS_WEBHOOK_SECRETS: z.string().optional(),
-  /** 平台托管 Provider 凭据（JSON；仅后端使用） */
+  /**
+   * 语音会话短期凭证签名密钥（N05-01）。未配置 → 创建语音会话 fail-closed（501），绝不回退长期 Key。
+   * 与会话/存储/凭据密钥独立（一把泄露不打穿其他面）。
+   */
+  ANCS_VOICE_SESSION_SECRET: z.string().min(32, 'ANCS_VOICE_SESSION_SECRET 过短（≥32 字符）').optional(),
+  /** 平台托管 Provider 凭据（`供应商:密钥,…`；仅后端使用，经凭据库登记） */
+  ANCS_PLATFORM_PROVIDER_KEYS: z.string().optional(),
+  /** 旧名：曾在 .env.example 中出现但从未被读取——配置了即启动失败并提示改名（不得静默忽略凭据配置） */
   PLATFORM_PROVIDER_KEYS: z.string().optional(),
   /** 历史兼容配置；N15-02 起不再授予运营权限。管理员身份由 admin_principals + role_grants 决定。 */
   ANCS_PLATFORM_ADMINS: z.string().optional(),
@@ -110,6 +136,20 @@ export const apiEnvSchema = z.object({
    * 人工条件（条款/主体/政策文档）台账见 docs/ops/launch-gate.md（scripts/launch-gate-check.mjs --live 校验）。
    */
   ANCS_SAAS_MODE: z.enum(['internal', 'live'], { message: 'ANCS_SAAS_MODE 仅支持 internal | live' }).default('internal'),
+  /** 生产进程装配 MOCK/SCRIPTED 驱动的显式许可（V5-M3；缺省 = 不允许，见 checkProviderInventory） */
+  ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1'], { message: 'ANCS_ALLOW_MOCK_PROVIDERS 仅支持 0 | 1' }).optional(),
+  /**
+   * 允许的浏览器来源（逗号分隔的完整 origin；V5-M4 Edge）：CORS 白名单与带 Cookie 写请求的 Origin 校验。
+   * 缺省 = BETTER_AUTH_URL 的 origin（非生产另加 http://localhost:3000、http://127.0.0.1:3000）。
+   */
+  ANCS_ALLOWED_ORIGINS: z.string().refine(
+    (value) => value.split(',').map((item) => item.trim()).filter((item) => item !== '').every((item) => originOf(item) === item.replace(/\/+$/, '').toLowerCase()),
+    'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）',
+  ).optional(),
+  /** 前置可信代理跳数（0 = 不信任 X-Forwarded-For；按 IP 限流依赖它取得真实客户端地址） */
+  ANCS_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5, 'ANCS_TRUST_PROXY_HOPS ≤ 5').default(0),
+  /** 限流开关（生产不得关闭） */
+  ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
@@ -117,6 +157,9 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
   const issues: EnvIssue[] = [];
+  if (value.PLATFORM_PROVIDER_KEYS !== undefined && value.PLATFORM_PROVIDER_KEYS.trim() !== '') {
+    issues.push({ variable: 'PLATFORM_PROVIDER_KEYS', message: '该变量名从未生效，已统一为 ANCS_PLATFORM_PROVIDER_KEYS（格式 供应商:密钥,…）——请改名后重启' });
+  }
   if (value.NODE_ENV === 'production' && value.ANCS_OPS_ENVIRONMENT !== 'PRODUCTION') {
     issues.push({ variable: 'ANCS_OPS_ENVIRONMENT', message: '生产进程必须显式配置 PRODUCTION 运营环境' });
   }
@@ -128,6 +171,15 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
     issues.push({
       variable: 'ANCS_CREDENTIAL_KEYS',
       message: '生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（v1:<base64 32B>）——不得从 BETTER_AUTH_SECRET 派生',
+    });
+  }
+  if (value.NODE_ENV === 'production' && value.ANCS_RATE_LIMIT === 'off') {
+    issues.push({ variable: 'ANCS_RATE_LIMIT', message: '生产环境不得关闭限流' });
+  }
+  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_DRIVER === 'local' && value.ANCS_STORAGE_SECRET === undefined) {
+    issues.push({
+      variable: 'ANCS_STORAGE_SECRET',
+      message: '生产环境必须显式配置 ANCS_STORAGE_SECRET（≥16）——签名 URL 不得从 BETTER_AUTH_SECRET 派生',
     });
   }
   if (value.ANCS_SAAS_MODE === 'live') {
@@ -162,6 +214,22 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
 /** Worker 环境（apps/worker）。 */
 export const workerEnvSchema = z.object({
   ...baseEnvShape,
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  /** 存储签名 URL 的公开基址回退（与 API 同一规则：ANCS_STORAGE_PUBLIC_BASE_URL → BETTER_AUTH_URL → localhost） */
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  ANCS_WORKER_ID: nonEmpty('ANCS_WORKER_ID').optional(),
+  ANCS_WORKER_TICK_MS: z.coerce.number().int().min(50, 'ANCS_WORKER_TICK_MS ≥ 50').max(60_000, 'ANCS_WORKER_TICK_MS ≤ 60000').default(1000),
+  ANCS_WORKER_LEASE_SECONDS: z.coerce.number().int().min(5, 'ANCS_WORKER_LEASE_SECONDS ≥ 5').max(3600, 'ANCS_WORKER_LEASE_SECONDS ≤ 3600').default(60),
+  ANCS_WORKER_HEARTBEAT_MS: z.coerce.number().int().min(100, 'ANCS_WORKER_HEARTBEAT_MS ≥ 100').optional(),
+  /** 故障注入（P03-02 演练）：在关键阶段退出进程 */
+  ANCS_WORKER_CRASH_AT: z.string().optional(),
+  ANCS_FFMPEG_PATH: nonEmpty('ANCS_FFMPEG_PATH').optional(),
+  ANCS_FFPROBE_PATH: nonEmpty('ANCS_FFPROBE_PATH').optional(),
+  /** 生产进程装配 MOCK/SCRIPTED 驱动的显式许可（V5-M3） */
+  ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1'], { message: 'ANCS_ALLOW_MOCK_PROVIDERS 仅支持 0 | 1' }).optional(),
+  /** 与 API 同一把凭据信封密钥（Worker 解密 BYOK 凭据调用 Provider）；生产必填 */
+  ANCS_CREDENTIAL_KEYS: z.string().min(1, 'ANCS_CREDENTIAL_KEYS 不能为空字符串（格式 v1:<base64 32B>）').optional(),
   /** 队列驱动：db（默认，权威状态轮询）| bullmq（需 REDIS_URL） */
   ANCS_QUEUE_DRIVER: z.enum(['db', 'bullmq'], { message: 'ANCS_QUEUE_DRIVER 仅支持 db | bullmq' }).default('db'),
   REDIS_URL: z.string().url('REDIS_URL 必须是完整 URL（如 redis://localhost:6379）').optional(),
@@ -172,9 +240,25 @@ export const workerEnvSchema = z.object({
   ANCS_RENDER_EXECUTOR_CMD: nonEmpty('ANCS_RENDER_EXECUTOR_CMD').optional(),
   ANCS_MOTION_VALIDATOR_CMD: nonEmpty('ANCS_MOTION_VALIDATOR_CMD').optional(),
   ANCS_MEDIA_PROBE_CMD: nonEmpty('ANCS_MEDIA_PROBE_CMD').optional(),
+  /**
+   * ASR 驱动（V5-M3）：process = 运维配置的子进程（ANCS_ASR_EXECUTABLE）；deepgram = 真实 Deepgram（需 DEEPGRAM_API_KEY）。
+   * 缺省：配置了 ANCS_ASR_EXECUTABLE 则为 process，否则不装配（转写任务明确失败"ASR 未配置"）。
+   */
+  ANCS_ASR_DRIVER: z.enum(['process', 'deepgram'], { message: 'ANCS_ASR_DRIVER 仅支持 process | deepgram' }).optional(),
+  /** Deepgram API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回） */
+  DEEPGRAM_API_KEY: z.string().min(16, 'DEEPGRAM_API_KEY 过短').optional(),
+  ANCS_DEEPGRAM_MODEL: nonEmpty('ANCS_DEEPGRAM_MODEL').optional(),
+  ANCS_DEEPGRAM_LANGUAGE: z.string().min(2).max(35, 'ANCS_DEEPGRAM_LANGUAGE 过长').optional(),
   /** ASR 子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaTranscript JSON。 */
   ANCS_ASR_EXECUTABLE: nonEmpty('ANCS_ASR_EXECUTABLE').optional(),
   ANCS_ASR_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_ASR_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /**
+   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini = 视觉模型逐帧写镜头说明（需对应密钥）。
+   * 缺省：配置了 ANCS_VISUAL_ANALYSIS_EXECUTABLE 则为 process，否则不装配（视觉分析任务明确失败"未配置"）。
+   */
+  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini' }).optional(),
+  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest） */
+  ANCS_VISION_MODEL: nonEmpty('ANCS_VISION_MODEL').optional(),
   /** 视觉分析子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaVisualAnalysis JSON。 */
   ANCS_VISUAL_ANALYSIS_EXECUTABLE: nonEmpty('ANCS_VISUAL_ANALYSIS_EXECUTABLE').optional(),
   ANCS_VISUAL_ANALYSIS_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_VISUAL_ANALYSIS_ARGS_JSON 必须是字符串数组 JSON').optional(),
@@ -183,6 +267,126 @@ export const workerEnvSchema = z.object({
   ANCS_AUDIO_ANALYSIS_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_AUDIO_ANALYSIS_ARGS_JSON 必须是字符串数组 JSON').optional(),
   ANCS_DISABLE_RENDER: z.enum(['0', '1']).optional(),
   ANCS_WORKER_ONCE: z.enum(['0', '1']).optional(),
+  /**
+   * 通用导演 Agent 的模型驱动（V6-1）：anthropic = 真实 Claude（需 ANTHROPIC_API_KEY）；gemini = Google Gemini（需 GEMINI_API_KEY）。
+   * 未配置时不装配真实模型：AI 轮次明确失败（AGENT_MODEL_NOT_CONFIGURED），不回退 Mock。风格撰写（蒸馏器）用同一个模型。
+   */
+  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini' }).optional(),
+  /** Claude API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回、不下发客户端） */
+  ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
+  /**
+   * Claude 走兼容 Anthropic Messages 协议的网关时的基址（如企业代理或模型聚合网关，填到 /v1 之前，例 https://gateway.example.com）。
+   * 不填 = 直连 Anthropic。导演与视觉理解（driver=anthropic）都用它；密钥仍是 ANTHROPIC_API_KEY（填网关发的 Key）。
+   */
+  ANCS_ANTHROPIC_BASE_URL: z.string().url('ANCS_ANTHROPIC_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_ANTHROPIC_BASE_URL 必须是 https').optional(),
+  /**
+   * Google Gemini API Key（https://ai.google.dev）：导演 / 视觉理解（driver=gemini）、讲述配音（ANCS_NARRATION_DRIVER=gemini）、
+   * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
+   */
+  GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
+  /** 导演模型 id（缺省 anthropic: claude-opus-5-5；gemini: gemini-flash-latest） */
+  ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
+  /**
+   * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
+   */
+  ANCS_EFFECT_CODEGEN: z.enum(['disabled', 'enabled'], { message: 'ANCS_EFFECT_CODEGEN 仅支持 disabled / enabled' }).optional(),
+  /** 特效图层渲染命令覆盖（缺省：仓库内 apps/render-worker/src/run-effect.ts） */
+  ANCS_EFFECT_RENDER_CMD: nonEmpty('ANCS_EFFECT_RENDER_CMD').optional(),
+  /**
+   * V6-6 蒸馏器：平台链接（YouTube、B 站……）的下载命令，占位符 {url} {output}，例如 `yt-dlp -f mp4/best -o {output} {url}`。
+   * 不配置时平台链接明确失败并提示改为上传文件；直接的视频文件链接不需要它。版权由项目所有者负责。
+   */
+  ANCS_REFERENCE_FETCH_CMD: nonEmpty('ANCS_REFERENCE_FETCH_CMD').refine((value) => value.includes('{url}') && value.includes('{output}'), 'ANCS_REFERENCE_FETCH_CMD 必须包含 {url} 与 {output} 占位符').optional(),
+  /** 参考视频大小上限（MB，缺省 1024） */
+  ANCS_REFERENCE_MAX_MB: z.coerce.number().int().min(1).max(8192).optional(),
+  /**
+   * V6-5 讲述配音（AI 合成讲述音频）：flite = FFmpeg 内置的本地英文语音（无需密钥、音质基础，FFmpeg 需带 libflite）；
+   * process = 部署方接入的语音合成子进程（任意供应商；协议：stdin 一行 JSON {text, voice, speed}，stdout 输出 FFmpeg 可解码的音频）。
+   * 不配置时讲述工具明确报"本部署没有配置配音"。
+   */
+  ANCS_NARRATION_DRIVER: z.enum(['flite', 'process', 'fish', 'gemini'], { message: 'ANCS_NARRATION_DRIVER 仅支持 flite | process | fish | gemini' }).optional(),
+  /** Gemini 语音合成模型（driver=gemini），缺省 gemini-3.8-flash-lite-tts；声音为 Gemini 预置声音（缺省列表见 Worker，可用 ANCS_NARRATION_VOICES_JSON 覆盖） */
+  ANCS_GEMINI_TTS_MODEL: nonEmpty('ANCS_GEMINI_TTS_MODEL').optional(),
+  /** Fish Audio（https://fish.audio）密钥：讲述配音（driver=fish）与数字人"你的声音"（声音克隆）。只在 Worker 内存中使用 */
+  FISH_AUDIO_API_KEY: z.string().min(16, 'FISH_AUDIO_API_KEY 过短').optional(),
+  /** Fish Audio TTS 模型（请求头 model），缺省 s1 */
+  ANCS_FISH_AUDIO_MODEL: nonEmpty('ANCS_FISH_AUDIO_MODEL').optional(),
+  ANCS_NARRATION_EXECUTABLE: nonEmpty('ANCS_NARRATION_EXECUTABLE').optional(),
+  ANCS_NARRATION_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_NARRATION_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /** process 驱动提供的声音列表（JSON 数组：{ id, name, languages: ["zh","en"], description }） */
+  ANCS_NARRATION_VOICES_JSON: z.string().refine((value) => {
+    try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => narrationVoiceSchema.safeParse(item).success); } catch { return false; }
+  }, 'ANCS_NARRATION_VOICES_JSON 必须是声音数组 JSON：[{ "id": "zh-female-1", "name": "…", "languages": ["zh"], "description": "…" }]').optional(),
+  /**
+   * V6-7/V6-8 付费生成（数字人出镜、生成镜头、选区重绘）：process = 部署方接入的生成子进程（任意供应商；
+   * 协议见 docs/V06/integration-checklist.md 与 scripts/generation-process-example.mjs）。不配置时报价工具明确报"本部署没有配置"。
+   * 每次生成只调用一次（不自动重试）；结果不明 → 待对账。
+   */
+  ANCS_GENERATION_DRIVER: z.enum(['process'], { message: 'ANCS_GENERATION_DRIVER 仅支持 process' }).optional(),
+  ANCS_GENERATION_EXECUTABLE: nonEmpty('ANCS_GENERATION_EXECUTABLE').optional(),
+  ANCS_GENERATION_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_GENERATION_ARGS_JSON 必须是字符串数组 JSON').optional(),
+  /** 供应商报价依据（JSON 数组：{ kind, providerId, implementation: "REAL", model, perSecondMicros: { min, max }, maxSeconds, languages }） */
+  ANCS_GENERATION_OFFERS_JSON: z.string().refine((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => { const offer = generationOfferSchema.safeParse(item); return offer.success && offer.data.implementation === 'REAL'; });
+    } catch { return false; }
+  }, 'ANCS_GENERATION_OFFERS_JSON 必须是报价数组 JSON：[{ "kind": "VIDEO_SHOT", "providerId": "vendor-x", "implementation": "REAL", "model": "…", "perSecondMicros": { "min": 50000, "max": 400000 }, "maxSeconds": 8 }]').optional(),
+  /** 传给生成子进程的额外环境变量名（逗号分隔，例如供应商密钥 VENDOR_API_KEY）；子进程只拿到白名单 + 这里列出的变量 */
+  ANCS_GENERATION_PASS_ENV: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*$/, 'ANCS_GENERATION_PASS_ENV 必须是逗号分隔的环境变量名').optional(),
+  /**
+   * V6-7 数字人出镜：heygen = HeyGen 会说话的照片 + Fish Audio 用你的声音读讲稿（需 HEYGEN_API_KEY 与 FISH_AUDIO_API_KEY）。
+   * 与 ANCS_GENERATION_DRIVER（生成镜头/选区重绘）可以并存。
+   */
+  ANCS_AVATAR_DRIVER: z.enum(['heygen'], { message: 'ANCS_AVATAR_DRIVER 仅支持 heygen' }).optional(),
+  HEYGEN_API_KEY: z.string().min(16, 'HEYGEN_API_KEY 过短').optional(),
+  /** 数字人报价依据覆盖（JSON：{ kind: "AVATAR_CLIP", providerId, implementation: "REAL", model, perSecondMicros, maxSeconds, languages }）；缺省为 V6 §10.1 规划区间 */
+  ANCS_AVATAR_OFFER_JSON: z.string().refine((value) => {
+    try { const offer = generationOfferSchema.safeParse(JSON.parse(value)); return offer.success && offer.data.kind === 'AVATAR_CLIP' && offer.data.implementation === 'REAL'; } catch { return false; }
+  }, 'ANCS_AVATAR_OFFER_JSON 必须是 AVATAR_CLIP 的报价 JSON（implementation 为 REAL）').optional(),
+  /**
+   * V6-8 生成镜头接 Google Veo（需 GEMINI_API_KEY）：VIDEO_SHOT 的报价依据，model 为 Veo 模型 id（如 veo-3.1-fast-generate-preview），
+   * durationOptions 为 Veo 能生成的时长档位（如 [4,6,8]，按不短于所需的最短一档计费）。价格按 Google 价格页填写，平台不内置。
+   * 配置即启用；与 ANCS_GENERATION_DRIVER、ANCS_AVATAR_DRIVER 可以并存。
+   */
+  ANCS_VEO_OFFER_JSON: z.string().refine((value) => {
+    try {
+      const offer = generationOfferSchema.safeParse(JSON.parse(value));
+      return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
+    } catch { return false; }
+  }, 'ANCS_VEO_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带 durationOptions，例如 [4,6,8]）').optional(),
+  /** 火山方舟（Volcengine Ark）API Key：Seedance 生成镜头（ANCS_SEEDANCE_OFFER_JSON）。只在 Worker 内存中使用，只放请求头 */
+  ARK_API_KEY: z.string().min(16, 'ARK_API_KEY 过短').optional(),
+  /** 方舟 API 地址（缺省 https://ark.cn-beijing.volces.com/api/v3） */
+  ANCS_ARK_BASE_URL: z.string().url('ANCS_ARK_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_ARK_BASE_URL 必须是 https').optional(),
+  /**
+   * V6-8 生成镜头接火山方舟 Seedance（需 ARK_API_KEY）：VIDEO_SHOT 的报价依据，model 为 Seedance 模型 id（如 doubao-seedance-2-5-260628），
+   * durationOptions 为整数秒档位（按不短于所需的最短一档计费）。价格按方舟价格页换算成美元微单位填写（方舟按 token 计价、人民币结算），平台不内置。
+   * 配置即启用；与 Veo、进程驱动、数字人可以并存。
+   */
+  ANCS_SEEDANCE_OFFER_JSON: z.string().refine((value) => {
+    try {
+      const offer = generationOfferSchema.safeParse(JSON.parse(value));
+      return offer.success && offer.data.kind === 'VIDEO_SHOT' && offer.data.implementation === 'REAL' && (offer.data.durationOptions?.length ?? 0) > 0;
+    } catch { return false; }
+  }, 'ANCS_SEEDANCE_OFFER_JSON 必须是 VIDEO_SHOT 的报价 JSON（implementation 为 REAL，带整数秒 durationOptions，例如 [5,10]）').optional(),
+  /** Runway API Key（https://dev.runwayml.com）：选区重绘（ANCS_RUNWAY_OFFER_JSON）。只在 Worker 内存中使用，只放请求头 */
+  RUNWAYML_API_SECRET: z.string().min(16, 'RUNWAYML_API_SECRET 过短').optional(),
+  /** Runway API 地址（缺省 https://api.dev.runwayml.com/v1） */
+  ANCS_RUNWAY_BASE_URL: z.string().url('ANCS_RUNWAY_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_RUNWAY_BASE_URL 必须是 https').optional(),
+  /**
+   * V6-8 选区重绘接 Runway gen4_aleph（需 RUNWAYML_API_SECRET）：VIDEO_REGION 的报价依据（model 为 Runway 模型 id，如 gen4_aleph）。
+   * 价格按 Runway 价格页填写（按秒计费的 credits 换算成美元微单位），平台不内置。配置即启用；可与进程驱动并存。
+   */
+  ANCS_RUNWAY_OFFER_JSON: z.string().refine((value) => {
+    try { const offer = generationOfferSchema.safeParse(JSON.parse(value)); return offer.success && offer.data.kind === 'VIDEO_REGION' && offer.data.implementation === 'REAL'; } catch { return false; }
+  }, 'ANCS_RUNWAY_OFFER_JSON 必须是 VIDEO_REGION 的报价 JSON（implementation 为 REAL）').optional(),
+  /** Seedance 是否同时生成声音（缺省 1） */
+  ANCS_SEEDANCE_GENERATE_AUDIO: z.enum(['0', '1'], { message: 'ANCS_SEEDANCE_GENERATE_AUDIO 仅支持 0 | 1' }).optional(),
+  /** Seedance 分辨率（如 480p / 720p / 1080p；缺省用模型的缺省值） */
+  ANCS_SEEDANCE_RESOLUTION: z.string().regex(/^\d{3,4}p$/, 'ANCS_SEEDANCE_RESOLUTION 形如 720p').optional(),
+  /** 单次生成子进程超时（秒，缺省 1200）；超时按"结果不明"处理（待对账，不重试） */
+  ANCS_GENERATION_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(7200).optional(),
 });
 
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
@@ -193,5 +397,161 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   if (value.ANCS_QUEUE_DRIVER === 'bullmq' && value.REDIS_URL === undefined) {
     issues.push({ variable: 'REDIS_URL', message: 'ANCS_QUEUE_DRIVER=bullmq 时必须配置 REDIS_URL' });
   }
+  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_SECRET === undefined) {
+    issues.push({
+      variable: 'ANCS_STORAGE_SECRET',
+      message: '生产环境必须显式配置 ANCS_STORAGE_SECRET（≥16）——与 API 同一把签名密钥，不得从 BETTER_AUTH_SECRET 派生',
+    });
+  }
+  if (value.NODE_ENV === 'production' && (value.ANCS_CREDENTIAL_KEYS ?? '').trim() === '') {
+    issues.push({ variable: 'ANCS_CREDENTIAL_KEYS', message: '生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（与 API 相同）——不得从 BETTER_AUTH_SECRET 派生' });
+  }
+  if (value.ANCS_ASR_DRIVER === 'deepgram' && value.DEEPGRAM_API_KEY === undefined) {
+    issues.push({ variable: 'DEEPGRAM_API_KEY', message: 'ANCS_ASR_DRIVER=deepgram 时必须配置 DEEPGRAM_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
+    issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'process' && value.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_VISUAL_ANALYSIS_EXECUTABLE', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=process 时必须配置 ANCS_VISUAL_ANALYSIS_EXECUTABLE' });
+  }
+  for (const [variable, driver] of [['ANCS_AGENT_DRIVER', value.ANCS_AGENT_DRIVER], ['ANCS_VISUAL_ANALYSIS_DRIVER', value.ANCS_VISUAL_ANALYSIS_DRIVER], ['ANCS_NARRATION_DRIVER', value.ANCS_NARRATION_DRIVER]] as const) {
+    if (driver === 'gemini' && value.GEMINI_API_KEY === undefined) {
+      issues.push({ variable: 'GEMINI_API_KEY', message: `${variable}=gemini 时必须配置 GEMINI_API_KEY（fail-closed，不回退 Mock）` });
+    }
+  }
+  if (value.ANCS_RUNWAY_OFFER_JSON !== undefined && value.RUNWAYML_API_SECRET === undefined) {
+    issues.push({ variable: 'RUNWAYML_API_SECRET', message: '配置了 ANCS_RUNWAY_OFFER_JSON（Runway 选区重绘）时必须配置 RUNWAYML_API_SECRET' });
+  }
+  if (value.ANCS_SEEDANCE_OFFER_JSON !== undefined && value.ARK_API_KEY === undefined) {
+    issues.push({ variable: 'ARK_API_KEY', message: '配置了 ANCS_SEEDANCE_OFFER_JSON（Seedance 生成镜头）时必须配置 ARK_API_KEY' });
+  }
+  if (value.ANCS_VEO_OFFER_JSON !== undefined && value.GEMINI_API_KEY === undefined) {
+    issues.push({ variable: 'GEMINI_API_KEY', message: '配置了 ANCS_VEO_OFFER_JSON（Veo 生成镜头）时必须配置 GEMINI_API_KEY' });
+  }
+  if (value.ANCS_AGENT_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
+    issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_AGENT_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_ASR_DRIVER === 'process' && value.ANCS_ASR_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_ASR_EXECUTABLE', message: 'ANCS_ASR_DRIVER=process 时必须配置 ANCS_ASR_EXECUTABLE' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_EXECUTABLE', message: 'ANCS_NARRATION_DRIVER=process 时必须配置 ANCS_NARRATION_EXECUTABLE' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'process' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=process 时必须用 ANCS_NARRATION_VOICES_JSON 声明可用的声音与语言' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'fish' && value.FISH_AUDIO_API_KEY === undefined) {
+    issues.push({ variable: 'FISH_AUDIO_API_KEY', message: 'ANCS_NARRATION_DRIVER=fish 时必须配置 FISH_AUDIO_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_NARRATION_DRIVER === 'fish' && value.ANCS_NARRATION_VOICES_JSON === undefined) {
+    issues.push({ variable: 'ANCS_NARRATION_VOICES_JSON', message: 'ANCS_NARRATION_DRIVER=fish 时必须用 ANCS_NARRATION_VOICES_JSON 声明 Fish Audio 声音（id = Fish 声音模型 id）与语言' });
+  }
+  if (value.ANCS_AVATAR_DRIVER === 'heygen' && value.HEYGEN_API_KEY === undefined) {
+    issues.push({ variable: 'HEYGEN_API_KEY', message: 'ANCS_AVATAR_DRIVER=heygen 时必须配置 HEYGEN_API_KEY（fail-closed）' });
+  }
+  if (value.ANCS_AVATAR_DRIVER === 'heygen' && value.FISH_AUDIO_API_KEY === undefined) {
+    issues.push({ variable: 'FISH_AUDIO_API_KEY', message: 'ANCS_AVATAR_DRIVER=heygen 用 Fish Audio 合成"你的声音"，必须配置 FISH_AUDIO_API_KEY' });
+  }
+  if (value.ANCS_GENERATION_DRIVER === 'process' && value.ANCS_GENERATION_EXECUTABLE === undefined) {
+    issues.push({ variable: 'ANCS_GENERATION_EXECUTABLE', message: 'ANCS_GENERATION_DRIVER=process 时必须配置 ANCS_GENERATION_EXECUTABLE' });
+  }
+  if (value.ANCS_GENERATION_DRIVER === 'process' && value.ANCS_GENERATION_OFFERS_JSON === undefined) {
+    issues.push({ variable: 'ANCS_GENERATION_OFFERS_JSON', message: 'ANCS_GENERATION_DRIVER=process 时必须用 ANCS_GENERATION_OFFERS_JSON 声明支持的生成类型与价格（报价依据）' });
+  }
+  if (value.ANCS_WORKER_HEARTBEAT_MS !== undefined && value.ANCS_WORKER_HEARTBEAT_MS >= value.ANCS_WORKER_LEASE_SECONDS * 1000) {
+    issues.push({ variable: 'ANCS_WORKER_HEARTBEAT_MS', message: '心跳间隔必须小于租约时长（否则租约会在两次心跳之间过期）' });
+  }
   return issues;
 }
+
+/** 保留清理 CLI 环境（apps/api retention:sweep）：与 API 同一存储签名规则。 */
+export const retentionCliEnvSchema = z.object({
+  ...baseEnvShape,
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local' }).default('local'),
+  ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
+  ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
+  ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ANCS_TRASH_RETENTION_DAYS: z.coerce.number().int().min(1, 'ANCS_TRASH_RETENTION_DAYS ≥ 1').max(3650).optional(),
+  ANCS_IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1, 'ANCS_IDEMPOTENCY_TTL_HOURS ≥ 1').max(24 * 365).optional(),
+});
+
+export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
+
+/**
+ * V6-2 Realtime Gateway（apps/realtime）：流式语音识别与指代绑定的独立进程。
+ * 只校验语音会话的短期凭证（与 API 同一把 ANCS_VOICE_SESSION_SECRET），不读写工程。
+ */
+export const realtimeEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3002),
+  /** 与 API 相同的语音会话签名密钥（网关用它校验浏览器带来的短期凭证） */
+  ANCS_VOICE_SESSION_SECRET: z.string().min(32, 'ANCS_VOICE_SESSION_SECRET 未配置或过短（≥32 字符）'),
+  /** 浏览器来源白名单（逗号分隔完整 origin）；留空 = BETTER_AUTH_URL 的 origin（非生产另加本地 Web 端口） */
+  ANCS_ALLOWED_ORIGINS: z.string().optional(),
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  /**
+   * 流式语音识别驱动：deepgram = 真实 Deepgram 流式识别（需 DEEPGRAM_API_KEY）；
+   * openai = OpenAI 兼容的转写接口（/audio/transcriptions，需 OPENAI_API_KEY；网关自己断句、说话中定时出临时转写）；
+   * 留空 = 不装配（连接时明确报"未配置"）
+   */
+  ANCS_REALTIME_ASR_DRIVER: z.enum(['deepgram', 'openai'], { message: 'ANCS_REALTIME_ASR_DRIVER 仅支持 deepgram | openai' }).optional(),
+  /** OpenAI 兼容接口的 Key（官方或兼容网关发的 Key；只在网关进程内存中使用） */
+  OPENAI_API_KEY: z.string().min(16, 'OPENAI_API_KEY 过短').optional(),
+  /** OpenAI 兼容接口基址（含 /v1，缺省 https://api.openai.com/v1；兼容网关填它的地址） */
+  ANCS_OPENAI_BASE_URL: z.string().url('ANCS_OPENAI_BASE_URL 必须是完整 URL').refine((value) => value.startsWith('https://'), 'ANCS_OPENAI_BASE_URL 必须是 https').optional(),
+  /** openai 识别的转写模型（缺省 gpt-4o-transcribe；whisper-1 会带回逐词时间，其余模型的词时间由网关按断句估算） */
+  ANCS_REALTIME_ASR_MODEL: nonEmpty('ANCS_REALTIME_ASR_MODEL').optional(),
+  /** 说话中出临时转写的间隔（毫秒，缺省 900；0 = 只在一句话说完时转写一次） */
+  ANCS_REALTIME_ASR_INTERIM_MS: z.coerce.number().int().min(0).max(10_000).optional(),
+  /** AI 语音回应的合成驱动：openai = OpenAI 兼容 /audio/speech（需 OPENAI_API_KEY）；留空 = 客户端用浏览器朗读并如实标注 */
+  ANCS_REALTIME_TTS_DRIVER: z.enum(['openai'], { message: 'ANCS_REALTIME_TTS_DRIVER 仅支持 openai' }).optional(),
+  /** 语音回应模型（缺省 gpt-4o-mini-tts） */
+  ANCS_REALTIME_TTS_MODEL: nonEmpty('ANCS_REALTIME_TTS_MODEL').optional(),
+  /** 可切换的声音（JSON 数组 [{"id":"coral","name":"Coral"}]；只列实际可用的声音，缺省只有 coral） */
+  ANCS_REALTIME_TTS_VOICES_JSON: nonEmpty('ANCS_REALTIME_TTS_VOICES_JSON').optional(),
+  DEEPGRAM_API_KEY: z.string().min(16, 'DEEPGRAM_API_KEY 过短').optional(),
+  /** 各语言的流式模型（缺省：中文 nova-2，英文 nova-3） */
+  ANCS_DEEPGRAM_LIVE_MODEL_ZH: nonEmpty('ANCS_DEEPGRAM_LIVE_MODEL_ZH').optional(),
+  ANCS_DEEPGRAM_LIVE_MODEL_EN: nonEmpty('ANCS_DEEPGRAM_LIVE_MODEL_EN').optional(),
+  ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1']).optional(),
+});
+
+export type RealtimeEnv = z.infer<typeof realtimeEnvSchema>;
+
+function parseJsonOrNull(text: string): unknown {
+  try { return JSON.parse(text) as unknown; } catch { return null; }
+}
+
+export function crossCheckRealtimeEnv(value: RealtimeEnv): EnvIssue[] {
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_REALTIME_ASR_DRIVER === 'deepgram' && value.DEEPGRAM_API_KEY === undefined) {
+    issues.push({ variable: 'DEEPGRAM_API_KEY', message: 'ANCS_REALTIME_ASR_DRIVER=deepgram 时必须配置 DEEPGRAM_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if ((value.ANCS_REALTIME_ASR_DRIVER === 'openai' || value.ANCS_REALTIME_TTS_DRIVER === 'openai') && value.OPENAI_API_KEY === undefined) {
+    issues.push({ variable: 'OPENAI_API_KEY', message: '识别或语音回应选择 openai 时必须配置 OPENAI_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_REALTIME_TTS_VOICES_JSON !== undefined) {
+    const voices = parseJsonOrNull(value.ANCS_REALTIME_TTS_VOICES_JSON);
+    if (!z.array(z.object({ id: z.string().min(1).max(64), name: z.string().min(1).max(80) }).strict()).min(1).max(20).safeParse(voices).success) {
+      issues.push({ variable: 'ANCS_REALTIME_TTS_VOICES_JSON', message: 'ANCS_REALTIME_TTS_VOICES_JSON 必须是 1–20 个 {"id","name"} 组成的 JSON 数组' });
+    }
+  }
+  if (value.ANCS_ALLOWED_ORIGINS !== undefined && value.ANCS_ALLOWED_ORIGINS.split(',').map((item) => item.trim()).filter((item) => item !== '').some((item) => originOf(item) !== item.replace(/\/+$/, '').toLowerCase())) {
+    issues.push({ variable: 'ANCS_ALLOWED_ORIGINS', message: 'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）' });
+  }
+  return issues;
+}
+
+/** Edge 允许的浏览器来源（V5-M4）：显式配置优先；否则 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 开发端口。 */
+export function resolveAllowedOrigins(value: Pick<ApiEnv, 'ANCS_ALLOWED_ORIGINS' | 'BETTER_AUTH_URL' | 'NODE_ENV' | 'PORT'>): string[] {
+  if (value.ANCS_ALLOWED_ORIGINS !== undefined) {
+    return value.ANCS_ALLOWED_ORIGINS.split(',').map((item) => item.trim().replace(/\/+$/, '')).filter((item) => item !== '');
+  }
+  const base = originOf(value.BETTER_AUTH_URL ?? `http://localhost:${String(value.PORT)}`) ?? `http://localhost:${String(value.PORT)}`;
+  return value.NODE_ENV === 'production' ? [base] : [...new Set([base, 'http://localhost:3000', 'http://127.0.0.1:3000'])];
+}
+

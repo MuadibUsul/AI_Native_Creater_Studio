@@ -1,0 +1,160 @@
+/*
+ * Issue #9 画布内悬浮语音条（ADR 0019：玻璃质感，跟随主题）：浮在看片屏幕下方预留出的边上
+ * （开语音时看片区自动加大下边距，画面按画幅缩进，语音条与反馈永远不压视频、字幕、时间带）。
+ * 正在听你说时语音条外沿亮起 AI 光晕（身份色，只在听的时候出现）。
+ */
+.layer {
+  position: absolute;
+  left: 50%;
+  bottom: var(--ui-space-3);
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 2 * var(--ui-space-3));
+  max-width: 880px;
+  pointer-events: none;
+  animation: dockIn 160ms ease-out;
+}
+@keyframes dockIn { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.caption {
+  pointer-events: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 12px;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  color: var(--ui-fg-primary);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.caption b { font-weight: 500; }
+.detail { color: var(--ui-fg-secondary); }
+.captionAlert { border-color: var(--ui-border-control); box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+
+.pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: var(--ui-glass-filter);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  box-shadow: var(--ui-shadow-3);
+  color: var(--ui-fg-primary);
+  transition: box-shadow var(--ui-motion-popover) var(--ui-ease-standard);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pill::-webkit-scrollbar { display: none; }
+
+.status { display: inline-flex; align-items: center; gap: 8px; padding: 0 10px 0 10px; min-height: 32px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.statusLabel { min-width: 4.5em; }
+.phaseIcon { width: 16px; height: 16px; }
+
+.meter { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.meter span { width: 3px; height: 16px; border-radius: 2px; background: currentColor; transform: scaleY(.25); transform-origin: center; }
+
+.dots { display: inline-flex; gap: 3px; }
+.dots span { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .35; animation: dot 1s infinite ease-in-out; }
+.dots span:nth-child(2) { animation-delay: .15s; }
+.dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--ui-radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.button svg { width: 16px; height: 16px; flex: none; }
+.button:hover:not(:disabled) { background: var(--ui-tonal-hover); }
+.button:disabled { opacity: .5; cursor: default; }
+.button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 1px; }
+.button[aria-pressed='true'] { background: var(--ui-selection-bg); box-shadow: inset 0 0 0 1px var(--ui-border-control); }
+.primary { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); }
+.primary:hover:not(:disabled) { background: var(--ui-action-primary-hover); }
+.end { background: var(--ui-tonal-bg); }
+.iconOnly { padding: 0; width: 34px; }
+.stopGlyph { width: 10px; height: 10px; border-radius: 2px; background: currentColor; flex: none; }
+.divider { width: 1px; height: 20px; margin: 0 4px; background: var(--ui-border-subtle); flex: none; }
+
+.badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--ui-radius-pill);
+  border: 1px dashed var(--ui-border-control);
+  color: var(--ui-fg-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.voicePicker { position: relative; display: inline-flex; flex: none; }
+.voicePicker select {
+  appearance: none;
+  height: 34px;
+  padding: 0 28px 0 12px;
+  border-radius: var(--ui-radius-pill);
+  border: 1px solid var(--ui-border-subtle);
+  background: var(--ui-tonal-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.voicePicker select:disabled { cursor: default; background-image: none; padding-right: 12px; }
+.voicePicker select:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 1px; }
+.voicePicker option { color: #0A0A0A; background: #FFFFFF; }
+
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.toggle { flex: none; }
+/* 麦克风开着：主色实心 + AI 光晕（身份色只在 AI 在听时出现） */
+.toggleOn, .toggleOn:hover:not(:disabled) { background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); box-shadow: var(--ui-ai-glow); }
+.layer:is([data-phase='listening'], [data-phase='recognizing']) .pill { box-shadow: var(--ui-ai-glow), var(--ui-shadow-3); }
+
+/* 窄屏（手机）：按钮只留图标（读屏仍读完整名称），状态文字保留 */
+@media (max-width: 720px) {
+  .label { display: none; }
+  .pill { flex-wrap: wrap; justify-content: center; row-gap: 2px; border-radius: 22px; overflow-x: visible; }
+  .divider { display: none; }
+  .button { padding: 0; width: 34px; }
+  .primary:not(.iconOnly):has(> span:not(.label)) { width: auto; padding: 0 12px; }
+  .status { padding: 0 8px; }
+  .statusLabel { min-width: 0; }
+  .caption { font-size: 12px; line-height: 16px; -webkit-line-clamp: 1; line-clamp: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer { animation: none; }
+  .dots span { animation: none; opacity: .8; }
+}

@@ -24,7 +24,7 @@ import {
   scenes,
   sequenceClips,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const id = (prefix: string): string => `${prefix}_${randomUUID()}`;
 

@@ -16,7 +16,7 @@ import {
   type ProviderModel,
 } from '@ancs/contracts';
 import { providerCatalogVersions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Provider Catalog（P03-03 / 计划 P03-03）。

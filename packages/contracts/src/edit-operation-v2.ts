@@ -27,6 +27,7 @@ import {
   splitClipOperationSchema,
   trimClipOperationSchema,
   updateTrackOperationSchema,
+  setSequenceDurationOperationSchema,
 } from './composition-edits.js';
 import { EDIT_OPERATION_TYPES, editOperationSchema, type EditOperationType } from './edits.js';
 
@@ -35,7 +36,7 @@ export const SOURCE_EDIT_OPERATION_TYPES = [
   'set_clip_transform', 'set_clip_crop', 'set_clip_opacity', 'set_clip_speed',
   'add_effect', 'update_effect', 'remove_effect',
   'add_keyframe', 'update_keyframe', 'remove_keyframe',
-  'create_track', 'move_track', 'delete_track',
+  'create_track', 'move_track', 'delete_track', 'set_sequence_duration',
   'set_audio_gain', 'set_audio_fade', 'set_audio_pan', 'set_audio_automation', 'apply_audio_crossfade',
   'add_marker', 'update_marker', 'remove_marker',
   'update_caption_segment', 'cut_caption_range', 'split_caption', 'regenerate_region', 'replace_region',
@@ -166,6 +167,7 @@ export const EDIT_OPERATION_V2_INPUT_SCHEMAS: Readonly<Record<SourceEditOperatio
   move_track: moveTrackOperationSchema,
   delete_track: deleteTrackOperationSchema,
   update_track: updateTrackOperationSchema,
+  set_sequence_duration: setSequenceDurationOperationSchema,
   set_av_link: setAvLinkOperationSchema,
   set_audio_gain: setAudioGainSourceOperationSchema,
   set_audio_fade: setAudioFadeSourceOperationSchema,
@@ -260,6 +262,8 @@ export const EDIT_OPERATION_V2_REGISTRY: Readonly<Record<SourceEditOperationType
   move_track: native('move_track', ['TRACK'], ['TRACK'], ['TRACK', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
   delete_track: native('delete_track', ['TRACK', 'CLIP'], ['TRACK', 'CLIP'], ['TRACK', 'CLIP', 'CLIP_ORDER'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
   update_track: native('update_track', ['TRACK'], ['TRACK'], ['TRACK'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
+  // V6-1：成片长度由规范原语承载（AI 初剪与用户共用；可撤销）
+  set_sequence_duration: native('set_sequence_duration', ['SEQUENCE'], ['SEQUENCE', 'CLIP', 'CAPTION', 'AUDIO_REGION'], ['SEQUENCE'], ['V6-1_KERNEL', 'V6-1_NATIVE_INTEGRATION']),
   set_av_link: native('set_av_link', ['CLIP', 'TRACK'], ['CLIP', 'TRACK'], ['CLIP'], ['N01-11_CONTRACT', 'N03-04_NATIVE_INTEGRATION']),
   set_audio_gain: alias('set_audio_gain', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),
   set_audio_fade: alias('set_audio_fade', 'update_audio_region', ['AUDIO_REGION'], ['AUDIO_REGION'], ['AUDIO_REGION']),

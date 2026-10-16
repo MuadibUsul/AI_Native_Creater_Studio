@@ -9,7 +9,7 @@ import {
   type DerivationListItem,
 } from '@ancs/contracts';
 import { derivationLineage, projectVersions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getProjectContentCoreState } from './content-core.js';
 
 /**

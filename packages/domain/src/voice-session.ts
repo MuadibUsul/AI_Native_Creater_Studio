@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import {
   ApiFailure,
@@ -18,8 +18,8 @@ import {
   type VoiceTranscriptRevision,
   type VoiceTransport,
 } from '@ancs/contracts';
-import { projectSequences, projects, voiceSessions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import { agentTurns, projectSequences, projects, voiceSessions } from '@ancs/db';
+import type { DomainDeps } from './deps.js';
 import { getSelectionAnchor } from './selection.js';
 
 /**
@@ -171,6 +171,59 @@ export async function createVoiceSession(deps: DomainDeps, input: {
     session: toSession(row),
     credential: { kind: 'EPHEMERAL_SESSION', token, scopes: ['voice:stream', 'voice:tools'], expiresAt: row.expiresAt.toISOString() },
   };
+}
+
+/** 凭证头名（API 与客户端共用；日志中脱敏）。 */
+export const VOICE_SESSION_CREDENTIAL_HEADER = 'x-voice-session-token';
+
+/**
+ * 校验短期会话凭证（V5-M3；代码审查 P1-4：此前凭证签发后从未被校验）。
+ *
+ * - 由会话行重算签名（会话 id + 代际 + 过期时间），恒定时间比较——凭证只对**签发它的那个会话与代际**有效；
+ * - 签名不符/缺失/会话不存在一律 401 `VOICE_CREDENTIAL_INVALID`（不区分原因，避免探测会话是否存在）；
+ * - 签名有效后再过会话门：撤销/关闭/过期 → 409（与按用户身份访问时相同的领域错误）；
+ * - 返回会话的租户与工程作用域，调用方据此执行流式写入（不信任客户端传入的作用域）。
+ */
+export async function verifyVoiceSessionCredential(deps: DomainDeps, input: {
+  sessionId: string;
+  token: string | undefined;
+}): Promise<{ workspaceId: string; projectId: string; sessionId: string; generation: number; expiresAt: Date }> {
+  const invalid = (): ApiFailure => new ApiFailure(ERROR_CODES.UNAUTHENTICATED, 'voice session credential is invalid', 401, {
+    reason: VOICE_ERROR_REASONS.CREDENTIAL_INVALID,
+  });
+  const secret = deps.voiceSessionSecret;
+  if (secret === undefined) {
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, 'voice session signing secret is not configured', 501, {
+      reason: VOICE_ERROR_REASONS.CREDENTIAL_UNAVAILABLE,
+    });
+  }
+  if (input.token === undefined || input.token.length === 0 || input.token.length > 256) throw invalid();
+  const rows = await deps.db.select().from(voiceSessions).where(eq(voiceSessions.id, input.sessionId)).limit(1);
+  const row = rows[0];
+  if (row === undefined) throw invalid();
+  const { token: expected } = signCredential(deps, row.id, row.expiresAt, row.generation);
+  const presented = Buffer.from(input.token, 'utf8');
+  const wanted = Buffer.from(expected, 'utf8');
+  if (presented.length !== wanted.length || !timingSafeEqual(presented, wanted)) throw invalid();
+  assertSessionOpen(row);
+  return { workspaceId: row.workspaceId, projectId: row.projectId, sessionId: row.id, generation: row.generation, expiresAt: row.expiresAt };
+}
+
+/**
+ * Issue #9：长连接期间复查会话门（凭证只在握手时校验；之后过期、被撤销、被关闭或换了代际都要立刻生效）。
+ * 网关在交出每一句话之前、以及到期那一刻调用；不可用时返回原因（与握手时同一套领域原因）。
+ */
+export async function voiceSessionGate(deps: DomainDeps, input: { sessionId: string; generation: number }): Promise<{ open: true } | { open: false; reason: string }> {
+  const rows = await deps.db.select().from(voiceSessions).where(eq(voiceSessions.id, input.sessionId)).limit(1);
+  const row = rows[0];
+  if (row === undefined) return { open: false, reason: VOICE_ERROR_REASONS.SESSION_NOT_OPEN };
+  try {
+    assertSessionOpen(row, input.generation);
+    return { open: true };
+  } catch (error) {
+    const reason = error instanceof ApiFailure ? error.details['reason'] : undefined;
+    return { open: false, reason: typeof reason === 'string' ? reason : VOICE_ERROR_REASONS.SESSION_NOT_OPEN };
+  }
 }
 
 export async function getVoiceSession(deps: DomainDeps, input: {
@@ -353,4 +406,32 @@ export async function listSealedUtterances(deps: DomainDeps, input: {
 }): Promise<IntentRevision[]> {
   const row = await loadSessionRow(deps, input);
   return intentRevisionSchema.array().parse(row.utterances);
+}
+
+/** 朗读的回应最多读多少字（按句截断；朗读是简短反馈，完整回应仍在对话里） */
+export const VOICE_REPLY_MAX_CHARACTERS = 360;
+
+/** 纯函数：按句截取前若干字（不在句中截断；第一句就超长时按字数截断） */
+export function spokenReplyExcerpt(reply: string, maxCharacters = VOICE_REPLY_MAX_CHARACTERS): string {
+  const text = reply.replace(/\s+/g, ' ').trim();
+  if (text.length <= maxCharacters) return text;
+  const sentences = text.match(/[^。！？!?.]+[。！？!?.]+["”』」）)]*\s*|[^。！？!?.]+$/g) ?? [text];
+  let excerpt = '';
+  for (const sentence of sentences) {
+    if (excerpt.length + sentence.length > maxCharacters) break;
+    excerpt += sentence;
+  }
+  return (excerpt.length > 0 ? excerpt : text.slice(0, maxCharacters)).trim();
+}
+
+/**
+ * Issue #9：网关朗读 AI 一轮的回应前，在语音会话所属的作品里读这一轮的回应文字（客户端只能给 id，不能让网关念任意文字）。
+ * 不在本作品、还在进行或没有回应时返回 null。
+ */
+export async function voiceReplyText(deps: DomainDeps, input: { workspaceId: string; projectId: string; turnId: string }): Promise<string | null> {
+  const rows = await deps.db.select({ reply: agentTurns.reply, status: agentTurns.status }).from(agentTurns)
+    .where(and(eq(agentTurns.id, input.turnId), eq(agentTurns.workspaceId, input.workspaceId), eq(agentTurns.projectId, input.projectId))).limit(1);
+  const row = rows[0];
+  if (row === undefined || row.status === 'RUNNING' || row.reply === null || row.reply.trim().length === 0) return null;
+  return spokenReplyExcerpt(row.reply);
 }

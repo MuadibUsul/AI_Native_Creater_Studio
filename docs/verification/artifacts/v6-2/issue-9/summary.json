@@ -1,0 +1,562 @@
+{
+  "generatedAt": "2026-10-15T16:17:09.329Z",
+  "providers": {
+    "asr": "openai-compatible gpt-4o-transcribe",
+    "tts": "openai-compatible gpt-4o-mini-tts",
+    "director": "anthropic claude-opus-5-5",
+    "viaGateway": {
+      "audio": true,
+      "claude": true
+    }
+  },
+  "results": [
+    {
+      "name": "准备：测试语音（真实合成，声音 alloy）",
+      "detail": "把这一段剪短一点。（2.5 s） / 好，然后呢，把这里的音乐调小一点。（3.5 s） / 不对，第一段不用剪那么多，保留三秒就行。（3.9 s） / 等一下，先这样，再把结尾淡出一点。（5.0 s） / 把开头剪掉一秒。（1.9 s） / Make this clip a little shorter.（2.1 s） / Hold on. Also turn the music down here.（3.0 s）"
+    },
+    {
+      "name": "准备：第一版已采用（脚本导演）；之后每一句交给真实 Claude",
+      "detail": "anthropic/claude-opus-5-5（经兼容网关）"
+    },
+    {
+      "name": "开麦：连续会话就绪（真实识别 + 真实合成）",
+      "detail": "点\"开始语音\"到\"在听\" 92 ms；声音下拉只列真实可用的 Coral / Onyx / Nova，选 Nova；语音条不压画面、时间带、播放键与输入框"
+    },
+    {
+      "name": "第一句：边说边出 → 说完交给 AI",
+      "detail": "开口 112 ms 后进入\"正在听你说\"；首个转写 4049 ms（\"把这一段剪短一点。\"）；说完到交出 1904 ms"
+    },
+    {
+      "name": "第二句：说到一半换指向；AI 忙时排队",
+      "detail": "已排队（\"还有 1 句排队\"）；首个转写 2222 ms；说完到交出 2725 ms"
+    },
+    {
+      "name": "AI 回应：真实 Claude → 真实语音合成念出来（按轮次对应）",
+      "detail": "zh_edit1：COMPLETED，Claude 64 s，说完到听见回应 69060 ms；zh_edit2：COMPLETED，Claude 21 s，说完到听见回应 未念（这一轮没有可念的回应）；合成首块 3106 ms，声音 nova；第一句结局 COMPLETED，有试改，第二句 COMPLETED，有试改"
+    },
+    {
+      "name": "指向绑定：第一句绑 lake；第二句开口指 road、说\"这里\"前改指 glacier → 绑 glacier",
+      "detail": "第一轮\"把这一段剪短一点。\"→ clp_7e15d6d8-84ea-4332-b5d1-ac111e3b30eb；第二轮\"好，然后呢，把这里的音乐调小一点。\"→ clp_5095d4f1-4056-456c-8cd4-d6c17ec7f2de"
+    },
+    {
+      "name": "纠正：作为新的一句交给 AI（带上前文）",
+      "detail": "\"不对，第一段不用剪那么多，保留三秒就行。\"（FAILED（AGENT_MODEL_REFUSED），AI：\"\"）；首个转写 2914 ms"
+    },
+    {
+      "name": "打断：AI 说话时开口，回应立即停下，这句话接着交给 AI",
+      "detail": "开口到停声 100 ms（阶段 → recognizing）；网关记录被打断的回应 已下发 0 s 音频后中止"
+    },
+    {
+      "name": "停止说话：只停声音，不影响这一轮与试改",
+      "detail": "点击到停声 37 ms（之后阶段 listening）"
+    },
+    {
+      "name": "采用 → 撤销：改动只在用户点\"采用\"后生效，可撤销",
+      "detail": "revision 5 → 采用 6 → 撤销后 19"
+    },
+    {
+      "name": "结束语音：网关收尾后关闭 → \"语音已结束\"",
+      "detail": ""
+    },
+    {
+      "name": "断线：如实说明；不自动重连、不自动调用付费服务；点\"重新连接\"开新会话，已交出的话不重复执行",
+      "detail": "断线后 3 s 内识别请求 +0、轮次 +0；重连后轮次仍 5"
+    },
+    {
+      "name": "会话过期：网关在交出前复查会话门，这句不交给 AI，界面提示重新连接",
+      "detail": "轮次仍 5"
+    },
+    {
+      "name": "识别服务失败（密钥无效）：如实说明，不自动重试",
+      "detail": "供应商请求 3 次后停止；4 s 内无新请求；不提供\"重新连接\"（重连无用）"
+    },
+    {
+      "name": "未配置识别：明确说明，不回退测试替身",
+      "detail": ""
+    },
+    {
+      "name": "没有麦克风权限：说明原因，可在允许后重新连接",
+      "detail": ""
+    },
+    {
+      "name": "键盘：V 开关语音；Tab 可进入语音条且有可见焦点；Enter 结束",
+      "detail": "焦点样式 outline=solid"
+    },
+    {
+      "name": "English: real speech in → real Claude → spoken reply → barge-in",
+      "detail": "first transcript 5426 ms (\"Make this clip a little shorter.\"); end → audible reply 16894 ms; barge-in 127 ms; turns: \"Hold on, also turn the music down here.\", \"Make this clip a little shorter.\""
+    },
+    {
+      "name": "手机：浅色 / 深色下语音条不遮挡画面、时间带、播放与输入；按钮只留图标（读屏仍读全名）",
+      "detail": "首个转写 4424 ms；说完到听见回应 15993 ms"
+    }
+  ],
+  "metrics": {
+    "utterances": [
+      {
+        "clip": "zh_edit1",
+        "locale": "zh-CN",
+        "text": "把这一段剪短一点。",
+        "speechSeconds": 2.15,
+        "speechStartMs": 112,
+        "firstTranscriptMs": 4049,
+        "firstTranscriptText": "把这一段剪短一点。",
+        "endToDeliveredMs": 1904,
+        "endedAt": 8765.30000000028
+      },
+      {
+        "clip": "zh_edit2",
+        "locale": "zh-CN",
+        "text": "好，然后呢，把这里的音乐调小一点。",
+        "speechSeconds": 3.15,
+        "speechStartMs": 87,
+        "firstTranscriptMs": 2222,
+        "firstTranscriptText": "好，然后",
+        "endToDeliveredMs": 2725,
+        "endedAt": 14575.30000000028
+      },
+      {
+        "clip": "zh_fix",
+        "locale": "zh-CN",
+        "text": "不对，第一段不用剪那么多，保留三秒就行。",
+        "speechSeconds": 3.6,
+        "speechStartMs": 130,
+        "firstTranscriptMs": 2914,
+        "firstTranscriptText": "不对。",
+        "endToDeliveredMs": 2529,
+        "endedAt": 100134.10000000056
+      },
+      {
+        "clip": "zh_short",
+        "locale": "zh-CN",
+        "text": "把开头剪掉一秒。",
+        "speechSeconds": 1.65,
+        "speechStartMs": 205,
+        "firstTranscriptMs": 205,
+        "firstTranscriptText": "刚才那句 AI 没能完成，原因在对话里。",
+        "endToDeliveredMs": 2609,
+        "endedAt": 168940.7999999998
+      },
+      {
+        "clip": "en_edit",
+        "locale": "en",
+        "text": "Make this clip a little shorter.",
+        "speechSeconds": 1.8,
+        "speechStartMs": 110,
+        "firstTranscriptMs": 5426,
+        "firstTranscriptText": "Make this clip a little shorter.",
+        "endToDeliveredMs": 3639,
+        "endedAt": 3641.5
+      },
+      {
+        "clip": "zh_short",
+        "locale": "zh-CN",
+        "text": "把开头剪掉一秒。",
+        "speechSeconds": 1.65,
+        "speechStartMs": 191,
+        "firstTranscriptMs": 4424,
+        "firstTranscriptText": "把开头剪掉一秒。",
+        "endToDeliveredMs": 2782,
+        "endedAt": 3397
+      }
+    ],
+    "replies": [
+      {
+        "after": "zh_edit1",
+        "turnStatus": "COMPLETED",
+        "claudeSeconds": 64,
+        "userEndToFirstAudioMs": 69060
+      },
+      {
+        "after": "zh_edit2",
+        "turnStatus": "COMPLETED",
+        "claudeSeconds": 21,
+        "userEndToFirstAudioMs": null
+      },
+      {
+        "after": "zh_short",
+        "turnStatus": "COMPLETED",
+        "claudeSeconds": 10,
+        "userEndToFirstAudioMs": 15131
+      },
+      {
+        "after": "en_edit",
+        "userEndToFirstAudioMs": 16894
+      },
+      {
+        "after": "zh_short (phone)",
+        "userEndToFirstAudioMs": 15993
+      }
+    ],
+    "bargeIns": [
+      {
+        "locale": "zh-CN",
+        "speechOnsetToSilenceMs": 100,
+        "phaseAfter": "recognizing"
+      },
+      {
+        "locale": "en",
+        "speechOnsetToSilenceMs": 127,
+        "phaseAfter": "recognizing"
+      }
+    ],
+    "stopSpeaking": {
+      "clickToSilenceMs": 37,
+      "phaseAfter": "listening"
+    },
+    "connect": [
+      {
+        "label": "zh desktop",
+        "ms": 92
+      },
+      {
+        "label": "en desktop",
+        "ms": 118
+      }
+    ],
+    "claudeTurns": [
+      {
+        "message": "等一下，先这样，再把结尾淡出一点。",
+        "status": "COMPLETED",
+        "seconds": 17.6,
+        "tools": [
+          "list_effects"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 574,
+          "cacheReadInputTokens": 25836,
+          "cacheCreationInputTokens": 8663
+        },
+        "costMicros": 59995,
+        "reply": "项目规则不允许使用程序化特效（包括淡出效果）。如果您需要在结尾添加淡出效果，需要先在项目设置中启用特效功能。\n\n目前时间线是：glacier（2秒）→ lake（2秒）→ road（1秒），共 5 秒。"
+      },
+      {
+        "message": "把开头剪掉一秒。",
+        "status": "COMPLETED",
+        "seconds": 10,
+        "tools": [
+          "edit_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 262,
+          "cacheReadInputTokens": 25322,
+          "cacheCreationInputTokens": 5029
+        },
+        "costMicros": 35483,
+        "reply": "已将 glacier.mp4 开头剪掉 1 秒，现在从素材的 1.5 秒开始，时长 2 秒：glacier（2秒）→ lake（2秒）→ road（1秒）。"
+      },
+      {
+        "message": "不对，第一段不用剪那么多，保留三秒就行。",
+        "status": "FAILED",
+        "seconds": 63.6,
+        "tools": [
+          "get_timeline",
+          "edit_timeline"
+        ],
+        "proposal": false,
+        "usage": {
+          "inputTokens": 12,
+          "outputTokens": 2246,
+          "cacheReadInputTokens": 40462,
+          "cacheCreationInputTokens": 7757
+        },
+        "costMicros": 91847,
+        "reply": null
+      },
+      {
+        "message": "好，然后呢，把这里的音乐调小一点。",
+        "status": "COMPLETED",
+        "seconds": 20.6,
+        "tools": [
+          "get_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 1350,
+          "outputTokens": 127,
+          "cacheReadInputTokens": 93207,
+          "cacheCreationInputTokens": 49799
+        },
+        "costMicros": 275577,
+        "reply": "我看到时间线上有三个音频片段，它们都是素材自带的音频（来自 glacier.mp4、road.mp4 和 lake.mp4）。\n\n当前的工具不支持调整音频音量，我无法实现\"调小音乐\"这个操作。如果您需要调整音量，可能需要在视频编辑器的界面中手动调整音频轨道的音量控制。"
+      },
+      {
+        "message": "把这一段剪短一点。",
+        "status": "COMPLETED",
+        "seconds": 63.7,
+        "tools": [
+          "edit_timeline",
+          "edit_timeline",
+          "edit_timeline",
+          "edit_timeline",
+          "edit_timeline",
+          "review_draft",
+          "look_at_timeline",
+          "look_at_footage",
+          "look_at_footage",
+          "look_at_footage"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 1704,
+          "outputTokens": 2000,
+          "cacheReadInputTokens": 106340,
+          "cacheCreationInputTokens": 38464
+        },
+        "costMicros": 260407,
+        "reply": "这些是测试色条素材，不是真实的冰岛风景片段。我已经将中间的 lake.mp4 从 3 秒缩短到 2 秒，现在整体时长是 8 秒：glacier（3秒）→ lake（2秒）→ road（3秒）。"
+      },
+      {
+        "message": "Hold on, also turn the music down here.",
+        "status": "COMPLETED",
+        "seconds": 9,
+        "tools": [
+          "get_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 102,
+          "cacheReadInputTokens": 25806,
+          "cacheCreationInputTokens": 5427
+        },
+        "costMicros": 34369,
+        "reply": "I don't have audio level controls available in this editor — the audio clips play at their recorded levels. I can remove the audio entirely from that section if the music is too loud, or suggest adjusting levels in your audio software before importing."
+      },
+      {
+        "message": "Make this clip a little shorter.",
+        "status": "COMPLETED",
+        "seconds": 10.4,
+        "tools": [
+          "edit_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 210,
+          "cacheReadInputTokens": 24682,
+          "cacheCreationInputTokens": 4529
+        },
+        "costMicros": 31814,
+        "reply": "Trimmed the lake clip to 2.5 seconds — shortened by half a second from each end."
+      },
+      {
+        "message": "把开头剪掉一秒。",
+        "status": "COMPLETED",
+        "seconds": 10.8,
+        "tools": [
+          "edit_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 186,
+          "cacheReadInputTokens": 24184,
+          "cacheCreationInputTokens": 4714
+        },
+        "costMicros": 32160,
+        "reply": "已将第一个镜头的开头剪掉一秒，从素材的 0.5 秒改为从 1.5 秒开始。"
+      }
+    ],
+    "extraEdit": {
+      "reason": "correction turn had no reply to interrupt",
+      "turn": "把开头剪掉一秒。",
+      "outcome": "COMPLETED，有试改"
+    },
+    "zhTurnOutcomes": [
+      {
+        "message": "等一下，先这样，再把结尾淡出一点。",
+        "outcome": "COMPLETED，有试改"
+      },
+      {
+        "message": "把开头剪掉一秒。",
+        "outcome": "COMPLETED，有试改"
+      },
+      {
+        "message": "不对，第一段不用剪那么多，保留三秒就行。",
+        "outcome": "FAILED（AGENT_MODEL_REFUSED）"
+      },
+      {
+        "message": "好，然后呢，把这里的音乐调小一点。",
+        "outcome": "COMPLETED，有试改"
+      },
+      {
+        "message": "把这一段剪短一点。",
+        "outcome": "COMPLETED，有试改"
+      }
+    ],
+    "gatewayReplies": [
+      {
+        "session": "vsess_70ad933c-7719-4d5d-b2d8-575e3fe3d3a3",
+        "characters": 96,
+        "voice": "nova",
+        "firstChunkMs": 3106,
+        "totalMs": 3608,
+        "audioSeconds": 14.05,
+        "stopped": false
+      },
+      {
+        "session": "vsess_70ad933c-7719-4d5d-b2d8-575e3fe3d3a3",
+        "characters": 133,
+        "voice": "nova",
+        "firstChunkMs": null,
+        "totalMs": 463,
+        "audioSeconds": 0,
+        "stopped": true
+      },
+      {
+        "session": "vsess_70ad933c-7719-4d5d-b2d8-575e3fe3d3a3",
+        "characters": 78,
+        "voice": "nova",
+        "firstChunkMs": 2316,
+        "totalMs": 2989,
+        "audioSeconds": 10.2,
+        "stopped": false
+      },
+      {
+        "session": "vsess_70ad933c-7719-4d5d-b2d8-575e3fe3d3a3",
+        "characters": 100,
+        "voice": "nova",
+        "firstChunkMs": 3379,
+        "totalMs": 3761,
+        "audioSeconds": 18.35,
+        "stopped": true
+      },
+      {
+        "session": "vsess_0ae6415a-6fa6-4be6-bc20-50001067d8d9",
+        "characters": 80,
+        "voice": "coral",
+        "firstChunkMs": 1992,
+        "totalMs": 2507,
+        "audioSeconds": 7.6,
+        "stopped": false
+      },
+      {
+        "session": "vsess_0ae6415a-6fa6-4be6-bc20-50001067d8d9",
+        "characters": 252,
+        "voice": "coral",
+        "firstChunkMs": null,
+        "totalMs": 221,
+        "audioSeconds": 0,
+        "stopped": true
+      },
+      {
+        "session": "vsess_4370f0e3-e2ad-446e-8bc2-8fee40abcaea",
+        "characters": 37,
+        "voice": "coral",
+        "firstChunkMs": 1949,
+        "totalMs": 2186,
+        "audioSeconds": 7.25,
+        "stopped": true
+      }
+    ],
+    "asrEvents": [
+      {
+        "event": "asr_final",
+        "ms": 1765,
+        "audioSeconds": 2.46,
+        "characters": 9,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_interim",
+        "ms": 1535,
+        "audioSeconds": 0.9
+      },
+      {
+        "event": "asr_final",
+        "ms": 2187,
+        "audioSeconds": 3.9,
+        "characters": 17,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_interim",
+        "ms": 2216,
+        "audioSeconds": 0.9
+      },
+      {
+        "event": "asr_final",
+        "ms": 1930,
+        "audioSeconds": 4.38,
+        "characters": 20,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_final",
+        "ms": 2077,
+        "audioSeconds": 2.26,
+        "characters": 8,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_interim",
+        "ms": 2326,
+        "audioSeconds": 0.9
+      },
+      {
+        "event": "asr_interim",
+        "ms": 1436,
+        "audioSeconds": 3.24
+      },
+      {
+        "event": "asr_final",
+        "ms": 2209,
+        "audioSeconds": 4.94,
+        "characters": 17,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_final",
+        "ms": 2296,
+        "audioSeconds": 2.26,
+        "characters": 8,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_final",
+        "ms": 3236,
+        "audioSeconds": 2.38,
+        "characters": 32,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_interim",
+        "ms": 2369,
+        "audioSeconds": 0.9
+      },
+      {
+        "event": "asr_final",
+        "ms": 2537,
+        "audioSeconds": 3.3,
+        "characters": 39,
+        "wordTimes": "estimated"
+      },
+      {
+        "event": "asr_final",
+        "ms": 2248,
+        "audioSeconds": 2.28,
+        "characters": 8,
+        "wordTimes": "estimated"
+      }
+    ]
+  },
+  "usage": {
+    "asrRequests": 23,
+    "asrAudioSeconds": 53,
+    "ttsRequests": 7,
+    "ttsCharacters": 776,
+    "clipTtsRequests": 0,
+    "clipTtsCharacters": 0,
+    "badKeyAsrRequests": 3,
+    "claudeTokens": {
+      "input": 3106,
+      "output": 5707,
+      "cacheRead": 365839
+    }
+  }
+}

@@ -139,6 +139,28 @@ describe('N02-02 media probe worker', () => {
     expect(version.mediaProbe?.capabilities).toMatchObject({ decode: 'AVAILABLE', preview: 'AVAILABLE', export: 'AVAILABLE' });
   });
 
+  it('V6-1: a byte-identical upload reuses the probe result, copies duration, and schedules its own analysis runs', { timeout: 60_000 }, async () => {
+    const bytes = await readFile(join(fixtures, 'clip-d-synthetic-vfr.mp4'));
+    const first = await uploadObject(bytes, 'first.mp4');
+    await executeProbe(first.workspaceId);
+    const firstVersion = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, first.versionId)))[0]!;
+    expect(firstVersion.durationMs).toBeGreaterThan(0);
+
+    // 同一工作区再传一次相同字节（不带校验值 → 不在意图阶段去重，在确认阶段复用对象）
+    const intent = await createUploadIntent(deps(), { workspaceId: first.workspaceId, userId: null, input: { assetType: 'USER_UPLOAD', filename: 'again.mp4', contentType: 'video/mp4', sizeBytes: bytes.byteLength } });
+    const secondVersion = (await handle.db.select().from(assetVersions).where(eq(assetVersions.assetId, intent.asset.id)).limit(1))[0]!;
+    await storage.putObject(secondVersion.storageKey, bytes);
+    const confirmed = await confirmUpload(deps(), { workspaceId: first.workspaceId, assetId: intent.asset.id, input: {} });
+    expect(confirmed.status).toBe('READY');
+    const reused = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, secondVersion.id)))[0]!;
+    expect(reused).toMatchObject({ durationMs: firstVersion.durationMs, width: firstVersion.width, height: firstVersion.height, probeStatus: 'READY' });
+    // 新版本有自己的代理与索引任务（AI 和界面按版本读取分析结果）
+    const queued = await handle.db.select().from(jobs).where(eq(jobs.workspaceId, first.workspaceId));
+    const forSecond = queued.filter((job) => JSON.stringify(job.input).includes(secondVersion.id)).map((job) => job.type).sort();
+    expect(forSecond).toEqual(expect.arrayContaining([MEDIA_INDEX_JOB_TYPE, MEDIA_PROXY_JOB_TYPE]));
+    expect(queued.filter((job) => job.type === MEDIA_PROBE_JOB_TYPE)).toHaveLength(1);
+  });
+
   it('corrupt MP4 signature is not marked usable and the immutable original remains available for recovery', { timeout: 60_000 }, async () => {
     const bytes = Buffer.from([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]);
     const created = await uploadObject(bytes, 'corrupt.mp4');

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   legacyMillisecondsToMediaTime,
   type MediaRange,
@@ -305,6 +305,68 @@ describe('N05-01 实时语音会话（HTTP + SDK）', () => {
       }),
       { status: 409, reason: 'VOICE_SESSION_EXPIRED' },
     );
+  });
+
+  it('V5-M3 短期凭证真正被校验：只有签发它的会话可用，伪造/串用 401，撤销 409；凭证不能用于其他端点', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const created = await client.projects.createVoiceSession(fixture.workspaceId, fixture.projectId, {});
+    const other = await client.projects.createVoiceSession(fixture.workspaceId, fixture.projectId, {});
+    const { session, credential } = created;
+    // 实时通道不带用户 Cookie：只凭短期凭证
+    const stream = (sessionId: string, token: string | null, seq: number) => fetch(`${baseUrl}/api/v1/voice-sessions/${sessionId}/stream-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token === null ? {} : { 'x-voice-session-token': token }) },
+      body: JSON.stringify({ event: envelopeOf(sessionId, session.generation, session.clockEpoch, seq, 'utt_stream', `第${String(seq)}段`) }),
+    });
+    const reasonOf = async (response: Response) => ((await response.json()) as { error?: { details?: { reason?: string } } }).error?.details?.reason;
+
+    const accepted = await stream(session.sessionId, credential.token, 1);
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toMatchObject({ accepted: true, projectUntouched: true, transcript: { utteranceId: 'utt_stream', text: '第1段' } });
+
+    for (const [sessionId, token] of [
+      [session.sessionId, null],
+      [session.sessionId, `${credential.token.slice(0, -2)}xx`],
+      [other.session.sessionId, credential.token], // A 的凭证用于 B
+      [`vsess_${randomUUID()}`, credential.token],
+    ] as const) {
+      const rejected = await stream(sessionId, token, 2);
+      expect(rejected.status).toBe(401);
+      expect(await reasonOf(rejected)).toBe('VOICE_CREDENTIAL_INVALID');
+    }
+
+    // 凭证不能代替用户身份：封存仍要求登录与 project:write
+    const sealWithToken = await fetch(`${baseUrl}/api/v1/workspaces/${fixture.workspaceId}/projects/${fixture.projectId}/voice-sessions/${session.sessionId}/seal`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-voice-session-token': credential.token },
+      body: JSON.stringify({ utteranceId: 'utt_stream', transcriptRevision: 1, interpretedAction: 'trim_clip', targetBindings: [], explicitConstraints: [], assumptions: [] }),
+    });
+    expect(sealWithToken.status).toBe(401);
+
+    await client.projects.revokeVoiceSession(fixture.workspaceId, fixture.projectId, session.sessionId);
+    const revoked = await stream(session.sessionId, credential.token, 3);
+    expect(revoked.status).toBe(409);
+    expect(await reasonOf(revoked)).toBe('VOICE_SESSION_REVOKED');
+  });
+
+  it('V5-M3 凭证到期即失效：有效签名但 TTL 已过 → 409 VOICE_SESSION_EXPIRED', async () => {
+    const client = await newSignedInClient();
+    const fixture = await makeProject(client);
+    const { session, credential } = await client.projects.createVoiceSession(fixture.workspaceId, fixture.projectId, {});
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(Date.parse(session.expiresAt) + 1_000));
+      const response = await fetch(`${baseUrl}/api/v1/voice-sessions/${session.sessionId}/stream-events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-voice-session-token': credential.token },
+        body: JSON.stringify({ event: envelopeOf(session.sessionId, session.generation, session.clockEpoch, 1, 'utt_late', '过期') }),
+      });
+      expect(response.status).toBe(409);
+      expect(((await response.json()) as { error?: { details?: { reason?: string } } }).error?.details?.reason).toBe('VOICE_SESSION_EXPIRED');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('能力协商按真实适配器能力：浏览器回退路径明确不承诺服务端 VAD/逐词时间戳/工具', async () => {

@@ -9,7 +9,7 @@ import {
   type WorkspaceFeatureKey,
 } from '@ancs/contracts';
 import { outboxEvents, workspaceFeaturePreferences } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 type Definition = Omit<WorkspaceFeature, 'requestedEnabled' | 'effectiveState' | 'reason' | 'updatedAt'>;
 

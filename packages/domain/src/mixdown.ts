@@ -13,7 +13,7 @@ import {
 } from '@ancs/contracts';
 import { buildSubtitles, planAudioMix, wrapCaption, type CaptionCue } from '@ancs/contracts';
 import { getCurrentMasterNarration } from './alignment.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 混音与字幕服务（P06-06 / §58、§59）。

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { userAppearancePreferences } from '@ancs/db';
 import type { AppearanceMode, UserAppearancePreference } from '@ancs/contracts';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /** An absent row has the same meaning as an explicit synced `system` preference. */
 export async function getUserAppearance(deps: DomainDeps, userId: string): Promise<UserAppearancePreference> {

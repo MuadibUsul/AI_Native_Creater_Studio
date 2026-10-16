@@ -18,7 +18,7 @@ import {
   type PaymentProvider,
 } from '@ancs/contracts';
 import { billingEvents, creditLedger, creditPacks } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getBalanceCredits, listLedger } from './billing.js';
 import { getWorkspaceEntitlement } from './plans.js';
 import { requirePaymentProvider } from './payments.js';

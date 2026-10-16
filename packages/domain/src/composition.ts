@@ -29,7 +29,9 @@ import {
   sequenceClips,
   sequenceTracks,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
+import { inOrder } from './in-order.js';
+import { writeCompositionDirect } from './composition-projector.js';
 import { loadProjectRow } from './projects.js';
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
@@ -127,10 +129,10 @@ export async function createSequence(
   const now = new Date();
   const id = newId('seq');
   const start = mediaTimeSchema.parse({ ticks: '0', timebase: request.duration.timebase });
-  await deps.db.insert(projectSequences).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_sequence', sequenceId: id }, (projector) => projector.insert('sequence', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     name: request.name,
     frameRate: frameRateSchema.parse(request.frameRate),
     start,
@@ -138,8 +140,8 @@ export async function createSequence(
     parentSequenceId: request.parentSequenceId ?? null,
     createdAt: now,
     updatedAt: now,
-  });
-  return toSequence((await deps.db.select().from(projectSequences).where(eq(projectSequences.id, id)).limit(1))[0]!);
+  }));
+  return toSequence(row);
 }
 
 export async function createTrack(
@@ -155,10 +157,10 @@ export async function createTrack(
   if (!sequence[0]) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
   const now = new Date();
   const id = newId('trk');
-  await deps.db.insert(sequenceTracks).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_track', trackId: id }, (projector) => projector.insert('track', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: input.sequenceId,
     kind: request.kind,
     position: request.position,
@@ -170,8 +172,8 @@ export async function createTrack(
     syncLocked: request.syncLocked ?? false,
     createdAt: now,
     updatedAt: now,
-  });
-  return toTrack((await deps.db.select().from(sequenceTracks).where(eq(sequenceTracks.id, id)).limit(1))[0]!);
+  }));
+  return toTrack(row);
 }
 
 async function assertNoNestedCycle(
@@ -286,10 +288,10 @@ export async function createClip(
   assertLinearMapping(sourceRange, sequenceRange, request.timeMapping.rate);
   const now = new Date();
   const id = newId('clp');
-  await deps.db.insert(sequenceClips).values({
+  const scope = { workspaceId: input.workspaceId, projectId: input.projectId };
+  const row = await writeCompositionDirect(deps.db, scope, { op: 'create_clip', clipId: id }, (projector) => projector.insert('clip', {
     id,
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
+    ...scope,
     sequenceId: input.sequenceId,
     trackId: request.trackId,
     assetVersionId: request.assetVersionId ?? null,
@@ -302,8 +304,8 @@ export async function createClip(
     parentClipId: request.parentClipId ?? null,
     createdAt: now,
     updatedAt: now,
-  });
-  return toClip((await deps.db.select().from(sequenceClips).where(eq(sequenceClips.id, id)).limit(1))[0]!);
+  }));
+  return toClip(row);
 }
 
 export async function listProjectComposition(
@@ -311,10 +313,10 @@ export async function listProjectComposition(
   input: { workspaceId: string; projectId: string },
 ): Promise<{ sequences: Sequence[]; tracks: Track[]; clips: Clip[] }> {
   await loadProjectRow(deps.db, input.workspaceId, input.projectId);
-  const [sequences, tracks, clips] = await Promise.all([
-    deps.db.select().from(projectSequences).where(and(eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId))).orderBy(asc(projectSequences.createdAt)),
-    deps.db.select().from(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId))).orderBy(asc(sequenceTracks.sequenceId), asc(sequenceTracks.position)),
-    deps.db.select().from(sequenceClips).where(and(eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId))).orderBy(asc(sequenceClips.createdAt)),
+  const [sequences, tracks, clips] = await inOrder([
+    () => deps.db.select().from(projectSequences).where(and(eq(projectSequences.workspaceId, input.workspaceId), eq(projectSequences.projectId, input.projectId))).orderBy(asc(projectSequences.createdAt)),
+    () => deps.db.select().from(sequenceTracks).where(and(eq(sequenceTracks.workspaceId, input.workspaceId), eq(sequenceTracks.projectId, input.projectId))).orderBy(asc(sequenceTracks.sequenceId), asc(sequenceTracks.position)),
+    () => deps.db.select().from(sequenceClips).where(and(eq(sequenceClips.workspaceId, input.workspaceId), eq(sequenceClips.projectId, input.projectId))).orderBy(asc(sequenceClips.createdAt)),
   ]);
   return { sequences: sequences.map(toSequence), tracks: tracks.map(toTrack), clips: clips.map(toClip) };
 }

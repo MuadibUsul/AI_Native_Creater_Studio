@@ -7,6 +7,7 @@ import {
   type MediaStreamProbe,
   type SourceMediaTranscoder,
 } from '@ancs/contracts';
+import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 
 export interface FfmpegMediaProxyTranscoderOptions {
   ffmpegPath?: string;
@@ -20,7 +21,7 @@ const DEFAULT_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 async function runProcess(input: { executable: string; args: string[]; timeoutMs: number; maxOutputBytes: number }): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(input.executable, input.args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(input.executable, input.args, { env: childProcessEnv(process.env, MEDIA_CHILD_ENV), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stdout = '';
     let outputBytes = 0;
     let settled = false;

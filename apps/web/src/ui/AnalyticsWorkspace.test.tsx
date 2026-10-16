@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { mockClient, renderWithClient } from '@/test-utils.js';
 import { AnalyticsWorkspace } from './AnalyticsWorkspace.js';
 
@@ -45,5 +46,22 @@ describe('AnalyticsWorkspace（P14 Web 完成面）', () => {
     await userEvent.click(screen.getByRole('button', { name: '接受' }));
     await waitFor(() => expect(actOnLearning).toHaveBeenCalledWith('ws_1', 'prj_1', 'lrn_1', { action: 'ACCEPT' }));
     expect(listDataSources).not.toHaveBeenCalled();
+  });
+
+  it('renders in English without Chinese interface text', async () => {
+    const { client } = makeClient();
+    client.publications.list = vi.fn().mockResolvedValue({ items: [{ ...publication, title: 'Rates weekly' }] });
+    client.analytics.listLearnings = vi.fn().mockResolvedValue({ items: [{ ...learning, title: 'Rhythm', explanation: 'Short scenes retained better.' }] });
+    const { container } = renderWithClient(<I18nProvider initialLocale="en"><AnalyticsWorkspace workspaceId="ws_1" projectId="prj_1" /></I18nProvider>, client);
+    expect(await screen.findByText('1,200')).toBeTruthy();
+    expect(screen.getAllByText('Unknown (not returned by the platform)').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Click-through rate')).toBeTruthy();
+    expect(screen.getByText(/^youtube · LIFETIME · UTC · Fetched /)).toBeTruthy();
+    expect(await screen.findByText('Retention: 82% · 1 sample point')).toBeTruthy();
+    expect(screen.getByText('Correlation evidence · 2 samples · Channel unchanged')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Select publication' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(container.innerHTML).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });

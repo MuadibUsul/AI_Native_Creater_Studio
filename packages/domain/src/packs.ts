@@ -29,7 +29,7 @@ import {
   type WorkspacePackView,
 } from '@ancs/contracts';
 import { claims, derivationLineage, packArtifactValidations, packArtifacts, packEnablements, packInstallations, projectPackBindings, projectSources } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assertPackEnabled } from './plans.js';
 import { evaluateChannelFit, listAtoms, listChannelRecipes } from './atoms.js';
 import { recordPlanLineage } from './lineage.js';

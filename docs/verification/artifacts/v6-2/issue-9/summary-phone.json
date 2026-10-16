@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-10-15T16:20:32.806Z",
+  "providers": {
+    "asr": "openai-compatible gpt-4o-transcribe",
+    "tts": "openai-compatible gpt-4o-mini-tts",
+    "director": "anthropic claude-opus-5-5",
+    "viaGateway": {
+      "audio": true,
+      "claude": true
+    }
+  },
+  "results": [
+    {
+      "name": "准备：测试语音（真实合成，声音 alloy）",
+      "detail": "把这一段剪短一点。（2.5 s） / 好，然后呢，把这里的音乐调小一点。（3.5 s） / 不对，第一段不用剪那么多，保留三秒就行。（3.9 s） / 等一下，先这样，再把结尾淡出一点。（5.0 s） / 把开头剪掉一秒。（1.9 s） / Make this clip a little shorter.（2.1 s） / Hold on. Also turn the music down here.（3.0 s）"
+    },
+    {
+      "name": "准备：第一版已采用（脚本导演）；之后每一句交给真实 Claude",
+      "detail": "anthropic/claude-opus-5-5（经兼容网关）"
+    },
+    {
+      "name": "手机：浅色 / 深色下语音条不遮挡画面、时间带、播放与输入；按钮只留图标（读屏仍读全名）",
+      "detail": "首个转写 4605 ms；说完到听见回应 17434 ms"
+    }
+  ],
+  "metrics": {
+    "utterances": [
+      {
+        "clip": "zh_short",
+        "locale": "zh-CN",
+        "text": "把开头剪掉一秒。",
+        "speechSeconds": 1.65,
+        "speechStartMs": 200,
+        "firstTranscriptMs": 4605,
+        "firstTranscriptText": "把开头剪掉一秒。",
+        "endToDeliveredMs": 2968,
+        "endedAt": 8725.5
+      }
+    ],
+    "replies": [
+      {
+        "after": "zh_short (phone)",
+        "userEndToFirstAudioMs": 17434
+      }
+    ],
+    "bargeIns": [],
+    "stopSpeaking": null,
+    "connect": [],
+    "claudeTurns": [
+      {
+        "message": "把开头剪掉一秒。",
+        "status": "COMPLETED",
+        "seconds": 12.1,
+        "tools": [
+          "edit_timeline"
+        ],
+        "proposal": true,
+        "usage": {
+          "inputTokens": 8,
+          "outputTokens": 182,
+          "cacheReadInputTokens": 12918,
+          "cacheCreationInputTokens": 16202
+        },
+        "costMicros": 87266,
+        "reply": "已将开头第一个镜头从 3 秒缩短至 2 秒，整体时长保持 9 秒。"
+      }
+    ],
+    "extraEdit": null,
+    "gatewayReplies": [
+      {
+        "session": "vsess_4047bdd0-bc8c-4ef8-8b05-61d50913a188",
+        "characters": 33,
+        "voice": "coral",
+        "firstChunkMs": 2211,
+        "totalMs": 2445,
+        "audioSeconds": 9.1,
+        "stopped": true
+      }
+    ],
+    "asrEvents": [
+      {
+        "event": "asr_final",
+        "ms": 2426,
+        "audioSeconds": 2.28,
+        "characters": 8,
+        "wordTimes": "estimated"
+      }
+    ]
+  },
+  "usage": {
+    "asrRequests": 2,
+    "asrAudioSeconds": 3.2,
+    "ttsRequests": 1,
+    "ttsCharacters": 33,
+    "clipTtsRequests": 0,
+    "clipTtsCharacters": 0,
+    "badKeyAsrRequests": 0,
+    "claudeTokens": {
+      "input": 8,
+      "output": 182,
+      "cacheRead": 12918
+    }
+  }
+}

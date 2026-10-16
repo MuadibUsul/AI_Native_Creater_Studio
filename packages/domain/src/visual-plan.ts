@@ -16,7 +16,7 @@ import { checkChartBinding, extractNumericMentions, extractTimelineMentions, pla
 import { listDatasets } from './evidence.js';
 import { datasetShape, recognizeSemanticType, ruleForSemanticType, type DatasetShape } from './visual-grammar.js';
 import { getPlan } from './narrative.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Visual Plan 服务（P04-04 / 规范 §10）。

@@ -50,6 +50,8 @@ declare function interpolate(
 declare function spring(options?: Record<string, unknown>): number;
 declare function AbsoluteFill(props: { children?: unknown; style?: Record<string, unknown> }): unknown;
 declare const fixtureProps: Record<string, unknown>;
+/** 确定性随机数（0–1；同一 key 同一结果）：特效代码用它代替 Math.random，保证重渲一致 */
+declare function random(key: string | number): number;
 `;
 
 /** 对代码做类型检查（返回结构化诊断；不抛异常）。 */

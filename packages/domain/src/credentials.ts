@@ -21,7 +21,7 @@ import {
 import { outboxEvents, providerConnections, workspaceProviderSettings } from '@ancs/db';
 import { evaluateModelAvailability, getCurrentCatalog } from './catalog.js';
 import { assertByokAllowed } from './plans.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Provider 凭据与路由（P03-04 / 规范 §17.2、§17.3；计划 P03-04）。

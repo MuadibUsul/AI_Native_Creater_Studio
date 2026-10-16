@@ -10,7 +10,7 @@ import {
   type MediaEvidenceRequest,
 } from '@ancs/contracts';
 import { assets, assetVersions, mediaEvidenceCaches, mediaIndexRuns, mediaRangeTags, mediaTranscriptRuns } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { listUnifiedMediaIndex } from './unified-media-index.js';
 
 const sha256 = (...parts: string[]): string => createHash('sha256').update(parts.join('\0')).digest('hex');

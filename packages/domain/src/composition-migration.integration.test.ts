@@ -4,6 +4,7 @@ import { editRequestSchema, projectVersionSnapshotSchema } from '@ancs/contracts
 import {
   createDb,
   projectCompositionMigrations,
+  projectOpLog,
   projectVersionCompositionProjections,
   projectVersions,
   redactDatabaseUrl,
@@ -13,7 +14,7 @@ import {
   workspaces,
   type DbHandle,
 } from '@ancs/db';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import {
   addScene,
   assembleProjectDocument,
@@ -21,10 +22,12 @@ import {
   compositionDigestSha256,
   createChannel,
   createProject,
+  listProjectComposition,
   listProjectVersionCompositionProjections,
   migrateLegacyProjectComposition,
   processEdits,
   setProjectCompositionMigrationEnabled,
+  verifyCompositionProjection,
   type DomainDeps,
 } from './index.js';
 
@@ -114,6 +117,12 @@ describe('N01-05 legacy composition migration', () => {
     expect(completed.sourceDigestSha256).toHaveLength(64);
     expect(completed.targetDigestSha256).toHaveLength(64);
 
+    // V5-M2：迁移写入经投影器进入操作日志（每个已提交步骤一行 MIGRATION，不改 revision），折叠结果与投影一致
+    const migrationLog = await handle.db.select().from(projectOpLog).where(eq(projectOpLog.projectId, f.projectId)).orderBy(asc(projectOpLog.position));
+    expect(migrationLog[0]?.source).toBe('BASELINE');
+    expect(migrationLog.filter((entry) => entry.source === 'MIGRATION').map((entry) => (entry.operations as { step: string }[])[0]?.step)).toEqual(['BASE', 'SCENES']);
+    expect(await verifyCompositionProjection(handle.db, f)).toMatchObject({ logged: true, differences: [] });
+
     const afterGraph = await assembleSceneGraph(deps(), f);
     const afterScenes = await handle.db.select().from(scenes).where(eq(scenes.projectId, f.projectId));
     const afterVersions = await handle.db.select().from(projectVersions).where(eq(projectVersions.projectId, f.projectId));
@@ -147,6 +156,22 @@ describe('N01-05 legacy composition migration', () => {
       }),
     })).rejects.toMatchObject({ details: { reason: 'LEGACY_WRITE_BLOCKED_AFTER_COMPOSITION_CUTOVER' } });
     expect((await handle.db.select().from(scenes).where(eq(scenes.id, f.sceneId)))[0]?.narration).toBe('旧版开场');
+
+    // V5-M2：切换后只拒绝写 Scene 的操作；组合编辑照常可用（此前全部编辑被拒，已迁移项目无法编辑）
+    const migratedTrack = (await listProjectComposition(deps(), f)).tracks.find((track) => track.kind === 'GRAPHIC')!;
+    const renamed = await processEdits(deps(), {
+      workspaceId: f.workspaceId,
+      projectId: f.projectId,
+      actor: { type: 'USER', id: 'composition-client' },
+      request: editRequestSchema.parse({
+        idempotencyKey: `idem_${randomUUID()}`,
+        baseProjectRevision: beforeGraph.projectRevision,
+        expectedSceneRevisions: {},
+        operations: [{ op: 'update_track', trackId: migratedTrack.id, changes: { name: '已迁移图形' } }],
+      }),
+    });
+    expect(renamed.response.editEvents.map((event) => event.action)).toEqual(['UPDATE_TRACK']);
+    expect(await verifyCompositionProjection(handle.db, f)).toMatchObject({ logged: true, differences: [] });
   });
 
   it('never exposes another workspace migration or projection', async () => {

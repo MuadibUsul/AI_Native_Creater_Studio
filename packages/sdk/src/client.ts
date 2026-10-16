@@ -73,6 +73,28 @@ import {
   legacySelectionSchema,
   rangeEditPlanSchema,
   createRenderRequestSchema,
+  startCompositionFinalRenderRequestSchema,
+  agentSessionSchema,
+  strategyPackSchema,
+  strategyPackSummarySchema,
+  createStudioProjectRequestSchema,
+  studioProjectRefSchema,
+  studioStateSchema,
+  applyReviewResponseSchema,
+  applyReviewRequestSchema,
+  createReviewNoteRequestSchema,
+  updateReviewNoteRequestSchema,
+  reviewNoteSchema,
+  reviewStateSchema,
+  undoChangeResponseSchema,
+  projectAgentCostSchema,
+  requestSequencePreviewSchema,
+  sequencePreviewSchema,
+  agentToolDescriptorSchema,
+  agentTurnSchema,
+  createAgentSessionRequestSchema,
+  startAgentTurnRequestSchema,
+  workflowRunSchema,
   directorPlanSchema,
   renderRecordSchema,
   customMotionComponentSchema,
@@ -368,6 +390,28 @@ import {
   type NarrationBlock,
   type NarrativeGenerationResult,
   type CreateRenderRequest,
+  type StartCompositionFinalRenderRequest,
+  type AgentSession,
+  type StrategyPack,
+  type StrategyPackSummary,
+  type CreateStudioProjectRequest,
+  type StudioProjectRef,
+  type StudioState,
+  type ApplyReviewRequest,
+  type ApplyReviewResponse,
+  type CreateReviewNoteRequest,
+  type ReviewNote,
+  type ReviewState,
+  type UpdateReviewNoteRequest,
+  type UndoChangeResponse,
+  type ProjectAgentCost,
+  type RequestSequencePreview,
+  type SequencePreview,
+  type AgentToolDescriptor,
+  type AgentTurn,
+  type CreateAgentSessionRequest,
+  type StartAgentTurnRequest,
+  type WorkflowRun,
   type DirectorPlan,
   type RenderRecord,
   type CustomMotionComponent,
@@ -496,7 +540,38 @@ import {
   type UploadIntentResponse,
   type UploadIntentStatus,
   type UploadPartTargetResponse,
+  productionPolicySchema,
+  updateProductionPolicyRequestSchema,
+  type ProductionPolicy,
+  type UpdateProductionPolicyRequest,
+  distillRunSchema,
+  startDistillRequestSchema,
+  updateStrategyPackRequestSchema,
+  type DistillRun,
+  type StartDistillRequest,
+  type UpdateStrategyPackRequest,
+  acceptGenerationRequestSchema,
+  createIdentityProfileRequestSchema,
+  generationSchema,
+  grantIdentityConsentRequestSchema,
+  identityProfileSchema,
+  revokeIdentityConsentRequestSchema,
+  setIdentityReferenceRequestSchema,
+  type AcceptGenerationRequest,
+  type Generation,
+  type GrantIdentityConsentRequest,
+  type IdentityConsentKind,
+  type IdentityProfile,
+  type SetIdentityReferenceRequest,
 } from '@ancs/contracts';
+
+const generationListSchema = z.object({ items: z.array(generationSchema) });
+const identityProfileListSchema = z.object({ items: z.array(identityProfileSchema) });
+const identityConsentStatementSchema = z.object({
+  version: z.string(),
+  statements: z.object({ LIKENESS: z.object({ 'zh-CN': z.string(), en: z.string() }), VOICE: z.object({ 'zh-CN': z.string(), en: z.string() }) }),
+});
+export type IdentityConsentStatement = z.infer<typeof identityConsentStatementSchema>;
 
 /**
  * ANCS SDK（P01-05 基线）：
@@ -1365,6 +1440,78 @@ export interface AncsClient {
       capability: string,
       query?: { region?: string; callableOnly?: boolean },
     ): Promise<CapabilitySelection>;
+  };
+  /** V5-M4：素材工程终渲染（工作流：冻结 RenderPlan → FFmpeg 媒体图 → 产物入库 → 技术 QA） */
+  finalRenders: {
+    /** 发起（202；同一幂等键返回同一运行） */
+    start(workspaceId: string, projectId: string, sequenceId: string, input: StartCompositionFinalRenderRequest, options?: MutationOptions): Promise<WorkflowRun>;
+    list(workspaceId: string, projectId: string): Promise<WorkflowRun[]>;
+  };
+  /** V6-1d：低清预览（当前版本或提案试改；按时间窗缓存复用；字幕由浏览器叠加） */
+  previews: {
+    request(workspaceId: string, projectId: string, sequenceId: string, input: RequestSequencePreview, options?: MutationOptions): Promise<SequencePreview>;
+    get(workspaceId: string, previewId: string): Promise<SequencePreview>;
+    latest(workspaceId: string, projectId: string, sequenceId: string): Promise<SequencePreview>;
+  };
+  /** V6-1：通用导演 Agent（会话 → 一句话一轮 → 改动成为提案，采用走 proposals 接口） */
+  agent: {
+    createSession(workspaceId: string, projectId: string, input: CreateAgentSessionRequest, options?: MutationOptions): Promise<AgentSession>;
+    getSession(workspaceId: string, sessionId: string): Promise<AgentSession>;
+    /** 202：轮次在 Worker 执行；轮询 getTurn 直到 status 不是 RUNNING */
+    startTurn(workspaceId: string, sessionId: string, input: StartAgentTurnRequest, options?: MutationOptions): Promise<AgentTurn>;
+    listTurns(workspaceId: string, sessionId: string): Promise<AgentTurn[]>;
+    getTurn(workspaceId: string, turnId: string): Promise<AgentTurn>;
+    cancelTurn(workspaceId: string, turnId: string, options?: MutationOptions): Promise<AgentTurn>;
+    tools(workspaceId: string): Promise<AgentToolDescriptor[]>;
+    projectCost(workspaceId: string, projectId: string): Promise<ProjectAgentCost>;
+    /** V6 §6.6：可选的风格策略（内置预设 + 本工作区的包） */
+    strategies(workspaceId: string): Promise<StrategyPackSummary[]>;
+    strategy(workspaceId: string, packId: string): Promise<StrategyPack>;
+    /** V6-6：编辑蒸馏/用户的策略包文字（版本 +1） */
+    updateStrategy(workspaceId: string, packId: string, changes: UpdateStrategyPackRequest, options?: MutationOptions): Promise<StrategyPack>;
+    /** V6-6：从参考视频蒸馏风格（202；Worker 执行） */
+    startDistill(workspaceId: string, request: StartDistillRequest, options?: MutationOptions): Promise<DistillRun>;
+    getDistill(workspaceId: string, runId: string): Promise<DistillRun>;
+  };
+  /** V6-1c：共看片室（单屏工作台）：新建、状态轮询、撤销这次修改 */
+  studio: {
+    create(workspaceId: string, input: CreateStudioProjectRequest, options?: MutationOptions): Promise<StudioProjectRef>;
+    state(workspaceId: string, projectId: string): Promise<StudioState>;
+    undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
+    /** 显式修改项目制作规则的"允许"开关（V6-3：例如素材工程开启程序化特效）；返回修改后的规则 */
+    updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
+  };
+  /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
+  generations: {
+    list(workspaceId: string, projectId: string): Promise<Generation[]>;
+    /** 确认：带上界面展示的报价上限（与报价不一致 → 409） */
+    accept(workspaceId: string, projectId: string, generationId: string, input: AcceptGenerationRequest, options?: MutationOptions): Promise<Generation>;
+    decline(workspaceId: string, projectId: string, generationId: string, options?: MutationOptions): Promise<Generation>;
+  };
+  /** V6-7：我的形象与声音（参考素材 + 只增不改的授权记录） */
+  identities: {
+    list(workspaceId: string): Promise<IdentityProfile[]>;
+    create(workspaceId: string, name: string, options?: MutationOptions): Promise<IdentityProfile>;
+    consentStatement(workspaceId: string): Promise<IdentityConsentStatement>;
+    setReference(workspaceId: string, identityId: string, input: SetIdentityReferenceRequest, options?: MutationOptions): Promise<IdentityProfile>;
+    grantConsent(workspaceId: string, identityId: string, input: GrantIdentityConsentRequest, options?: MutationOptions): Promise<IdentityProfile>;
+    revokeConsent(workspaceId: string, identityId: string, kind: IdentityConsentKind, options?: MutationOptions): Promise<IdentityProfile>;
+  };
+  /** V6-4：批注式审片（标记 → 逐条讨论 → 全部执行 → 采用走 proposals 接口） */
+  review: {
+    state(workspaceId: string, projectId: string): Promise<ReviewState>;
+    addNote(workspaceId: string, projectId: string, input: CreateReviewNoteRequest, options?: MutationOptions): Promise<ReviewNote>;
+    updateNote(workspaceId: string, noteId: string, input: UpdateReviewNoteRequest, options?: MutationOptions): Promise<ReviewNote>;
+    deleteNote(workspaceId: string, noteId: string, options?: MutationOptions): Promise<void>;
+    /** 讨论用 agent.startTurn（带 reviewNoteId）；这里读这条批注的讨论（新→旧） */
+    noteTurns(workspaceId: string, noteId: string): Promise<AgentTurn[]>;
+    /** 202：一次执行已确定的批注（AI 轮次 → 试改提案） */
+    apply(workspaceId: string, projectId: string, input: ApplyReviewRequest, options?: MutationOptions): Promise<ApplyReviewResponse>;
+  };
+  /** V5-M4：工作流运行（步骤尝试、输出与错误；取消在步骤边界生效） */
+  workflowRuns: {
+    get(workspaceId: string, runId: string): Promise<WorkflowRun>;
+    cancel(workspaceId: string, runId: string, options?: MutationOptions): Promise<WorkflowRun>;
   };
   renders: {
     /** 创建渲染（P07-03：冻结输入快照；无版本则自动 FINAL_RENDER 快照） */
@@ -2903,6 +3050,161 @@ export function createClient(options: ClientOptions): AncsClient {
           capabilitySelectionSchema,
         );
       },
+    },
+
+    finalRenders: {
+      start: (workspaceId, projectId, sequenceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/final-renders`, workflowRunSchema, {
+          body: input,
+          bodySchema: startCompositionFinalRenderRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      list: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/final-renders`, listOf(workflowRunSchema))).items,
+    },
+
+    previews: {
+      request: (workspaceId, projectId, sequenceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/previews`, sequencePreviewSchema, {
+          body: input,
+          bodySchema: requestSequencePreviewSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      get: (workspaceId, previewId) => request('GET', `/api/v1/workspaces/${workspaceId}/previews/${previewId}`, sequencePreviewSchema),
+      latest: (workspaceId, projectId, sequenceId) =>
+        request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/sequences/${sequenceId}/previews/latest`, sequencePreviewSchema),
+    },
+
+    agent: {
+      createSession: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-sessions`, agentSessionSchema, {
+          body: input,
+          bodySchema: createAgentSessionRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      getSession: (workspaceId, sessionId) => request('GET', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}`, agentSessionSchema),
+      startTurn: (workspaceId, sessionId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}/turns`, agentTurnSchema, {
+          body: input,
+          bodySchema: startAgentTurnRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listTurns: async (workspaceId, sessionId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-sessions/${sessionId}/turns`, listOf(agentTurnSchema))).items,
+      getTurn: (workspaceId, turnId) => request('GET', `/api/v1/workspaces/${workspaceId}/agent-turns/${turnId}`, agentTurnSchema),
+      cancelTurn: (workspaceId, turnId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/agent-turns/${turnId}/cancel`, agentTurnSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      tools: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/agent-tools`, z.object({ items: z.array(agentToolDescriptorSchema) }))).items,
+      projectCost: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/agent-cost`, projectAgentCostSchema),
+      strategies: async (workspaceId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs`, z.object({ items: z.array(strategyPackSummarySchema) }))).items,
+      strategy: (workspaceId, packId) => request('GET', `/api/v1/workspaces/${workspaceId}/strategy-packs/${encodeURIComponent(packId)}`, strategyPackSchema),
+      updateStrategy: (workspaceId, packId, changes, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/strategy-packs/${encodeURIComponent(packId)}`, strategyPackSchema, {
+          body: changes,
+          bodySchema: updateStrategyPackRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      startDistill: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/strategy-distills`, distillRunSchema, {
+          body: input,
+          bodySchema: startDistillRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      getDistill: (workspaceId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/strategy-distills/${runId}`, distillRunSchema),
+    },
+
+    studio: {
+      create: (workspaceId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/studio-projects`, studioProjectRefSchema, {
+          body: input,
+          bodySchema: createStudioProjectRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
+      undoChange: (workspaceId, projectId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      updateProductionPolicy: (workspaceId, projectId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-policy`, productionPolicySchema, {
+          body: input,
+          bodySchema: updateProductionPolicyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    generations: {
+      list: async (workspaceId, projectId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations`, generationListSchema)).items,
+      accept: (workspaceId, projectId, generationId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations/${generationId}/accept`, generationSchema, {
+          body: input,
+          bodySchema: acceptGenerationRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      decline: (workspaceId, projectId, generationId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations/${generationId}/decline`, generationSchema, { idempotencyKey: mutation?.idempotencyKey }),
+    },
+
+    identities: {
+      list: async (workspaceId) => (await request('GET', `/api/v1/workspaces/${workspaceId}/identity-profiles`, identityProfileListSchema)).items,
+      create: (workspaceId, name, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles`, identityProfileSchema, {
+          body: { name },
+          bodySchema: createIdentityProfileRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      consentStatement: (workspaceId) => request('GET', `/api/v1/workspaces/${workspaceId}/identity-consent-statement`, identityConsentStatementSchema),
+      setReference: (workspaceId, identityId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/reference`, identityProfileSchema, {
+          body: input,
+          bodySchema: setIdentityReferenceRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      grantConsent: (workspaceId, identityId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/consents`, identityProfileSchema, {
+          body: input,
+          bodySchema: grantIdentityConsentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revokeConsent: (workspaceId, identityId, kind, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/identity-profiles/${identityId}/consents/revoke`, identityProfileSchema, {
+          body: { kind },
+          bodySchema: revokeIdentityConsentRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    review: {
+      state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review`, reviewStateSchema),
+      addNote: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review/notes`, reviewNoteSchema, {
+          body: input,
+          bodySchema: createReviewNoteRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      updateNote: (workspaceId, noteId, input, mutation) =>
+        request('PATCH', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}`, reviewNoteSchema, {
+          body: input,
+          bodySchema: updateReviewNoteRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      deleteNote: (workspaceId, noteId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
+      noteTurns: async (workspaceId, noteId) =>
+        (await request('GET', `/api/v1/workspaces/${workspaceId}/review-notes/${noteId}/turns`, listOf(agentTurnSchema))).items,
+      apply: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/review/apply`, applyReviewResponseSchema, {
+          body: input,
+          bodySchema: applyReviewRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+    },
+
+    workflowRuns: {
+      get: (workspaceId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/workflow-runs/${runId}`, workflowRunSchema),
+      cancel: (workspaceId, runId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/workflow-runs/${runId}/cancel`, workflowRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
     },
 
     renders: {

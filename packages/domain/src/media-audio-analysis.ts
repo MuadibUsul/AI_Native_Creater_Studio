@@ -12,7 +12,7 @@ import {
   type MediaAudioAnalysisJobInput,
 } from '@ancs/contracts';
 import { assets, assetVersions, mediaIndexEntries, mediaIndexRuns } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { createJobInTx } from './jobs.js';
 
 type DomainTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];
@@ -141,9 +141,9 @@ export async function completeMediaAudioAnalysis(deps: DomainDeps, input: { work
   return { runId: jobInput.runId, status, entryCount };
 }
 
-export async function failMediaAudioAnalysis(deps: DomainDeps, input: { workspaceId: string; jobInput: MediaAudioAnalysisJobInput; message: string }): Promise<void> {
+export async function failMediaAudioAnalysis(deps: DomainDeps, input: { workspaceId: string; jobInput: MediaAudioAnalysisJobInput; message: string; code?: string }): Promise<void> {
   const jobInput = mediaAudioAnalysisJobInputSchema.parse(input.jobInput);
-  await deps.db.update(mediaIndexRuns).set({ status: 'FAILED', errorSummary: input.message.slice(0, 500), updatedAt: new Date() }).where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId)));
+  await deps.db.update(mediaIndexRuns).set({ status: 'FAILED', errorSummary: input.message.slice(0, 500), errorCode: input.code ?? null, updatedAt: new Date() }).where(and(eq(mediaIndexRuns.id, jobInput.runId), eq(mediaIndexRuns.workspaceId, input.workspaceId)));
 }
 
 export async function retryMediaAudioAnalysis(deps: DomainDeps, input: { workspaceId: string; assetId: string; analysisConfigHash?: string }): Promise<void> {

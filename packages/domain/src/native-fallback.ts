@@ -9,7 +9,7 @@ import {
 } from '@ancs/contracts';
 import { assetVersions, assets, providerGenerations } from '@ancs/db';
 import { getProviderGeneration } from './billing.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Native Fallback：外部处理结果回绑（P06-07 / §39、§40、§45）。

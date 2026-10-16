@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { ApiFailure, ERROR_CODES, opsWorkspaceStorageSummarySchema, type OpsWorkspaceStorageSummary } from '@ancs/contracts';
 import { assetVersions, workspaces } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /** Tenant predicate is applied in SQL before aggregation; response has no storage identifier. */
 export async function getOpsWorkspaceStorageSummary(

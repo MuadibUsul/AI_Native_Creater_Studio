@@ -8,6 +8,7 @@ import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
+import { configureDeploymentPolicy } from '@ancs/domain';
 import { buildServer } from './server.js';
 import { createStorageDeps } from './plugins/storage.js';
 
@@ -164,8 +165,7 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
     expect(cancelled.status).toBe('CANCELLED');
     const afterCancel = await owner.assets.createUploadPartTarget(workspaceId, intent.intentId!, 1).catch((error: unknown) => error);
     expect(afterCancel).toMatchObject({ status: 409, details: { reason: 'INTENT_CANCELLED' } });
-    const previousPlan = process.env['ANCS_DEFAULT_PLAN'];
-    process.env['ANCS_DEFAULT_PLAN'] = 'FREE';
+    configureDeploymentPolicy({ defaultPlan: 'FREE' });
     try {
       const quota = await owner.assets.createUploadIntent(workspaceId, {
         assetType: 'USER_UPLOAD', filename: 'too-large.mp4', contentType: 'video/mp4', sizeBytes: 3 * 1024 * 1024 * 1024,
@@ -173,8 +173,7 @@ describe('资产上传（HTTP / SDK，真实本地存储端点）', () => {
       }).catch((error: unknown) => error);
       expect(quota).toMatchObject({ status: 422, details: { reason: 'STORAGE_QUOTA_EXCEEDED' } });
     } finally {
-      if (previousPlan === undefined) delete process.env['ANCS_DEFAULT_PLAN'];
-      else process.env['ANCS_DEFAULT_PLAN'] = previousPlan;
+      configureDeploymentPolicy({});
     }
   });
 

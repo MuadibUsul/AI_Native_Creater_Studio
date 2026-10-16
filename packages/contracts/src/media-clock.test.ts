@@ -117,7 +117,7 @@ describe('N03-13 音画同步决策（容差带内不修正）', () => {
     expect(decideMediaClockSync({ masterSequenceMs: 0, followerSequenceMs: 51, toleranceMs: 50, reseekThresholdMs: 50 }).action).toBe('RESEEK');
   });
 
-  it('音量淡变：淡入线性爬升、淡出回落、中段为目标增益；重叠时取较小者', () => {
+  it('音量淡变：等功率淡入淡出（与 RenderPlan/终渲染同一曲线）、中段为目标增益；重叠时取较小者', () => {
     const envelope = { gainDb: 0, fadeInMs: 1_000, fadeOutMs: 1_000 };
     expect(gainDbAt({ envelope, localMs: 0, durationMs: 5_000 })).toBeCloseTo(-96, 6);   // 起点静音
     expect(gainDbAt({ envelope, localMs: 1_000, durationMs: 5_000 })).toBeCloseTo(0, 6); // 淡入结束 = 目标
@@ -126,6 +126,12 @@ describe('N03-13 音画同步决策（容差带内不修正）', () => {
     const mid = gainDbAt({ envelope, localMs: 500, durationMs: 5_000 });
     expect(mid).toBeGreaterThan(-96);
     expect(mid).toBeLessThan(0);
+    // 等功率：淡入中点幅度 sin(π/4) → -3.01 dB（旧的"dB 线性"曲线在此为 -48 dB）
+    expect(mid).toBeCloseTo(20 * Math.log10(Math.SQRT1_2), 6);
+    // 对称位置的淡入/淡出幅度平方和为 1（in² + out² = 1）
+    const fadeIn = 10 ** (gainDbAt({ envelope, localMs: 300, durationMs: 5_000 }) / 20);
+    const fadeOut = 10 ** (gainDbAt({ envelope, localMs: 4_300, durationMs: 5_000 }) / 20);
+    expect(fadeIn ** 2 + fadeOut ** 2).toBeCloseTo(1, 9);
     // 无淡变 → 恒为目标增益
     expect(gainDbAt({ envelope: { gainDb: -6, fadeInMs: 0, fadeOutMs: 0 }, localMs: 100, durationMs: 5_000 })).toBe(-6);
   });

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { EditPlan } from '@ancs/contracts';
+import { useI18n } from '@/i18n/I18nProvider';
 
 /**
  * AI Edit 面板（P05-06）：自然语言 → 计划（不落库）→ 差异预览与影响 → Apply / 拒绝。
@@ -26,29 +27,30 @@ export interface AiEditPanelProps {
 }
 
 export function AiEditPanel(props: AiEditPanelProps) {
+  const t = useI18n().messages.projectFlow.aiEdit;
   const [prompt, setPrompt] = useState(props.initialPrompt ?? '');
   const [showReplan, setShowReplan] = useState(false);
 
   return (
     <div data-testid="ai-edit-panel" className="qf-ai-panel">
       {props.plan ? <div className="qf-ai-intent"><span aria-hidden="true">✧</span><strong>{props.plan.prompt}</strong></div> : null}
-      <p className="qf-ai-intro">{props.plan ? '由服务端生成的修改建议。请核对差异、锁定内容和影响范围。' : '说明希望修改的内容；生成计划不会直接改动作品。'}</p>
-      {props.plan ? <button type="button" className="textbtn small qf-ai-replan-toggle" disabled={props.applyPending} aria-expanded={showReplan} onClick={() => setShowReplan((value) => !value)}>修改意图并重新生成计划</button> : null}
+      <p className="qf-ai-intro">{props.plan ? t.introPlan : t.introEmpty}</p>
+      {props.plan ? <button type="button" className="textbtn small qf-ai-replan-toggle" disabled={props.applyPending} aria-expanded={showReplan} onClick={() => setShowReplan((value) => !value)}>{t.replanToggle}</button> : null}
       {!props.plan || showReplan ? <form className="qf-ai-form" onSubmit={(event) => { event.preventDefault(); if (prompt.trim() !== '') props.onPlan(prompt.trim()); }}>
-        <input aria-label="AI Edit 意图" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：缩短当前旁白，保留观点和来源" className="field" />
-        <button type="submit" disabled={props.planPending || props.applyPending || prompt.trim() === ''} className="btn blue">{props.planPending ? '生成计划中…' : '生成计划'}</button>
+        <input aria-label={t.promptAria} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={t.promptPlaceholder} className="field" />
+        <button type="submit" disabled={props.planPending || props.applyPending || prompt.trim() === ''} className="btn blue">{props.planPending ? t.planning : t.generate}</button>
       </form> : null}
 
       {props.planError !== null ? (
         <p data-testid="ai-edit-plan-error" role="alert" className="notice amber qf-ai-error">
           {props.planError.message}
-          {props.planError.code !== null ? `（${props.planError.code}）` : ''}
+          {props.planError.code !== null ? t.codeSuffix(props.planError.code) : ''}
         </p>
       ) : null}
 
       {props.plan !== null ? (
         <section data-testid="ai-edit-plan" className="qf-ai-plan">
-          <p className="small muted">计划 {props.plan.planId.slice(0, 14)}… · 项目 revision {props.plan.baseProjectRevision} · {props.plan.generation.providerId}</p>
+          <p className="small muted">{t.planMeta(props.plan.planId.slice(0, 14), props.plan.baseProjectRevision, props.plan.generation.providerId)}</p>
 
           {props.plan.warnings.map((warning) => (
             <p key={warning} data-testid="ai-edit-warning" className="notice amber qf-ai-warning">
@@ -64,15 +66,15 @@ export function AiEditPanel(props: AiEditPanelProps) {
                   <div className="diff-remove">− {field}: {JSON.stringify(entry.before[field] ?? null)}</div>
                   <div className="diff-add">+ {field}: {JSON.stringify(entry.after[field] ?? null)}</div>
                 </div>)}
-                {props.plan?.rationale[index] !== undefined ? <p className="qf-ai-rationale">理由：{props.plan.rationale[index]}</p> : null}
+                {props.plan?.rationale[index] !== undefined ? <p className="qf-ai-rationale">{t.rationale(props.plan.rationale[index])}</p> : null}
               </li>
             ))}
           </ul>
 
-          <div className="qf-ai-impact" data-testid="ai-edit-impact"><span>影响范围</span><strong>新增 {props.plan.impact.scenesAdded} · 删除 {props.plan.impact.scenesRemoved} · 修改 {props.plan.impact.scenesModified} · 时长 {props.plan.impact.durationDeltaMs >= 0 ? '+' : ''}{props.plan.impact.durationDeltaMs}ms</strong></div>
-          <div className="qf-ai-impact"><span>已锁定内容</span><strong>{props.plan.warnings.length > 0 ? '见上方提醒' : '未提示修改'}</strong></div>
-          <div className="qf-ai-impact"><span>成本影响</span><strong>{props.plan.impact.costImpact === 'NONE' ? '无（计划阶段零 Provider 调用）' : props.plan.impact.costImpact}</strong></div>
-          <p className="small muted qf-ai-disclaimer">应用后将通过编辑协议写入，仍需人工核对事实与画面。素材重生成须另行确认。</p>
+          <div className="qf-ai-impact" data-testid="ai-edit-impact"><span>{t.impactLabel}</span><strong>{t.impactValue(props.plan.impact.scenesAdded, props.plan.impact.scenesRemoved, props.plan.impact.scenesModified, (props.plan.impact.durationDeltaMs >= 0 ? '+' : '') + String(props.plan.impact.durationDeltaMs))}</strong></div>
+          <div className="qf-ai-impact"><span>{t.lockedLabel}</span><strong>{props.plan.warnings.length > 0 ? t.lockedSeeAbove : t.lockedNone}</strong></div>
+          <div className="qf-ai-impact"><span>{t.costLabel}</span><strong>{props.plan.impact.costImpact === 'NONE' ? t.costNone : props.plan.impact.costImpact}</strong></div>
+          <p className="small muted qf-ai-disclaimer">{t.disclaimer}</p>
 
           <div className="qf-ai-actions">
             <button
@@ -81,10 +83,10 @@ export function AiEditPanel(props: AiEditPanelProps) {
               onClick={() => props.onApply(props.plan as EditPlan)}
               className="btn primary full"
             >
-              {props.applyPending ? '应用中…' : `应用（${String(props.plan.operations.length)} 项）`}
+              {props.applyPending ? t.applying : t.apply(props.plan.operations.length)}
             </button>
             <button type="button" disabled={props.applyPending} onClick={props.onReject} className="btn full">
-              拒绝计划
+              {t.reject}
             </button>
           </div>
         </section>
@@ -93,11 +95,11 @@ export function AiEditPanel(props: AiEditPanelProps) {
       {props.applyError !== null ? (
         <p data-testid="ai-edit-apply-error" role="alert" className="notice amber qf-ai-error">
           {props.applyError.kind === 'conflict'
-            ? '应用失败：项目已被其他编辑更新（409）——请刷新后重新生成计划。'
+            ? t.applyConflict
             : props.applyError.kind === 'validation'
-              ? '应用被拒绝：计划包含非法操作，未提交任何变更（整批在同一事务）。'
+              ? t.applyValidation
               : props.applyError.message}
-          {props.applyError.code !== null ? `（${props.applyError.code}）` : ''}
+          {props.applyError.code !== null ? t.codeSuffix(props.applyError.code) : ''}
         </p>
       ) : null}
     </div>

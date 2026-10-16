@@ -7,13 +7,16 @@ import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { useAdminProjects, useAdminStorage, useAdminSupportGrants } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
+import { useI18n } from '@/i18n/I18nProvider';
+import type { Locale } from '@/i18n/locale';
 import styles from '@/app/admin/ops.module.css';
 
 type Scope = { workspaceId: string; ticketId?: string; request: number };
 
-const stamp = (value: string): string => new Date(value).toLocaleString('zh-CN');
-const bytes = (value: number): string => {
-  if (!Number.isFinite(value)) return '未提供';
+const stamp = (value: string, locale: Locale): string => new Date(value).toLocaleString(locale);
+/** 存储量换算；单位符号不翻译，缺失值的说明由调用方按界面语言传入。 */
+const bytes = (value: number, notProvided: string): string => {
+  if (!Number.isFinite(value)) return notProvided;
   if (value < 1024) return `${value} B`;
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`;
   if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB`;
@@ -21,12 +24,15 @@ const bytes = (value: number): string => {
 };
 
 function QueryProblem({ error, retry }: { error: unknown; retry: () => void }): ReactElement {
+  const t = useI18n().messages.entry.securityOps;
   const status = (error as { status?: number } | null)?.status;
-  const title = status === 401 ? '运营会话已过期' : status === 403 || status === 404 ? '当前范围无权查看' : '查询失败';
-  return <StateBlock variant="error" title={title} description={describeError(error).message} action={{ label: '重试查询', onClick: retry }} />;
+  const title = status === 401 ? t.sessionExpired : status === 403 || status === 404 ? t.scopeForbidden : t.queryFailed;
+  return <StateBlock variant="error" title={title} description={describeError(error).message} action={{ label: t.retryQuery, onClick: retry }} />;
 }
 
 function OperatorDiagnostics({ session }: { session: OpsSession }): ReactElement {
+  const { messages, locale } = useI18n();
+  const t = messages.entry.securityOps;
   const [draft, setDraft] = useState('');
   const [scope, setScope] = useState<Scope | null>(null);
   const projects = useAdminProjects(scope?.workspaceId ?? '', session.id, scope?.request ?? 0);
@@ -34,40 +40,40 @@ function OperatorDiagnostics({ session }: { session: OpsSession }): ReactElement
 
   return <section className={styles['panel']} aria-labelledby="ops-workspace-heading">
     <div className={styles['sectionHeading']}>
-      <div><p className={styles['kicker']}>WORKSPACE DIAGNOSTICS</p><h2 id="ops-workspace-heading">工作区诊断</h2></div>
+      <div><p className={styles['kicker']}>WORKSPACE DIAGNOSTICS</p><h2 id="ops-workspace-heading">{t.workspaceHeading}</h2></div>
       <span className={styles['role']}>PRODUCTION_OPERATOR</span>
     </div>
-    <p className={styles['description']}>只展示项目标识、状态、时间和存储总量；不读取作品标题或素材内容。</p>
+    <p className={styles['description']}>{t.workspaceDescription}</p>
     <form className={styles['form']} onSubmit={(event) => {
       event.preventDefault();
       const workspaceId = draft.trim();
       if (workspaceId) setScope({ workspaceId, request: (scope?.request ?? 0) + 1 });
     }}>
-      <label className={styles['label']} htmlFor="ops-workspace-id">工作区 ID
+      <label className={styles['label']} htmlFor="ops-workspace-id">{t.workspaceId}
         <input id="ops-workspace-id" className="field" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="ws_..." autoComplete="off" spellCheck={false} required />
       </label>
-      <button className="btn primary" type="submit">查询工作区</button>
+      <button className="btn primary" type="submit">{t.queryWorkspace}</button>
     </form>
-    {!scope ? <p className={styles['hint']}>输入获授权的工作区 ID，提交后才会查询。</p> : <>
-      <p className={styles['scope']} role="status">当前范围 <code>{scope.workspaceId}</code></p>
-      {(projects.isPending || storage.isPending) ? <p className={styles['hint']} role="status">正在加载项目与存储摘要…</p> : null}
+    {!scope ? <p className={styles['hint']}>{t.workspaceHint}</p> : <>
+      <p className={styles['scope']} role="status">{t.currentScope} <code>{scope.workspaceId}</code></p>
+      {(projects.isPending || storage.isPending) ? <p className={styles['hint']} role="status">{t.loadingProjects}</p> : null}
       {projects.isError ? <QueryProblem error={projects.error} retry={() => void projects.refetch()} /> : null}
       {storage.isError ? <QueryProblem error={storage.error} retry={() => void storage.refetch()} /> : null}
       {projects.data && storage.data ? <>
         <div className={styles['storage']} data-testid="admin-storage">
-          <span>存储用量 <strong>{bytes(storage.data.bytesUsed)}</strong></span>
-          <span>资产数 <strong>{storage.data.assetCount}</strong></span>
+          <span>{t.storageUsed} <strong>{bytes(storage.data.bytesUsed, t.notProvided)}</strong></span>
+          <span>{t.assetCount} <strong>{storage.data.assetCount}</strong></span>
         </div>
         <div className={styles['tableWrap']}>
           <table className={styles['table']} data-testid="admin-projects">
-            <caption>项目状态 · {scope.workspaceId}</caption>
-            <thead><tr><th scope="col">项目 ID</th><th scope="col">状态</th><th scope="col">创建时间</th><th scope="col">更新时间</th></tr></thead>
+            <caption>{t.projectsCaption(scope.workspaceId)}</caption>
+            <thead><tr><th scope="col">{t.projectId}</th><th scope="col">{t.status}</th><th scope="col">{t.createdAt}</th><th scope="col">{t.updatedAt}</th></tr></thead>
             <tbody>{projects.data.map((project) => <tr key={project.id}>
-              <td><code>{project.id}</code></td><td>{project.status}</td><td>{stamp(project.createdAt)}</td><td>{stamp(project.updatedAt)}</td>
+              <td><code>{project.id}</code></td><td>{project.status}</td><td>{stamp(project.createdAt, locale)}</td><td>{stamp(project.updatedAt, locale)}</td>
             </tr>)}</tbody>
           </table>
         </div>
-        {projects.data.length === 0 ? <p className={styles['hint']}>当前工作区没有可见项目。</p> : null}
+        {projects.data.length === 0 ? <p className={styles['hint']}>{t.noProjects}</p> : null}
       </> : null}
     </>}
   </section>;
@@ -75,6 +81,8 @@ function OperatorDiagnostics({ session }: { session: OpsSession }): ReactElement
 
 function SupportDiagnostics({ session }: { session: OpsSession }): ReactElement {
   const client = useAncsClient();
+  const { messages, locale } = useI18n();
+  const t = messages.entry.securityOps;
   const [workspaceDraft, setWorkspaceDraft] = useState('');
   const [ticketDraft, setTicketDraft] = useState('');
   const [scope, setScope] = useState<Scope | null>(null);
@@ -89,11 +97,11 @@ function SupportDiagnostics({ session }: { session: OpsSession }): ReactElement 
 
   return <section className={styles['panel']} aria-labelledby="ops-support-heading">
     <div className={styles['sectionHeading']}>
-      <div><p className={styles['kicker']}>SUPPORT ACCESS</p><h2 id="ops-support-heading">工单支持</h2></div>
+      <div><p className={styles['kicker']}>SUPPORT ACCESS</p><h2 id="ops-support-heading">{t.supportHeading}</h2></div>
       <span className={styles['role']}>SUPPORT_L2</span>
     </div>
-    <p className={styles['description']}>只显示当前运营主体在指定工作区和工单下的授权元数据。支持摘要须单独主动打开，每次访问都会留痕并对客户可见。</p>
-    <p className={styles['principal']}>当前主体 <code>{session.principalId}</code></p>
+    <p className={styles['description']}>{t.supportDescription}</p>
+    <p className={styles['principal']}>{t.currentPrincipal} <code>{session.principalId}</code></p>
     <form className={styles['form']} onSubmit={(event) => {
       event.preventDefault();
       const workspaceId = workspaceDraft.trim();
@@ -105,47 +113,47 @@ function SupportDiagnostics({ session }: { session: OpsSession }): ReactElement 
         setScope({ workspaceId, ticketId, request: scopeRevision.current });
       }
     }}>
-      <label className={styles['label']} htmlFor="ops-support-workspace">工作区 ID
+      <label className={styles['label']} htmlFor="ops-support-workspace">{t.workspaceId}
         <input id="ops-support-workspace" className="field" value={workspaceDraft} onChange={(event) => setWorkspaceDraft(event.target.value)} placeholder="ws_..." autoComplete="off" spellCheck={false} required />
       </label>
-      <label className={styles['label']} htmlFor="ops-support-ticket">工单 ID
+      <label className={styles['label']} htmlFor="ops-support-ticket">{t.ticketId}
         <input id="ops-support-ticket" className="field" value={ticketDraft} onChange={(event) => setTicketDraft(event.target.value)} placeholder="ticket-..." autoComplete="off" spellCheck={false} required />
       </label>
-      <button className="btn primary" type="submit">查询授权</button>
+      <button className="btn primary" type="submit">{t.queryGrants}</button>
     </form>
-    {!scope ? <p className={styles['hint']}>输入工作区和工单 ID，提交后才会查询。</p> : <>
-      <p className={styles['scope']} role="status">当前范围 <code>{scope.workspaceId}</code> · 工单 <code>{scope.ticketId}</code></p>
-      {grants.isPending ? <p className={styles['hint']} role="status">正在加载当前工单授权…</p> : null}
+    {!scope ? <p className={styles['hint']}>{t.supportHint}</p> : <>
+      <p className={styles['scope']} role="status">{t.currentScope} <code>{scope.workspaceId}</code> · {t.ticket} <code>{scope.ticketId}</code></p>
+      {grants.isPending ? <p className={styles['hint']} role="status">{t.loadingGrants}</p> : null}
       {grants.isError ? <QueryProblem error={grants.error} retry={() => void grants.refetch()} /> : null}
       {grants.data ? <>
         <div className={styles['tableWrap']}>
           <table className={styles['table']} data-testid="support-grants">
-            <caption>当前主体的支持授权 · {scope.ticketId}</caption>
-            <thead><tr><th scope="col">授权 ID</th><th scope="col">状态</th><th scope="col">范围</th><th scope="col">创建时间</th><th scope="col">到期时间</th></tr></thead>
+            <caption>{t.grantsCaption(scope.ticketId ?? '')}</caption>
+            <thead><tr><th scope="col">{t.grantId}</th><th scope="col">{t.status}</th><th scope="col">{t.scope}</th><th scope="col">{t.createdAt}</th><th scope="col">{t.expiresAt}</th></tr></thead>
             <tbody>{grants.data.map((grant) => <tr key={grant.id}>
-              <td><code>{grant.id}</code></td><td>{grant.status}</td><td>{grant.scope}</td><td>{stamp(grant.createdAt)}</td><td>{stamp(grant.expiresAt)}</td>
+              <td><code>{grant.id}</code></td><td>{grant.status}</td><td>{grant.scope}</td><td>{stamp(grant.createdAt, locale)}</td><td>{stamp(grant.expiresAt, locale)}</td>
             </tr>)}</tbody>
           </table>
         </div>
-        {grants.data.length === 0 ? <p className={styles['hint']}>当前范围没有可见授权。</p> : null}
+        {grants.data.length === 0 ? <p className={styles['hint']}>{t.noGrants}</p> : null}
         <div className={styles['accessAction']}>
-          <p>打开支持摘要会产生访问审计并通知工作区成员；仅展示脱敏统计。</p>
+          <p>{t.accessNotice}</p>
           <button className="btn" type="button" disabled={!active || openSummary.isPending} onClick={() => {
             setSummary(null);
             openSummary.mutate({ workspaceId: scope.workspaceId, ticketId: scope.ticketId ?? '', request: scope.request });
-          }}>确认并打开支持摘要</button>
-          {!active ? <p className={styles['hint']}>当前工单没有有效授权，无法打开支持摘要。</p> : null}
+          }}>{t.openSummary}</button>
+          {!active ? <p className={styles['hint']}>{t.noActiveGrant}</p> : null}
         </div>
       </> : null}
-      {openSummary.isPending ? <p className={styles['hint']} role="status">正在核验授权并记录访问…</p> : null}
-      {openSummary.isError ? <StateBlock variant="error" title="支持摘要访问被拒或失败" description={describeError(openSummary.error).message} action={{ label: '再次打开并留痕', onClick: () => {
+      {openSummary.isPending ? <p className={styles['hint']} role="status">{t.verifyingAccess}</p> : null}
+      {openSummary.isError ? <StateBlock variant="error" title={t.summaryFailed} description={describeError(openSummary.error).message} action={{ label: t.reopenSummary, onClick: () => {
         if (scope) openSummary.mutate({ workspaceId: scope.workspaceId, ticketId: scope.ticketId ?? '', request: scope.request });
       } }} /> : null}
       {summary && !grants.isError ? <div className={styles['summary']} data-testid="support-view">
-        <h3>脱敏支持摘要</h3>
-        <p>工作区 <code>{scope.workspaceId}</code> · 工单 <code>{scope.ticketId}</code> · 查看时间 {stamp(summary.viewedAt)}</p>
-        <dl><div><dt>成员</dt><dd>{summary.counts.members}</dd></div><div><dt>项目</dt><dd>{summary.counts.projects}</dd></div><div><dt>资产</dt><dd>{summary.counts.assets}</dd></div><div><dt>存储</dt><dd>{bytes(summary.counts.storageBytesUsed)}</dd></div></dl>
-        <p>本次访问已留痕并对工作区成员可见。</p>
+        <h3>{t.summaryTitle}</h3>
+        <p>{t.workspace} <code>{scope.workspaceId}</code> · {t.ticket} <code>{scope.ticketId}</code> · {t.viewedAt(stamp(summary.viewedAt, locale))}</p>
+        <dl><div><dt>{t.members}</dt><dd>{summary.counts.members}</dd></div><div><dt>{t.projects}</dt><dd>{summary.counts.projects}</dd></div><div><dt>{t.assets}</dt><dd>{summary.counts.assets}</dd></div><div><dt>{t.storage}</dt><dd>{bytes(summary.counts.storageBytesUsed, t.notProvided)}</dd></div></dl>
+        <p>{t.accessLogged}</p>
       </div> : null}
     </>}
   </section>;
@@ -154,9 +162,10 @@ function SupportDiagnostics({ session }: { session: OpsSession }): ReactElement 
 export function SecurityOps({ session }: { session: OpsSession }): ReactElement {
   const operator = session.roles.includes('PRODUCTION_OPERATOR');
   const support = session.roles.includes('SUPPORT_L2');
+  const t = useI18n().messages.entry.securityOps;
   return <div className={styles['sections']} data-testid="security-ops">
     {operator ? <OperatorDiagnostics session={session} /> : null}
     {support ? <SupportDiagnostics session={session} /> : null}
-    {!operator && !support ? <StateBlock variant="info" title="当前角色暂无可用诊断" description="此入口只开放已完成限定范围授权的只读操作。写入与审批功能尚未开放。" /> : null}
+    {!operator && !support ? <StateBlock variant="info" title={t.noDiagnostics} description={t.noDiagnosticsBody} /> : null}
   </div>;
 }

@@ -49,7 +49,7 @@ import {
   workspaceSubscriptions,
   workspaces,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { getBalanceCredits } from './billing.js';
 import { defaultPlanKeyForUnsubscribed } from './plans.js';
 

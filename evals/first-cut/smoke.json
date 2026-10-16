@@ -1,0 +1,33 @@
+{
+  "id": "smoke",
+  "description": "框架冒烟：FFmpeg 生成的三段测试素材（各 6 秒，画面与声音各不相同）。只验证评测流程能跑通，不衡量剪辑质量。",
+  "cases": [
+    {
+      "id": "three-clips-no-strategy",
+      "title": "三段素材 · 不选策略",
+      "aspectRatio": "16:9",
+      "locale": "zh-CN",
+      "footage": [
+        { "generate": { "name": "glacier.mp4", "video": "testsrc2=size=1280x720:rate=30", "seconds": 6, "toneHz": 440 } },
+        { "generate": { "name": "lake.mp4", "video": "smptehdbars=size=1280x720:rate=30", "seconds": 6, "toneHz": 660 } },
+        { "generate": { "name": "road.mp4", "video": "rgbtestsrc=size=1280x720:rate=30", "seconds": 6, "toneHz": 880 } }
+      ],
+      "request": "用这些素材剪出第一版。",
+      "targetSeconds": 9,
+      "strategy": null
+    },
+    {
+      "id": "three-clips-beat-strategy",
+      "title": "三段素材 · 选用“节奏卡点”",
+      "aspectRatio": "9:16",
+      "locale": "en",
+      "footage": [
+        { "generate": { "name": "glacier.mp4", "video": "testsrc2=size=1280x720:rate=30", "seconds": 6, "toneHz": 440 } },
+        { "generate": { "name": "lake.mp4", "video": "smptehdbars=size=1280x720:rate=30", "seconds": 6, "toneHz": 660 } }
+      ],
+      "request": "Make a short, punchy first cut.",
+      "targetSeconds": null,
+      "strategy": { "packId": "builtin:travel-beat", "knobs": { "pacing": "intense" } }
+    }
+  ]
+}

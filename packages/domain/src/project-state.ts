@@ -10,7 +10,7 @@ import {
   type ProjectState,
 } from '@ancs/contracts';
 import { editEvents, projectObjectLocks, projects } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { assembleProjectDocument } from './project-document.js';
 import { listProjectMediaViews } from './media-sources.js';
 

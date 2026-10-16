@@ -18,7 +18,7 @@ import {
 } from '@ancs/contracts';
 import { claims, contentBlocks, contentDocuments, narrationBlocks, narrativePlans } from '@ancs/db';
 import { buildNarrativePrompts, NARRATIVE_PROMPT_VERSION, repairNarrativePlan } from './narrative-repair.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Narrative 服务（P04-03 / 规范 §8、§52；计划 P04-03）。

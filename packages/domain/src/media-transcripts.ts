@@ -19,7 +19,7 @@ import {
   type UpdateTranscriptTerminologyRequest,
 } from '@ancs/contracts';
 import { assetVersions, assets, mediaTranscriptRuns, mediaTranscriptVersions } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { createJobInTx } from './jobs.js';
 
 type DomainTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];
@@ -178,9 +178,9 @@ export async function completeMediaTranscript(deps: DomainDeps, input: { workspa
   });
 }
 
-export async function failMediaTranscript(deps: DomainDeps, input: { workspaceId: string; jobInput: MediaTranscriptJobInput; message: string }): Promise<void> {
+export async function failMediaTranscript(deps: DomainDeps, input: { workspaceId: string; jobInput: MediaTranscriptJobInput; message: string; code?: string }): Promise<void> {
   const jobInput = mediaTranscriptJobInputSchema.parse(input.jobInput);
-  await deps.db.update(mediaTranscriptRuns).set({ status: 'FAILED', errorSummary: input.message.slice(0, 500), updatedAt: new Date() })
+  await deps.db.update(mediaTranscriptRuns).set({ status: 'FAILED', errorSummary: input.message.slice(0, 500), errorCode: input.code ?? null, updatedAt: new Date() })
     .where(and(eq(mediaTranscriptRuns.id, jobInput.runId), eq(mediaTranscriptRuns.workspaceId, input.workspaceId)));
 }
 

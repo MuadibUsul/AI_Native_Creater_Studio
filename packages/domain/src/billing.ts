@@ -20,7 +20,7 @@ import {
   type WorkspaceBudget,
 } from '@ancs/contracts';
 import { budgetCounters, creditHolds, creditLedger, providerGenerations, workspaceBudgets } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 账本与预算（P03-05 / 规范 §35.1、§35.2、§68；计划 §5.6"账本结算幂等"）。

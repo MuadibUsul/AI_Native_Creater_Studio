@@ -3,6 +3,7 @@
 import type { ReactElement } from 'react';
 import { ASPECT_RATIO_SIZES, DEFAULT_THEME_TOKENS, sceneRenderContextSchema, type AspectRatio } from '@ancs/contracts';
 import { getComponent, SceneThemeProvider } from '@ancs/scene-components';
+import { useI18n } from '@/i18n/I18nProvider';
 import ui from './Monochrome.module.css';
 
 /**
@@ -21,12 +22,13 @@ export interface ScenePreviewProps {
 }
 
 export function ScenePreview({ sceneType, componentVersion, props, durationMs, aspectRatio = '16:9', width = 384 }: ScenePreviewProps): ReactElement {
+  const t = useI18n().messages.projectFlow.scenePreview;
   const definition = getComponent(sceneType, componentVersion ?? undefined);
   const scale = width / ASPECT_RATIO_SIZES[aspectRatio].width;
   if (definition === null) {
     return (
       <div data-state="unregistered" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className={`flex items-center justify-center text-xs ${ui['notice']}`}>
-        组件未注册：{sceneType}
+        {t.unregistered(sceneType)}
       </div>
     );
   }
@@ -34,7 +36,7 @@ export function ScenePreview({ sceneType, componentVersion, props, durationMs, a
   if (!parsed.success) {
     return (
       <div data-state="invalid-props" style={{ width, height: Math.round(ASPECT_RATIO_SIZES[aspectRatio].height * scale) }} className={`flex items-center justify-center text-xs ${ui['notice']}`}>
-        props 未通过 {sceneType} 校验（编辑器需先修正）
+        {t.invalidProps(sceneType)}
       </div>
     );
   }

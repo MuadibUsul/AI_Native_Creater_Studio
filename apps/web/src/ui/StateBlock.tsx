@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactElement, ReactNode } from 'react';
+import { useI18n } from '@/i18n/I18nProvider';
 
 /**
  * 状态块（P05-03 验收：空 / 加载 / 失败 / 无权限 / 冲突状态**均可操作**）。
@@ -26,22 +27,23 @@ export interface StateBlockProps {
   children?: ReactNode;
 }
 
-const VARIANT_STYLE: Record<StateBlockVariant, { badge: string; label: string }> = {
-  loading: { badge: '', label: '加载中' },
-  empty: { badge: '', label: '空' },
-  error: { badge: 'red', label: '失败' },
-  forbidden: { badge: 'amber', label: '无权限' },
-  unauthenticated: { badge: 'blue', label: '未登录' },
-  conflict: { badge: 'amber', label: '冲突' },
-  unavailable: { badge: 'amber', label: '不可用' },
-  info: { badge: 'blue', label: '说明' },
+const VARIANT_BADGE: Record<StateBlockVariant, string> = {
+  loading: '',
+  empty: '',
+  error: 'red',
+  forbidden: 'amber',
+  unauthenticated: 'blue',
+  conflict: 'amber',
+  unavailable: 'amber',
+  info: 'blue',
 };
 
 export function StateBlock(props: StateBlockProps): ReactElement {
-  const style = VARIANT_STYLE[props.variant];
+  const { messages } = useI18n();
+  const badge = VARIANT_BADGE[props.variant];
   return (
     <div data-state={props.variant} className="panel pad">
-      <span className={`badge ${style.badge}`.trim()}>{style.label}</span>
+      <span className={`badge ${badge}`.trim()}>{messages.projectFlow.stateBlock.variants[props.variant]}</span>
       <h2 className="mt16">{props.title}</h2>
       {props.description !== undefined ? <p className="muted mt8">{props.description}</p> : null}
       {props.diagnostics !== null && props.diagnostics !== undefined ? (

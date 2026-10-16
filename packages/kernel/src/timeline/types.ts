@@ -103,6 +103,11 @@ export interface TimelineState {
   locks: KernelLockTable;
   sources: KernelSourceFacts;
   policy: KernelPolicy;
+  /**
+   * 内核不编辑、但占用轨道的对象数（按 trackId；当前为视觉对象）。
+   * 删除轨道时必须计入：否则数据库外键级联会静默删除它们且无法撤销。
+   */
+  unmanagedTrackObjects?: ReadonlyMap<string, number>;
 }
 
 export interface KernelContext {
@@ -113,6 +118,7 @@ export interface KernelContext {
 }
 
 export type KernelEntity =
+  | { entity: 'sequence'; value: KernelSequence }
   | { entity: 'clip'; value: KernelClip }
   | { entity: 'track'; value: KernelTrack }
   | { entity: 'audioRegion'; value: KernelAudioRegion }
@@ -130,7 +136,7 @@ export type KernelWrite =
  */
 export interface KernelEventDraft {
   action: string;
-  objectKind: 'CLIP' | 'TRACK' | 'AUDIO_REGION' | 'CAPTION';
+  objectKind: 'SEQUENCE' | 'CLIP' | 'TRACK' | 'AUDIO_REGION' | 'CAPTION';
   objectId: string;
   patch: Record<string, unknown>;
   snapshots: Record<string, KernelEntity>;
@@ -159,6 +165,7 @@ export const KERNEL_TIMELINE_OPERATIONS = [
   'move_track',
   'delete_track',
   'update_track',
+  'set_sequence_duration',
   'set_clip_transform',
   'set_clip_crop',
   'set_clip_opacity',

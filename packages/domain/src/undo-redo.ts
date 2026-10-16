@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   ApiFailure,
   ERROR_CODES,
@@ -19,8 +20,11 @@ import {
   type ObjectLockDimension,
 } from '@ancs/contracts';
 import { editEvents, projects, scenes } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { contentToChanges, processEdits, type ProcessEditsResult, type SceneContentSnapshot } from './edits.js';
+
+/** UPDATE_SEQUENCE 事件的前后快照（内核序列实体只记录可编辑字段）。 */
+const sequenceDurationSnapshotSchema = z.object({ id: z.string().min(1), duration: mediaTimeSchema });
 
 /**
  * Undo / Redo（P02-03 / §4.8；规范 §23）。
@@ -44,6 +48,7 @@ interface EventRow {
   objectId: string | null;
   patch: unknown;
   compensatesEventId: string | null;
+  resultRevision: number;
 }
 
 /** EditEvent.patch 的已知字段（处理器写入；其余字段按事件类型可选读取）。 */
@@ -183,6 +188,7 @@ async function loadProjectEvents(deps: DomainDeps, projectId: string): Promise<E
       objectId: editEvents.objectId,
       patch: editEvents.patch,
       compensatesEventId: editEvents.compensatesEventId,
+      resultRevision: editEvents.resultRevision,
     })
     .from(editEvents)
     .where(eq(editEvents.projectId, projectId))
@@ -376,6 +382,11 @@ function reconstructOperation(event: EventRow): EditOperation | undefined {
         nonEmptyPolicy: patch.nonEmptyPolicy === 'MOVE_CLIPS' ? 'MOVE_CLIPS' : 'REJECT',
         destinationTrackId: patch.destinationTrackId == null ? null : String(patch.destinationTrackId),
       };
+    }
+    case 'UPDATE_SEQUENCE': {
+      // V6-1：成片长度（重做 = 按事件记录的新时长再执行一次）
+      const after = sequenceDurationSnapshotSchema.parse(patch.after);
+      return { op: 'set_sequence_duration', sequenceId: after.id, duration: after.duration };
     }
     case 'UPDATE_TRACK': {
       const changes = (patch.changes ?? {}) as Record<string, unknown>;
@@ -667,6 +678,11 @@ function planUndo(event: EventRow, meta: Map<string, SceneMeta>): EditOperation[
         restoreTrackId: before.id,
       }];
     }
+    case 'UPDATE_SEQUENCE': {
+      // 逆操作：恢复原时长（内核会再次校验内容不越界）
+      const before = sequenceDurationSnapshotSchema.parse(patch.before);
+      return [{ op: 'set_sequence_duration', sequenceId: before.id, duration: before.duration }];
+    }
     case 'UPDATE_TRACK': {
       const before = trackSchema.parse(patch.before);
       const changes = (patch.changes ?? {}) as Record<string, unknown>;
@@ -899,6 +915,32 @@ export async function undoProject(
     originalAction: target.action,
     originalOperation: reconstructOperation(target),
     intentText: `撤销：${target.action}`,
+  });
+}
+
+/**
+ * 撤销"这次修改"（V6-1c）：把最近一个版本号产生的全部事件（例如采用一个 AI 提案）作为一组撤销，
+ * 在同一事务内逐条补偿（任一条失败则整组不生效）。之后仍可逐条重做。
+ */
+export async function undoLastChange(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; actor: Actor },
+): Promise<{ undoneEvents: number; projectRevision: number }> {
+  return deps.db.transaction(async (tx) => {
+    const scoped: DomainDeps = { ...deps, db: tx };
+    const latest = analyzeEvents(await loadProjectEvents(scoped, input.projectId)).active.at(-1);
+    if (latest === undefined) throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '没有可撤销的操作', 409);
+    const revision = latest.resultRevision;
+    let undone = 0;
+    let projectRevision = revision;
+    for (;;) {
+      const target = analyzeEvents(await loadProjectEvents(scoped, input.projectId)).active.at(-1);
+      if (target === undefined || target.resultRevision !== revision) break;
+      const result = await undoProject(scoped, input);
+      projectRevision = result.response.project.revision;
+      undone += 1;
+    }
+    return { undoneEvents: undone, projectRevision };
   });
 }
 

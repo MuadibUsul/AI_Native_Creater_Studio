@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { and, asc, eq } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import {
   ApiFailure,
   COMPOSITION_MIGRATION_ERROR_REASONS,
   ERROR_CODES,
+  LEGACY_SCENE_WRITE_OPERATIONS,
   compositionMigrationSchema,
   legacyFpsToFrameRate,
   legacyMillisecondsToMediaTime,
@@ -14,6 +16,7 @@ import {
   type CaptionSpan,
   type CompositionMigration,
   type CompositionMigrationStep,
+  type EditOperation,
   type ProjectVersionCompositionProjection,
   type SceneGraph,
   type Sequence,
@@ -21,17 +24,14 @@ import {
   type VisualObject,
 } from '@ancs/contracts';
 import {
-  compositionAudioRegions,
-  compositionCaptionSpans,
-  compositionVisualObjects,
   projectCompositionMigrations,
   projectSequences,
   projectVersionCompositionProjections,
   projectVersions,
   projects,
-  sequenceTracks,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
+import { CompositionProjector } from './composition-projector.js';
 import { assembleSceneGraph } from './projects.js';
 
 const canonicalValue = (value: unknown): unknown => {
@@ -242,18 +242,38 @@ export async function getProjectCompositionMigration(
   return rows[0] ? toMigration(rows[0]) : null;
 }
 
+/**
+ * 切换到组合权威后，旧 Scene 写入口只读（V5-M2）：只拒绝写 Scene 的操作，组合编辑照常可用。
+ * （M2 之前此处拒绝全部编辑，导致已迁移项目完全无法编辑。）
+ */
 export async function assertLegacyProjectWriteAllowed(
   deps: DomainDeps,
-  input: { workspaceId: string; projectId: string },
+  input: { workspaceId: string; projectId: string; operations: readonly EditOperation[] },
 ): Promise<void> {
+  const legacy = input.operations.filter((operation) => LEGACY_SCENE_WRITE_OPERATIONS.has(operation.op)).map((operation) => operation.op);
+  if (legacy.length === 0) return;
   const rows = await deps.db.select({ authorityMode: projectCompositionMigrations.authorityMode })
     .from(projectCompositionMigrations)
     .where(and(eq(projectCompositionMigrations.projectId, input.projectId), eq(projectCompositionMigrations.workspaceId, input.workspaceId))).limit(1);
   if (rows[0]?.authorityMode === 'COMPOSITION') {
-    throw new ApiFailure(ERROR_CODES.VERSION_CONFLICT, 'legacy project edits are read-only after composition cutover', 409, {
+    throw new ApiFailure(ERROR_CODES.VERSION_CONFLICT, 'legacy scene edits are read-only after composition cutover', 409, {
       reason: COMPOSITION_MIGRATION_ERROR_REASONS.LEGACY_WRITE_BLOCKED,
+      operations: [...new Set(legacy)],
     });
   }
+}
+
+/** 迁移步骤的日志行：revision 不变（旧版场景图与其摘要必须保持不变）。 */
+async function commitMigrationStep(projector: CompositionProjector, step: 'BASE' | 'SCENES'): Promise<void> {
+  const rows = await projector.tx.select({ revision: projects.revision }).from(projects).where(eq(projects.id, projector.scope.projectId)).limit(1);
+  const revision = rows[0]?.revision ?? 1;
+  await projector.commit({
+    source: 'MIGRATION',
+    operations: [{ op: 'migrate_legacy_composition', step }],
+    baseRevision: revision,
+    revision,
+    actor: { type: 'SYSTEM', id: null },
+  });
 }
 
 export interface CompositionMigrationHooks {
@@ -318,14 +338,17 @@ export async function migrateLegacyProjectComposition(
     const stepIndex = (step: CompositionMigrationStep) => ['NONE', 'BASE', 'SCENES', 'VERSIONS', 'COMPLETE'].indexOf(step);
     if (stepIndex(migration.completedStep as CompositionMigrationStep) < stepIndex('BASE')) {
       await deps.db.transaction(async (tx) => {
-        await tx.insert(projectSequences).values({
+        // 迁移写入同样经投影器进入操作日志（MIGRATION，不改变旧版 revision）
+        const projector = await CompositionProjector.open(tx as unknown as NodePgDatabase, input);
+        await projector.insertManyIfAbsent('sequence', [{
           ...live.sequence,
           start: live.sequence.start,
           duration: live.sequence.duration,
           updatedAt: createdAt,
           createdAt,
-        }).onConflictDoNothing();
-        await tx.insert(sequenceTracks).values(live.tracks.map((item) => ({ ...item, createdAt, updatedAt: createdAt }))).onConflictDoNothing();
+        }]);
+        await projector.insertManyIfAbsent('track', live.tracks.map((item) => ({ ...item, createdAt, updatedAt: createdAt })));
+        await commitMigrationStep(projector, 'BASE');
         await tx.update(projectCompositionMigrations).set({ completedStep: 'BASE', updatedAt: new Date() })
           .where(eq(projectCompositionMigrations.id, migration!.id));
       });
@@ -334,9 +357,11 @@ export async function migrateLegacyProjectComposition(
     }
     if (stepIndex(migration.completedStep as CompositionMigrationStep) < stepIndex('SCENES')) {
       await deps.db.transaction(async (tx) => {
-        if (live.visualObjects.length > 0) await tx.insert(compositionVisualObjects).values(live.visualObjects.map((item) => ({ ...item, createdAt, updatedAt: createdAt }))).onConflictDoNothing();
-        if (live.captions.length > 0) await tx.insert(compositionCaptionSpans).values(live.captions.map((item) => ({ ...item, createdAt, updatedAt: createdAt }))).onConflictDoNothing();
-        if (live.audioRegions.length > 0) await tx.insert(compositionAudioRegions).values(live.audioRegions.map((item) => ({ ...item, gainDb: String(item.gainDb), pan: String(item.pan), createdAt, updatedAt: createdAt }))).onConflictDoNothing();
+        const projector = await CompositionProjector.open(tx as unknown as NodePgDatabase, input);
+        await projector.insertManyIfAbsent('visualObject', live.visualObjects.map((item) => ({ ...item, createdAt, updatedAt: createdAt })));
+        await projector.insertManyIfAbsent('caption', live.captions.map((item) => ({ ...item, createdAt, updatedAt: createdAt })));
+        await projector.insertManyIfAbsent('audioRegion', live.audioRegions.map((item) => ({ ...item, gainDb: String(item.gainDb), pan: String(item.pan), createdAt, updatedAt: createdAt })));
+        await commitMigrationStep(projector, 'SCENES');
         await tx.update(projectCompositionMigrations).set({ completedStep: 'SCENES', updatedAt: new Date() })
           .where(eq(projectCompositionMigrations.id, migration!.id));
       });

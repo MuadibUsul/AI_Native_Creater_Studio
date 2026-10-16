@@ -603,6 +603,76 @@
       "when": 1791608504473,
       "tag": "0086_content_protections",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1791610504473,
+      "tag": "0087_op_log_reference_edges",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791612504473,
+      "tag": "0088_workflow_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791614504473,
+      "tag": "0089_agent_turns",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1791616504473,
+      "tag": "0090_sequence_previews",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1791616564473,
+      "tag": "0091_agent_turn_continues_trial",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791616624473,
+      "tag": "0092_analysis_run_error_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1791616684473,
+      "tag": "0093_strategy_packs",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1791616744473,
+      "tag": "0094_review_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1791616804473,
+      "tag": "0095_paid_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791616864473,
+      "tag": "0096_identity_consent_workspace_cascade",
+      "breakpoints": true
     }
   ]
 }

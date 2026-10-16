@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LocalObjectStorage } from './index.js';
+import { LocalObjectStorage, deriveStorageSigningSecret, localStorageOptionsFromEnv } from './index.js';
 
 /**
  * 本地对象存储适配器（P02-04）：真实写盘 / 探测 / 校验和 / 签名作用域（§51 Security 测试的
@@ -148,3 +148,23 @@ describe('本地对象存储适配器', () => {
     expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/renders/proxy.mp4') ?? new Uint8Array())).toBe('proxy-bytes');
   });
 });
+
+describe('localStorageOptionsFromEnv / deriveStorageSigningSecret（API、Worker、清理 CLI 同一规则）', () => {
+  const authSecret = 'session-secret-0123456789abcdef'; // secrets:check-ignore：测试专用假密钥
+
+  it('显式密钥优先；否则由会话密钥派生，且派生值稳定、不等于会话密钥本身', () => {
+    expect(deriveStorageSigningSecret({ BETTER_AUTH_SECRET: authSecret, ANCS_STORAGE_SECRET: 'explicit-storage-secret' })).toBe('explicit-storage-secret'); // secrets:check-ignore：测试专用假值
+    const derived = deriveStorageSigningSecret({ BETTER_AUTH_SECRET: authSecret });
+    expect(derived).toMatch(/^[0-9a-f]{64}$/);
+    expect(derived).not.toBe(authSecret);
+    expect(deriveStorageSigningSecret({ BETTER_AUTH_SECRET: authSecret })).toBe(derived);
+  });
+
+  it('公开基址回退顺序：ANCS_STORAGE_PUBLIC_BASE_URL → BETTER_AUTH_URL → localhost:PORT（Worker 不再固定 localhost:3001）', () => {
+    expect(localStorageOptionsFromEnv({ BETTER_AUTH_SECRET: authSecret, ANCS_STORAGE_PUBLIC_BASE_URL: 'https://cdn.example.com', BETTER_AUTH_URL: 'https://api.example.com' }).publicBaseUrl).toBe('https://cdn.example.com');
+    expect(localStorageOptionsFromEnv({ BETTER_AUTH_SECRET: authSecret, BETTER_AUTH_URL: 'https://api.example.com' }).publicBaseUrl).toBe('https://api.example.com');
+    expect(localStorageOptionsFromEnv({ BETTER_AUTH_SECRET: authSecret, PORT: 4000 }).publicBaseUrl).toBe('http://localhost:4000');
+    expect(localStorageOptionsFromEnv({ BETTER_AUTH_SECRET: authSecret }).publicBaseUrl).toBe('http://localhost:3001');
+  });
+});
+

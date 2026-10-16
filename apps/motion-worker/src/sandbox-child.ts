@@ -113,6 +113,11 @@ const evaluateMotion = (code: string, fixture: SandboxFixture): MotionRegistrati
     spring,
     AbsoluteFill,
     fixtureProps: fixture.props,
+    // 确定性随机数（与特效渲染页面注入的 random 同一语义：同一 key 同一结果）
+    random: (key: string | number): number => {
+      const digest = createHash('sha256').update(`motion:${String(key)}`).digest();
+      return digest.readUInt32BE(0) / 0x1_0000_0000;
+    },
     Math,
     JSON,
     Date,

@@ -48,7 +48,7 @@ const projectTitle = `Quiet Frame smoke ${prefix.slice(-8)}`;
 let app;
 let browser;
 let page;
-const evidenceDir = resolve('.artifacts/quiet-frame-rebuild/browser-smoke');
+const evidenceDir = resolve(process.env.ANCS_EVIDENCE_DIR ?? '.artifacts/quiet-frame-rebuild/browser-smoke');
 
 try {
   await runMigrations(db);
@@ -65,7 +65,7 @@ try {
   await app.listen({ host: '127.0.0.1', port: 0 });
   apiPort = app.server.address().port;
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, ...(process.env.ANCS_BROWSER_EXECUTABLE ? { executablePath: process.env.ANCS_BROWSER_EXECUTABLE } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
   page = await context.newPage();
   const pageErrors = [];
@@ -110,8 +110,8 @@ try {
     ['settings', `${workspacePath}/settings`, '保持掌控，也保持简单。'],
     ['team', `${workspacePath}/team`, '团队与隐私', '暂无邀请。'],
     ['billing', `${workspacePath}/billing`, '额度与账单', '暂无 Credits 流水（充值/赠送/使用后在此展示）。'],
-    ['analytics', `${projectPath}/analytics`, '看见作品，如何被理解。', '暂无可绘制的留存数据。平台未返回的数据保持未知。'],
-    ['history', `${projectPath}/history`, 'History'],
+    ['analytics', `${projectPath}/analytics`, '看见作品，如何被理解。', '暂无可绘制的采样值；缺失值保持未知。'],
+    ['history', `${projectPath}/history`, '版本历史'],
     ['render', `${projectPath}/render`, '最后一遍，由你把关。', '还没有渲染。建议先运行预检。'],
     ['publish', `${projectPath}/publish`, '作品准备好了。选择下一站。', '尚无发布记录。'],
   ];
@@ -125,12 +125,46 @@ try {
     await page.screenshot({ path: resolve(routeEvidenceDir, `${name}.png`), fullPage: true });
     console.log(`PASS route ${name}: ${path}`);
   }
+
+  // 英文界面（界面精修第四阶段）：顶栏切到英文后逐页检查——界面文字与无障碍属性里不应再有中文；
+  // 本脚本写入的中文数据（工作区名、用户名、粘贴的正文）与页面从 /api/v1/ 读到的服务端数据
+  // （由中文正文生成的脚本内容、服务端错误信息等）不算界面文字。
+  await page.getByRole('button', { name: '切换为英文界面' }).click();
+  await page.getByRole('button', { name: 'Switch the interface to Chinese' }).waitFor({ timeout: 10_000 });
+  // "中文"是英文界面里切回中文的按钮（用目标语言写自己的名字），不算残留
+  const userData = ['中文', 'Quiet Frame 隔离测试', 'Quiet Frame 测试', '本次隔离测试检查真实浏览器、会话、工作区、项目和内容保存。来源事实需要人工核对。'.repeat(8)];
+  const englishRoutes = [['home', '/'], ['new', `${workspacePath}/new`], ['script', `${projectPath}/script`], ['storyboard', `${projectPath}/storyboard`], ...routeChecks.map(([name, path]) => [name, path])];
+  let apiTexts = [];
+  page.on('response', (apiResponse) => {
+    if (!apiResponse.url().includes('/api/v1/') || !(apiResponse.headers()['content-type'] ?? '').includes('json')) return;
+    void apiResponse.text().then((text) => { apiTexts.push(text); }, () => undefined);
+  });
+  for (const [name, path] of englishRoutes) {
+    apiTexts = [];
+    const routeResponse = await page.goto(`${baseUrl}${path}`, { waitUntil: 'networkidle' });
+    if (routeResponse?.status() !== 200) throw new Error(`en ${name} HTTP ${routeResponse?.status() ?? 'none'}`);
+    await page.locator('#main').first().waitFor({ timeout: 15_000 });
+    const lang = await page.evaluate(() => globalThis.document.documentElement.lang);
+    if (lang !== 'en') throw new Error(`en ${name}: <html lang> is ${lang}`);
+    const texts = await page.evaluate(() => {
+      const parts = [globalThis.document.body.innerText];
+      for (const element of globalThis.document.querySelectorAll('[aria-label],[title],[placeholder],[alt]')) {
+        for (const attribute of ['aria-label', 'title', 'placeholder', 'alt']) { const value = element.getAttribute(attribute); if (value) parts.push(value); }
+      }
+      return parts;
+    });
+    const leftovers = [...new Set(texts.join('\n').match(/[\u4e00-\u9fff][^\n]{0,40}/g) ?? [])]
+      .filter((run) => { const head = run.match(/^[\u4e00-\u9fff，。、：；！？“”「」（）·\s]+/)?.[0]?.trim() ?? run; return !userData.some((data) => data.includes(head)) && !apiTexts.some((text) => text.includes(head)); });
+    await page.screenshot({ path: resolve(routeEvidenceDir, `en-${name}.png`), fullPage: true });
+    if (leftovers.length) throw new Error(`en ${name}: Chinese interface text left: ${leftovers.slice(0, 8).join(' | ')}`);
+    console.log(`PASS en route ${name}: ${path}`);
+  }
   if (pageErrors.length) throw new Error(`Browser page errors: ${pageErrors.join(' | ')}`);
   if (hydrationErrors.length) throw new Error(`Browser hydration errors: ${hydrationErrors.join(' | ')}`);
   await mkdir(evidenceDir, { recursive: true });
   const screenshotPath = resolve(evidenceDir, `${prefix}.png`);
   await page.screenshot({ path: screenshotPath, fullPage: true });
-  console.log('PASS Quiet Frame browser smoke: login → workspace → project → pasted content → reload → mock narrative → script deep link → persisted rows → 11 secondary routes');
+  console.log('PASS Quiet Frame browser smoke: login → workspace → project → pasted content → reload → mock narrative → script deep link → persisted rows → 11 secondary routes → English interface on 15 routes');
   console.log('Environment: isolated test DB, in-process API, production Next, Chromium; no paid Provider or live publication');
   console.log(`Evidence: ${screenshotPath}`);
   console.log(`Route screenshots: ${routeEvidenceDir}`);

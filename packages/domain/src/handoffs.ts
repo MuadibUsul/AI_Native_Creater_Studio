@@ -8,7 +8,7 @@ import {
   type HandoffRecord,
 } from '@ancs/contracts';
 import { assets, handoffs } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * Handoff 服务（P13-05 / §42.3；计划 §8 P13）：

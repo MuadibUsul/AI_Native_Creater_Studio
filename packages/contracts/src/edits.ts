@@ -19,6 +19,7 @@ import {
   deleteCaptionOperationSchema,
   splitCaptionOperationSchema,
   createTrackOperationSchema,
+  setSequenceDurationOperationSchema,
   setClipCropOperationSchema,
   setClipOpacityOperationSchema,
   setClipTransformOperationSchema,
@@ -88,6 +89,7 @@ export const EDIT_OPERATION_TYPES = [
   'move_track',
   'delete_track',
   'update_track',
+  'set_sequence_duration',
   'set_av_link',
   'set_clip_transform',
   'set_clip_crop',
@@ -164,6 +166,7 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   create_track: { ...common, operation: 'create_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'TRACK'], writeSet: ['TRACK', 'CLIP_ORDER'], preconditions: ['SEQUENCE_EXISTS', 'TRACK_POSITION_AVAILABLE'], postconditions: ['TRACK_AVAILABLE', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   move_track: { ...common, operation: 'move_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['TRACK'], writeSet: ['TRACK', 'CLIP_ORDER'], preconditions: ['TRACK_EXISTS'], postconditions: ['TRACK_ORDER_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   delete_track: { ...common, operation: 'delete_track', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['TRACK', 'CLIP'], writeSet: ['TRACK', 'CLIP', 'CLIP_ORDER'], preconditions: ['TRACK_EXISTS', 'NON_EMPTY_POLICY_SATISFIED'], postconditions: ['TRACK_REMOVED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
+  set_sequence_duration: { ...common, operation: 'set_sequence_duration', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SEQUENCE', 'CLIP', 'CAPTION', 'AUDIO_REGION'], writeSet: ['SEQUENCE'], preconditions: ['SEQUENCE_EXISTS', 'DURATION_POSITIVE', 'CONTENT_WITHIN_NEW_DURATION'], postconditions: ['SEQUENCE_DURATION_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   update_track: { ...common, operation: 'update_track', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['TRACK'], writeSet: ['TRACK'], preconditions: ['TRACK_EXISTS'], postconditions: ['TRACK_STATE_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_clip_transform: { ...common, operation: 'set_clip_transform', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED'], postconditions: ['TRANSFORM_UPDATED', 'NO_REGENERATION_TRIGGERED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   set_clip_crop: { ...common, operation: 'set_clip_crop', availability: 'ACTIVE', plannedPhase: null, structural: false, readSet: ['CLIP'], writeSet: ['CLIP.PARAMETERS'], preconditions: ['CLIP_EXISTS', 'TARGET_TRACK_UNLOCKED', 'CROP_AREA_NONEMPTY'], postconditions: ['CROP_UPDATED', 'PROJECT_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
@@ -181,6 +184,16 @@ export const EDIT_OPERATION_REGISTRY: Readonly<Record<EditOperationType, EditOpe
   restore_scene: { ...common, operation: 'restore_scene', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['SCENE', 'EDIT_EVENT'], writeSet: ['SCENE'], preconditions: ['SCENE_EXISTS', 'SCENE_UNLOCKED', 'TARGET_REVISION_REPLAYABLE'], postconditions: ['SCENE_REVISION_ADVANCES'], compensation: 'EVENT_INVERSE' },
   restore_project_version: { ...common, operation: 'restore_project_version', availability: 'ACTIVE', plannedPhase: null, structural: true, readSet: ['PROJECT_VERSION'], writeSet: ['PROJECT', 'SCENE', 'SCENE_ORDER'], preconditions: ['EXCLUSIVE_BATCH', 'PROJECT_VERSION_EXISTS'], postconditions: ['PROJECT_REVISION_ADVANCES', 'TIMELINE_RECOMPUTED'], compensation: 'SNAPSHOT_RESTORE' },
 };
+
+/**
+ * 旧 Scene 写入口（V5-M2，决策 0013）：写集触及 Scene / 场景顺序的操作。
+ * 项目切换到组合权威（authorityMode = COMPOSITION）后这些操作只读拒绝；组合操作照常可用。
+ * 整项目版本恢复不在此列：它是补偿语义（K5），同时恢复组合与兼容投影。
+ */
+export const LEGACY_SCENE_WRITE_OPERATIONS: ReadonlySet<EditOperationType> = new Set(
+  EDIT_OPERATION_TYPES.filter((operation) => operation !== 'restore_project_version'
+    && EDIT_OPERATION_REGISTRY[operation].writeSet.some((target) => target === 'SCENE' || target === 'SCENE_ORDER' || target.startsWith('SCENE.'))),
+);
 
 const changesSchema = z.record(z.string(), z.unknown());
 
@@ -391,6 +404,7 @@ export const editOperationSchema = z.discriminatedUnion('op', [
   moveTrackOperationSchema,
   deleteTrackOperationSchema,
   updateTrackOperationSchema,
+  setSequenceDurationOperationSchema,
   updateClipOperationSchema,
   updateAnimationOperationSchema,
   updateAudioRegionOperationSchema,

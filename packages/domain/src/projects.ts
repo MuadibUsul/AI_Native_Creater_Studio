@@ -29,7 +29,7 @@ import {
   speechProfiles,
   voiceIdentities,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { processEdits } from './edits.js';
 import { toProjectDto, toSceneDto, type ProjectRow, type SceneRow } from './mappers.js';
 

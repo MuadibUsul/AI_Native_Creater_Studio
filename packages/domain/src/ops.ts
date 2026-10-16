@@ -1,7 +1,7 @@
 import { and, count, desc, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import { opsAuditEntrySchema, opsJobSummarySchema, opsOverviewSchema, type Job, type JobStatus, type OpsAuditEntry, type OpsJobSummary, type OpsOverview } from '@ancs/contracts';
 import { creditLedger, jobs, outboxEvents, providerGenerations, renderApprovals, renderEvents, renderQaReports, renders } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { loadJobRow, retryJob } from './jobs.js';
 
 /**

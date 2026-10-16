@@ -22,7 +22,7 @@ import {
   projects,
   scenes,
 } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 const toAssetDto = (row: typeof assets.$inferSelect): Asset => assetSchema.parse({
   id: row.id,

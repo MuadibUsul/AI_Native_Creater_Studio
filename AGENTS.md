@@ -1,26 +1,27 @@
 # AGENTS.md — 代理协作规则
 
-**架构权威：`docs/V05/ANCS_v0.5_Architecture.md`（V5，按 M0—M5 推进，裁决见 `docs/decisions/0011-v5-architecture-adoption.md`）。** 产品需求仍按 `docs/V04/ANCS_AI_Native_v0.4.md` 和 `docs/V04/ANCS_v0.4_Task_Backlog.md` 的 N 系列任务推进，接手流程见 `docs/V04/ANCS_v0.4_Codex_Start.md`。`docs/V04/ANCS_v0.4_Traceability.md` 是需求来源矩阵；实际完成状态以 `docs/requirements/ai-native-v04-traceability.md`、`docs/requirements/ai-native-v04-acceptance-ledger.md` 和逐项证据为准。`creator_video_os_spec_v0.2.md`、`ANCS_Plan261004.md` 与旧 P 系列证据保留为历史。冲突优先级：用户后续明确要求 → V5 架构裁决 → v0.4 显式增量 → v0.4 保留内容 → 不冲突的旧规范（见 v0.4 §1.4、`docs/decisions/0009-v04-authority-and-scope.md` 与 `0011-v5-architecture-adoption.md`）。
+**唯一权威：`docs/V06/ANCS_v0.6_Product_Architecture.md`（V6，按里程碑 V6-0—V6-8 推进，裁决见 `docs/decisions/0018-v6-adoption.md`）。** V5（`docs/V05/ANCS_v0.5_Architecture.md` 与裁决 0011—0017）的架构骨架继续有效；v0.4 文档（`docs/V04/`）是需求与交互细节的参考库，N 系列任务账本冻结为历史（`pnpm spec:check` 继续校验其一致性，不新增条目）。冲突优先级：项目所有者后续明确要求 → V6 → V5 架构裁决 → v0.4 需求参考 → 更早的规范。
 
 任何模型接手前必须按顺序执行：
 
-## 启动步骤（计划 §13.5）
+## 启动步骤
 
-1. 阅读 v0.4 总规范 §1、§2、§5、§7、§9—§15、§21—§23、§27—§29，及启动指令、任务清单和追踪矩阵；按任务需要继续读旧规范的安全与架构条款。
-2. 阅读生效裁决（`docs/decisions/`），对照当前 N 任务的依赖、验收门与实际证据。旧计划中的 Article-only、整数毫秒权威时间、全局 Audio-First、专业功能永久排除和旧 UI 边界已被 v0.4 覆盖。
-3. 检查仓库真实状态与最新交接记录（`docs/handoffs/`）。
-4. 选择依赖已完成、验收门允许的 N 任务；N13 安全、N15 运营和 N16 设计按横切依赖提前推进。旧 P15/P16 不自动成为下一项。
-5. 检查该任务相关代码与测试，不重复初始化已有工程。
+1. 通读 V6；按当前里程碑需要查阅 V4 的对应章节（共看片室 §4、共同注意力 §7、语音 §8、AI 导演 §9、提案 §10；鼠标点线面增量设计）。
+2. 阅读生效裁决（`docs/decisions/`，0018 起为 V6 裁决）。
+3. 检查仓库真实状态与最新里程碑记录（`docs/V06/milestones/`；历史交接见 `docs/handoffs/`）。
+4. 按 V6 §11 的里程碑顺序推进：每个里程碑以可演示的用户体验收尾，后端只做该体验需要的部分；冻结范围（V6 §9.1）不主动扩展。
+5. 检查相关代码与测试，不重复初始化已有工程。
 
 ## 实现规则
 
 - 顺序（v0.4 §22）：contracts → migration → domain/service → API → SDK → UI → tests → docs。不涉及的层明确写"不适用"；禁止先在 UI 内实现权威规则再抽取。
-- 每项用户可见功能在编码前填写 `docs/design/features/<taskId>.md` UI 交付卡，按 `docs/design/ui-delivery-contract.md` 完成设计补全、真实业务联调、浏览器操作与截图目检；在 `docs/design/ui-coverage.md` 登记入口、状态和证据。后续 UI 任务必须主动读取该完整规约，不能只看本条链接；纯基础设施项说明 UI 不适用及关联用户切片。
+- 用户可见功能必须经真实浏览器操作验证并截图目检（`docs/design/ui-delivery-contract.md` 的原则继续适用）；新界面一律中英双语（i18n），不新增硬编码单语文案。
 - 无对应高保真稿时按当前 v0.4 设计系统和现有共享组件自行补齐，不等待新图，不用临时管理模板，不擅自重做本轮未影响的已确认界面。运营读面只显示已授权投影；有副作用的操作走 AdminAction 的预检、授权、执行、逐项结果和审计，不因按钮隐藏而放松服务端权限。
 - 完成定义：只有 `VERIFIED` 计入完成；Mock 验证通过 ≠ 真实 Provider 验证通过；接口存在 ≠ 功能交付。
-- 证据与交接：每项 N 任务在 `docs/verification/<taskId>.md` 记录证据（命令与结果），在 `docs/handoffs/<taskId>.md` 交接；同步更新两个 `docs/requirements/ai-native-v04-*` 活账本。旧 P 账本保持历史语义，不用新状态覆写。
-- 账本一致性由 `pnpm spec:check`（已在 `pnpm verify` 中）强制：VERIFIED 的依赖必须 VERIFIED、每项有独立证据与交接文件、汇总与明细一致。账本统计以明细表为唯一事实源。
-- V5 架构约束（逐阶段生效，见 V5 §4、§20）：编辑规则进入纯函数内核（禁止 I/O）；权威路径禁用毫秒/浮点秒，显示换算只用 `mediaTimeToDisplay*`；外部/付费调用只经工作流与 Provider Gateway；业务包不得读取 `process.env`。
+- 证据与交接：每个 V6 里程碑在 `docs/V06/milestones/<id>.md` 记录目标、验收、命令与结果、实测数据和交接；N 系列与旧 P 账本保持历史语义，不用新状态覆写。
+- 历史账本一致性仍由 `pnpm spec:check`（在 `pnpm verify` 中）校验，不得改坏；V6 不再向其新增条目。
+- V5 架构约束（逐阶段生效，见 V5 §4、§20）：编辑规则进入纯函数内核（禁止 I/O）；权威路径禁用毫秒/浮点秒，显示换算只用 `mediaTimeToDisplay*`；外部/付费调用只经工作流与 Provider Gateway；业务包不得读取 `process.env`；组合状态以操作日志为权威，组合表只能经 `packages/domain/src/composition-projector.ts` 写入（arch-check R11，裁决 0013）；业务包读取 `process.env` 由 arch-check R12 拦截，配置在入口校验后注入；编辑能力覆盖统计不得手写，改注册表或测试后运行 `pnpm capabilities:generate`（verify 中校验，裁决 0014）。
+- AI 通用能力（V6 §6，裁决 0018）：AI 的导演与调度代码不得按视频类型或策略分支；新组件一律注册进统一工具目录（契约、权限、预算、能力声明、评测）供 AI 自由组合，不为某类型写专用流水线；策略剪辑是可选功能，策略包只以数据形式进入 AI 上下文，不得裁剪工具集合或绕过通用自检；质量评测以不选策略的通用能力为主。
 - TODO 必须写清 why / dependency / intended interface。
 - 未实现测试套件必须使用显式 `[PLANNED]` 占位（`scripts/planned-suite.mjs`），不得伪造断言、扩大阈值或静默跳过。
 - 依赖方向由 `pnpm arch:check` 强制（见 `packages/arch-check`）；新增依赖边前先核对现有规则和 v0.4 架构。

@@ -12,7 +12,7 @@ import {
   type JobStatus,
 } from '@ancs/contracts';
 import { jobDependencies, jobs, outboxEvents, workspaces } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { workspaceRestrictedFailure } from './security-ops.js';
 
 /**
@@ -279,6 +279,8 @@ export interface CreateJobTxInput {
   createdBy?: string | null;
   /** SYSTEM 为非成本性内部维护/通知任务；默认 COSTED。 */
   classification?: 'COSTED' | 'SYSTEM';
+  /** 最早可认领时间（退避后的再推进；claimJob 已遵守 nextAttemptAt）；缺省立即可认领 */
+  notBefore?: Date;
 }
 
 /**
@@ -309,6 +311,7 @@ export async function createJobInTx(
       priority: input.priority ?? 0,
       maxAttempts: input.maxAttempts ?? 3,
       createdBy: input.createdBy ?? null,
+      nextAttemptAt: input.notBefore ?? null,
       updatedAt: now,
     })
     .returning();

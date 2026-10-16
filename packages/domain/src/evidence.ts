@@ -21,7 +21,7 @@ import {
 } from '@ancs/contracts';
 import { claims, contentBlocks, contentDocuments, projectSources, sourceCitations, structuredDatasets } from '@ancs/db';
 import { checkChartBinding, extractClaimCandidates, extractNumericMentions, extractTimelineMentions, extractionFingerprint, planFactVisual } from './evidence-extract.js';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 
 /**
  * 证据与数据服务（P04-02 / 规范 §7、§10.3、§85）。

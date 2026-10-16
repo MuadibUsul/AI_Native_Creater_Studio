@@ -62,7 +62,28 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_OPS_ENVIRONMENT` | 未配置则运营面关闭 | 开发可显式设 `DEVELOPMENT`；生产进程必须显式设 `PRODUCTION`；`TEST` principal 不可登录生产运营面 |
 | `ANCS_OPS_IDLE_SECONDS` / `ANCS_OPS_ABSOLUTE_SECONDS` / `ANCS_OPS_REAUTH_SECONDS` | `900` / `28800` / `300` | 独立运营会话空闲、绝对和敏感操作重验时限（秒） |
 | `ANCS_WEBHOOK_SECRETS` | — | Provider 回调验签密钥（JSON） |
-| `REMOTION_BROWSER_EXECUTABLE` | 自动检测 | 指定 Chrome/Headless Shell 可执行文件 |
+| `REMOTION_BROWSER_EXECUTABLE` | 自动检测 | 指定 Chrome/Headless Shell 可执行文件（新版 Chrome 已移除旧 Headless 模式，需指向 `chrome-headless-shell`） |
+| `ANCS_PLATFORM_PROVIDER_KEYS` | — | 平台托管 Provider 凭据（`供应商:密钥,…`）。旧名 `PLATFORM_PROVIDER_KEYS` 从未生效，配置即启动失败并提示改名 |
+| `ANCS_VOICE_SESSION_SECRET` | 未配置则创建语音会话 501 | 语音会话短期凭证签名密钥（≥32；与其他密钥独立） |
+| `ANCS_ASR_DRIVER` | 有 `ANCS_ASR_EXECUTABLE` 则 `process`，否则不装配 | Worker ASR：`deepgram`（需 `DEEPGRAM_API_KEY`，缺失启动失败）或 `process` |
+| `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动（当前 LLM/TTS/声音克隆/素材搜索/分发均为 Mock）必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告 |
+| `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
+| `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
+| `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
+| `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
+| `ANCS_AGENT_DRIVER` / `ANCS_VISUAL_ANALYSIS_DRIVER`（Worker） | 未配置 | AI 导演 / 素材画面理解：`anthropic`（需 `ANTHROPIC_API_KEY`）或 `gemini`（需 `GEMINI_API_KEY`；模型 `ANCS_AGENT_MODEL` 缺省 `gemini-flash-latest`、`ANCS_VISION_MODEL` 缺省 `gemini-flash-lite-latest`）；画面理解另可 `process`。缺密钥启动失败 |
+| `ANCS_VEO_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接 Google Veo：VIDEO_SHOT 报价依据（必须带 `durationOptions`，价格按 Google 价格页填写），需 `GEMINI_API_KEY`；装配清单出现 `video_generation=veo` |
+| `ANCS_RUNWAY_OFFER_JSON`（Worker） | 未配置 | V6-8 选区重绘接 Runway gen4_aleph：VIDEO_REGION 报价依据（价格按 Runway 价格页换算填写），需 `RUNWAYML_API_SECRET`；可选 `ANCS_RUNWAY_BASE_URL`；装配清单出现 `region_generation=runway` |
+| `ANCS_SEEDANCE_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接火山方舟 Seedance：VIDEO_SHOT 报价依据（必须带整数秒 `durationOptions`，价格按方舟价格页换算填写），需 `ARK_API_KEY`；可选 `ANCS_SEEDANCE_GENERATE_AUDIO`、`ANCS_SEEDANCE_RESOLUTION`、`ANCS_ARK_BASE_URL`；装配清单出现 `video_generation=seedance` |
+| `ANCS_AVATAR_DRIVER`（Worker） | 未配置 | V6-7 数字人：`heygen`（需 `HEYGEN_API_KEY` 与 `FISH_AUDIO_API_KEY`；可选 `ANCS_AVATAR_OFFER_JSON` 报价依据） |
+| `ANCS_GENERATION_DRIVER`（Worker） | 未配置 | V6-8 视频生成：`process`（需 `ANCS_GENERATION_EXECUTABLE` 与 `ANCS_GENERATION_OFFERS_JSON`；可选 `ANCS_GENERATION_ARGS_JSON`、`ANCS_GENERATION_PASS_ENV`、`ANCS_GENERATION_TIMEOUT_SECONDS`） |
+| `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
+| `ANCS_TRUST_PROXY_HOPS` | `0` | 前置可信代理跳数；为 0 时不信任 `X-Forwarded-For`。部署在负载均衡/反向代理后必须如实设置，否则所有用户共享代理 IP 的限流桶 |
+| `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流（每实例内存）；生产不得为 `off` |
+| `ANCS_CSP_EXTRA_ORIGINS`（Web **构建期**） | 非生产为本地 API 端口 | Web CSP 额外放行的媒体/上传来源（签名 URL 直达的存储或 API origin）；Next 在构建时固化安全头，修改后需重新构建 Web |
+
+生产（`NODE_ENV=production`）额外必填：`ANCS_CREDENTIAL_KEYS`（API 与 Worker 同一值）、`ANCS_STORAGE_SECRET`（API、Worker、清理 CLI 同一值；不得从会话密钥派生）、`ANCS_OPS_ENVIRONMENT=PRODUCTION`（API）。
+空白值（`VAR=`）视为未配置。Worker 的渲染/探测/Motion 验证/FFmpeg 子进程只继承平台必需环境变量（`PATH`、`HOME`、临时目录、语言）与 `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`，不继承连接串与密钥。
 
 密钥轮换：轮换 `BETTER_AUTH_SECRET` 会失效既有会话与本地存储签名 URL（TTL 15 分钟内的下载链接立即失效）；
 轮换存储签名密钥（未显式配置时由 `BETTER_AUTH_SECRET` 派生）同理会失效在途签名链接。轮换窗口与步骤见 P08-03。
@@ -94,6 +115,51 @@ node apps/worker/dist/main.js          # 常驻循环；或 --once 单轮自检
 ```
 
 健康检查：`GET /api/v1/health`（无需认证）→ `{ "status": "ok", "service": "ancs-api", ... }`。
+
+### 5.1 Realtime Gateway（V6-2 实时语音，可选）
+
+```bash
+node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { ok, asr: "deepgram" | "NOT_CONFIGURED" }
+```
+
+- 环境：`DATABASE_URL`、与 API **同一把** `ANCS_VOICE_SESSION_SECRET`（网关用它校验浏览器带来的语音会话短期凭证）、`ANCS_ALLOWED_ORIGINS`（Web 的 origin）；
+  流式识别 `ANCS_REALTIME_ASR_DRIVER=deepgram` + `DEEPGRAM_API_KEY`（可选 `ANCS_DEEPGRAM_LIVE_MODEL_ZH` / `_EN`）。没配识别时网关照常启动，连接时明确回"未配置"。
+- 反向代理：把 Web 同源的 `/realtime/v1/voice`（WebSocket 升级）转到网关；或在构建 Web 时设 `NEXT_PUBLIC_ANCS_REALTIME_URL=wss://…/realtime/v1/voice` 并把该 origin 加进 `ANCS_CSP_EXTRA_ORIGINS`。
+- 网关不读写工程、不调用 AI：一句话说完交还浏览器，浏览器把它当作一轮对话发给 API（权限、幂等、预算不变）。
+
+### 5.2 特效渲染（V6-3）
+
+- Worker 在仓库根启动时自动装配特效渲染：spawn `apps/render-worker/src/run-effect.ts`（Remotion 无头浏览器 → ProRes 4444 → 无损转 PNG/QuickTime 透明图层），可用 `ANCS_EFFECT_RENDER_CMD` 覆盖命令；需要 `REMOTION_BROWSER_EXECUTABLE`（或本机 Chrome）与 FFmpeg。`ANCS_DISABLE_RENDER=1` 时不装配，特效工具明确报不可用。
+- 子进程只继承白名单环境变量（平台启动项 + `REMOTION_*`、`ANCS_FFMPEG_PATH`、`ANCS_FFPROBE_PATH`），硬超时 3 分钟；特效代码在页面里运行时浏览器网络/存储/DOM 能力被遮蔽。
+- AI 当场写特效代码缺省关闭；按评测结果设 `ANCS_EFFECT_CODEGEN=enabled` 开启（代码先过 Custom Motion 四道门禁）。
+- 程序化特效受项目制作规则约束（素材工程缺省关闭），用户在共看片室顶栏开启：`PATCH /api/v1/workspaces/:id/projects/:projectId/production-policy`，写工作区事件 `project.production_policy.updated`。
+
+### 5.3 从参考视频学风格（V6-6）
+
+- Worker 自动装配蒸馏工作流 `REFERENCE_DISTILL`（获取 → 测量 → 撰写 → 保存）：测量全部用本地 FFmpeg（场景切换、黑场、`signalstats` 色彩、`ebur128` 响度、`silencedetect`、单声道 PCM 节拍检测），每条最多分析前 15 分钟，最多 5 条。
+- 链接：直接的视频文件链接由 Worker 下载（拒绝内网/保留地址，逐跳检查重定向，限制大小 `ANCS_REFERENCE_MAX_MB`，缺省 1024）；平台页面链接需要 `ANCS_REFERENCE_FETCH_CMD`（如 `yt-dlp … -o {output} {url}`），命令只继承代理/证书相关的环境变量，硬超时 10 分钟，下载后再按同一上限检查大小。没配置时页面链接明确失败并提示下载后上传。
+- 参考视频存为工作区素材库里的草稿资产（`DRAFT_RENDER_30D`，许可证"未知"并记录来源链接与最终链接）；风格包 id 由工作流 id 派生（重放不会重复保存）。
+- 配置了 AI 导演（`ANCS_AGENT_DRIVER`）时由模型看测量结果与抽帧撰写说明（数值仍只来自测量，模型的画面观察标为推断）；否则用规则版说明。接口：`POST /api/v1/workspaces/:id/strategy-distills`（202，`project:write`，按"昂贵端点"限流）、`GET …/strategy-distills/:runId`、`PATCH …/strategy-packs/:packId`（内置预设 409）。
+- 命令行（不用数据库）：`node scripts/distill-reference.mjs [--json out.json] <文件或链接>…`，与工作流同一套测量与撰写代码。
+
+### 5.4 讲述配音（V6-5）
+
+- Worker 按 `ANCS_NARRATION_DRIVER` 装配语音合成：`flite`（FFmpeg 内置 libflite，本地英文语音，无需密钥）或 `process`（部署方的合成程序，见 `.env.example`）。不配置时讲述工具明确报不可用，装配清单（启动日志"外部能力驱动"）里没有 `narration`。
+- 合成逐句进行、拼成一条 24 kHz 单声道 WAV（句间 0.25 s），每句的起止位置精确，字幕按句生成并绑定讲述片段；产物经真实探测后存为 `VOICE_AUDIO`（来源 GENERATED，保留类 `KEEP_PAID_GENERATED`）。同一段讲述（引擎、声音、语速、句子相同）复用已有音频。
+- 合成语音受项目制作规则约束（`allowGeneratedSpeech`）：素材作品默认关闭，用户在共看片室顶栏"配音：关/开"显式切换（写工作区事件）；从文章开始的作品按新建时的选择。
+- 合成失败不自动重试，如实交还 AI；`process` 子进程每句硬超时 2 分钟、输出上限 64 MB。
+
+### 5.5 付费生成：数字人与视频生成（V6-7 / V6-8）
+
+- 流程：AI 只报价（`quote_generation`）→ 用户在共看片室报价卡上确认（API 校验确认金额 = 报价上限）→ 在**工作区生成预算**里原子预留（没设预算 → 拒绝）→ `PAID_GENERATION` 工作流生成一次（不重试）→ 产物写入对象存储并探测（保留类 `KEEP_PAID_GENERATED`）→ 放进试改 → 按供应商报告的费用结算（没报告按报价上限并标明；明确未扣费的失败释放预留）。
+- **待对账**：调用供应商之后的任何中断（超时、进程崩溃、Worker 丢租约）都把生成标为 `NEEDS_RECONCILIATION`，绝不再次调用，预留保持。运维按 `generation_requests.provider_job_id` 与供应商核对后手工处理（AdminAction 接入前的临时做法；见 V6-7 记录的 TODO）。
+- 装配：`ANCS_AVATAR_DRIVER=heygen`（数字人）与 `ANCS_GENERATION_DRIVER=process`（生成镜头、选区重绘）可以并存；装配清单出现 `avatar_generation` / `paid_generation`。没有配置时 AI 如实回复"这个部署还没有接入这类生成的供应商"。
+- 网络：放行 `api.fish.audio`、`api.heygen.com`、`upload.heygen.com` 与 HeyGen 视频下载域名；Gemini / Veo 放行 `generativelanguage.googleapis.com`（Veo 成片的下载链接会跳转到 Google 存储域名，Worker 跟随跳转时不带密钥）；在需要经代理出网的环境里给 Worker 加 `NODE_USE_ENV_PROXY=1`。
+- Veo 只能生成 4/6/8 秒：报价与预留按不短于所需的最短一档，成片统一到项目画布与帧率后放进试改（只用需要的长度）。
+- 网络层失败分两类：请求确定没发出去（DNS、拒绝连接、出网代理拒绝建立隧道）→ 不扣费、释放预留；连接中途断开或超时 → 结果不明、待对账。诊断：`node scripts/provider-network-check.mjs`（不产生生成费用）。
+- Seedance（火山方舟）放行 `ark.cn-beijing.volces.com` 与成片所在的对象存储域名（`*.tos-cn-beijing.volces.com`）；成片链接是临时签名链接，Worker 下载时不带密钥。Veo 与 Seedance 共用同一套"提交一次 → 轮询 → 下载 → 统一画布"的实现（`apps/worker/src/hosted-video-shot.ts`），计费结局一致。
+- 密钥只在 Worker 进程内存里使用，不进日志与错误信息；进程驱动的子进程只拿到白名单环境变量 + `ANCS_GENERATION_PASS_ENV` 列出的变量。
+- 身份档案的授权记录（`identity_consent_records`）只增不改，由数据库触发器保证；删除身份档案或工作区时随级联清理。
 
 ## 6. 队列
 

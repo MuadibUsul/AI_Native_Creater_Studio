@@ -6,7 +6,7 @@ export {
   listChannels,
   updateChannel,
 } from './channels.js';
-export type { DomainDeps } from './channels.js';
+export type { DomainDeps } from './deps.js';
 export { getUserAppearance, setUserAppearance } from './appearance.js';
 export {
   createCreatorIdentity,
@@ -51,7 +51,7 @@ export {
   listProjectVersions,
   loadSceneRows,
 } from './versions.js';
-export { redoProject, undoProject } from './undo-redo.js';
+export { redoProject, undoLastChange, undoProject } from './undo-redo.js';
 export {
   generateNarrative,
   getCurrentPlan,
@@ -399,6 +399,7 @@ export {
   assembleProjectDocument,
   getProjectProductionPolicy,
   assertProjectGenerationAllowed,
+  updateProjectProductionPolicy,
 } from './project-document.js';
 export { assertProjectApiSchemaVersion, getProjectState, listProjectEditEvents } from './project-state.js';
 export { clipInstanceToLegacyProjection, compileLegacyClipProjectionUpdate, listProjectMediaViews, upsertMediaDerivativeState } from './media-sources.js';
@@ -441,6 +442,8 @@ export {
 export type { ClipDigests } from './content-protection.js';
 export {
   VOICE_ADAPTER_CAPABILITIES,
+  VOICE_REPLY_MAX_CHARACTERS,
+  VOICE_SESSION_CREDENTIAL_HEADER,
   VOICE_SESSION_TTL_SECONDS,
   appendVoiceEvent,
   closeVoiceSession,
@@ -451,12 +454,18 @@ export {
   resolveVoiceCapabilities,
   revokeVoiceSession,
   sealUtterance,
+  spokenReplyExcerpt,
+  verifyVoiceSessionCredential,
+  voiceSessionGate,
+  voiceReplyText,
 } from './voice-session.js';
 export { alignVoiceUtterance, negotiateVoiceSessionCapabilities } from './voice-alignment.js';
 export type { AlignVoiceUtteranceInput } from './voice-alignment.js';
 export { SELECTION_ERROR_REASONS, assertNotFrameHashIdentity, getSelectionAnchor, recoverSelectionAnchor, remapSelectionAnchor, saveSelectionAnchor } from './selection.js';
 export { RANGE_EDIT_PROMPT_VERSION, buildRangeEditPrompts, planRangeEdit } from './range-edit.js';
-export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, playbackSupports, playbackTimeOfFrame } from './playback.js';
+export { PLAYBACK_BACKEND_CAPABILITIES, buildPlaybackSnapshot, buildServerSynthesisPlan, compileSequenceRenderPlan, loadRenderPlanInput, playbackSupports, playbackTimeOfFrame } from './playback.js';
+// V5-M4：终渲染后端（apps/worker）经领域层取得内核的后端裁决（R7：worker 不直接依赖内核）
+export { assertRenderPlanSupported, audioOnlyRenderPlan, renderPlanWindows, requirementsForDelivery, sliceRenderPlanVideo, unsupportedRenderRequirements } from '@ancs/kernel';
 export type { ServerSynthesisPlan } from './playback.js';
 export type { ClipMixPlan, ClipMixTrackPlan } from './audio-mix.js';
 export type { ProcessEditsV2Input } from './edit-operation-v2.js';
@@ -476,6 +485,13 @@ export {
   listProjectVersionCompositionProjections,
 } from './composition-migration.js';
 export type { CompositionMigrationHooks } from './composition-migration.js';
+export {
+  diffProjectionRows,
+  foldOpLog,
+  rebuildCompositionProjection,
+  verifyCompositionProjection,
+} from './composition-projector.js';
+export type { OpLogSource, ProjectedEntity, ProjectionChange, ProjectionDifference } from './composition-projector.js';
 export {
   assertEffectExecutionSupported,
   createAnimationBinding,
@@ -547,6 +563,9 @@ export type { EventPage, NotificationDispatchReport } from './events.js';
 export {
   DEFAULT_IDEMPOTENCY_KEY_TTL_HOURS,
   isAssetBoundToScene,
+  isAssetReferenced,
+  isAssetReferencedByReferenceEdge,
+  isAssetReferencedByTimeline,
   isAssetReferencedByVersionSnapshot,
   isAssetReferencedByDerivation,
   listTrashedAssets,
@@ -619,3 +638,94 @@ export {
   listAssets,
   sanitizeFilename,
 } from './assets.js';
+export { configureDeploymentPolicy, deploymentPolicy } from './deployment-policy.js';
+export type { DeploymentPolicy } from './deployment-policy.js';
+// V5-M4（§11.1）：工作流引擎（运行/步骤持久化，任务表为执行载体）
+export {
+  WorkflowRegistry,
+  advanceWorkflow,
+  cancelWorkflow,
+  defaultWorkflowErrorClass,
+  getWorkflowRun,
+  listWorkflowRuns,
+  resolveWorkflowGate,
+  startWorkflow,
+} from './workflow.js';
+export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';
+// V5-M4（§11.2）：素材工程终渲染工作流（冻结 → 渲染 → 技术 QA）
+export { compositionFinalRenderWorkflow, startCompositionFinalRender } from './composition-final-render.js';
+// V6 §6/§8：通用导演 Agent（统一工具目录 + 可续跑的轮次运行时）
+export {
+  DEFAULT_AGENT_RUNTIME_LIMITS,
+  agentTurnWorkflow,
+  createAgentSession,
+  getAgentSession,
+  getAgentTurn,
+  listAgentTurns,
+  projectAgentCost,
+  runAgentTurnLoop,
+  agentTurnIdFor,
+  startAgentTurn,
+  startGenerationTurn,
+  completeGenerationTurn,
+  failGenerationTurn,
+  unconfiguredAgentModel,
+} from './agent-runtime.js';
+export type { AgentRuntimeLimits, AgentTurnPorts } from './agent-runtime.js';
+export { AgentToolCatalog, buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft } from './agent-tools.js';
+export type { AgentDraft, AgentDraftSimulation, AgentTimelineView, AgentToolContext, AgentToolDefinition, AgentToolOutcome } from './agent-tools.js';
+export { agentEditOperationSchema, agentSecondsToTime, sequenceContentEnd, translateAgentEdit } from './agent-operations.js';
+export type { AgentEditContext, AgentEditOperation } from './agent-operations.js';
+export { AGENT_PROMPT_VERSION, AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
+export type { CompositionFinalRenderPorts } from './composition-final-render.js';
+// V6 §7.4：低清预览（改哪里渲染哪里）
+export {
+  beginPreviewRender,
+  compileProposalRenderPlan,
+  completePreviewRender,
+  failPreviewRender,
+  findPreviewSegment,
+  getSequencePreview,
+  latestSequencePreview,
+  previewProfileFor,
+  recordPreviewSegment,
+  requestSequencePreview,
+  resolvePreviewSourceKeys,
+} from './previews.js';
+export type { PreviewRenderTask } from './previews.js';
+// V6-1c：共看片室（单屏工作台）的服务端支撑
+export { createStudioProject, getStudioState } from './studio.js';
+export { addReviewNote, applyReview, deleteReviewNote, getReviewState, listReviewNoteTurns, updateReviewNote } from './reviews.js';
+export { bindAttention, findDeicticWords, isUnclosedUtterance, joinTranscript, pointerSampleAt } from './realtime-attention.js';
+export { BUILT_IN_STRATEGY_PACKS, defaultStrategyGuidance, getStrategyPack, listStrategyPacks, resolveStrategyKnobs, saveStrategyPack, strategyGuidanceText } from './strategies.js';
+export { reviewDraftOperations, scoreFirstCut, type DraftReview, type EvalIndicator, type FirstCutScorecard } from './agent-eval.js';
+export { EFFECT_TEMPLATES, findEffectTemplate, resolveEffectParams } from './effect-templates.js';
+export { EFFECT_AGENT_TOOLS, effectLayerSize, effectRegionTransform, loadEffectLayers } from './agent-effects.js';
+export type { EffectLayerRef } from './agent-effects.js';
+export { NARRATION_AGENT_TOOLS, loadNarrations, narrationLanguage, splitNarrationSentences } from './agent-narration.js';
+export type { NarrationRef } from './agent-narration.js';
+export { ARTICLE_AGENT_TOOLS, ARTICLE_CONTEXT_CHARS, articleContextView, articleParagraphs, projectArticle } from './agent-article.js';
+export { numbersIn, numbersMissingFromSource } from './source-numbers.js';
+export { GENERATION_AGENT_TOOLS } from './agent-generation.js';
+export { billedSeconds, estimateSpeechSeconds, formatMicros, generationBudget, generationCanvas, listProjectGenerations, quoteGeneration, toGeneration } from './paid-generation-quote.js';
+export type { GenerationQuote } from './paid-generation-quote.js';
+export { acceptGeneration, countGenerationsNeedingReconciliation, declineGeneration, generationPlacementOperations, paidGenerationWorkflow } from './paid-generation.js';
+export type { PaidGenerationPorts } from './paid-generation.js';
+export {
+  createIdentityProfile,
+  getIdentityProfile,
+  grantIdentityConsent,
+  identityConsentStatementSha256,
+  identityForGeneration,
+  listIdentityProfiles,
+  revokeIdentityConsent,
+  setIdentityReference,
+} from './identity-profiles.js';
+export { detectBeats, onsetEnvelope } from './audio-beats.js';
+export type { DetectedBeats } from './audio-beats.js';
+export { BEAT_CONFIDENCE_THRESHOLD, BEAT_TOLERANCE_SECONDS, beatCutRatio, describeColor, editPoints, describeSound, distillStats, editingDnaFromStats, pacingCurve, shotDurations } from './distill-dna.js';
+export type { DistilledStats } from './distill-dna.js';
+export { DISTILL_PROMPT_VERSION, composeStrategyFromStats, composeStrategyWithModel } from './distill-compose.js';
+export type { ComposedPack, DistillSource } from './distill-compose.js';
+export { getReferenceDistill, referenceDistillWorkflow, startReferenceDistill, updateStrategyPack } from './reference-distill.js';
+export type { ReferenceDistillPorts } from './reference-distill.js';

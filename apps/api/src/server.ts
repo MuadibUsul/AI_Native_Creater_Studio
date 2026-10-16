@@ -57,6 +57,12 @@ import { registerMetrics } from './plugins/metrics.js';
 import { registerAdminMetricsRoutes } from './routes/admin-metrics.js';
 import { registerNativeFallbackRoutes } from './routes/native-fallback.js';
 import { registerRenderRoutes } from './routes/renders.js';
+import { registerFinalRenderRoutes } from './routes/final-renders.js';
+import { registerAgentRoutes } from './routes/agent.js';
+import { registerPreviewRoutes } from './routes/previews.js';
+import { registerStudioRoutes } from './routes/studio.js';
+import { registerGenerationRoutes } from './routes/generations.js';
+import { registerReviewRoutes } from './routes/review.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerWebhookRoutes } from './routes/results.js';
@@ -67,6 +73,7 @@ import { registerVisualGrammarRoutes } from './routes/visual-grammar.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import type { StorageDeps } from './plugins/storage.js';
 import type { CredentialDeps } from './plugins/credentials.js';
+import { registerEdge, registerSecurityHeaders } from './plugins/edge.js';
 import type { WebhookRouteDeps } from './routes/results.js';
 
 export interface BuildServerOptions {
@@ -116,10 +123,21 @@ export interface BuildServerOptions {
   voiceClone?: { provider?: import('@ancs/contracts').VoiceCloneProvider };
   /** N05-01 实时语音会话：短期凭证签名密钥（未配置 → 创建会话 501 fail-closed） */
   voice?: { sessionSecret?: string };
+  /**
+   * Edge 安全层（V5-M4）：CORS 白名单、Origin 校验、限流、HSTS；入口按已校验配置提供。
+   * 未提供时只注册安全头（测试与无边缘需求的进程）。`trustProxyHops` 决定客户端 IP 的来源。
+   */
+  edge?: import('./plugins/edge.js').EdgeOptions & { trustProxyHops?: number };
+  /** 本进程装配的外部能力驱动清单（V5-M3；经 /capabilities 报告实现种类，客户端据此显示 Mock 标识） */
+  providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
 }
+
+/** 信任最近 N 跳代理（proxy-addr 信任函数：第 hop 跳 < N 时可信）；0/未配置 = 不信任 X-Forwarded-For。 */
+const trustProxyHopsOf = (hops: number | undefined): false | ((address: string, hop: number) => boolean) =>
+  hops === undefined || hops <= 0 ? false : (_address: string, hop: number) => hop < hops;
 
 /**
  * 构建 Fastify 实例（独立于 Next.js 的权威业务 API，规范 §29.2）。
@@ -134,10 +152,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       options.logger === true || (typeof options.logger === 'object' && options.logger !== null)
         ? {
             ...(typeof options.logger === 'object' && options.logger !== null ? options.logger : {}),
-            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'], censor: '[REDACTED]' },
+            redact: { paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-voice-session-token"]', 'res.headers["set-cookie"]'], censor: '[REDACTED]' },
           }
         : (options.logger ?? false),
     // 请求追踪（§33）：客户端可提供合法 X-Request-Id，否则服务端生成
+    // 只信任配置的代理跳数（否则 X-Forwarded-For 可被伪造以绕过按 IP 限流）
+    trustProxy: trustProxyHopsOf(options.edge?.trustProxyHops),
     genReqId: (raw) => {
       const provided = raw.headers['x-request-id'];
       if (typeof provided === 'string' && requestIdSchema.safeParse(provided).success) return provided;
@@ -151,6 +171,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   registerErrorHandler(app);
   registerClientContext(app);
+  if (options.edge !== undefined) registerEdge(app, options.edge);
+  else registerSecurityHeaders(app, { hsts: false });
 
   await app.register(swagger, {
     openapi: {
@@ -218,17 +240,19 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerAiEditRoutes(instance, authDeps, contentDeps?.llm);
         registerSelectionRoutes(instance, authDeps);
         registerProposalRoutes(instance, authDeps);
-        // N05-01：语音会话签名密钥来自环境（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
+        // N05-01：语音会话签名密钥由入口从已校验配置注入（未配置 → 创建会话 fail-closed 501，绝不回退长期 Key）
         registerVoiceSessionRoutes(instance, authDeps, {
-          ...(options.voice?.sessionSecret !== undefined
-            ? { sessionSecret: options.voice.sessionSecret }
-            : process.env['ANCS_VOICE_SESSION_SECRET'] === undefined
-              ? {}
-              : { sessionSecret: process.env['ANCS_VOICE_SESSION_SECRET'] }),
+          ...(options.voice?.sessionSecret !== undefined ? { sessionSecret: options.voice.sessionSecret } : {}),
         });
         registerMixdownRoutes(instance, authDeps);
         registerNativeFallbackRoutes(instance, authDeps);
         registerRenderRoutes(instance, authDeps);
+        registerFinalRenderRoutes(instance, authDeps);
+        registerAgentRoutes(instance, authDeps);
+        registerPreviewRoutes(instance, { ...authDeps, ...(storageDeps === undefined ? {} : { storage: storageDeps }) });
+        registerStudioRoutes(instance, authDeps);
+        registerGenerationRoutes(instance, authDeps);
+        registerReviewRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
         registerCustomMotionRoutes(instance, authDeps);
         registerNarrationAudioRoutes(instance, authDeps, {
@@ -274,7 +298,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance);
-      registerCapabilityRoutes(instance, { extensions });
+      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [] });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);
       }

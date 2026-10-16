@@ -1,0 +1,140 @@
+{
+  "engines": [
+    "Firefox 158.0",
+    "WebKitGTK 2.52.6"
+  ],
+  "results": [
+    {
+      "name": "准备：第一版已采用",
+      "detail": "3 段真实素材（带正弦音轨）"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 1440 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 1440 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 1440 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 1440 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 390 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 390 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 390 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · zh-CN · 390 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 1440 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 1440 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 1440 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 1440 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 390 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 390 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 390 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "Firefox 158.0 · en · 390 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 1440 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 1440 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 1440 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 1440 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 390 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 390 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 390 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · zh-CN · 390 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 1440 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 1440 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 1440 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 1440 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 390 px · home",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 390 px · studio",
+      "detail": "无横向溢出；片段 6、波形 3、导出按钮在屏幕内；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 390 px · review",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    },
+    {
+      "name": "WebKitGTK 2.52.6 · en · 390 px · settings",
+      "detail": "无横向溢出；text-wrap:balance 支持，scrollbar-color 支持"
+    }
+  ]
+}

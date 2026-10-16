@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 
+/** 分析运行的机器可读错误码：驱动未配置 ≠ 分析失败（界面显示"未配置"）。 */
+export const MEDIA_ANALYSIS_ERROR_CODES = { CAPABILITY_NOT_CONFIGURED: 'CAPABILITY_NOT_CONFIGURED' } as const;
+
 export const MEDIA_ANALYSIS_STAGES = ['PROBE', 'PROXY', 'WAVEFORM', 'ASR', 'SHOT', 'SAMPLING', 'VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'] as const;
 export const MEDIA_ANALYSIS_STAGE_STATUSES = ['NOT_REQUESTED', 'QUEUED', 'RUNNING', 'PARTIAL', 'READY', 'EMPTY', 'FAILED', 'DISABLED', 'STALE', 'CANCEL_REQUESTED', 'CANCELLED'] as const;
 export const mediaAnalysisStageNameSchema = z.enum(MEDIA_ANALYSIS_STAGES);

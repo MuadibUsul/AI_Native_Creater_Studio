@@ -23,7 +23,7 @@ import {
   type UpsertCmsWritebackTargetRequest,
 } from '@ancs/contracts';
 import { channels, cmsIngestions, cmsWritebackAttempts, cmsWritebackTargets, jobs, renders } from '@ancs/db';
-import type { DomainDeps } from './channels.js';
+import type { DomainDeps } from './deps.js';
 import { createContent, createContentFromDocument } from './content.js';
 import { assertSafeUrl } from './content-extract.js';
 import { createJobInTx, retryJob } from './jobs.js';

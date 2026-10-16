@@ -21,7 +21,9 @@ import {
   createSequence,
   createTrack,
   createVisualObject,
+  compileSequenceRenderPlan,
   playbackSupports,
+  processEdits,
   playbackTimeOfFrame,
 } from '@ancs/domain';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
@@ -233,6 +235,54 @@ describe('N03-08 多轨媒体预览与真实合成（真实 FFmpeg 探测 + 真�
       workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: fixture.sequenceId,
     });
     expect(soloSnapshot.audioSegments.find((segment) => segment.id === withAudioRegion)?.audible).toBe(true);
+  });
+
+  it('V5-M4：快照来自内核 RenderPlan——insert_clip 带出的关联音频片段进入音频段（旧投影静默丢弃）；planHash 只随渲染内容变化', { timeout: 60_000 }, async () => {
+    const fixture = await makeProject(20_000);
+    const video = await seedAssetFromRealFile(fixture, resolve(fixtures, 'clip-a-24000-1001.mp4'));
+    expect(video.probe.streams.some((stream) => stream.type === 'AUDIO')).toBe(true);
+    const actor = { type: 'USER' as const, id: null };
+    const revisionOf = async () => Number((await handle.db.execute(`select revision from projects where id = '${fixture.projectId}'`)).rows[0]!['revision']);
+    await processEdits({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, actor,
+      request: {
+        baseProjectRevision: await revisionOf(), expectedSceneRevisions: {}, idempotencyKey: `idem_${randomUUID()}`,
+        operations: [{
+          op: 'insert_clip', sequenceId: fixture.sequenceId, trackId: fixture.videoTrackId, assetVersionId: video.assetVersionId,
+          nestedSequenceId: null, sourceStreamId: null, sourceRange: range(500, 2_500), mode: 'OVERWRITE', sequenceStart: mt(0), linkAudio: true, audioTrackId: null,
+        }],
+      },
+    });
+
+    const scope = { workspaceId: fixture.workspaceId, projectId: fixture.projectId, sequenceId: fixture.sequenceId };
+    const plan = await compileSequenceRenderPlan({ db: handle.db }, scope);
+    const snapshot = await buildPlaybackSnapshot({ db: handle.db }, scope);
+    expect(snapshot.planHash).toBe(plan.planHash);
+    expect(snapshot.documentRevision).toBe(await revisionOf());
+    expect(snapshot.videoSegments).toHaveLength(1);
+    // 关联音频片段：同一源版本、同一序列区间与源区间，作为 CLIP_AUDIO 发声
+    expect(snapshot.audioSegments).toHaveLength(1);
+    const audio = snapshot.audioSegments[0]!;
+    expect(audio).toMatchObject({ kind: 'CLIP_AUDIO', trackId: fixture.audioTrackId, sourceVersionId: video.assetVersionId, assetId: video.assetId, audible: true });
+    expect(audio.sequenceRange).toEqual(snapshot.videoSegments[0]!.sequenceRange);
+    expect(ms(audio.sourceRange.start)).toBe(500);
+    expect(plan.sources).toEqual([{ assetVersionId: video.assetVersionId, assetId: video.assetId, checksumSha256: 'a'.repeat(64), hasAudio: true }]);
+
+    // 只改轨道名：revision 前进，渲染内容不变 → planHash 不变；改透明度 → planHash 改变
+    await processEdits({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, actor,
+      request: { baseProjectRevision: await revisionOf(), expectedSceneRevisions: {}, idempotencyKey: `idem_${randomUUID()}`, operations: [{ op: 'update_track', trackId: fixture.videoTrackId, changes: { name: 'V1 renamed' } }] },
+    });
+    const renamed = await compileSequenceRenderPlan({ db: handle.db }, scope);
+    expect(renamed.documentRevision).toBeGreaterThan(plan.documentRevision);
+    expect(renamed.planHash).toBe(plan.planHash);
+    await processEdits({ db: handle.db }, {
+      workspaceId: fixture.workspaceId, projectId: fixture.projectId, actor,
+      request: { baseProjectRevision: await revisionOf(), expectedSceneRevisions: {}, idempotencyKey: `idem_${randomUUID()}`, operations: [{ op: 'set_clip_opacity', clipId: snapshot.videoSegments[0]!.clipId, opacity: 0.5 }] },
+    });
+    const faded = await compileSequenceRenderPlan({ db: handle.db }, scope);
+    expect(faded.planHash).not.toBe(plan.planHash);
+    expect(faded.requirements).toContain('PER_SEGMENT_OPACITY');
   });
 
   it('fail-closed：空时间线 409 EMPTY_TIMELINE；源未就绪/缺校验和 409 SOURCE_NOT_PLAYABLE', async () => {
