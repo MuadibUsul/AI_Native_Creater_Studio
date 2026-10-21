@@ -4,6 +4,7 @@ import { PROJECT_FLOW_TEXT } from './pages/project-flow';
 import { WORKSPACE_ADMIN_TEXT } from './pages/workspace-admin';
 import { DELIVERY_TEXT } from './pages/delivery';
 import { ENTRY_TEXT } from './pages/entry';
+import { AUTONOMY_TEXT } from './pages/autonomy';
 
 /**
  * 界面文案目录（中文为基准，英文必须覆盖同一结构——类型检查保证不缺键）。
@@ -652,6 +653,7 @@ const zhCN = {
   workspaceAdmin: WORKSPACE_ADMIN_TEXT['zh-CN'],
   delivery: DELIVERY_TEXT['zh-CN'],
   entry: ENTRY_TEXT['zh-CN'],
+  autonomy: AUTONOMY_TEXT['zh-CN'],
 };
 
 export type Messages = typeof zhCN;
@@ -1298,6 +1300,7 @@ const en: Messages = {
   workspaceAdmin: WORKSPACE_ADMIN_TEXT.en,
   delivery: DELIVERY_TEXT.en,
   entry: ENTRY_TEXT.en,
+  autonomy: AUTONOMY_TEXT.en,
 };
 
 export const MESSAGES: Record<Locale, Messages> = { 'zh-CN': zhCN, en };

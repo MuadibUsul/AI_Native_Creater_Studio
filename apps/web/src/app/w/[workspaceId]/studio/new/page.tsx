@@ -10,6 +10,7 @@ import { describeError } from '@/lib/errors';
 import { queryKeys } from '@/lib/queries';
 import { useI18n } from '@/i18n/I18nProvider';
 import { keepStudioBrief } from '@/studio/studio-brief';
+import { AutonomySetupFields, autonomySetupValid, autonomyStartErrorKey, defaultAutonomySetup, useStartAutonomy, type AutonomySetup } from '@/studio/StudioAutonomy';
 import styles from '@/studio/studio.module.css';
 
 type AspectRatio = (typeof STUDIO_ASPECT_RATIOS)[number];
@@ -67,6 +68,7 @@ export default function NewStudioProjectPage() {
   const queryClient = useQueryClient();
   const { messages, locale } = useI18n();
   const t = messages.studioNew;
+  const ta = messages.autonomy.setup;
   const [title, setTitle] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [start, setStart] = useState<'footage' | 'article'>('footage');
@@ -76,6 +78,11 @@ export default function NewStudioProjectPage() {
   const [brief, setBrief] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [imported, setImported] = useState<StudioArticleDraft | null>(null);
+  // V6-9 交给 AI 剪完：可选；勾上后建好工程即签署授权并开始（AI 会等素材处理好）
+  const [delegate, setDelegate] = useState(false);
+  const [setup, setSetup] = useState<AutonomySetup>(() => defaultAutonomySetup(''));
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const startAutonomy = useStartAutonomy(workspaceId);
   const importLink = useMutation({
     mutationFn: (url: string) => client.studio.fetchArticle(workspaceId, { url }),
     onSuccess: (draft) => {
@@ -97,15 +104,25 @@ export default function NewStudioProjectPage() {
     } else if (draft.brief.trim().length > 0) {
       setBrief(draft.brief.trim());
       setTitle((current) => (current.length > 0 ? current : titleFromBrief(draft.brief)));
+      setSetup((current) => (current.goal.length > 0 ? current : { ...current, goal: draft.brief.trim() }));
     }
   }, []);
   const create = useMutation({
     mutationFn: (input: CreateStudioProjectRequest) => client.studio.create(workspaceId, input, { idempotencyKey: `studio-${globalThis.crypto.randomUUID()}` }),
     onSuccess: async (ref) => {
-      if (brief !== null && start === 'footage') {
+      // 交给 AI 时需求已经交代过，不再把想法预填进对话框
+      if (brief !== null && start === 'footage' && !delegate) {
         keepStudioBrief(ref.projectId, brief);
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.projects(workspaceId) });
+      if (delegate) {
+        setCreatedId(ref.projectId);
+        try {
+          await startAutonomy.mutateAsync({ projectId: ref.projectId, setup, locale });
+        } catch {
+          return; // 作品已建好：留在这里说明原因，并给出进入共看片室的入口
+        }
+      }
       router.push(`/w/${workspaceId}/studio/${ref.projectId}`);
     },
   });
@@ -113,6 +130,7 @@ export default function NewStudioProjectPage() {
     event.preventDefault();
     setTouched(true);
     if (title.trim().length === 0) return;
+    if (delegate && !autonomySetupValid(setup)) return;
     if (start === 'article') {
       if (article.trim().length === 0) return;
       // 来源只在正文仍是导入的那份时保存（用户改写过也算导入的原文，清空重贴则不再带来源）
@@ -224,9 +242,25 @@ export default function NewStudioProjectPage() {
             ))}
           </div>
         </div>
+        <div className={styles['autonomyEntry']}>
+          <label className={styles['checkRow']}>
+            <input type="checkbox" checked={delegate} onChange={(event) => setDelegate(event.target.checked)} aria-describedby="studio-delegate-hint" />
+            <span>{ta.toggle}</span>
+          </label>
+          <span id="studio-delegate-hint" className="small muted">{ta.toggleHint}</span>
+          {delegate ? <AutonomySetupFields value={setup} onChange={setSetup} touched={touched} idPrefix="studio-delegate" /> : null}
+        </div>
         {create.isError ? <p role="alert"><strong>{t.failed}</strong> · {describeError(create.error).message}</p> : null}
+        {startAutonomy.isError && createdId !== null ? (
+          <div role="alert" className="col" style={{ gap: 8 }}>
+            <p><strong>{ta.created}</strong> {ta.startErrors[autonomyStartErrorKey(startAutonomy.error)]}</p>
+            <div className="row"><Link className="btn" href={`/w/${workspaceId}/studio/${createdId}`}>{ta.openAnyway}</Link></div>
+          </div>
+        ) : null}
         <div className="row">
-          <button type="submit" className="btn primary" disabled={create.isPending}>{create.isPending ? t.creating : t.create}</button>
+          <button type="submit" className="btn primary" disabled={create.isPending || startAutonomy.isPending || (startAutonomy.isError && createdId !== null)}>
+            {create.isPending ? t.creating : startAutonomy.isPending ? ta.starting : delegate ? ta.start : t.create}
+          </button>
         </div>
       </form>
     </div>

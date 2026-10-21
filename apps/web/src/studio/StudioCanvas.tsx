@@ -91,6 +91,10 @@ export function StudioCanvas(props: {
   onAddFootage: () => void;
   onDropFiles: (files: File[]) => void;
   onFirstCut: () => void;
+  /** V6-9：交给 AI 剪完（打开设置）；有进行中的自主制作时不给 */
+  onDelegate?: (() => void) | null;
+  /** V6-9 交给 AI 剪完的按钮文案 */
+  delegateLabel?: string;
   onRetryPreview: () => void;
   onVideoError: () => void;
   onTimeUpdate: () => void;
@@ -142,13 +146,21 @@ export function StudioCanvas(props: {
     </div>
   );
 
+  const delegate = props.canEdit && props.onDelegate !== undefined && props.onDelegate !== null
+    ? <button type="button" className={styles['onMatteButtonQuiet']} onClick={props.onDelegate}><QuietIcon name="spark" />{props.delegateLabel}</button>
+    : null;
   let content: ReactNode;
   if (props.mode === 'empty') {
     content = (
       <div className={styles['empty']}>
         <h2>{t.emptyTitle}</h2>
         <p>{t.emptyBody}</p>
-        {props.canEdit ? <button type="button" className={styles['onMatteButton']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button> : null}
+        {props.canEdit ? (
+          <div className={styles['emptyActions']}>
+            <button type="button" className={styles['onMatteButton']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button>
+            {delegate}
+          </div>
+        ) : null}
         {uploadsList}
       </div>
     );
@@ -158,6 +170,7 @@ export function StudioCanvas(props: {
         <span className={styles['spinner']} aria-hidden="true" />
         <h2>{t.processingTitle}</h2>
         <p>{t.processingBody}</p>
+        {delegate}
         {uploadsList}
       </div>
     );
@@ -170,6 +183,7 @@ export function StudioCanvas(props: {
           <div className={styles['emptyActions']}>
             <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.articleFirstCut}</button>
             <button type="button" className={styles['onMatteButtonQuiet']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button>
+            {delegate}
           </div>
         ) : null}
         {uploadsList}
@@ -180,7 +194,12 @@ export function StudioCanvas(props: {
       <div className={styles['empty']}>
         <h2>{t.noCutTitle}</h2>
         <p>{t.noCutBody}</p>
-        {props.canEdit ? <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.firstCut}</button> : null}
+        {props.canEdit ? (
+          <div className={styles['emptyActions']}>
+            <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.firstCut}</button>
+            {delegate}
+          </div>
+        ) : null}
         {uploadsList}
       </div>
     );

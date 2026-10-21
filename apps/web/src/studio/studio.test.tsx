@@ -201,6 +201,39 @@ describe('V6-1c 共看片室', () => {
     await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '用这些素材剪出第一版。', pointer: { timeRange: null, clipIds: [], frameRegion: null } }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
   });
 
+  it('V6-9 交给 AI 剪完：还没剪时画布给出入口，打开设置签署并开始；进行中时进度卡在对话里、可停下，画布不再给入口', async () => {
+    const policy = { approval: 'ASK_EACH', budgetMicros: null, perGenerationMicros: null, allowOwnLikeness: false, maxRetriesPerTask: 2, signature: null };
+    const active = {
+      id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', goal: '60 秒冰岛自驾', targetDurationSeconds: 60, strategyPackId: null, approval: 'ASK_EACH', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_9', workflowRunId: 'wfr_9', proposalId: null, adoptedRevision: null,
+      progress: { steps: 3, lastStep: '计划：4 场', lastTool: 'plan_production' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    const sign = vi.fn().mockResolvedValue({ ...policy, budgetMicros: 2_000_000, signature: { userId: 'usr_1', signedAt: '2026-10-21T00:00:00.000Z', version: 1 } });
+    const startRun = vi.fn().mockResolvedValue({ ...active, status: 'WAITING_FOR_FOOTAGE' });
+    const idle = client({ turns: [], state: studioState({ project: { ...studioState().project, autonomy: policy }, autonomousRun: null }), extra: { autonomy: { sign, startRun, revoke: vi.fn(), cancelRun: vi.fn() } } });
+    const { unmount } = renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, idle.sdk);
+    await userEvent.click(await screen.findByRole('button', { name: '交给 AI 剪完…' }));
+    const dialog = screen.getByRole('dialog', { name: '交给 AI 剪完' });
+    await userEvent.type(within(dialog).getByLabelText('你想要一条什么样的视频'), '60 秒冰岛自驾');
+    await userEvent.click(within(dialog).getByRole('button', { name: '交给 AI' }));
+    await waitFor(() => expect(startRun).toHaveBeenCalledWith('ws_1', 'prj_1', expect.objectContaining({ goal: '60 秒冰岛自驾', locale: 'zh-CN' }), expect.anything()));
+    expect(sign).toHaveBeenCalledWith('ws_1', 'prj_1', { approval: 'ASK_EACH', budgetMicros: 2_000_000 }, expect.anything());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    unmount();
+
+    const cancelRun = vi.fn().mockResolvedValue({ ...active, status: 'CANCELLED' });
+    const running = client({ turns: [], state: studioState({ project: { ...studioState().project, autonomy: policy }, autonomousRun: active }), extra: { autonomy: { cancelRun } } });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, running.sdk);
+    const chat = await screen.findByRole('region', { name: '和 AI 说' });
+    const card = await within(chat).findByRole('article', { name: 'AI 自己剪' });
+    expect(within(card).getByText('已做 3 步')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '交给 AI 剪完…' })).toBeNull();
+    expect((screen.getByRole('button', { name: '让 AI 剪第一版' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(within(card).getByRole('button', { name: '停下' }));
+    await waitFor(() => expect(cancelRun).toHaveBeenCalledWith('ws_1', 'prj_1', 'aut_1', { idempotencyKey: 'autonomy-cancel-aut_1' }));
+  });
+
   it('试改：就地播放试改预览，时间带显示试改的片段；"就这样"按看过的哈希采用', async () => {
     const { sdk, adoptProposal } = client({ turns: [turn()] });
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);

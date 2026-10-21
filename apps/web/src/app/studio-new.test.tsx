@@ -77,4 +77,40 @@ describe('新建作品', () => {
     expect(await screen.findByText(/文章太长，只导入了前面的部分。/)).toBeTruthy();
     expect(window.sessionStorage.getItem('ancs-studio-draft')).toBeNull();
   });
+
+  it('V6-9 交给 AI 剪完：勾上后需求与上限必填；建好工程即签署授权并开始运行，再进入共看片室', async () => {
+    push.mockClear();
+    const create = vi.fn().mockResolvedValue({ projectId: 'prj_4', sequenceId: 'seq_4', sessionId: 'ses_4' });
+    const sign = vi.fn().mockResolvedValue({});
+    const startRun = vi.fn().mockResolvedValue({ id: 'aut_1' });
+    renderWithClient(<NewStudioProjectPage />, mockClient({ studio: { create }, autonomy: { sign, startRun } }));
+    await userEvent.type(screen.getByLabelText('作品名称'), '冰岛环岛');
+    await userEvent.click(screen.getByRole('checkbox', { name: '交给 AI 自己剪完' }));
+    await userEvent.click(screen.getByRole('button', { name: '交给 AI' }));
+    expect(screen.getByText('请写一句你想要的效果')).toBeTruthy();
+    expect(create).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText('你想要一条什么样的视频'), '90 秒的冰岛自驾，节奏轻快');
+    await userEvent.selectOptions(screen.getByLabelText('目标时长'), '90');
+    await userEvent.click(screen.getByRole('radio', { name: /自检通过就直接用/ }));
+    await userEvent.click(screen.getByRole('button', { name: '交给 AI' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/w/ws_1/studio/prj_4'));
+    expect(sign).toHaveBeenCalledWith('ws_1', 'prj_4', { approval: 'AUTO_SAFE', budgetMicros: 2_000_000 }, expect.anything());
+    expect(startRun).toHaveBeenCalledWith('ws_1', 'prj_4', { goal: '90 秒的冰岛自驾，节奏轻快', targetDurationSeconds: 90, strategyPackId: null, strategyKnobs: {}, locale: 'zh-CN' }, expect.anything());
+  });
+
+  it('V6-9 作品建好但没能交给 AI：说明原因，给出进入共看片室的入口（不重复建工程）', async () => {
+    push.mockClear();
+    const create = vi.fn().mockResolvedValue({ projectId: 'prj_5', sequenceId: 'seq_5', sessionId: 'ses_5' });
+    const sign = vi.fn().mockRejectedValue(apiError(503, 'UNAVAILABLE'));
+    renderWithClient(<NewStudioProjectPage />, mockClient({ studio: { create }, autonomy: { sign, startRun: vi.fn() } }));
+    await userEvent.type(screen.getByLabelText('作品名称'), '冰岛');
+    await userEvent.click(screen.getByRole('checkbox', { name: '交给 AI 自己剪完' }));
+    await userEvent.type(screen.getByLabelText('你想要一条什么样的视频'), '剪一条 vlog');
+    await userEvent.click(screen.getByRole('button', { name: '交给 AI' }));
+    expect(await screen.findByText('作品已经建好，但没能交给 AI。')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '先进入共看片室' }).getAttribute('href')).toBe('/w/ws_1/studio/prj_5');
+    expect((screen.getByRole('button', { name: '交给 AI' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
 });

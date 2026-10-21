@@ -51,6 +51,8 @@ export interface ConversationProps {
   onLearnStrategy?: () => void;
   /** V6-7/V6-8：付费生成的报价卡（确认/放弃/进行中/结果） */
   generationCards?: ReactNode;
+  /** V6-9：交给 AI 剪完的进度与交付报告卡 */
+  autonomyCard?: ReactNode;
   /** V6-2 语音：麦克风开关（发送按钮旁）；语音条本身浮在画布底部（Issue #9） */
   voiceToggle?: ReactNode;
   /** 制作规则开关组（特效 / 配音 / 生成），放在输入框上方 */
@@ -176,6 +178,7 @@ export function StudioConversation(props: ConversationProps) {
         ) : null}
         {props.notice !== null ? <div className={styles['lineMeta']} role="status">{props.notice}</div> : null}
         {props.error !== null ? <div className={styles['alert']} role="alert">{props.error}</div> : null}
+        {props.autonomyCard ?? null}
         {props.generationCards ?? null}
       </div>
       <div className={styles['composerArea']}>

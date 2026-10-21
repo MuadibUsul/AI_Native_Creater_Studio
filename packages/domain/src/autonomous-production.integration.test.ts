@@ -190,7 +190,7 @@ describe('V6-9 自主制作闭环（AP-05）', () => {
       outcome: 'ADOPTED',
       note: '剪好了：6 秒一镜到底，加了原声字幕。',
       notAdoptedReason: null,
-      timeline: { lengthSeconds: '6.000', captions: 1 },
+      timeline: { lengthSeconds: '6.000', clips: 1, captions: 1 },
       sources: { footage: [{ footageId: f.footageId, name: 'talk.mp4', seconds: '6.000' }], generated: [], originalShare: 1 },
       review: { warnings: 0 },
       plan: { version: 1, logline: '冰川口播', scenes: 1, intents: 1 },

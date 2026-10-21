@@ -6,6 +6,7 @@
 // 测试替身直接用文章段落当讲述稿；真实导演会改写成口语讲述稿。
 // 请求里要求付费生成时（V6-7/V6-8）：先 list_generation_options，再 quote_generation（只报价），回复里说清价格、等你确认——
 // 框了画面区域说"重绘/换成" → 选区重绘；说"数字人/我出镜" → 用已授权的身份档案出镜（引号里的话就是讲稿）；说"生成一个镜头" → 生成镜头。
+// 交给 AI 剪完（V6-9，上下文里有 autonomous_production）：写制作计划 → 每条素材取 3 秒拼成第一版 → 自检与节奏 → 交付说明。
 // 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
 
@@ -38,6 +39,8 @@ export class ScriptedDirector {
     const article = JSON.parse(tag(text, 'article') ?? 'null');
     const startTimeline = JSON.parse(tag(text, 'timeline') ?? '{}');
     if (article !== null && (startTimeline.clips ?? []).length === 0) return this.#articleStep(request, article, zh);
+    const autonomous = JSON.parse(tag(text, 'autonomous_production') ?? 'null');
+    if (autonomous !== null) return this.#autonomousStep(request, text, zh, autonomous);
     const last = request.messages.at(-1);
     const results = last.content.filter((block) => block.type === 'tool_result');
     if (results.length > 0) {
@@ -173,6 +176,37 @@ export class ScriptedDirector {
       input = { kind, prompt: what, seconds: '3', summary: zh ? `生成一个 3 秒镜头：${what.slice(0, 40)}` : `A 3-second generated shot: ${what.slice(0, 40)}` };
     }
     return { model: this.model, content: [{ type: 'tool_use', id: `tu_${randomUUID()}`, name: 'quote_generation', input }], stopReason: 'tool_use', usage };
+  }
+
+  /** 交给 AI 剪完：按已经做过的工具调用推进（计划 → 第一版 → 自检 + 节奏 → 交付说明）。 */
+  #autonomousStep(request, text, zh, autonomous) {
+    const calls = request.messages.flatMap((message) => message.content.filter((block) => block.type === 'tool_use'));
+    const done = new Set(calls.map((call) => call.name));
+    const footage = JSON.parse(tag(text, 'footage') ?? '[]');
+    const items = (Array.isArray(footage) ? footage : footage.footage ?? []).filter((item) => item.kind === 'video').sort((a, b) => a.name.localeCompare(b.name));
+    const tool = (...uses) => ({ model: this.model, content: uses.map(([name, input]) => ({ type: 'tool_use', id: `tu_${randomUUID()}`, name, input })), stopReason: 'tool_use', usage });
+    if (items.length === 0) return this.#reply(zh ? '工程里没有可用的视频素材，这次没有剪。' : 'There is no usable video footage in the project, so nothing was cut.');
+    const goal = String(autonomous.goal ?? '').split('\n')[0].slice(0, 120) || (zh ? '一条视频' : 'A video');
+    if (!done.has('plan_production')) {
+      return tool(['plan_production', {
+        blueprint: {
+          logline: goal, structure: items.map((item) => item.name).join(' → '),
+          targetDurationSeconds: autonomous.targetDurationSeconds ?? null, paceTarget: { cutsPerMinute: 20, wordsPerSecond: null },
+        },
+        scenes: items.map((item, index) => ({
+          id: `scene_${String(index + 1)}`, title: item.name.slice(0, 80), goal: index === 0 ? (zh ? '开场：先给最好看的画面' : 'Opening: lead with the strongest picture') : (zh ? '推进' : 'Move the story on'),
+          sources: [{ footageId: item.footageId, from: '0.5', to: '3.5' }],
+          intents: [{ id: `intent_${String(index + 1)}`, type: index === 0 ? 'HOOK' : 'RHYTHM', targetFeeling: zh ? '一眼想看下去' : 'Want to keep watching', reason: zh ? '测试替身按素材顺序各取 3 秒' : 'The test double takes 3 seconds of each clip in order' }],
+        })),
+      }]);
+    }
+    if (!done.has('edit_timeline')) {
+      return tool(['edit_timeline', { operations: [...items.map((item) => ({ op: 'place_clip', footageId: item.footageId, sourceStart: '0.5', sourceEnd: '3.5' })), { op: 'fit_length' }] }]);
+    }
+    if (!done.has('review_draft')) return tool(['review_draft', {}], ['measure_pace', {}]);
+    return this.#reply(zh
+      ? `剪好了第一版：${items.map((item) => item.name).join(' → ')}，各取 3 秒，共 ${String(items.length * 3)} 秒。这是测试替身，按素材顺序拼接，没有判断内容。`
+      : `First cut done: ${items.map((item) => item.name).join(' → ')}, 3 seconds each, ${String(items.length * 3)} seconds in total. This is a test double that joins the footage in order without judging the content.`);
   }
 
   /** 文章第一版：按已经做过的工具调用推进（讲述 → 图解卡 → 自检 → 回复）。 */

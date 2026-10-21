@@ -48,6 +48,7 @@ export const autonomousReportSchema = z.object({
   note: z.string().max(4000).nullable(),
   /** 为什么没有自动采用（ASK_EACH 档位、自检没过、授权在运行中被改动或撤回……）；采用了为 null */
   notAdoptedReason: z.enum(['APPROVAL_ASK_EACH', 'REVIEW_GATE', 'AUTHORIZATION_CHANGED', 'PROJECT_CHANGED', 'NO_CHANGES', 'TURN_FAILED']).nullable(),
+  /** 成片长度（秒）、画面片段数（素材与生成镜头，不含随画面带入的声音片段与特效图层）、字幕条数 */
   timeline: z.object({ lengthSeconds: z.string().max(20), clips: z.number().int().nonnegative(), captions: z.number().int().nonnegative() }).strict(),
   sources: z.object({
     /** 画面里来自你的素材的部分（秒） */

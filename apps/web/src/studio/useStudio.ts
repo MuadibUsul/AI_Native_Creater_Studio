@@ -28,6 +28,9 @@ export const studioKeys = {
 const footageBusy = (state: StudioState | undefined): boolean =>
   state?.footage.some((item) => item.status === 'UPLOADING' || item.status === 'PROCESSING'
     || Object.values(item.understanding).some((value) => value === 'WORKING')) ?? false;
+/** 交给 AI 剪完进行中（V6-9）：轮询进度到交付 */
+const autonomyBusy = (state: StudioState | undefined): boolean =>
+  state?.autonomousRun !== null && state?.autonomousRun !== undefined && ['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING'].includes(state.autonomousRun.status);
 /** 付费生成进行中（V6-7/V6-8）：轮询到结果出来 */
 const generationBusy = (state: StudioState | undefined): boolean => state?.generations.some((item) => item.status === 'RUNNING') ?? false;
 
@@ -36,7 +39,7 @@ export function useStudioState(workspaceId: string, projectId: string) {
   return useQuery({
     queryKey: studioKeys.state(workspaceId, projectId),
     queryFn: () => client.studio.state(workspaceId, projectId),
-    refetchInterval: (query) => (footageBusy(query.state.data) || generationBusy(query.state.data) ? 2500 : false),
+    refetchInterval: (query) => (footageBusy(query.state.data) || generationBusy(query.state.data) || autonomyBusy(query.state.data) ? 2500 : false),
   });
 }
 

@@ -477,6 +477,7 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   const footageSeconds = new Map<string, number>();
   const generated: AutonomousReport['sources']['generated'] = [];
   let pictureSeconds = 0;
+  let pictureClips = 0;
   let originalSeconds = 0;
   for (const clip of view.clips) {
     if (clip.footageId === null) continue;
@@ -485,6 +486,7 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
     if (narrations.has(clip.footageId)) { generated.push({ kind: 'NARRATION', name: (clip.narration ?? '').slice(0, 200), seconds: secText(seconds) }); continue; }
     if (!videoTracks.has(clip.track)) continue;
     pictureSeconds += seconds;
+    pictureClips += 1;
     if (originOf.get(clip.footageId) === 'GENERATED') { generated.push({ kind: 'GENERATED_VIDEO', name: (nameOf.get(clip.footageId) ?? clip.footageId).slice(0, 200), seconds: secText(seconds) }); continue; }
     originalSeconds += seconds;
     footageSeconds.set(clip.footageId, (footageSeconds.get(clip.footageId) ?? 0) + seconds);
@@ -516,7 +518,7 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
     outcome: input.outcome,
     note: turn?.reply ?? null,
     notAdoptedReason: input.adopted ? null : input.notAdoptedReason,
-    timeline: { lengthSeconds: view.length, clips: view.clips.length, captions: view.captions.length },
+    timeline: { lengthSeconds: view.length, clips: pictureClips, captions: view.captions.length },
     sources: {
       footage: [...footageSeconds.entries()].map(([footageId, seconds]) => ({ footageId, name: (nameOf.get(footageId) ?? footageId).slice(0, 200), seconds: secText(seconds) })),
       generated,

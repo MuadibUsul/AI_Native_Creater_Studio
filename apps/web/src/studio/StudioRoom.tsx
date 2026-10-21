@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
@@ -13,6 +13,7 @@ import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanvas';
 import { StudioConversation } from './StudioConversation';
+import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive } from './StudioAutonomy';
 import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
@@ -107,6 +108,19 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const proposal = proposalQuery.data ?? null;
   const trial = proposal?.status === 'OPEN' ? proposal : null;
   const actions = useStudioActions(workspaceId, projectId);
+  // V6-9 交给 AI 剪完：最近一次运行随工作台状态一起读；进度变化时刷新对话（自主的那一轮就在这个会话里）
+  const autonomousRun = state?.autonomousRun ?? null;
+  const autonomyActive = autonomousRunActive(autonomousRun);
+  const [autonomyOpen, setAutonomyOpen] = useState(false);
+  const sessionId = state?.session?.id ?? null;
+  const autonomyTick = autonomousRun === null ? null : `${autonomousRun.id}:${autonomousRun.status}:${autonomousRun.turnId ?? ''}:${String(autonomousRun.progress.steps)}`;
+  useEffect(() => {
+    if (autonomyTick !== null && sessionId !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.turns(workspaceId, sessionId) });
+  }, [autonomyTick, sessionId, queryClient, workspaceId]);
+  const cancelAutonomy = useMutation({
+    mutationFn: (runId: string) => client.autonomy.cancelRun(workspaceId, projectId, runId, { idempotencyKey: `autonomy-cancel-${runId}` }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
   // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）
   const latestDone = latest !== undefined && latest.status !== 'RUNNING' ? latest.id : null;
   useEffect(() => {
@@ -728,6 +742,15 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         strategy={strategy}
         onStrategyChange={setStrategy}
         onLearnStrategy={() => { setFootageOpen(false); setTasksOpen(false); setDistillOpen(true); }}
+        autonomyCard={autonomousRun !== null && (autonomyActive || autonomousRun.completedAt === null || Date.now() - Date.parse(autonomousRun.completedAt) < 86_400_000) ? (
+          <StudioAutonomyCard
+            run={autonomousRun}
+            canEdit={canEdit}
+            stopping={cancelAutonomy.isPending}
+            error={cancelAutonomy.isError ? messages.autonomy.card.stopFailed : null}
+            onStop={() => cancelAutonomy.mutate(autonomousRun.id)}
+          />
+        ) : null}
         generationCards={(
           <StudioGenerationCards
             generations={visibleGenerations(state.generations)}
@@ -773,7 +796,9 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           seconds={displaySeconds(playhead)}
           uploads={uploads}
           canEdit={canEdit}
-          firstCutBusy={running || actions.send.isPending}
+          firstCutBusy={running || actions.send.isPending || autonomyActive}
+          onDelegate={autonomyActive || !canEdit ? null : () => setAutonomyOpen(true)}
+          delegateLabel={messages.autonomy.setup.open}
           onAddFootage={() => fileInput.current?.click()}
           onDropFiles={upload}
           onFirstCut={() => send(article !== null ? t.canvas.articleFirstCutPrompt : t.canvas.firstCutPrompt)}
@@ -854,6 +879,17 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       />
       {tasksOpen ? <StudioTasks rows={taskRows} loadFailed={exportsQuery.isError} onClose={() => setTasksOpen(false)} /> : null}
       {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
+      {autonomyOpen ? (
+        <StudioAutonomyDialog
+          workspaceId={workspaceId}
+          projectId={projectId}
+          policy={state.project.autonomy}
+          initialGoal={brief ?? ''}
+          strategy={strategy}
+          onClose={() => setAutonomyOpen(false)}
+          onStarted={() => { setAutonomyOpen(false); void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }); }}
+        />
+      ) : null}
       <StudioShortcuts open={shortcutsOpen} held={shortcutsHeld} onClose={() => setShortcutsOpen(false)} />
       {exportOpen ? (
         <StudioExport
