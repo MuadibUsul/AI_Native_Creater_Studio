@@ -7,6 +7,8 @@ AI Native 视频制作平台。V6 的核心体验是**共看片室**：你和 AI
 | 文档 | 用途 |
 |---|---|
 | `docs/V06/ANCS_v0.6_Product_Architecture.md` | **唯一权威**：V6 产品架构与里程碑 V6-0—V6-8（裁决 `docs/decisions/0018-v6-adoption.md`） |
+| `docs/decisions/0020-autonomous-production-adoption.md` · `docs/V06/proposals/` | **增量**：自主制作模式（Proposal 0.1 定稿）纳入路线，里程碑 V6-9 起；创作智能层（Proposal 0.2，待评审）只先做剪辑意图与节奏谱 |
+| `docs/V06/production-readiness-checklist.md` | **生产部署与商业化清单**：上线阻塞、真实服务、自主制作、体验、运维、商业化；标明开发代理做的与需要所有者完成的 |
 | `docs/V06/milestones/` | 每个里程碑的交付、验收命令与结果、未验证项 |
 | `docs/V06/integration-checklist.md` | **外部能力接入清单**：要配哪些密钥、配在哪、没配时的表现、配好后怎么验证 |
 | `docs/V06/eval/first-cut-rubric.md` | 初剪评测：人工评分标准、自动指标、怎么跑 |
