@@ -333,6 +333,7 @@ export {
   rebaseProposalResponseSchema,
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
+  MAX_PROPOSAL_OPERATIONS,
 } from './proposal.js';
 export type {
   AdoptProposalPartialRequest,

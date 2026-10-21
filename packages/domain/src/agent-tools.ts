@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ApiFailure,
   ERROR_CODES,
+  MAX_PROPOSAL_OPERATIONS,
   agentToolDescriptorSchema,
   compareMediaTime,
   isDecimalSecondsText,
@@ -34,6 +35,7 @@ import { EFFECT_AGENT_TOOLS, effectLayersOnTimeline, type EffectLayerRef } from 
 import { NARRATION_AGENT_TOOLS, narrationsOnTimeline, type NarrationRef } from './agent-narration.js';
 import { ARTICLE_AGENT_TOOLS } from './agent-article.js';
 import { GENERATION_AGENT_TOOLS } from './agent-generation.js';
+import { EDIT_POINT_AGENT_TOOLS } from './agent-edit-points.js';
 
 /**
  * 统一工具目录（V6 §6.3）：AI 通过同一形状的工具读取素材与时间线、改动草稿。
@@ -215,7 +217,7 @@ export async function simulateAgentDraft(context: Pick<AgentToolContext, 'deps' 
   }
 }
 
-const json = (value: unknown): string => JSON.stringify(value);
+export const json = (value: unknown): string => JSON.stringify(value);
 
 const errorOutcome = (error: unknown, summary: string): AgentToolOutcome => {
   if (error instanceof ApiFailure && error.httpStatus < 500) {
@@ -228,7 +230,7 @@ const errorOutcome = (error: unknown, summary: string): AgentToolOutcome => {
 // 素材
 // ---------------------------------------------------------------------------
 
-interface FootageRow {
+export interface FootageRow {
   footageId: string;
   assetId: string;
   storageKey: string;
@@ -241,7 +243,7 @@ interface FootageRow {
   hasAudio: boolean;
 }
 
-async function listProjectFootage(context: Pick<AgentToolContext, 'deps' | 'workspaceId' | 'projectId'>, footageIds?: readonly string[]): Promise<FootageRow[]> {
+export async function listProjectFootage(context: Pick<AgentToolContext, 'deps' | 'workspaceId' | 'projectId'>, footageIds?: readonly string[]): Promise<FootageRow[]> {
   const rows = await context.deps.db.select({ asset: assets, version: assetVersions }).from(assets)
     .innerJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
     .where(and(
@@ -291,7 +293,7 @@ const INSPECT_KINDS = [
   'VISUAL_EVENT', 'ACTION_EVENT', 'OBJECT_TRACK', 'PERSON_TRACK', 'OCR_TEXT', 'MOTION_INTENSITY', 'USER_MARKER',
 ] as const satisfies readonly UnifiedMediaIndexKind[];
 
-const ptsSeconds = (pts: string, timeBase: { numerator: number; denominator: number }): string =>
+export const ptsSeconds = (pts: string, timeBase: { numerator: number; denominator: number }): string =>
   mediaTimeToDisplaySecondsText(mediaTimeSchema.parse({ ticks: pts, timebase: normalizeRational(timeBase.numerator, timeBase.denominator) }), 3);
 
 /** 记录负载压缩成模型可读的一行（素材原文截断，并标注为参考数据）。 */
@@ -482,7 +484,7 @@ const lookAtFootageTool: AgentToolDefinition<z.infer<typeof lookAtFootageInput>>
   },
 };
 
-const MAX_DRAFT_OPERATIONS = 256;
+const MAX_DRAFT_OPERATIONS = MAX_PROPOSAL_OPERATIONS;
 const editTimelineInput = z.object({ operations: z.array(agentEditOperationSchema).min(1).max(40) }).strict();
 
 const editTimelineTool: AgentToolDefinition<z.infer<typeof editTimelineInput>> = {
@@ -496,45 +498,95 @@ const editTimelineTool: AgentToolDefinition<z.infer<typeof editTimelineInput>> =
     ].join(' '),
   },
   input: editTimelineInput,
-  async run(context, input) {
-    const baseline = await simulateAgentDraft(context, context.draft);
-    const before = baseline.timeline;
-    const baseRevision = baseline.baseRevision;
-    const sequence = before.sequences.get(context.sequenceId);
-    if (sequence === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
-    const timebase: Rational = mediaTimeSchema.parse(sequence.duration).timebase;
-    let state = before;
-    const added: EditOperation[] = [];
-    for (const [index, operation] of input.operations.entries()) {
-      try {
-        const translated = translateAgentEdit(operation, { sequenceId: context.sequenceId, timebase, state, locale: context.locale });
-        added.push(...translated);
-        state = (await simulateAgentDraft(context, { baseRevision, operations: [...context.draft.operations, ...added] })).timeline;
-      } catch (error) {
-        const outcome = errorOutcome(error, `edit #${String(index)} (${operation.op}) rejected`);
-        return { ...outcome, content: json({ failedIndex: index, failedOp: operation.op, applied: 0, ...JSON.parse(outcome.content) as Record<string, unknown> }) };
-      }
-    }
-    const operations = [...context.draft.operations, ...added];
-    if (operations.length > MAX_DRAFT_OPERATIONS) {
-      return { content: json({ error: `the draft would exceed ${String(MAX_DRAFT_OPERATIONS)} operations; consolidate edits` }), isError: true, summary: 'draft too large' };
-    }
-    const beforeIds = new Set(before.clips.map((clip) => clip.id));
-    const view = buildAgentTimelineView(state, context.sequenceId);
-    const created = view.clips.filter((clip) => !beforeIds.has(clip.id));
-    return {
-      content: json({
-        applied: input.operations.length, length: view.length, clipCount: view.clips.length,
-        createdClips: created.map((clip) => ({ id: clip.id, track: clip.track, at: clip.at, footageId: clip.footageId })),
-        ...(baseRevision === context.draft.baseRevision ? {} : { projectChangedByUser: true }),
-      }),
-      isError: false,
-      summary: `${String(input.operations.length)} edits applied (length ${view.length}s, ${String(view.clips.length)} clips)`,
-      draftOperations: operations,
-      ...(baseRevision === context.draft.baseRevision ? {} : { baseRevision }),
-    };
-  },
+  run: (context, input) => applyAgentEdits(context, input.operations),
 };
+
+/**
+ * 把一批编辑（模型的编辑词汇）整批加进草稿：逐条翻译成内核操作并在基线上内存试改整份草稿，任何一条被拒 → 整批不生效。
+ * edit_timeline 与其他会改草稿的工具（例如原声字幕）共用这一条路径。
+ */
+export async function applyAgentEdits(context: AgentToolContext, edits: readonly z.infer<typeof agentEditOperationSchema>[]): Promise<AgentToolOutcome> {
+  const input = { operations: edits };
+  const baseline = await simulateAgentDraft(context, context.draft);
+  const before = baseline.timeline;
+  const baseRevision = baseline.baseRevision;
+  const sequence = before.sequences.get(context.sequenceId);
+  if (sequence === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+  const timebase: Rational = mediaTimeSchema.parse(sequence.duration).timebase;
+  let state = before;
+  const added: EditOperation[] = [];
+  for (const [index, operation] of input.operations.entries()) {
+    try {
+      const translated = translateAgentEdit(operation, { sequenceId: context.sequenceId, timebase, state, locale: context.locale });
+      added.push(...translated);
+      state = (await simulateAgentDraft(context, { baseRevision, operations: [...context.draft.operations, ...added] })).timeline;
+    } catch (error) {
+      const outcome = errorOutcome(error, `edit #${String(index)} (${operation.op}) rejected`);
+      return { ...outcome, content: json({ failedIndex: index, failedOp: operation.op, applied: 0, ...JSON.parse(outcome.content) as Record<string, unknown> }) };
+    }
+  }
+  const operations = [...context.draft.operations, ...added];
+  if (operations.length > MAX_DRAFT_OPERATIONS) {
+    return { content: json({ error: `the draft would exceed ${String(MAX_DRAFT_OPERATIONS)} operations; consolidate edits` }), isError: true, summary: 'draft too large' };
+  }
+  const beforeIds = new Set(before.clips.map((clip) => clip.id));
+  const view = buildAgentTimelineView(state, context.sequenceId);
+  const created = view.clips.filter((clip) => !beforeIds.has(clip.id));
+  return {
+    content: json({
+      applied: input.operations.length, length: view.length, clipCount: view.clips.length,
+      createdClips: created.map((clip) => ({ id: clip.id, track: clip.track, at: clip.at, footageId: clip.footageId })),
+      ...(baseRevision === context.draft.baseRevision ? {} : { projectChangedByUser: true }),
+    }),
+    isError: false,
+    summary: `${String(input.operations.length)} edits applied (length ${view.length}s, ${String(view.clips.length)} clips)`,
+    draftOperations: operations,
+    ...(baseRevision === context.draft.baseRevision ? {} : { baseRevision }),
+  };
+}
+
+/**
+ * 一大批**彼此独立**的编辑（例如整轨字幕）：第一条走常规路径（需要时建轨），其余按同一状态翻译后一次性内存试改整份草稿。
+ * 比逐条试改快一个数量级；只能用于翻译结果不依赖前面几条的编辑。任何一条被拒 → 整批不生效。
+ */
+export async function applyIndependentAgentEdits(context: AgentToolContext, edits: readonly z.infer<typeof agentEditOperationSchema>[]): Promise<AgentToolOutcome> {
+  if (edits.length <= 1) return applyAgentEdits(context, edits);
+  const first = await applyAgentEdits(context, edits.slice(0, 1));
+  if (first.isError || first.draftOperations === undefined) return first;
+  const baseRevision = first.baseRevision ?? context.draft.baseRevision;
+  const draft = { baseRevision, operations: first.draftOperations };
+  const after = await simulateAgentDraft(context, draft);
+  const sequence = after.timeline.sequences.get(context.sequenceId);
+  if (sequence === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'sequence not found', 404);
+  const timebase: Rational = mediaTimeSchema.parse(sequence.duration).timebase;
+  const added: EditOperation[] = [];
+  for (const [offset, operation] of edits.slice(1).entries()) {
+    try {
+      added.push(...translateAgentEdit(operation, { sequenceId: context.sequenceId, timebase, state: after.timeline, locale: context.locale }));
+    } catch (error) {
+      const outcome = errorOutcome(error, `edit #${String(offset + 1)} (${operation.op}) rejected`);
+      return { ...outcome, content: json({ failedIndex: offset + 1, failedOp: operation.op, applied: 0, ...JSON.parse(outcome.content) as Record<string, unknown> }) };
+    }
+  }
+  const operations = [...draft.operations, ...added];
+  if (operations.length > MAX_DRAFT_OPERATIONS) {
+    return { content: json({ error: `the draft would exceed ${String(MAX_DRAFT_OPERATIONS)} operations; consolidate edits` }), isError: true, summary: 'draft too large' };
+  }
+  let final: AgentDraftSimulation;
+  try {
+    final = await simulateAgentDraft(context, { baseRevision: after.baseRevision, operations });
+  } catch (error) {
+    return errorOutcome(error, `${String(edits.length)} edits rejected`);
+  }
+  const view = buildAgentTimelineView(final.timeline, context.sequenceId);
+  return {
+    content: json({ applied: edits.length, length: view.length, clipCount: view.clips.length, captionCount: view.captions.length, ...(final.baseRevision === context.draft.baseRevision ? {} : { projectChangedByUser: true }) }),
+    isError: false,
+    summary: `${String(edits.length)} edits applied (length ${view.length}s, ${String(view.captions.length)} captions)`,
+    draftOperations: operations,
+    ...(final.baseRevision === context.draft.baseRevision ? {} : { baseRevision: final.baseRevision }),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // 自检（V6 §6.4）：通用质量检查 + 看自己剪出的画面
@@ -675,7 +727,7 @@ const lookAtTimelineTool: AgentToolDefinition<z.infer<typeof lookAtTimelineInput
   },
 };
 
-/** 默认目录：读取、看素材、草稿编辑、自检、特效与图解、讲述与文章（后续里程碑的组件在此注册：数字人、生成……）。 */
+/** 默认目录：读取、看素材、剪点候选、草稿编辑、原声字幕、自检、特效与图解、讲述与文章、付费生成报价（新组件在此注册）。 */
 export function defaultAgentToolCatalog(): AgentToolCatalog {
   return new AgentToolCatalog()
     .register(getTimelineTool)
@@ -683,7 +735,9 @@ export function defaultAgentToolCatalog(): AgentToolCatalog {
     .register(inspectFootageTool)
     .register(lookAtFootageTool)
     .register(searchFootageTool)
+    .register(EDIT_POINT_AGENT_TOOLS[0])
     .register(editTimelineTool)
+    .register(EDIT_POINT_AGENT_TOOLS[1])
     .register(reviewDraftTool)
     .register(lookAtTimelineTool)
     .register(EFFECT_AGENT_TOOLS[0])
