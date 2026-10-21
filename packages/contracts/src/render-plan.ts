@@ -225,6 +225,53 @@ export const renderPlanExecutionResultSchema = z.object({
 export type RenderPlanExecutionResult = z.infer<typeof renderPlanExecutionResultSchema>;
 
 /**
+ * AI 生成合成内容标识（《人工智能生成合成内容标识办法》+ GB 45438-2025）：成片含 AI 生成合成的媒体时，导出文件必须同时带
+ * - 显式标识：开头画面角落的文字提示（含"AI"与"生成"，持续 ≥2 秒，字高 ≥ 画面短边 5%）；
+ * - 隐式标识：文件元数据里的 `AIGC` 字段（附录 E 的七个键，键序固定）。
+ */
+export const AIGC_METADATA_KEY = 'AIGC';
+export const AIGC_EXPLICIT_MIN_SECONDS = 2;
+/** 显式标识字高占画面短边的最小比例 */
+export const AIGC_EXPLICIT_MIN_HEIGHT_RATIO = 0.05;
+
+export const aigcMetadataLabelSchema = z.object({
+  /** 1 = 确定为 AI 生成合成（生成服务提供者只用 1；2、3 由传播平台使用） */
+  Label: z.enum(['1', '2', '3']),
+  /** 生成合成服务提供者名称或编码（运营方配置；未配置时为空串，如实报告） */
+  ContentProducer: z.string().max(64),
+  /** 内容制作编号（唯一，可追溯到这次导出） */
+  ProduceID: z.string().min(1).max(128),
+  ReservedCode1: z.string().max(256),
+  ContentPropagator: z.string().max(64),
+  PropagateID: z.string().max(128),
+  ReservedCode2: z.string().max(256),
+}).strict();
+export type AigcMetadataLabel = z.infer<typeof aigcMetadataLabelSchema>;
+
+/** 附录 E 的键序序列化（不依赖对象构造顺序） */
+export function serializeAigcMetadata(label: AigcMetadataLabel): string {
+  const parsed = aigcMetadataLabelSchema.parse(label);
+  return JSON.stringify({
+    Label: parsed.Label,
+    ContentProducer: parsed.ContentProducer,
+    ProduceID: parsed.ProduceID,
+    ReservedCode1: parsed.ReservedCode1,
+    ContentPropagator: parsed.ContentPropagator,
+    PropagateID: parsed.PropagateID,
+    ReservedCode2: parsed.ReservedCode2,
+  });
+}
+
+export const contentLabelSchema = z.object({
+  /** 显式标识文字（须含"AI/人工智能"与"生成/合成"） */
+  explicitText: z.string().min(1).max(40).refine((text) => /AI|人工智能/.test(text) && /生成|合成/.test(text), '显式标识须同时含"AI/人工智能"与"生成/合成"'),
+  /** 显式标识在开头显示的秒数（视频更短时全程显示） */
+  explicitSeconds: z.number().min(AIGC_EXPLICIT_MIN_SECONDS).max(10),
+  metadata: aigcMetadataLabelSchema,
+}).strict();
+export type ContentLabel = z.infer<typeof contentLabelSchema>;
+
+/**
  * 终渲染执行器：**只消费 RenderPlan**（不读数据库、不取凭据）。编排层负责把冻结的源对象落到
  * `workDir/assets/<fileName>`，执行器产出 `workDir/out/*` 并返回逐文件哈希。
  */
@@ -236,5 +283,7 @@ export interface RenderPlanExecutor {
     profile: FinalRenderProfileInput;
     workDir: string;
     sources: readonly { assetVersionId: string; fileName: string }[];
+    /** AI 生成合成内容标识；null / 缺省 = 成片不含 AI 生成合成媒体，不加标识 */
+    label?: ContentLabel | null;
   }): Promise<RenderPlanExecutionResult>;
 }

@@ -1,10 +1,14 @@
 import {
+  AIGC_EXPLICIT_MIN_HEIGHT_RATIO,
+  AIGC_METADATA_KEY,
   RENDER_PLAN_AUDIO_RULES,
   compareFractions,
   finalRenderProfileSchema,
   stereoPanCoefficients,
   subtractFractions,
+  serializeAigcMetadata,
   timeToFraction,
+  type ContentLabel,
   type FinalRenderProfile,
   type Fraction,
   type MediaTime,
@@ -160,10 +164,37 @@ export function placementOf(segment: Pick<RenderPlanVideoSegment, 'transform' | 
   };
 }
 
+/**
+ * AI 生成合成内容的显式标识：开头画面左上角的文字（白字半透明黑底），字号取画面短边的 6.5%
+ * （汉字可见高度约为字号的九成，保证 ≥ 短边 5%），边距取短边的 3%。
+ */
+export function explicitLabelFilter(label: Pick<ContentLabel, 'explicitText' | 'explicitSeconds'>, canvas: { width: number; height: number }, fontFile: string): string {
+  if (!/^[A-Za-z0-9_./-]+$/.test(fontFile)) throw new Error(`标识字体路径含不支持的字符：${fontFile}`);
+  if (/['\\:%]/.test(label.explicitText)) throw new Error('显式标识文字含不支持的字符');
+  const shortSide = Math.min(canvas.width, canvas.height);
+  const fontSize = Math.ceil(shortSide * (AIGC_EXPLICIT_MIN_HEIGHT_RATIO + 0.015));
+  const margin = Math.round(shortSide * 0.03);
+  const padding = Math.round(fontSize * 0.25);
+  return [
+    `drawtext=fontfile=${fontFile}`,
+    `text='${label.explicitText}'`,
+    `fontsize=${String(fontSize)}`,
+    'fontcolor=white',
+    'box=1',
+    'boxcolor=black@0.55',
+    `boxborderw=${String(padding)}`,
+    `x=${String(margin + padding)}`,
+    `y=${String(margin + padding)}`,
+    `enable='lt(t,${String(label.explicitSeconds)})'`,
+  ].join(':');
+}
+
 export function compileFfmpegMediaGraph(input: {
   plan: RenderPlan;
   profile: FinalRenderProfile;
   sources: readonly FfmpegStagedSource[];
+  /** AI 生成合成内容标识（含中文字体文件路径，执行器解析）；null = 不加 */
+  label?: { content: ContentLabel; fontFile: string } | null;
 }): FfmpegMediaGraph {
   const plan = input.plan;
   const profile = finalRenderProfileSchema.parse(input.profile);
@@ -232,6 +263,10 @@ export function compileFfmpegMediaGraph(input: {
       layerIndex += 1;
     }
   }
+  if (input.label != null) {
+    filters.push(`[${current}]${explicitLabelFilter(input.label.content, profile, input.label.fontFile)}[labeled]`);
+    current = 'labeled';
+  }
   filters.push(`[${current}]format=yuv420p[vout]`);
 
   // ── 音频
@@ -273,7 +308,9 @@ export function compileFfmpegMediaGraph(input: {
     '-frames:v', frameCount.toString(),
     '-c:v', 'libx264', '-preset', profile.encoderPreset, '-crf', String(profile.videoCrf), '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', `${String(profile.audioBitrateKbps)}k`, '-ar', String(FINAL_AUDIO_SAMPLE_RATE), '-ac', '2',
-    '-map_metadata', '-1', '-movflags', '+faststart',
+    '-map_metadata', '-1',
+    // 隐式标识：MP4 默认只写已知键，use_metadata_tags 才会把自定义的 AIGC 键写进 moov/meta
+    ...(input.label != null ? ['-metadata', `${AIGC_METADATA_KEY}=${serializeAigcMetadata(input.label.content.metadata)}`, '-movflags', '+faststart+use_metadata_tags'] : ['-movflags', '+faststart']),
     FFMPEG_OUTPUT_VIDEO_FILE,
   );
   return {

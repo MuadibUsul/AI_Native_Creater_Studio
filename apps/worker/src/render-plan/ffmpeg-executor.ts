@@ -7,7 +7,9 @@ import {
   RENDER_PLAN_IR_VERSION,
   finalRenderProfileSchema,
   mediaTimeToDisplayMilliseconds,
+  contentLabelSchema,
   renderPlanExecutionResultSchema,
+  type ContentLabel,
   type FinalRenderProfile,
   type RenderBackendCapabilities,
   type RenderPlan,
@@ -41,6 +43,20 @@ export interface FfmpegRenderPlanExecutorOptions {
   ffprobePath?: string;
   /** 硬超时（毫秒；超时 SIGKILL 并失败） */
   timeoutMs?: number;
+  /** AI 生成标识用的中文字体文件；缺省经 fontconfig 找一款支持简体中文的字体 */
+  labelFontFile?: string;
+}
+
+const PREFERRED_CJK_FONTS = /NotoSansCJK|Noto Sans CJK|SourceHanSans|wqy|WenQuanYi/i;
+
+/** 找一款支持简体中文的字体（显式标识必须真的显示出汉字；找不到就失败，不画成方块） */
+async function resolveLabelFont(override: string | undefined, cwd: string): Promise<string> {
+  if (override !== undefined) return override;
+  const listed = await runTool('fc-list', [':lang=zh-cn', 'file'], { cwd, timeoutMs: 30_000 }).catch(() => null);
+  const files = (listed?.stdout ?? '').split('\n').map((line) => line.replace(/:\s*$/, '').trim()).filter((line) => line.length > 0).sort();
+  const chosen = files.find((file) => PREFERRED_CJK_FONTS.test(file)) ?? files[0];
+  if (chosen === undefined) throw new Error('找不到支持中文的字体，无法渲染"AI生成"显式标识（Worker 镜像应包含 fonts-noto-cjk）');
+  return chosen;
 }
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -142,7 +158,9 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
       for (const versionId of needed) {
         if (!staged.some((source) => source.assetVersionId === versionId)) throw new Error(`冻结源未落盘：${versionId}`);
       }
-      const graph = compileFfmpegMediaGraph({ plan: input.plan, profile, sources: staged });
+      const label: ContentLabel | null = input.label == null ? null : contentLabelSchema.parse(input.label);
+      const labelFont = label === null ? null : await resolveLabelFont(options.labelFontFile, input.workDir);
+      const graph = compileFfmpegMediaGraph({ plan: input.plan, profile, sources: staged, label: label === null || labelFont === null ? null : { content: label, fontFile: labelFont } });
       await mkdir(join(input.workDir, 'out'), { recursive: true });
       await writeFile(join(input.workDir, 'graph.json'), `${JSON.stringify({ graphHash: graph.graphHash, args: graph.args }, null, 2)}\n`, 'utf8');
       const run = await runTool(ffmpegPath, graph.args, { cwd: input.workDir, timeoutMs });
@@ -179,6 +197,8 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
         sampleCount: graph.sampleCount.toString(),
         sources: input.plan.sources,
         outputs: files,
+        // AI 生成合成内容标识（显式文字 + 写进文件的 AIGC 元数据），没有则为 null
+        contentLabel: label,
         warnings,
       };
       await writeFile(join(input.workDir, 'out', 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

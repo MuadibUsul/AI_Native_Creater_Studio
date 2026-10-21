@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AIGC_EXPLICIT_MIN_HEIGHT_RATIO,
   ApiFailure,
   PLAYBACK_ERROR_REASONS,
+  contentLabelSchema,
+  serializeAigcMetadata,
+  type ContentLabel,
   RENDER_PLAN_IR_VERSION,
   projectVisualPoint,
   stereoPanCoefficients,
@@ -12,7 +16,7 @@ import {
 } from '@ancs/contracts';
 import { requirementsForDelivery, unsupportedRenderRequirements } from '@ancs/domain';
 import { FFMPEG_MEDIA_GRAPH_CAPABILITIES, captionsToSrt, captionsToVtt, createFfmpegRenderPlanExecutor } from './ffmpeg-executor.js';
-import { compileFfmpegMediaGraph, decimalSeconds, placementOf, type FfmpegStagedSource } from './ffmpeg-graph.js';
+import { compileFfmpegMediaGraph, decimalSeconds, explicitLabelFilter, placementOf, type FfmpegStagedSource } from './ffmpeg-graph.js';
 
 /** V5-M4：RenderPlan → FFmpeg 媒体图（纯函数）——帧窗口、精确时基、几何与命中检测一致、声像/淡变、确定性与注入防护。 */
 
@@ -100,6 +104,36 @@ describe('compileFfmpegMediaGraph', () => {
     for (const index of inputs) {
       expect(graph.args.slice(index - 7, index + 2)).toEqual(['-protocol_whitelist', 'file,pipe', '-noaccurate_seek', '-ss', '0.5', '-copyts', '-start_at_zero', '-i', 'assets/a.mp4']);
     }
+  });
+
+  it('AI 生成合成内容标识：开头角落叠"AI生成"（字号 ≥ 短边 5%、只在前几秒），AIGC 元数据按附录 E 键序写入并允许自定义键；不含 AI 媒体时两者都没有', () => {
+    const label: ContentLabel = {
+      explicitText: 'AI生成',
+      explicitSeconds: 3,
+      metadata: { Label: '1', ContentProducer: 'P001', ProduceID: 'wfr_1', ReservedCode1: '', ContentPropagator: 'P001', PropagateID: 'wfr_1', ReservedCode2: '' },
+    };
+    const labelled = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES, label: { content: label, fontFile: '/usr/share/fonts/cjk.ttc' } });
+    expect(labelled.filterGraph).toContain("drawtext=fontfile=/usr/share/fonts/cjk.ttc:text='AI生成'");
+    expect(labelled.filterGraph).toContain("enable='lt(t,3)'");
+    expect(labelled.filterGraph).toMatch(/\[labeled\]format=yuv420p\[vout\]$|\[labeled\]format=yuv420p\[vout\];/);
+    const fontSize = Number(/fontsize=(\d+)/.exec(labelled.filterGraph)![1]);
+    expect(fontSize * 0.9).toBeGreaterThanOrEqual(Math.min(PROFILE.width, PROFILE.height) * AIGC_EXPLICIT_MIN_HEIGHT_RATIO);
+    const metadataAt = labelled.args.indexOf('-metadata');
+    expect(labelled.args[metadataAt + 1]).toBe(`AIGC=${serializeAigcMetadata(label.metadata)}`);
+    expect(labelled.args).toContain('+faststart+use_metadata_tags');
+    expect(serializeAigcMetadata({ ReservedCode2: '', PropagateID: 'x', ContentPropagator: '', ReservedCode1: '', ProduceID: 'x', ContentProducer: '', Label: '1' })).toBe('{"Label":"1","ContentProducer":"","ProduceID":"x","ReservedCode1":"","ContentPropagator":"","PropagateID":"x","ReservedCode2":""}');
+
+    const plain = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES });
+    expect(plain.filterGraph).not.toContain('drawtext');
+    expect(plain.args).not.toContain('-metadata');
+    expect(plain.args).toContain('+faststart');
+    expect(plain.graphHash).not.toBe(labelled.graphHash);
+
+    // 显式标识须含"AI"与"生成/合成"、至少 2 秒；字体路径与文字里不能有能逃出滤镜参数的字符
+    expect(contentLabelSchema.safeParse({ ...label, explicitText: 'Generated' }).success).toBe(false);
+    expect(contentLabelSchema.safeParse({ ...label, explicitSeconds: 1 }).success).toBe(false);
+    expect(() => explicitLabelFilter(label, PROFILE, "/fonts/x.ttc:enable='1'")).toThrow();
+    expect(() => explicitLabelFilter({ ...label, explicitText: "AI生成'[x]" }, PROFILE, '/fonts/x.ttc')).toThrow();
   });
 
   it('确定性：同一输入 → 同一 argv 与 graphHash；内容变化 → 哈希变化', () => {

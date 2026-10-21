@@ -142,6 +142,12 @@ export function exportVideoAssetId(run: WorkflowRun | undefined): string | null 
   return rendered?.outputs?.find((output) => output.kind === 'VIDEO')?.assetId ?? null;
 }
 
+/** 导出时是否加了 AI 生成合成内容标识（成片含 AI 生成的画面、配音或特效时由服务端加上）。 */
+export function exportContentLabelled(run: WorkflowRun | undefined): boolean {
+  const rendered = run?.outputs['render'] as { contentLabel?: unknown } | undefined;
+  return rendered?.contentLabel !== undefined && rendered.contentLabel !== null;
+}
+
 /** 用户选用的风格策略（可选）：包 + 旋钮取值。 */
 export interface StudioStrategyChoice {
   packId: string;

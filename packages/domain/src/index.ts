@@ -654,7 +654,7 @@ export {
 } from './workflow.js';
 export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';
 // V5-M4（§11.2）：素材工程终渲染工作流（冻结 → 渲染 → 技术 QA）
-export { compositionFinalRenderWorkflow, startCompositionFinalRender } from './composition-final-render.js';
+export { compositionFinalRenderWorkflow, contentLabelFor, startCompositionFinalRender } from './composition-final-render.js';
 // V6 §6/§8：通用导演 Agent（统一工具目录 + 可续跑的轮次运行时）
 export {
   DEFAULT_AGENT_RUNTIME_LIMITS,

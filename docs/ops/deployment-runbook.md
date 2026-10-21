@@ -78,6 +78,7 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
 | `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
 | `ANCS_AGENT_DRIVER` / `ANCS_VISUAL_ANALYSIS_DRIVER`（Worker） | 未配置 | AI 导演 / 素材画面理解：`anthropic`（需 `ANTHROPIC_API_KEY`）或 `gemini`（需 `GEMINI_API_KEY`；模型 `ANCS_AGENT_MODEL` 缺省 `gemini-flash-latest`、`ANCS_VISION_MODEL` 缺省 `gemini-flash-lite-latest`）；画面理解另可 `process`。缺密钥启动失败 |
+| `ANCS_AIGC_PRODUCER_CODE`（Worker） | 未配置（生产启动时警告） | AI 生成合成内容标识的服务提供者编码，写进成片 `AIGC` 元数据的 ContentProducer / ContentPropagator（§5.6）。面向中国境内公众提供服务时必须配置 |
 | `ANCS_VEO_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接 Google Veo：VIDEO_SHOT 报价依据（必须带 `durationOptions`，价格按 Google 价格页填写），需 `GEMINI_API_KEY`；装配清单出现 `video_generation=veo` |
 | `ANCS_RUNWAY_OFFER_JSON`（Worker） | 未配置 | V6-8 选区重绘接 Runway gen4_aleph：VIDEO_REGION 报价依据（价格按 Runway 价格页换算填写），需 `RUNWAYML_API_SECRET`；可选 `ANCS_RUNWAY_BASE_URL`；装配清单出现 `region_generation=runway` |
 | `ANCS_SEEDANCE_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接火山方舟 Seedance：VIDEO_SHOT 报价依据（必须带整数秒 `durationOptions`，价格按方舟价格页换算填写），需 `ARK_API_KEY`；可选 `ANCS_SEEDANCE_GENERATE_AUDIO`、`ANCS_SEEDANCE_RESOLUTION`、`ANCS_ARK_BASE_URL`；装配清单出现 `video_generation=seedance` |
@@ -174,6 +175,19 @@ node apps/realtime/dist/main.js        # 缺省端口 3002；GET /health → { o
 - Seedance（火山方舟）放行 `ark.cn-beijing.volces.com` 与成片所在的对象存储域名（`*.tos-cn-beijing.volces.com`）；成片链接是临时签名链接，Worker 下载时不带密钥。Veo 与 Seedance 共用同一套"提交一次 → 轮询 → 下载 → 统一画布"的实现（`apps/worker/src/hosted-video-shot.ts`），计费结局一致。
 - 密钥只在 Worker 进程内存里使用，不进日志与错误信息；进程驱动的子进程只拿到白名单环境变量 + `ANCS_GENERATION_PASS_ENV` 列出的变量。
 - 身份档案的授权记录（`identity_consent_records`）只增不改，由数据库触发器保证；删除身份档案或工作区时随级联清理。
+
+### 5.6 AI 生成合成内容标识（《人工智能生成合成内容标识办法》+ GB 45438-2025）
+
+- 判定：导出时冻结的成片里只要用到来源为 AI 生成的媒体（付费生成的镜头与数字人、合成讲述、AI 写的特效 / 图解图层，资产 `origin=GENERATED`），
+  这次导出就加标识；只有用户自己素材的成片不加（不误标）。
+- 显式标识：成片开头左上角"AI生成"（白字半透明黑底，显示 3 秒，字号为画面短边的 6.5%，满足"≥2 秒、字高 ≥ 短边 5%"），需要 Worker 有中文字体
+  （镜像含 `fonts-noto-cjk`；找不到中文字体时导出失败，不画成方块）。
+- 隐式标识：MP4 元数据 `AIGC` 字段，按附录 E 键序写 `Label`（1）、`ContentProducer`、`ProduceID`（这次导出的运行编号）、`ReservedCode1`、
+  `ContentPropagator`、`PropagateID`、`ReservedCode2`；技术检查（QA）从存储读回成片确认元数据真的写进去了，没有就不交付。
+- 导出面板如实告诉用户"已加 AI 生成标识"（中英）。
+- 👤 待你：配置 `ANCS_AIGC_PRODUCER_CODE`（服务提供者编码，按 TC260 实践指南由统一社会信用代码等组成）；面向中国境内公众时确认算法备案、生成式人工智能服务备案与 ICP 备案；
+  用户要求导出无显式标识版本的流程（用户协议约定标识义务 + 日志留存 ≥6 个月）尚未提供，需要时请提出。
+- 如实说明：`ReservedCode1/2`（可选的防篡改校验字段）目前留空；未写 XMP；C2PA 内容凭证需要签名证书，未接入。
 
 ## 6. 队列
 

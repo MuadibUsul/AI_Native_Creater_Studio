@@ -291,6 +291,11 @@ export const workerEnvSchema = z.object({
   /** 队列驱动：db（默认，权威状态轮询）| bullmq（需 REDIS_URL） */
   ANCS_QUEUE_DRIVER: z.enum(['db', 'bullmq'], { message: 'ANCS_QUEUE_DRIVER 仅支持 db | bullmq' }).default('db'),
   REDIS_URL: z.string().url('REDIS_URL 必须是完整 URL（如 redis://localhost:6379）').optional(),
+  /**
+   * AI 生成合成内容标识（GB 45438-2025 附录 E）：生成合成服务提供者编码，写进导出文件 AIGC 元数据的
+   * ContentProducer / ContentPropagator。面向中国境内公众提供服务时必须配置（运营方的统一社会信用代码等，见手册）。
+   */
+  ANCS_AIGC_PRODUCER_CODE: z.string().regex(/^[0-9A-Za-z_-]{1,64}$/, 'ANCS_AIGC_PRODUCER_CODE 只能是 1–64 位字母、数字、_ 或 -').optional(),
   /** 与 API 相同的存储驱动与桶（同一份对象） */
   ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),

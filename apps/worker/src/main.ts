@@ -237,6 +237,10 @@ if (inventoryIssues.length > 0) {
   console.error(formatEnvFailure('worker', inventoryIssues));
   process.exit(1);
 }
+if (config.NODE_ENV === 'production' && config.ANCS_AIGC_PRODUCER_CODE === undefined) {
+  // 不阻止启动（并非所有部署都面向中国境内公众），但如实提示：含 AI 生成内容的成片元数据里服务提供者编码为空
+  console.warn('[worker] 未配置 ANCS_AIGC_PRODUCER_CODE：含 AI 生成内容的成片仍加显式标识与 AIGC 元数据，但其中服务提供者编码为空（面向中国境内公众时必须配置）。');
+}
 console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
 const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5', ...anthropicGateway }), ...ffmpegPaths })
@@ -267,6 +271,8 @@ const workflowRegistry = new WorkflowRegistry()
   .register(compositionFinalRenderWorkflow({
     executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
     outputProbe: sourceMediaProbe,
+    // 成片含 AI 生成合成媒体时加显式标识与 AIGC 元数据；服务提供者编码由运营方配置
+    ...(config.ANCS_AIGC_PRODUCER_CODE === undefined ? {} : { aigc: { producerCode: config.ANCS_AIGC_PRODUCER_CODE } }),
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
   .register(agentTurnWorkflow({

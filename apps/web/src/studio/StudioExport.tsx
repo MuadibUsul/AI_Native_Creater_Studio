@@ -6,7 +6,7 @@ import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
-import { exportVideoAssetId, useExportRun, useStudioActions } from './useStudio';
+import { exportContentLabelled, exportVideoAssetId, useExportRun, useStudioActions } from './useStudio';
 import styles from './studio.module.css';
 
 /** 导出尺寸：按作品画幅取 1080p 级（短边 1080）。 */
@@ -86,6 +86,7 @@ export function StudioExport(props: {
       {status === 'SUCCEEDED' ? (
         <div className="col" style={{ gap: 8 }} role="status">
           <div className="row gap8"><QuietIcon name="check" /><strong>{t.done}</strong></div>
+          {exportContentLabelled(run.data) ? <p className="small muted" data-aigc-label="">{t.aiLabelled}</p> : null}
           <button type="button" className="btn primary" onClick={() => void download()}><QuietIcon name="download" />{t.download}</button>
           {downloadError !== null ? <p role="alert">{downloadError}</p> : null}
         </div>

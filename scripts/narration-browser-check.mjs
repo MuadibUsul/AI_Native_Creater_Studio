@@ -10,7 +10,7 @@
 //       （可选 ANCS_BROWSER_EXECUTABLE 指定支持 H.264 的 Chromium；REMOTION_BROWSER_EXECUTABLE 指定渲染用无头浏览器）
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
@@ -140,6 +140,23 @@ try {
   if (adopted.project.revision === created.project.revision) throw new Error('adoption did not create a new version');
   await shot('05-adopted');
   pass('采用', `版本 ${String(created.project.revision)} → ${String(adopted.project.revision)}；讲述轨与图解卡留在时间带上`);
+
+  // 3b. 导出：讲述是合成语音、卡片是 AI 写的图层 → 成片带 AI 生成标识（导出面板如实告诉用户；文件里有 AIGC 元数据）
+  await page.getByRole('button', { name: '导出' }).click();
+  await page.getByRole('button', { name: '开始导出' }).click();
+  await page.getByText('导出完成').waitFor({ timeout: 300_000 });
+  await page.locator('[data-aigc-label]').waitFor({ timeout: 10_000 });
+  await shot('05b-export-ai-labelled');
+  const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载成片' }).click()]);
+  const downloaded = join(evidenceDir, '.tmp-export.mp4');
+  await exported.saveAs(downloaded);
+  const tags = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', downloaded]).toString()).format.tags ?? {};
+  const aigc = JSON.parse(tags.AIGC ?? 'null');
+  if (aigc?.Label !== '1' || typeof aigc.ProduceID !== 'string') throw new Error(`exported file has no AIGC metadata: ${JSON.stringify(tags)}`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', downloaded, '-frames:v', '1', join(evidenceDir, '05c-export-frame-1s.png')]);
+  await rm(downloaded, { force: true });
+  await page.getByRole('button', { name: '关闭' }).click();
+  pass('导出带 AI 生成标识', `导出面板说明已加标识；下载的成片 AIGC 元数据 Label=1、ProduceID=${String(aigc.ProduceID)}；1 秒处画面见 05c`);
 
   // 4. 英文 / 深色 / 手机宽度
   await page.getByRole('button', { name: '切换为英文界面' }).click();
