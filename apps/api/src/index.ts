@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, resolveAllowedOrigins, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
@@ -92,18 +92,27 @@ if (storageDriver === 'local') {
 const credentialDeps = credentialDepsFromEnv();
 
 /**
+ * 旧 V4 流水线（脚本 / 分镜 / 旧编辑器的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）：目前只有测试替身。
+ * 生产缺省 off（不装配，相关端点由领域层 501 fail-closed，界面隐藏旧入口）；开发缺省 mock。
+ * V6 共看片室、文章、自主制作走工作流与 Provider Gateway，不依赖这些替身。
+ */
+const legacyPipeline = resolveLegacyPipeline(config);
+const legacyMock = legacyPipeline === 'mock';
+if (!legacyMock) console.info('[api] 旧 V4 流水线 = off：脚本 / 分镜 / 旧配音 / 声音克隆 / 素材搜索 / Mock 分发未装配（端点 501），共看片室不受影响。');
+
+/**
  * 声音克隆（P10-02）：V1 使用**明确 Mock**（无真实训练能力——同其他 Mock 驱动）。
  * 真实 Provider（ElevenLabs/HeyGen 等）为契约同构 seam 替换（BLOCKED：凭据）。
  */
-console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）：仅限开发/测试，不得视为真实克隆结果。');
-const voiceCloneDeps = { provider: new MockVoiceCloneProvider() };
+if (legacyMock) console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）：仅限开发/测试，不得视为真实克隆结果。');
+const voiceCloneDeps = legacyMock ? { provider: new MockVoiceCloneProvider() } : {};
 
 /**
  * 素材搜索（P10-03）：Mock（确定性结果，含无许可/缺署名两类不可用样本——证明守卫）。
  * Runway：**fail-closed 骨架**（未实现；接入需凭据 + 端点核验——不以未核验实现冒充真实接入）。
  */
-console.warn('[api] 素材搜索驱动 = mock（确定性素材；不代表真实素材库）：仅限开发/测试。');
-const mediaDeps = { stockSearch: new MockAssetSearchProvider() };
+if (legacyMock) console.warn('[api] 素材搜索驱动 = mock（确定性素材；不代表真实素材库）：仅限开发/测试。');
+const mediaDeps = legacyMock ? { stockSearch: new MockAssetSearchProvider() } : {};
 void RunwayGenerationAdapter;
 
 /**
@@ -111,8 +120,10 @@ void RunwayGenerationAdapter;
  * ANCS_LLM_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
 const llmDriver = config.ANCS_LLM_DRIVER;
-let llmDeps: { llm?: import('@ancs/contracts').LlmAdapter };
-if (llmDriver === 'mock') {
+let llmDeps: { llm?: import('@ancs/contracts').LlmAdapter } = {};
+if (!legacyMock) {
+  // 旧流水线未装配：不注入叙事 LLM（V6 导演的模型经 Provider Gateway 配置）
+} else if (llmDriver === 'mock') {
   console.warn('[api] LLM 驱动 = mock（无真实凭据）：叙事生成为 Mock 输出，不得视为真实模型结果。');
   llmDeps = { llm: new MockLlmAdapter() };
 } else {
@@ -125,8 +136,10 @@ if (llmDriver === 'mock') {
  * ANCS_TTS_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
 const ttsDriver = config.ANCS_TTS_DRIVER;
-let audioDeps: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider };
-if (ttsDriver === 'mock') {
+let audioDeps: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider } = {};
+if (!legacyMock) {
+  // 旧流水线未装配：不注入旧配音（V6 旁白经 Provider Gateway）
+} else if (ttsDriver === 'mock') {
   console.warn('[api] TTS 驱动 = mock（无真实凭据）：Master Narration 为确定性 Mock 音频（带词级时间戳），不得视为真实语音。');
   audioDeps = { tts: new MockTtsAdapter() };
 } else {
@@ -153,20 +166,24 @@ if (paymentsDriver === 'mock') {
 }
 
 /**
- * 分发 Provider（P13-01）：Mock（脚本化发布，无真实平台账户）+ 平台占位（只报能力矩阵，不伪造发布成功）。
+ * 分发 Provider（P13-01）：Mock（脚本化发布，无真实平台账户，仅旧流水线 mock 时装配）+ 平台占位（只报能力矩阵，不伪造发布成功）。
  */
-const distributionProviders = [createMockDistributionProvider(), ...createPlatformStubProviders()];
+const distributionProviders = legacyMock ? [createMockDistributionProvider(), ...createPlatformStubProviders()] : createPlatformStubProviders();
 
 /**
  * 装配清单与生产守卫（V5-M3，§11.3）：生产进程装配 MOCK/SCRIPTED 必须显式 ANCS_ALLOW_MOCK_PROVIDERS=1，
  * 否则启动失败；清单经 /capabilities 报告（客户端据此显示 Mock 标识）。
  */
 const providerInventory: ProviderInventoryEntry[] = [
-  { capability: 'llm', driver: llmDriver, implementation: 'MOCK' },
-  { capability: 'tts', driver: ttsDriver, implementation: 'MOCK' },
-  { capability: 'voice_clone', driver: 'mock', implementation: 'MOCK' },
-  { capability: 'stock_search', driver: 'mock', implementation: 'MOCK' },
-  { capability: 'distribution', driver: 'mock', implementation: 'MOCK' },
+  ...(legacyMock
+    ? ([
+        { capability: 'llm', driver: llmDriver, implementation: 'MOCK' },
+        { capability: 'tts', driver: ttsDriver, implementation: 'MOCK' },
+        { capability: 'voice_clone', driver: 'mock', implementation: 'MOCK' },
+        { capability: 'stock_search', driver: 'mock', implementation: 'MOCK' },
+        { capability: 'distribution', driver: 'mock', implementation: 'MOCK' },
+      ] as const)
+    : []),
   ...(paymentsDriver === 'mock' ? [{ capability: 'payments', driver: 'mock', implementation: 'MOCK' as const }] : []),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
@@ -227,6 +244,7 @@ const app = await buildServer({
   voice: config.ANCS_VOICE_SESSION_SECRET === undefined ? {} : { sessionSecret: config.ANCS_VOICE_SESSION_SECRET },
   distribution: { providers: distributionProviders },
   providerInventory,
+  legacyPipeline,
   // 就绪探针：数据库能查询、没有在退出排空（生产部署编排用；/health 只看存活）
   readiness: {
     checks: { database: async () => (await handle.pool.query('select 1')).rowCount === 1 },

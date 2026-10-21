@@ -139,6 +139,8 @@ export const NARRATIVE_ERROR_REASONS = {
   UNKNOWN_CLAIM_REFERENCE: 'UNKNOWN_CLAIM_REFERENCE',
   /** 目标时长非法 */
   INVALID_TARGET_DURATION: 'INVALID_TARGET_DURATION',
+  /** 本部署未装配叙事生成（旧 V4 流水线 off）：501 fail-closed */
+  GENERATOR_UNAVAILABLE: 'GENERATOR_UNAVAILABLE',
 } as const;
 
 export type NarrativeErrorReason = (typeof NARRATIVE_ERROR_REASONS)[keyof typeof NARRATIVE_ERROR_REASONS];

@@ -117,6 +117,15 @@ describe('API 路由（Fastify inject；无数据库模式）', () => {
     await bare.close();
   });
 
+  it('GET /api/v1/capabilities：报告旧 V4 流水线是否装配（缺省 mock；生产入口缺省 off，界面据此隐藏旧入口）', async () => {
+    const off = await buildServer({ legacyPipeline: 'off' });
+    expect(((await off.inject({ method: 'GET', url: '/api/v1/capabilities' })).json() as { legacyPipeline: string }).legacyPipeline).toBe('off');
+    const bare = await buildServer();
+    expect(((await bare.inject({ method: 'GET', url: '/api/v1/capabilities' })).json() as { legacyPipeline: string }).legacyPipeline).toBe('mock');
+    await off.close();
+    await bare.close();
+  });
+
   it('GET /api/v1/capabilities：注入注册表后列出 Pack 并报告可用性', async () => {
     const registry = createBuiltInRegistry();
     registry.registerPack(testPack);

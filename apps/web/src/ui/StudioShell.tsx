@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, createContext, useContext, type ReactNode 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { applyAppearance, deviceAppearance, saveDeviceAppearance, type AppearanceMode } from '@/lib/appearance';
-import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
+import { queryKeys, useLegacyPipelineOff, useSession, useWorkspaces } from '@/lib/queries';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from './QuietIcon';
@@ -194,6 +194,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     if (deviceOverride === null) applyAppearance(saved.mode);
   };
   const toggleTheme = () => setDeviceOverride(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
+  const legacyOff = useLegacyPipelineOff();
   const workspaceLinks = workspaceId ? [
     { href: homeHref, label: t.nav.home, icon: 'grid' },
     { href: `${base}/assets`, label: t.nav.assets, icon: 'folder' },
@@ -204,8 +205,11 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     ...workspaceLinks,
     ...(projects.data ?? []).map((item) => ({ href: projectHref(base, item), label: item.title, icon: 'film' })),
     ...(projectBase ? [
-      { href: `${projectBase}/script`, label: t.nav.script, icon: 'file' },
-      { href: `${projectBase}/storyboard`, label: t.nav.storyboard, icon: 'film' },
+      // 旧 V4 流水线下线时不再提供脚本 / 分镜入口（出片、发布、数据仍可用）
+      ...(legacyOff ? [] : [
+        { href: `${projectBase}/script`, label: t.nav.script, icon: 'file' },
+        { href: `${projectBase}/storyboard`, label: t.nav.storyboard, icon: 'film' },
+      ]),
       { href: `${projectBase}/render`, label: t.nav.render, icon: 'check' },
       { href: `${projectBase}/publish`, label: t.nav.publish, icon: 'upload' },
       { href: `${projectBase}/analytics`, label: t.nav.analytics, icon: 'chart' },

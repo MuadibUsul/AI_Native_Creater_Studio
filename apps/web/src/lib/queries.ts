@@ -30,6 +30,17 @@ export function useSession() {
   return useQuery({ queryKey: queryKeys.session, queryFn: () => client.auth.session(), retry: false });
 }
 
+/** 本部署装配了哪些能力（公开、很少变化）；旧 V4 流水线 off 时界面隐藏旧入口 */
+export function useCapabilities() {
+  const client = useAncsClient();
+  return useQuery({ queryKey: ['capabilities'] as const, queryFn: () => client.capabilities(), staleTime: Infinity, retry: false });
+}
+
+/** 只有服务端明确报告 off 才算下线（查询失败或旧服务端时保持原样，不凭空隐藏入口） */
+export function useLegacyPipelineOff(): boolean {
+  return useCapabilities().data?.legacyPipeline === 'off';
+}
+
 export function useWorkspaces() {
   const client = useAncsClient();
   return useQuery({ queryKey: queryKeys.workspaces, queryFn: () => client.workspaces.list() });

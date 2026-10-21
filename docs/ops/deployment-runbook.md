@@ -66,7 +66,8 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_PLATFORM_PROVIDER_KEYS` | — | 平台托管 Provider 凭据（`供应商:密钥,…`）。旧名 `PLATFORM_PROVIDER_KEYS` 从未生效，配置即启动失败并提示改名 |
 | `ANCS_VOICE_SESSION_SECRET` | 未配置则创建语音会话 501 | 语音会话短期凭证签名密钥（≥32；与其他密钥独立） |
 | `ANCS_ASR_DRIVER` | 有 `ANCS_ASR_EXECUTABLE` 则 `process`，否则不装配 | Worker ASR：`deepgram`（需 `DEEPGRAM_API_KEY`，缺失启动失败）或 `process` |
-| `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动（当前 LLM/TTS/声音克隆/素材搜索/分发均为 Mock）必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告 |
+| `ANCS_LEGACY_PIPELINE` | 生产 `off`，其余 `mock` | 旧 V4 流水线（脚本 / 分镜的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）。它只有测试替身：`off` 不装配，相关端点 501，`/api/v1/capabilities` 报告 `legacyPipeline: off`，Web 隐藏旧入口、旧页面引导到共看片室；V6 共看片室、文章、自主制作不依赖它 |
+| `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告。生产缺省已不装配 Mock（旧流水线 off），正常部署不需要它 |
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
 | `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
@@ -232,8 +233,8 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
   API 不直接对外，浏览器经 Web 的 `/api/v1/*` 转发（`ANCS_API_INTERNAL_URL` 在构建 Web 时写入转发规则）。
 - 本地存储驱动要求 API 与 Worker 挂同一个卷（样例里的 `storage`），所以这份编排是**单机**的；多机扩容需要对象存储驱动（生产清单第 1 节第 2 项）。
 - 构建期需要访问 npm 源；需要企业根证书时用 `--secret id=extra_ca,src=<pem>` 传入（只在安装依赖时可见，不写进镜像）。
-- **当前限制（如实）**：生产模式下旧 V4 流水线的 Mock 驱动会被启动校验拦下（生产清单第 1 节第 1 项）。在它完成前，演练环境需在
-  `production.env` 里显式写 `ANCS_ALLOW_MOCK_PROVIDERS=1`，界面与产物会标识 Mock；正式上线前必须去掉。
+- 生产缺省不装配任何 Mock：旧 V4 流水线 off（`ANCS_LEGACY_PIPELINE`），不需要也不应设置 `ANCS_ALLOW_MOCK_PROVIDERS`。
+  旧的脚本 / 分镜页面只显示说明并引导到共看片室；已有作品仍可查看、出片和发布。
 
 ### 10.1 首个账号
 
@@ -249,5 +250,6 @@ ANCS_NEW_USER_PASSWORD='…' docker compose -f infra/docker-compose.prod.yml --e
 - 镜像：`ancs:runtime`（压缩后约 0.5 GB）、`ancs:worker`（约 0.9 GB，FFmpeg 5.1 含 flite、Chromium、Node 24）；构建上下文不含密钥，企业根证书只经 BuildKit secret 进入安装步骤；
 - 全新数据库上 `migrate` 应用 98 个迁移后退出 0，其余服务随后启动；API、Web 健康检查通过，经 Web 转发的 `/api/v1/ready` 为 ready；
 - 真实浏览器：`user:create` 建号 → 登录 → 建工作区 → 新建视频 → 上传素材 → 容器里的 Worker 探测 / 代理 / 索引用时约 3 s → 画布素材画框预览经签名地址加载；
+- 生产不装配 Mock（同日复演）：`production.env` 不设 `ANCS_ALLOW_MOCK_PROVIDERS`，API 照常启动（日志"旧 V4 流水线 = off"）；经 Web 转发的 `/api/v1/capabilities` 报告 `legacyPipeline: off`、非真实驱动 0 个；旧新建页只显示说明并引导到共看片室（截图 `04-legacy-off.png`）；
 - `docker stop api`：排空期间 `/api/v1/ready` 503（`draining: true`）、退出码 0、日志"已优雅退出"；重新启动后就绪，作品与素材都在；
-- 本环境的限制：Docker Hub 拉取 `postgres:16-alpine` 被限流（429），演练用 `ANCS_POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine`；构建用 `DEBIAN_MIRROR=https://deb.debian.org`（这里只能走 HTTPS 出网）。演练里设置了 `ANCS_ALLOW_MOCK_PROVIDERS=1`（见上文"当前限制"）。
+- 本环境的限制：Docker Hub 拉取 `postgres:16-alpine` 被限流（429），演练用 `ANCS_POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine`；构建用 `DEBIAN_MIRROR=https://deb.debian.org`（这里只能走 HTTPS 出网）。

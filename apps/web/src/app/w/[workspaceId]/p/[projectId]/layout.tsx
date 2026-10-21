@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useI18n } from '@/i18n/I18nProvider';
 import { useAncsClient } from '@/lib/client';
+import { useLegacyPipelineOff } from '@/lib/queries';
+import { LegacyPipelineNotice } from '@/ui/LegacyPipelineNotice';
 import { QuietIcon } from '@/ui/QuietIcon';
 
 /** Tab labels and status labels come from messages.projectFlow.projectNav. */
@@ -22,6 +24,10 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
     queryKey: ['projects', params.projectId, 'detail'],
     queryFn: () => client.projects.get(params.projectId),
   });
+  // 旧 V4 流水线下线：顶部说明；素材剪辑 / 文章讲述作品直接给"在共看片室打开"
+  const legacyOff = useLegacyPipelineOff();
+  const mode = project.data?.mode;
+  const studioHref = mode === 'FOOTAGE_EDIT' || mode === 'HYBRID' ? `/w/${params.workspaceId}/studio/${params.projectId}` : null;
   const inEditor = pathname.includes('/storyboard') || pathname.includes('/editor');
   const inScript = pathname.includes('/script');
 
@@ -44,6 +50,7 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
         {inEditor ? <Link className="btn primary small" href={`${base}/render`}><QuietIcon name="arrow" />{t.makeRender}</Link> : inScript ? <Link className="btn primary small" href={`${base}/storyboard`}><QuietIcon name="arrow" />{t.viewStoryboard}</Link> : <details className="qf-project-more"><summary className="btn small">{t.more} <QuietIcon name="more" /></summary><div className="qf-project-menu"><Link href={`${base}/assets`}>{t.menu.assets}</Link><Link href={`${base}/analytics`}>{t.menu.analytics}</Link><Link href={`${base}/history`}>{t.menu.history}</Link></div></details>}
       </div>
     </div>
+    {legacyOff ? <div className="qf-legacy-strip"><LegacyPipelineNotice workspaceId={params.workspaceId} studioHref={studioHref} /></div> : null}
     {children}
   </>;
 }

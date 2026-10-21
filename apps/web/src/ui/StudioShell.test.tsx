@@ -71,6 +71,20 @@ describe('Quiet Frame 工作台外壳', () => {
     expect(screen.getByRole('dialog', { name: '快速搜索' })).toBeTruthy();
   });
 
+  it('旧 V4 流水线下线（服务端报告 off）：快速搜索不再列出脚本与导演工作台，出片等入口保留', async () => {
+    const sdk = mockClient({ ...client(), capabilities: vi.fn().mockResolvedValue({ legacyPipeline: 'off' }) });
+    renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);
+    await screen.findByRole('link', { name: /真实作品/ });
+    await waitFor(() => expect(sdk.capabilities).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole('button', { name: /快速搜索/ }));
+    const search = screen.getByRole('textbox', { name: '搜索页面或作品' });
+    await userEvent.type(search, '导演');
+    await waitFor(() => expect(screen.queryByRole('link', { name: /导演工作台/ })).toBeNull());
+    await userEvent.clear(search);
+    await userEvent.type(search, '脚本');
+    expect(screen.queryByRole('link', { name: /^脚本/ })).toBeNull();
+  });
+
   it('主题切换只改变用户偏好，不触发业务写入', async () => {
     const sdk = client();
     renderWithClient(<StudioShell><div>页面内容</div></StudioShell>, sdk);

@@ -213,6 +213,7 @@ import {
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
   healthResponseSchema,
+  capabilitiesResponseSchema,
   nativeAuthorizeQuerySchema,
   pageResponseSchema,
   projectDetailSchema,
@@ -302,6 +303,7 @@ import {
   setPrivacyTierRequestSchema,
   type ClientType,
   type HealthResponse,
+  type CapabilitiesResponse,
   type SessionInfo,
   type UserAppearancePreference,
   type SetUserAppearancePreferenceRequest,
@@ -707,6 +709,8 @@ export async function generatePkcePair(): Promise<PkcePair> {
 
 export interface AncsClient {
   health(): Promise<HealthResponse>;
+  /** 本部署装配了哪些能力（公开、无凭据；含旧 V4 流水线是否可用） */
+  capabilities(): Promise<CapabilitiesResponse>;
   auth: {
     signIn(input: { email: string; password: string }): Promise<SignInResponse>;
     verifyTotp(input: { code: string }): Promise<SignInResponse>;
@@ -1881,6 +1885,7 @@ export function createClient(options: ClientOptions): AncsClient {
 
   return {
     health: () => request('GET', '/api/v1/health', healthResponseSchema),
+    capabilities: () => request('GET', '/api/v1/capabilities', capabilitiesResponseSchema),
 
     auth: {
       signIn: (input) =>

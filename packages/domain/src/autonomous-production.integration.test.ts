@@ -86,7 +86,7 @@ const usage = { inputTokens: 10_000, outputTokens: 1_000, cacheReadInputTokens: 
 /** 每次调用按 Opus 5.5 单价计 6 万微美元（$0.06）：输入 1 万 token × $4/M + 输出 1 千 token × $20/M */
 const CALL_MICROS = 60_000;
 const reply = (content: AgentContentBlock[], stopReason: AgentModelResponse['stopReason']): AgentModelResponse => ({ model: 'claude-opus-5-5', content, stopReason, usage });
-const toolResults = (request: AgentModelRequest) => request.messages.at(-1)!.content.filter((block): block is Extract<AgentContentBlock, { type: 'tool_use' | 'tool_result' }> => block.type === 'tool_result');
+const toolResults = (request: AgentModelRequest) => request.messages.at(-1)!.content.filter((block): block is Extract<AgentContentBlock, { type: 'tool_result' }> => block.type === 'tool_result');
 
 class ScriptedModel implements AgentModelAdapter {
   readonly providerId = 'scripted';

@@ -2,7 +2,8 @@
 // 生产镜像部署演练（可重复）：在 docker compose 起好的整套服务上（db / migrate / api / worker / realtime / web，
 // 全部来自 Dockerfile 构建的 ancs:runtime 与 ancs:worker 镜像），用真实浏览器走一遍：建首个账号（user:create 命令，
 // 在 api 容器里跑）→ 登录 → 建工作区 → 新建视频 → 上传素材 → 容器里的 Worker（FFmpeg）探测 / 代理 / 索引完成 → 画布显示素材画框；
-// 再验证就绪探针、API 优雅退出（排空期间 /ready 503、退出码 0）与重启后恢复。
+// 再验证生产不装配任何 Mock（不设 ANCS_ALLOW_MOCK_PROVIDERS 也能启动；旧 V4 流水线 off，旧页面引导到共看片室）、
+// 就绪探针、API 优雅退出（排空期间 /ready 503、退出码 0）与重启后恢复。
 //
 // 前置：docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env up -d（Web 发布在 BASE_URL）
 // 用法：node scripts/compose-browser-check.mjs   证据写入 docs/verification/artifacts/deploy/
@@ -85,7 +86,20 @@ try {
   await shot('02-footage-processed');
   pass('上传与处理', `浏览器上传 → 共享存储卷 → 容器里的 Worker（FFmpeg）探测 / 代理 / 索引完成，用时 ${processedSeconds.toFixed(1)} s；画布素材画框的预览经签名地址真实加载`);
 
-  // 3. API 优雅退出：排空期间 /ready 503、存活 200；退出码 0；重启后恢复就绪
+  // 3. 生产不装配 Mock：api 容器里没有 ANCS_ALLOW_MOCK_PROVIDERS；/capabilities 报告旧流水线 off、没有 MOCK 驱动；旧新建页只给说明
+  docker(['exec', '-T', 'api', 'node', '-e', 'process.exit(process.env.ANCS_ALLOW_MOCK_PROVIDERS === undefined ? 0 : 1)'], { stdio: 'pipe' });
+  const capabilities = await (await fetch(`${baseUrl}/api/v1/capabilities`)).json();
+  const mocks = capabilities.providers.filter((entry) => entry.implementation !== 'REAL');
+  if (capabilities.legacyPipeline !== 'off' || mocks.length > 0) throw new Error(`production still wires mocks: ${JSON.stringify({ legacyPipeline: capabilities.legacyPipeline, mocks })}`);
+  const studioUrl = page.url();
+  await page.goto(`${baseUrl}/w/${String(workspaceId)}/new`, { waitUntil: 'networkidle' });
+  await page.getByText('这里不再用旧版脚本 / 分镜流程制作').waitFor({ timeout: 30_000 });
+  if (await page.getByRole('link', { name: '去共看片室新建' }).getAttribute('href') !== `/w/${String(workspaceId)}/studio/new`) throw new Error('legacy notice does not lead to the studio');
+  await shot('04-legacy-off');
+  await page.goto(studioUrl, { waitUntil: 'networkidle' });
+  pass('生产不装配 Mock', `api 未设 ANCS_ALLOW_MOCK_PROVIDERS 照常启动；/api/v1/capabilities：legacyPipeline = off、非真实驱动 0 个；旧新建页只显示说明并引导到共看片室`);
+
+  // 4. API 优雅退出：排空期间 /ready 503、存活 200；退出码 0；重启后恢复就绪
   // 异步执行 docker stop（同步执行会阻塞事件循环，看不到排空期间的探针）
   const stop = promisify(execFile)('docker', [...compose, 'stop', '-t', '40', 'api']);
   const draining = await waitUntil(async () => {
@@ -102,7 +116,7 @@ try {
   await waitUntil(async () => (await (await fetch(`${baseUrl}/api/v1/ready`)).json()).status === 'ready', { timeoutMs: 90_000, label: 'api ready again' });
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByRole('region', { name: '素材 1' }).waitFor({ timeout: 30_000 });
-  await shot('03-after-api-restart');
+  await shot('05-after-api-restart');
   pass('优雅退出与恢复', 'docker stop api：排空期间 /api/v1/ready 503（draining: true）、退出码 0、日志"已优雅退出"；重新启动后就绪，作品与素材都在');
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);

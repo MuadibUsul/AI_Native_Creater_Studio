@@ -131,6 +131,8 @@ export interface BuildServerOptions {
   edge?: import('./plugins/edge.js').EdgeOptions & { trustProxyHops?: number };
   /** 本进程装配的外部能力驱动清单（V5-M3；经 /capabilities 报告实现种类，客户端据此显示 Mock 标识） */
   providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
+  /** 旧 V4 流水线是否装配（经 /capabilities 报告；off 时界面隐藏旧入口） */
+  legacyPipeline?: 'mock' | 'off';
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
@@ -273,7 +275,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
         });
         registerPublicationRoutes(instance, authDeps, {
-          distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider(), ...createPlatformStubProviders()],
+          distributionProviders: options.distribution?.providers ?? (options.legacyPipeline === 'off' ? createPlatformStubProviders() : [createMockDistributionProvider(), ...createPlatformStubProviders()]),
         });
         registerHandoffRoutes(instance, authDeps);
         registerCmsRoutes(instance, authDeps, {
@@ -302,7 +304,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance, options.readiness);
-      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [] });
+      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [], ...(options.legacyPipeline === undefined ? {} : { legacyPipeline: options.legacyPipeline }) });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);
       }

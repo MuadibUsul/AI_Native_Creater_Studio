@@ -240,6 +240,8 @@ export const capabilitiesResponseSchema = capabilitySnapshotSchema.extend({
   outputFormatAvailability: capabilityAvailabilitySchema.nullable().default(null),
   /** 本进程装配的外部能力驱动及其种类（V5-M3；客户端据此显示 Mock 标识） */
   providers: providerInventoryEntrySchema.array().default([]),
+  /** 旧 V4 流水线是否装配（off = 脚本 / 分镜等旧页面在此部署不可用，界面隐藏入口并引导到共看片室） */
+  legacyPipeline: z.enum(['mock', 'off']).default('mock'),
 });
 
 export type CapabilitiesResponse = z.infer<typeof capabilitiesResponseSchema>;

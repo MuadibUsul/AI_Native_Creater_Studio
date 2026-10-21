@@ -10,7 +10,7 @@
 
 | # | 问题（审计事实） | 谁 | 要做什么 | 进度 |
 |---|---|---|---|---|
-| 1 | API 在 `NODE_ENV=production` 下启动即失败：旧 V4 流水线把 LLM、TTS、声音克隆、素材搜索、分发硬接为 Mock，生产守卫拦截（只能用 `ANCS_ALLOW_MOCK_PROVIDERS=1` 绕过，那样生产会产出模板草稿） | 🔧 | 生产环境不装配旧流水线的 Mock 驱动，旧页面（`/new`、`/p/*/script` 等）在生产隐藏或转到 V6 新路径；V6 主路径（共看片室、文章、自主制作）不依赖它们 | 待做 |
+| 1 | API 在 `NODE_ENV=production` 下启动即失败：旧 V4 流水线把 LLM、TTS、声音克隆、素材搜索、分发硬接为 Mock，生产守卫拦截（只能用 `ANCS_ALLOW_MOCK_PROVIDERS=1` 绕过，那样生产会产出模板草稿） | 🔧 | 生产环境不装配旧流水线的 Mock 驱动，旧页面（`/new`、`/p/*/script` 等）在生产隐藏或转到 V6 新路径；V6 主路径（共看片室、文章、自主制作）不依赖它们 | ✅ `ANCS_LEGACY_PIPELINE`（生产缺省 `off`）：不装配叙事 LLM / 旧配音 / 声音克隆 / 素材搜索 / Mock 分发，相关端点 501 fail-closed；`/api/v1/capabilities` 报告 `legacyPipeline`，Web 隐藏脚本 / 分镜入口，旧新建页与旧作品页显示中英说明并引导到共看片室。生产编排不设 `ANCS_ALLOW_MOCK_PROVIDERS` 在真实浏览器演练通过（手册 §10.2） |
 | 2 | 对象存储只有本地磁盘，API、Worker、清理任务必须共用一个文件卷，无法多机扩容；上线门要求非本地存储 | 🔧 / 👤 | 🔧 S3 兼容驱动（AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 通用），浏览器直传预签名 URL；👤 开桶、配置 CORS（允许你的域名 PUT/GET）、生命周期规则、访问密钥 | 待做 |
 | 3 | 没有公开注册、没有找回密码、整个仓库没有发邮件的能力；账号只能用内部命令创建 | 🔧 / 👤 | 🔧 注册、邮箱验证、找回密码页面与接口，邮件端口（SMTP / 事务邮件服务）；👤 发信域名（SPF、DKIM、DMARC）、邮件服务商账号；是否开放公开注册、是否要手机号或第三方登录（Google / Apple / 微信）的决定 | 待做 |
 | 4 | 收款只有 Mock；设成 `stripe` 启动即失败 | 🔧 / 👤 | 🔧 按现有收款端口实现 Stripe（Checkout、客户门户、Webhook 签名校验、去重与对账）；👤 Stripe 账号、产品与价格、税务（如 Stripe Tax）、生产 Webhook 密钥；面向中国大陆收款需另开微信支付 / 支付宝商户（需要营业主体） | 待做 |

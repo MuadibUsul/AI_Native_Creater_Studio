@@ -1255,6 +1255,7 @@ export {
   realtimeEnvSchema,
   crossCheckApiEnv,
   resolveAllowedOrigins,
+  resolveLegacyPipeline,
   retentionCliEnvSchema,
   migrateCliEnvSchema,
   createUserCliEnvSchema,

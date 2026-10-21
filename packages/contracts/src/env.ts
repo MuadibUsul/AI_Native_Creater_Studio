@@ -100,6 +100,11 @@ export const apiEnvSchema = z.object({
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  /**
+   * 旧 V4 流水线（脚本 / 分镜 / 旧编辑器的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）：
+   * mock = 装配测试替身（开发缺省）；off = 不装配，相关端点 501（**生产缺省**）。V6 共看片室、文章、自主制作不依赖它们。
+   */
+  ANCS_LEGACY_PIPELINE: z.enum(['mock', 'off'], { message: 'ANCS_LEGACY_PIPELINE 只能是 mock 或 off' }).optional(),
   /** LLM 驱动：V1 仅 mock（真实适配器需凭据 → 未实现驱动名明确失败） */
   ANCS_LLM_DRIVER: z.enum(['mock'], { message: 'ANCS_LLM_DRIVER 仅支持 mock（真实 LLM 适配器随凭据接入）' }).default('mock'),
   /** TTS 驱动：V1 仅 mock */
@@ -564,6 +569,11 @@ export function crossCheckRealtimeEnv(value: RealtimeEnv): EnvIssue[] {
     issues.push({ variable: 'ANCS_ALLOWED_ORIGINS', message: 'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）' });
   }
   return issues;
+}
+
+/** 旧 V4 流水线是否装配：显式配置优先；生产缺省 off（不装配测试替身，生产守卫不再需要 Mock 许可），其余缺省 mock */
+export function resolveLegacyPipeline(value: Pick<ApiEnv, 'ANCS_LEGACY_PIPELINE' | 'NODE_ENV'>): 'mock' | 'off' {
+  return value.ANCS_LEGACY_PIPELINE ?? (value.NODE_ENV === 'production' ? 'off' : 'mock');
 }
 
 /** Edge 允许的浏览器来源（V5-M4）：显式配置优先；否则 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 开发端口。 */

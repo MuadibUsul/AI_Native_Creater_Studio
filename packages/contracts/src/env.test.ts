@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -38,6 +38,17 @@ describe('validateEnv（API）', () => {
     const llm = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LLM_DRIVER: 'openai' });
     expect(llm.ok).toBe(false);
     expect(llm.issues.find((issue) => issue.variable === 'ANCS_LLM_DRIVER')?.message).toContain('仅支持 mock');
+  });
+
+  it('旧 V4 流水线：生产缺省 off、其余缺省 mock、显式配置优先；非法值启动失败', () => {
+    expect(resolveLegacyPipeline({ NODE_ENV: 'production' })).toBe('off');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'development' })).toBe('mock');
+    expect(resolveLegacyPipeline({})).toBe('mock');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'production', ANCS_LEGACY_PIPELINE: 'mock' })).toBe('mock');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'development', ANCS_LEGACY_PIPELINE: 'off' })).toBe('off');
+    const bad = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LEGACY_PIPELINE: 'real' });
+    expect(bad.ok).toBe(false);
+    expect(bad.issues.find((issue) => issue.variable === 'ANCS_LEGACY_PIPELINE')?.message).toContain('mock 或 off');
   });
 
   it('非法 PORT / 非法 URL → 明确原因', () => {

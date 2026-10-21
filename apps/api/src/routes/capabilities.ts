@@ -8,6 +8,8 @@ export interface ExtensionsDeps {
   extensions: ExtensionRegistry;
   /** 装配的外部能力驱动与实现种类（V5-M3；不含任何凭据） */
   providers?: readonly ProviderInventoryEntry[];
+  /** 旧 V4 流水线是否装配（缺省 mock） */
+  legacyPipeline?: 'mock' | 'off';
 }
 
 /**
@@ -37,6 +39,7 @@ export function registerCapabilityRoutes(app: FastifyInstance, deps: ExtensionsD
         outputFormatAvailability:
           requested === undefined ? null : deps.extensions.availability(requested),
         providers: [...(deps.providers ?? [])],
+        legacyPipeline: deps.legacyPipeline ?? 'mock',
       };
     },
   );
