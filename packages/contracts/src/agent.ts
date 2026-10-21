@@ -246,7 +246,8 @@ export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
  * APPLY_REVIEW = 把一轮审片里已确定的批注一次做完（成为一个试改提案）；
  * GENERATE = 用户确认的一次付费生成（V6-7/V6-8）：不调用模型，生成结果放进试改（在当前试改上继续）。
  */
-export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE'] as const;
+/** AUTONOMOUS：自主制作的那一轮（裁决 0020）——由自主制作工作流发起与推进，不经 AGENT_TURN 工作流 */
+export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE', 'AUTONOMOUS'] as const;
 export const agentTurnPurposeSchema = z.enum(AGENT_TURN_PURPOSES);
 export type AgentTurnPurpose = z.infer<typeof agentTurnPurposeSchema>;
 

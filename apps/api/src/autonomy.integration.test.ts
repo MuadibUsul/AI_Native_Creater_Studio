@@ -89,6 +89,37 @@ describe('V6-9 自主制作授权（HTTP + SDK）', () => {
     expect(autonomyEvents[2]?.payload).toMatchObject({ projectId: ref.projectId, actorId: userId, before: { approval: 'FULL', budgetMicros: 20_000_000 } });
   }, 60_000);
 
+  it('自主制作运行：未签署 409；开始 202（等素材）、幂等、同一工程只有一个进行中的运行；列表、单个、停止；工作台状态带出；VIEWER 不能开始；跨工作区 404', async () => {
+    const { client: owner } = await signedIn();
+    const workspace = await owner.workspaces.create({ name: `自主运行-${randomUUID().slice(0, 8)}` });
+    const ref = await owner.studio.create(workspace.id, { title: 'Autonomous' }, { idempotencyKey: `s-${randomUUID()}` });
+    const brief = { goal: '把素材剪成 30 秒的旅行短片', targetDurationSeconds: 30 };
+    await expectApiError(owner.autonomy.startRun(workspace.id, ref.projectId, brief, { idempotencyKey: `r-${randomUUID()}` }), 409);
+    await owner.autonomy.sign(workspace.id, ref.projectId, { approval: 'AUTO_SAFE', budgetMicros: 3_000_000 }, { idempotencyKey: `a-${randomUUID()}` });
+
+    const key = `r-${randomUUID()}`;
+    const run = await owner.autonomy.startRun(workspace.id, ref.projectId, brief, { idempotencyKey: key });
+    expect(run).toMatchObject({ status: 'WAITING_FOR_FOOTAGE', goal: brief.goal, targetDurationSeconds: 30, approval: 'AUTO_SAFE', policyVersion: 1, budgetMicros: 3_000_000, locale: 'zh-CN', report: null, progress: { steps: 0 } });
+    expect(run.workflowRunId).not.toBeNull();
+    expect((await owner.autonomy.startRun(workspace.id, ref.projectId, brief, { idempotencyKey: key })).id).toBe(run.id);
+    await expectApiError(owner.autonomy.startRun(workspace.id, ref.projectId, brief, { idempotencyKey: `r-${randomUUID()}` }), 409);
+    expect((await owner.autonomy.listRuns(workspace.id, ref.projectId)).map((item) => item.id)).toEqual([run.id]);
+    expect((await owner.autonomy.getRun(workspace.id, ref.projectId, run.id)).id).toBe(run.id);
+    expect((await owner.studio.state(workspace.id, ref.projectId)).autonomousRun).toMatchObject({ id: run.id, status: 'WAITING_FOR_FOOTAGE' });
+
+    const viewerEmail = `autonomy-run-viewer-${randomUUID()}@test.local`;
+    const { client: viewer } = await signedIn(viewerEmail);
+    await owner.workspaces.members.add(workspace.id, { email: viewerEmail, role: 'VIEWER' });
+    expect((await viewer.autonomy.getRun(workspace.id, ref.projectId, run.id)).id).toBe(run.id);
+    await expectApiError(viewer.autonomy.cancelRun(workspace.id, ref.projectId, run.id, { idempotencyKey: `c-${randomUUID()}` }), 403);
+    const { client: stranger } = await signedIn();
+    const strangerWorkspace = await stranger.workspaces.create({ name: `外部-${randomUUID().slice(0, 8)}` });
+    await expectApiError(stranger.autonomy.getRun(strangerWorkspace.id, ref.projectId, run.id), 404);
+
+    // 停止：在步骤边界生效（没有 Worker 推进时运行记录保持原状态，工作流已请求取消）
+    expect((await owner.autonomy.cancelRun(workspace.id, ref.projectId, run.id, { idempotencyKey: `c-${randomUUID()}` })).id).toBe(run.id);
+  }, 60_000);
+
   it('预算必填、单次上限不得超过总预算；VIEWER 403；跨工作区 404', async () => {
     const ownerEmail = `autonomy-owner-${randomUUID()}@test.local`;
     const { client: owner } = await signedIn(ownerEmail);

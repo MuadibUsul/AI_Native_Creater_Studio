@@ -549,6 +549,10 @@ import {
   autonomyPolicySchema,
   signAutonomyRequestSchema,
   productionPlanSchema,
+  autonomousRunSchema,
+  startAutonomousRunRequestSchema,
+  type AutonomousRun,
+  type StartAutonomousRunRequest,
   type ProductionPlan,
   type AutonomyPolicy,
   type SignAutonomyRequest,
@@ -1502,6 +1506,11 @@ export interface AncsClient {
     revoke(workspaceId: string, projectId: string, options?: MutationOptions): Promise<AutonomyPolicy>;
     /** 最新一版制作计划（导演蓝图、场景契约、剪辑意图）；没有为 null */
     latestPlan(workspaceId: string, projectId: string): Promise<ProductionPlan | null>;
+    /** 开始自主制作（202）：素材准备好后 AI 自己完成并交付；幂等键 → 同一运行 */
+    startRun(workspaceId: string, projectId: string, input: StartAutonomousRunRequest, options?: MutationOptions): Promise<AutonomousRun>;
+    listRuns(workspaceId: string, projectId: string): Promise<AutonomousRun[]>;
+    getRun(workspaceId: string, projectId: string, runId: string): Promise<AutonomousRun>;
+    cancelRun(workspaceId: string, projectId: string, runId: string, options?: MutationOptions): Promise<AutonomousRun>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -3171,6 +3180,16 @@ export function createClient(options: ClientOptions): AncsClient {
       revoke: (workspaceId, projectId, mutation) =>
         request('DELETE', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, { idempotencyKey: mutation?.idempotencyKey }),
       latestPlan: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-plan`, productionPlanSchema.nullable()),
+      startRun: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs`, autonomousRunSchema, {
+          body: input,
+          bodySchema: startAutonomousRunRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listRuns: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs`, z.array(autonomousRunSchema)),
+      getRun: (workspaceId, projectId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}`, autonomousRunSchema),
+      cancelRun: (workspaceId, projectId, runId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}/cancel`, autonomousRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
     },
     generations: {
       list: async (workspaceId, projectId) =>

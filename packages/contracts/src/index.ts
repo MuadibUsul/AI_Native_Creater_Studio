@@ -2999,3 +2999,16 @@ export {
   productionPlanSchema,
 } from './production-plan.js';
 export type { EditIntentType, EditIntent, SceneContract, NarrativeBlueprint, ProductionPlanInput, ProductionPlan } from './production-plan.js';
+export {
+  AUTONOMOUS_PRODUCTION_WORKFLOW,
+  AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION,
+  AUTONOMOUS_RUN_STATUSES,
+  AUTONOMOUS_RUN_ACTIVE_STATUSES,
+  autonomousRunStatusSchema,
+  startAutonomousRunRequestSchema,
+  autonomousReportSchema,
+  autonomousRunSchema,
+  AUTONOMOUS_RUN_ERROR_REASONS,
+  AUTONOMOUS_UNMET_CODES,
+} from './autonomous-run.js';
+export type { AutonomousRunStatus, StartAutonomousRunRequest, AutonomousReport, AutonomousRun } from './autonomous-run.js';

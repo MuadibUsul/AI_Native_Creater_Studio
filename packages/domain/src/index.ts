@@ -738,3 +738,14 @@ export type { EditPoints, EditPointsInput, CutPoint, RemovalCandidate, CaptionLi
 export { measurePace, paceDeviations } from './pace-score.js';
 export type { PaceScore, PaceWindow, PaceTarget, PaceDeviation } from './pace-score.js';
 export { draftPace, timelineSpeech } from './agent-edit-points.js';
+export {
+  startAutonomousRun,
+  getAutonomousRun,
+  listAutonomousRuns,
+  cancelAutonomousRun,
+  autonomousProductionWorkflow,
+  autonomousSpentMicros,
+  MIN_AUTONOMOUS_RUN_MICROS,
+} from './autonomous-production.js';
+export type { AutonomousProductionPorts } from './autonomous-production.js';
+export { createAutonomousTurn } from './agent-runtime.js';

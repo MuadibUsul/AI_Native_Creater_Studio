@@ -11,7 +11,7 @@ import {
   type AutonomySpendDecision,
   type SignAutonomyRequest,
 } from '@ancs/contracts';
-import { outboxEvents, projects } from '@ancs/db';
+import { autonomousRuns, outboxEvents, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 
 /**
@@ -92,13 +92,16 @@ export async function signProjectAutonomy(
   const request = signAutonomyRequestSchema.parse(input.request);
   return deps.db.transaction(async (tx) => {
     const before = await lockPolicy(tx, input);
+    // 版本号单调递增（撤回后重新签署也不复用旧版本号：花费按版本计，旧版本下的花费不能算进新授权）
+    const used = await tx.select({ version: sql<number>`coalesce(max(${autonomousRuns.policyVersion}), 0)::int` }).from(autonomousRuns).where(eq(autonomousRuns.projectId, input.projectId));
+    const version = Math.max(before.autonomy.signature?.version ?? 0, Number(used[0]?.version ?? 0)) + 1;
     const after: AutonomyPolicy = {
       approval: request.approval,
       budgetMicros: request.budgetMicros,
       perGenerationMicros: request.perGenerationMicros,
       allowOwnLikeness: request.allowOwnLikeness,
       maxRetriesPerTask: request.maxRetriesPerTask,
-      signature: { userId: input.actorId, signedAt: (input.now ?? new Date()).toISOString(), version: (before.autonomy.signature?.version ?? 0) + 1 },
+      signature: { userId: input.actorId, signedAt: (input.now ?? new Date()).toISOString(), version },
     };
     const policy = productionPolicySchema.parse({ ...before, autonomy: after });
     await tx.update(projects).set({ productionPolicy: policy, updatedAt: sql`now()` }).where(eq(projects.id, input.projectId));

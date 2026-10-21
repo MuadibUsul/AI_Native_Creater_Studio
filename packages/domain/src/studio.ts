@@ -29,6 +29,7 @@ import { createAgentSession, getAgentSession, projectAgentCost } from './agent-r
 import { createChannel, listChannels } from './channels.js';
 import { createSequence, createTrack } from './composition.js';
 import { createProject } from './projects.js';
+import { listAutonomousRuns } from './autonomous-production.js';
 import { articleParagraphs } from './agent-article.js';
 import { generationBudget, listProjectGenerations } from './paid-generation-quote.js';
 
@@ -186,5 +187,6 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     generations: await listProjectGenerations(deps, { workspaceId: input.workspaceId, projectId: input.projectId, limit: 20 }),
     generationBudget: await generationBudget(deps, { workspaceId: input.workspaceId }),
     cost: await projectAgentCost(deps, input),
+    autonomousRun: (await listAutonomousRuns(deps, { ...input, limit: 1 }))[0] ?? null,
   });
 }

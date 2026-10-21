@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
 import { createDefaultRegistry } from '../../apps/worker/dist/handlers.js';
@@ -118,6 +118,13 @@ export async function startStudioEnv(options) {
       }),
       ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
       ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
+    }))
+    // V6-9：自主制作（同一个导演与工具；等素材的轮询间隔缩短到 2 秒，方便验收）
+    .register(autonomousProductionWorkflow({
+      model: options.director,
+      frames: createStorageFrameSampler({ storage }),
+      footageWait: { pollSeconds: 2 },
+      ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
     }))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
     .register(referenceDistillWorkflow({

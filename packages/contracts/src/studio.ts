@@ -4,6 +4,7 @@ import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from '.
 import { MAX_ARTICLE_CHARS, projectArticleSchema } from './narration.js';
 import { generationBudgetSchema, generationSchema } from './paid-generation.js';
 import { DEFAULT_AUTONOMY_POLICY, autonomyPolicySchema } from './autonomy.js';
+import { autonomousRunSchema } from './autonomous-run.js';
 
 /**
  * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
@@ -130,6 +131,8 @@ export const studioStateSchema = z.object({
   /** 工作区生成预算（确认生成前展示；未设置时确认会被拒绝） */
   generationBudget: generationBudgetSchema,
   cost: projectAgentCostSchema,
+  /** 最近一次自主制作（裁决 0020；没有为 null）：界面据此显示进度与交付报告 */
+  autonomousRun: autonomousRunSchema.nullable().default(null),
 }).strict();
 export type StudioState = z.infer<typeof studioStateSchema>;
 

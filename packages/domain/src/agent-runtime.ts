@@ -38,7 +38,7 @@ import {
   type StartAgentTurnRequest,
   type WorkflowErrorClass,
 } from '@ancs/contracts';
-import { agentSessions, agentTurnMessages, agentTurns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
+import { agentSessions, agentTurnMessages, agentTurns, autonomousRuns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
@@ -500,9 +500,9 @@ const LIMIT_REPLIES = {
 export async function runAgentTurnLoop(
   deps: DomainDeps,
   ports: AgentTurnPorts,
-  input: { turnId: string; workflowRunId: string | null },
+  input: { turnId: string; workflowRunId: string | null; limits?: Partial<AgentRuntimeLimits> },
 ): Promise<Record<string, unknown>> {
-  const limits = { ...DEFAULT_AGENT_RUNTIME_LIMITS, ...ports.limits };
+  const limits = { ...DEFAULT_AGENT_RUNTIME_LIMITS, ...ports.limits, ...input.limits };
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const turnRows = await deps.db.select().from(agentTurns).where(eq(agentTurns.id, input.turnId)).limit(1);
   const loaded = turnRows[0];
@@ -610,6 +610,12 @@ export async function runAgentTurnLoop(
         calls.push({ name: use.name, ok: false, summary: 'discussion only: not applied' });
         continue;
       }
+      if (turn.purpose === 'AUTONOMOUS' && tool.descriptor.effect === 'GENERATE') {
+        // 自主制作（V6-9）不调用付费生成：报价需要用户确认，而用户不在场（裁决 0020 第 3 条）
+        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'paid generation is not available in an autonomous run; use the footage, edits, effects and cards' }), isError: true });
+        calls.push({ name: use.name, ok: false, summary: 'not available in an autonomous run' });
+        continue;
+      }
       const parsed = tool.input.safeParse(use.input);
       if (!parsed.success) {
         results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'invalid input', issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join('.'), message: issue.message })) }), isError: true });
@@ -708,6 +714,77 @@ async function loadContinuedProposal(deps: DomainDeps, proposalId: string) {
 const sameOperations = (left: readonly EditOperation[], right: readonly EditOperation[]): boolean =>
   left.length === right.length && JSON.stringify(left) === JSON.stringify(right);
 
+/**
+ * 自主制作的那一轮（裁决 0020，AP-05）：由自主制作工作流建立并在同一工作流里推进（不另起 AGENT_TURN 工作流）。
+ * 与普通轮次同一套约束：同会话同一时刻只有一个进行中的轮次（409，调用方稍后再试）；从工程当前版本出发（不延续旧试改）；
+ * 结果成为提案，是否由系统采用由自主制作工作流按审批档位决定。
+ */
+export async function createAutonomousTurn(deps: DomainDeps, input: {
+  workspaceId: string;
+  sessionId: string;
+  turnId: string;
+  message: string;
+  workflowRunId: string;
+  strategyPackId: string | null;
+  strategyKnobs: Record<string, string>;
+  createdBy: string | null;
+}): Promise<AgentTurn> {
+  return deps.db.transaction(async (tx) => {
+    const sessionRows = await tx.select().from(agentSessions)
+      .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.workspaceId, input.workspaceId))).limit(1).for('update');
+    const session = sessionRows[0];
+    if (session === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'agent session not found', 404, { reason: AGENT_ERROR_REASONS.SESSION_NOT_FOUND });
+    const existing = await tx.select().from(agentTurns).where(eq(agentTurns.id, input.turnId)).limit(1);
+    if (existing[0] !== undefined) return toTurn(existing[0]);
+    const running = await tx.select({ id: agentTurns.id }).from(agentTurns)
+      .where(and(eq(agentTurns.sessionId, session.id), eq(agentTurns.status, 'RUNNING'))).limit(1);
+    if (running[0] !== undefined) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'another turn is still running in this session', 409, { reason: AGENT_ERROR_REASONS.TURN_IN_PROGRESS, turnId: running[0].id });
+    }
+    const project = await tx.select({ revision: projects.revision }).from(projects)
+      .where(and(eq(projects.id, session.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
+    if (project[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
+    const [row] = await tx.insert(agentTurns).values({
+      id: input.turnId,
+      sessionId: session.id,
+      workspaceId: input.workspaceId,
+      projectId: session.projectId,
+      workflowRunId: input.workflowRunId,
+      purpose: 'AUTONOMOUS',
+      message: input.message.slice(0, 4000),
+      pointer: agentPointerSchema.parse({}),
+      strategyPackId: input.strategyPackId,
+      strategyKnobs: input.strategyKnobs,
+      baseRevision: project[0].revision,
+      draftOperations: [],
+      continuesProposalId: null,
+      usage: ZERO_USAGE,
+      createdBy: input.createdBy,
+    }).returning();
+    if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'agent turn insert failed', 500);
+    return toTurn(row);
+  });
+}
+
+/** 自主制作那一轮的交代：需求、目标时长、档位、总预算与本次可用的模型花费上限（美元）。 */
+async function autonomousContextOf(deps: DomainDeps, turn: TurnRow): Promise<Record<string, unknown> | null> {
+  const rows = await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.turnId, turn.id)).limit(1);
+  const run = rows[0];
+  if (run === undefined) return null;
+  const usd = (micros: number): string => (micros / 1_000_000).toFixed(2);
+  const capMicros = run.modelCapMicros;
+  return {
+    goal: run.goal,
+    targetDurationSeconds: run.targetDurationSeconds,
+    approval: run.approval,
+    budgetUsd: usd(run.budgetMicros),
+    ...(typeof capMicros === 'number' ? { modelBudgetForThisRunUsd: usd(capMicros) } : {}),
+    note: run.approval === 'ASK_EACH'
+      ? 'The result stays a trial edit for the person to adopt.'
+      : 'If your draft passes the automatic checks, it becomes the current version of the video (the person can still undo it).',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 上下文编译
 // ---------------------------------------------------------------------------
@@ -727,6 +804,7 @@ async function compileTurnContext(
   const { view: timeline } = await agentTimelineViewOf(context, state, session.sequenceId);
   const article = await projectArticle(deps, turn.projectId);
   const plan = await getLatestProductionPlan(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId });
+  const autonomous = turn.purpose === 'AUTONOMOUS' ? await autonomousContextOf(deps, turn) : null;
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const footageTool = catalog.get('list_footage');
   const footage = footageTool === undefined ? null : JSON.parse((await footageTool.run(context, {})).content) as unknown;
@@ -775,6 +853,7 @@ async function compileTurnContext(
     pointer: pointerView,
     ...(article === null ? {} : { article: articleContextView(article) }),
     ...(plan === null ? {} : { plan: compactPlanView(plan) }),
+    ...(autonomous === null ? {} : { autonomous }),
     strategy,
     recentTurns,
     request: turn.message,
