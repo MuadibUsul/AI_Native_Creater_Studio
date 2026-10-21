@@ -28,7 +28,8 @@ export type AgentLocale = z.infer<typeof agentLocaleSchema>;
 // ---------------------------------------------------------------------------
 
 /** READ：只读；DRAFT_EDIT：改本轮草稿（成为可撤销的提案）；GENERATE：付费生成（先报预估成本）。 */
-export const AGENT_TOOL_EFFECTS = ['READ', 'DRAFT_EDIT', 'GENERATE'] as const;
+/** PLAN：写规划记录（导演蓝图与场景契约，裁决 0020）——不改时间线，也不是只读 */
+export const AGENT_TOOL_EFFECTS = ['READ', 'DRAFT_EDIT', 'GENERATE', 'PLAN'] as const;
 export const agentToolEffectSchema = z.enum(AGENT_TOOL_EFFECTS);
 export type AgentToolEffect = z.infer<typeof agentToolEffectSchema>;
 

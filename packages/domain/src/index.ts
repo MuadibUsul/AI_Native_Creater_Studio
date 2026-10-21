@@ -732,3 +732,6 @@ export { getReferenceDistill, referenceDistillWorkflow, startReferenceDistill, u
 export type { ReferenceDistillPorts } from './reference-distill.js';
 export { autonomySpendDecision, autonomyMayAdopt, autonomyRemainingMicros, getProjectAutonomy, signProjectAutonomy, revokeProjectAutonomy } from './autonomy.js';
 export type { AutonomySpendKind } from './autonomy.js';
+export { saveProductionPlan, getLatestProductionPlan, compactPlanView } from './production-plan.js';
+export { findEditPoints, captionLinesFromWords, isFillerWord } from './edit-candidates.js';
+export type { EditPoints, EditPointsInput, CutPoint, RemovalCandidate, CaptionLine, TimedWord } from './edit-candidates.js';

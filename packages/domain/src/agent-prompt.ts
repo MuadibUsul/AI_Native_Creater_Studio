@@ -52,6 +52,8 @@ export interface AgentContextInput {
   pointer: unknown;
   /** V6-5：从文章开始的工程，文章原文（按段编号；参考数据） */
   article?: unknown;
+  /** 裁决 0020：这条视频最新的制作计划摘要（蓝图、场景、剪辑意图）；没有计划时不出现 */
+  plan?: unknown;
   strategy: { id: string; guidance: string } | null;
   /** 审片（V6-4）：讨论一条批注或一次执行已确定的批注；普通对话为 null */
   review?: unknown;
@@ -70,6 +72,7 @@ export function compileAgentContext(input: AgentContextInput): string {
     block('pointer', JSON.stringify(input.pointer)),
   ];
   if (input.article !== undefined && input.article !== null) parts.push(block('article', JSON.stringify(input.article)));
+  if (input.plan !== undefined && input.plan !== null) parts.push(block('production_plan', JSON.stringify(input.plan)));
   if (input.strategy !== null) {
     parts.push(block('optional_style_strategy', `id: ${input.strategy.id}\n${input.strategy.guidance}`));
   }

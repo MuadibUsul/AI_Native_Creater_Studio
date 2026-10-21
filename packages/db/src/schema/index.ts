@@ -83,5 +83,6 @@ export { renderApprovals } from './render-approvals.js';
 export { plans, workspaceSubscriptions } from './plans.js';
 export { billingEvents, creditPacks, workspaceBillingStates } from './payments.js';
 export { strategyPacks } from './strategy.js';
+export { productionPlans } from './production-plans.js';
 export { reviewNotes, reviewRounds } from './review.js';
 export { generationRequests, identityConsentRecords, identityReferences } from './paid-generation.js';

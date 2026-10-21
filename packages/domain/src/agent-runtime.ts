@@ -43,6 +43,7 @@ import type { DomainDeps } from './deps.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
 import { articleContextView, projectArticle } from './agent-article.js';
+import { compactPlanView, getLatestProductionPlan } from './production-plan.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
@@ -725,6 +726,7 @@ async function compileTurnContext(
   const { timeline: state } = await simulateAgentDraft(context, context.draft);
   const { view: timeline } = await agentTimelineViewOf(context, state, session.sequenceId);
   const article = await projectArticle(deps, turn.projectId);
+  const plan = await getLatestProductionPlan(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId });
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const footageTool = catalog.get('list_footage');
   const footage = footageTool === undefined ? null : JSON.parse((await footageTool.run(context, {})).content) as unknown;
@@ -772,6 +774,7 @@ async function compileTurnContext(
     footage,
     pointer: pointerView,
     ...(article === null ? {} : { article: articleContextView(article) }),
+    ...(plan === null ? {} : { plan: compactPlanView(plan) }),
     strategy,
     recentTurns,
     request: turn.message,

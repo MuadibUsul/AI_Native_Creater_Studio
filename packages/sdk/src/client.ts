@@ -548,6 +548,8 @@ import {
   updateProductionPolicyRequestSchema,
   autonomyPolicySchema,
   signAutonomyRequestSchema,
+  productionPlanSchema,
+  type ProductionPlan,
   type AutonomyPolicy,
   type SignAutonomyRequest,
   type ProductionPolicy,
@@ -1498,6 +1500,8 @@ export interface AncsClient {
     sign(workspaceId: string, projectId: string, input: SignAutonomyRequest, options?: MutationOptions): Promise<AutonomyPolicy>;
     /** 撤回：回到逐项审批、不授权任何花费 */
     revoke(workspaceId: string, projectId: string, options?: MutationOptions): Promise<AutonomyPolicy>;
+    /** 最新一版制作计划（导演蓝图、场景契约、剪辑意图）；没有为 null */
+    latestPlan(workspaceId: string, projectId: string): Promise<ProductionPlan | null>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -3166,6 +3170,7 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
       revoke: (workspaceId, projectId, mutation) =>
         request('DELETE', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, { idempotencyKey: mutation?.idempotencyKey }),
+      latestPlan: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-plan`, productionPlanSchema.nullable()),
     },
     generations: {
       list: async (workspaceId, projectId) =>

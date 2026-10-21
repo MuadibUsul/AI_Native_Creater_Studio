@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, outboxEvents, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { saveProductionPlan } from '@ancs/domain';
 import { buildServer } from './server.js';
 
 /**
@@ -69,6 +70,14 @@ describe('V6-9 自主制作授权（HTTP + SDK）', () => {
     expect(state.project.autonomy).toEqual(resigned);
     // 内容来源（工程模式）不受影响：工作方式与内容来源是两个独立维度
     expect(state.project.allowGeneratedVideo).toBe(false);
+
+    // 制作计划（AP-04）：没有时为 null；导演写过之后读到最新一版（带制定时与当前的工程版本号）
+    expect(await owner.autonomy.latestPlan(workspace.id, ref.projectId)).toBeNull();
+    await saveProductionPlan({ db: handle.db }, { workspaceId: workspace.id, projectId: ref.projectId, turnId: null, baseRevision: state.project.revision, plan: {
+      blueprint: { logline: '冰川', structure: '钩子 → 结尾' },
+      scenes: [{ id: 'scene_1', title: '开场', goal: '抓人', intents: [{ id: 'i1', type: 'HOOK', targetFeeling: '惊叹', reason: '最亮的镜头' }] }],
+    } });
+    expect(await owner.autonomy.latestPlan(workspace.id, ref.projectId)).toMatchObject({ version: 1, baseRevision: state.project.revision, currentRevision: state.project.revision, scenes: [{ id: 'scene_1', intents: [{ type: 'HOOK' }] }] });
 
     const revoked = await owner.autonomy.revoke(workspace.id, ref.projectId, { idempotencyKey: `a-${randomUUID()}` });
     expect(revoked).toEqual(initial);

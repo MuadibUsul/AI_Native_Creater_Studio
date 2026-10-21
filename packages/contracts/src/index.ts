@@ -2987,3 +2987,15 @@ export type {
   AutonomyErrorReason,
   AutonomySpendDecision,
 } from './autonomy.js';
+export {
+  EDIT_INTENT_TYPES,
+  editIntentTypeSchema,
+  planTimeRangeSchema,
+  editIntentSchema,
+  sceneSourceSchema,
+  sceneContractSchema,
+  narrativeBlueprintSchema,
+  productionPlanInputSchema,
+  productionPlanSchema,
+} from './production-plan.js';
+export type { EditIntentType, EditIntent, SceneContract, NarrativeBlueprint, ProductionPlanInput, ProductionPlan } from './production-plan.js';

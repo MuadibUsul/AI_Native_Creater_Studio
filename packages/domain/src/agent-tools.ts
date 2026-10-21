@@ -36,6 +36,7 @@ import { NARRATION_AGENT_TOOLS, narrationsOnTimeline, type NarrationRef } from '
 import { ARTICLE_AGENT_TOOLS } from './agent-article.js';
 import { GENERATION_AGENT_TOOLS } from './agent-generation.js';
 import { EDIT_POINT_AGENT_TOOLS } from './agent-edit-points.js';
+import { PLAN_AGENT_TOOLS } from './production-plan.js';
 
 /**
  * 统一工具目录（V6 §6.3）：AI 通过同一形状的工具读取素材与时间线、改动草稿。
@@ -727,10 +728,12 @@ const lookAtTimelineTool: AgentToolDefinition<z.infer<typeof lookAtTimelineInput
   },
 };
 
-/** 默认目录：读取、看素材、剪点候选、草稿编辑、原声字幕、自检、特效与图解、讲述与文章、付费生成报价（新组件在此注册）。 */
+/** 默认目录：读取、制作计划（蓝图与场景契约）、看素材、剪点候选、草稿编辑、原声字幕、自检、特效与图解、讲述与文章、付费生成报价（新组件在此注册）。 */
 export function defaultAgentToolCatalog(): AgentToolCatalog {
   return new AgentToolCatalog()
     .register(getTimelineTool)
+    .register(PLAN_AGENT_TOOLS[0])
+    .register(PLAN_AGENT_TOOLS[1])
     .register(listFootageTool)
     .register(inspectFootageTool)
     .register(lookAtFootageTool)
