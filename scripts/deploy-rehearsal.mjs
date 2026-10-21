@@ -204,9 +204,12 @@ try {
     `exit=${String(badApi.status)}`,
   );
 
-  const badDriver = spawnSync(process.execPath, ['apps/api/dist/index.js'], { cwd: repoRoot, env: { ...apiEnv, ANCS_STORAGE_DRIVER: 's3' }, encoding: 'utf8', timeout: 60_000 });
+  const badDriver = spawnSync(process.execPath, ['apps/api/dist/index.js'], { cwd: repoRoot, env: { ...apiEnv, ANCS_STORAGE_DRIVER: 'gcs' }, encoding: 'utf8', timeout: 60_000 });
   const driverOutput = `${badDriver.stdout}${badDriver.stderr}`;
-  record('步骤 6b：未实现驱动启动失败（拒绝静默降级）', badDriver.status === 1 && driverOutput.includes('仅支持 local'), `exit=${String(badDriver.status)}`);
+  record('步骤 6b：未实现驱动启动失败（拒绝静默降级）', badDriver.status === 1 && driverOutput.includes('只能是 local 或 s3'), `exit=${String(badDriver.status)}`);
+  const halfS3 = spawnSync(process.execPath, ['apps/api/dist/index.js'], { cwd: repoRoot, env: { ...apiEnv, ANCS_STORAGE_DRIVER: 's3' }, encoding: 'utf8', timeout: 60_000 });
+  const halfS3Output = `${halfS3.stdout}${halfS3.stderr}`;
+  record('步骤 6c：s3 驱动缺桶 / 区域启动失败并逐项说明', halfS3.status === 1 && halfS3Output.includes('ANCS_S3_BUCKET') && halfS3Output.includes('ANCS_S3_REGION'), `exit=${String(halfS3.status)}`);
 
   // 7) 清理
   rmSync(apiEnv.ANCS_STORAGE_LOCAL_DIR, { recursive: true, force: true });

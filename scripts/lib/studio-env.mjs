@@ -1,7 +1,7 @@
 // 进程内共看片室环境（验收与评测脚本共用）：隔离测试库 + Fastify API + 进程内 Worker（与生产装配同一组处理器：
 // 真实 FFmpeg 探测/代理/索引/预览/终渲染）+ 一个把 /api/v1 转给 API、其余转给 Web 的本地代理。
 // 外部能力（导演模型、语音识别、视觉理解）由调用方传入；不传即"未配置"，相应任务如实失败。
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -26,6 +26,7 @@ import { createReferenceFetcher } from '../../apps/worker/dist/reference-fetcher
 import { createFliteNarrationSynthesizer } from '../../apps/worker/dist/narration-synthesizer-process.js';
 import { createPaidGenerationExecutor, createScriptedGenerationProvider } from '../../apps/worker/dist/paid-generation.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
+import { S3ObjectStorage } from '../../packages/providers/storage-s3/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
 
@@ -60,7 +61,19 @@ export async function startStudioEnv(options) {
   const proxyPort = await new Promise((done, fail) => { proxy.once('error', fail); proxy.listen(0, '127.0.0.1', () => done(proxy.address().port)); });
   const baseUrl = `http://127.0.0.1:${String(proxyPort)}`;
   const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl });
-  const storage = new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') });
+  // ANCS_STUDIO_S3_ENDPOINT：同一套验收改跑在 S3 兼容存储上（浏览器预签名直传直下、Worker 物化 / 写回都走对象存储；
+  // 桶需已存在，每次运行用独立前缀）。缺省是本地磁盘。
+  const s3Endpoint = process.env.ANCS_STUDIO_S3_ENDPOINT;
+  const storage = s3Endpoint === undefined
+    ? new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') })
+    : new S3ObjectStorage({
+      bucket: process.env.ANCS_STUDIO_S3_BUCKET ?? 'ancs-test',
+      region: process.env.ANCS_STUDIO_S3_REGION ?? 'us-east-1',
+      endpoint: s3Endpoint,
+      forcePathStyle: true,
+      credentials: { accessKeyId: process.env.ANCS_STUDIO_S3_ACCESS_KEY_ID ?? 'ancs-test', secretAccessKey: process.env.ANCS_STUDIO_S3_SECRET_ACCESS_KEY ?? 'ancs-test-secret-0000' }, // secrets:check-ignore：测试专用假密钥
+      keyPrefix: `studio-${randomUUID()}`,
+    });
   const voiceSecret = randomBytes(32).toString('hex');
   const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }) });
 

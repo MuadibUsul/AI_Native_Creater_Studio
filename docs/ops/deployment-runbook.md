@@ -14,7 +14,7 @@
 | PostgreSQL | 16（本地开发见 `infra/docker-compose.dev.yml`） |
 | Redis | 7（仅 `ANCS_QUEUE_DRIVER=bullmq` 时需要；默认 DB 轮询不需要） |
 | 浏览器 | 无本机 Chrome 时 Remotion 首次渲染会自动下载 Headless Shell（需出网） |
-| 对象存储 | V1 使用**本地驱动**（`ANCS_STORAGE_DRIVER=local`，目录挂载持久卷）；S3/R2 适配器属后续阶段 |
+| 对象存储 | 单机用**本地驱动**（`ANCS_STORAGE_DRIVER=local`，目录挂载持久卷）；多机 / 正式上线用 **S3 兼容对象存储**（`ANCS_STORAGE_DRIVER=s3`：AWS S3、Cloudflare R2、阿里云 OSS、自建 SeaweedFS 等，见 §10.3） |
 | KMS/密码管理 | 会话密钥与存储签名密钥经 Secrets 注入（见 §2）；`packages/providers/credential-vault-local` 为本地凭据密文实现 |
 
 ## 1. 安装与构建
@@ -52,7 +52,12 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 |---|---|---|
 | `PORT` | `3001` | API 端口 |
 | `BETTER_AUTH_URL` | `http://localhost:$PORT` | 对外基址（签名/回调） |
-| `ANCS_STORAGE_DRIVER` | `local` | **仅 local**（s3/r2 未实现 → 启动失败，不静默降级） |
+| `ANCS_STORAGE_DRIVER` | `local` | `local`（单机磁盘）或 `s3`（S3 兼容对象存储，§10.3）；其他值启动失败，不静默降级。API、Worker、清理 CLI 必须一致 |
+| `ANCS_S3_BUCKET` / `ANCS_S3_REGION` | — | `s3` 时必填：桶名、区域（R2 写 `auto`） |
+| `ANCS_S3_ENDPOINT` / `ANCS_S3_PUBLIC_ENDPOINT` | AWS 缺省端点 | 非 AWS 服务的端点；浏览器访问的端点与服务端不同时（如内网地址）另设公开端点 |
+| `ANCS_S3_FORCE_PATH_STYLE` | `0` | 路径风格寻址（自建 SeaweedFS 等通常需要 `1`） |
+| `ANCS_S3_ACCESS_KEY_ID` / `ANCS_S3_SECRET_ACCESS_KEY` | 运行环境凭据链 | 成对配置；都不配时用云主机角色等。所需权限：桶的 `s3:ListBucket`，对象的 `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject`、`s3:AbortMultipartUpload` |
+| `ANCS_S3_KEY_PREFIX` | 无 | 桶内前缀（多个环境共用一个桶时区分，如 `prod/`） |
 | `ANCS_STORAGE_LOCAL_DIR` | `.storage` | 本地存储根目录（挂持久卷；只存 storage_key） |
 | `ANCS_STORAGE_PUBLIC_BASE_URL` | `BETTER_AUTH_URL` | 签名 URL 的对外基址 |
 | `ANCS_LLM_DRIVER` / `ANCS_TTS_DRIVER` | `mock` | **仅 mock**（真实驱动随凭据接入；未知名 → 启动失败） |
@@ -103,6 +108,7 @@ psql "$DATABASE_URL" -c "select count(*) from information_schema.tables where ta
 ## 4. 存储卷
 
 - 本地驱动：`ANCS_STORAGE_LOCAL_DIR` 指向**持久卷**（容器部署挂卷）；目录自动创建；
+- S3 驱动：不需要共享卷，配置见 §10.3；
 - 校验：写入/读取/校验和（`scripts/deploy-rehearsal.mjs` 步骤 5 自动执行）；
 - 数据库只存 `storage_key`（绝不存对象 URL）；签名 URL TTL 15 分钟（上传/下载）。
 
@@ -183,7 +189,7 @@ pnpm run provider:verify    # Provider 能力核验（无凭据时退出码 2 �
 
 反向校验（演练自动执行，也可手工复核）：
 - 缺 `DATABASE_URL` + 缺/短 `BETTER_AUTH_SECRET` → 启动失败并**一次列出两项**；
-- `ANCS_STORAGE_DRIVER=s3` → 启动失败并提示"仅支持 local"；
+- 未知 `ANCS_STORAGE_DRIVER`（如 `gcs`）→ 启动失败并提示"只能是 local 或 s3"；`s3` 缺桶 / 区域 → 启动失败并逐项列出；
 - `ANCS_QUEUE_DRIVER=bullmq` 缺 `REDIS_URL` → Worker 启动失败并指出 REDIS_URL。
 
 ## 8. 已知边界与待办（诚实记录）
@@ -222,7 +228,8 @@ node scripts/launch-gate-check.mjs --live   # 放行判定：任一人工条件�
 ```bash
 docker build --target runtime -t ancs:runtime \
   --build-arg ANCS_API_INTERNAL_URL=http://api:3001 \
-  --build-arg NEXT_PUBLIC_ANCS_REALTIME_URL= .     # 空 = 浏览器走 Web 同源的 /realtime/v1/voice
+  --build-arg ANCS_CSP_EXTRA_ORIGINS= \
+  --build-arg NEXT_PUBLIC_ANCS_REALTIME_URL= .     # 空 = 浏览器走 Web 同源的 /realtime/v1/voice；用 S3 时 CSP 来源见 §10.3
 docker build --target worker -t ancs:worker .
 cp infra/production.env.example infra/production.env  # 填写；三把密钥互不相同
 docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env up -d
@@ -231,7 +238,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
 - 启动顺序：`db` 健康 → `migrate` 成功退出 → `api`（就绪探针）/ `worker` / `realtime` → `web`（等 API 就绪）。迁移失败时其余服务不会启动。
 - 对外只发布 Web（3000）与实时语音网关（3002，缺省只绑 127.0.0.1）；前面放 TLS 反向代理：`/` → web:3000，`/realtime/v1/voice`（WebSocket）→ realtime:3002。
   API 不直接对外，浏览器经 Web 的 `/api/v1/*` 转发（`ANCS_API_INTERNAL_URL` 在构建 Web 时写入转发规则）。
-- 本地存储驱动要求 API 与 Worker 挂同一个卷（样例里的 `storage`），所以这份编排是**单机**的；多机扩容需要对象存储驱动（生产清单第 1 节第 2 项）。
+- 本地存储驱动要求 API 与 Worker 挂同一个卷（样例里的 `storage`），这时编排是**单机**的；多机扩容改用 S3 驱动（§10.3），共享卷就不再需要。
 - 构建期需要访问 npm 源；需要企业根证书时用 `--secret id=extra_ca,src=<pem>` 传入（只在安装依赖时可见，不写进镜像）。
 - 生产缺省不装配任何 Mock：旧 V4 流水线 off（`ANCS_LEGACY_PIPELINE`），不需要也不应设置 `ANCS_ALLOW_MOCK_PROVIDERS`。
   旧的脚本 / 分镜页面只显示说明并引导到共看片室；已有作品仍可查看、出片和发布。
@@ -253,3 +260,36 @@ ANCS_NEW_USER_PASSWORD='…' docker compose -f infra/docker-compose.prod.yml --e
 - 生产不装配 Mock（同日复演）：`production.env` 不设 `ANCS_ALLOW_MOCK_PROVIDERS`，API 照常启动（日志"旧 V4 流水线 = off"）；经 Web 转发的 `/api/v1/capabilities` 报告 `legacyPipeline: off`、非真实驱动 0 个；旧新建页只显示说明并引导到共看片室（截图 `04-legacy-off.png`）；
 - `docker stop api`：排空期间 `/api/v1/ready` 503（`draining: true`）、退出码 0、日志"已优雅退出"；重新启动后就绪，作品与素材都在；
 - 本环境的限制：Docker Hub 拉取 `postgres:16-alpine` 被限流（429），演练用 `ANCS_POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine`；构建用 `DEBIAN_MIRROR=https://deb.debian.org`（这里只能走 HTTPS 出网）。
+
+### 10.3 S3 兼容对象存储（多机部署）
+
+`ANCS_STORAGE_DRIVER=s3` 时浏览器经预签名 URL **直传直下**桶里的对象，字节不经 API；Worker 物化素材、写回代理与成片也直接读写桶，
+API 与 Worker 可以各自横向扩容、不再共享磁盘。驱动在 `packages/providers/storage-s3`。
+
+1. **开桶**（AWS S3、Cloudflare R2、阿里云 OSS 或自建 SeaweedFS）；不要开公开读，所有访问都用短时签名 URL。
+2. **访问密钥**：桶的 `s3:ListBucket`（没有它时 S3 对不存在的对象回 403 而不是 404，系统无法判断对象是否存在），对象的
+   `s3:GetObject`、`s3:PutObject`、`s3:DeleteObject`、`s3:AbortMultipartUpload`。API 启动时 HeadBucket 自检，桶名、区域或密钥错误直接启动失败。
+3. **CORS**（浏览器直传直下必需）：允许来源 = 你的 Web 域名；方法 `GET`、`PUT`、`HEAD`；请求头 `content-type`、`range`；
+   暴露 `ETag`、`Content-Length`、`Content-Range`、`Accept-Ranges`。
+4. **Web 的 CSP**：构建 Web 镜像时把浏览器看到的存储 origin 加进 `--build-arg ANCS_CSP_EXTRA_ORIGINS=…`
+   （AWS 虚拟主机风格是 `https://<桶>.s3.<区域>.amazonaws.com`；路径风格或自定义端点就是 `ANCS_S3_PUBLIC_ENDPOINT` / `ANCS_S3_ENDPOINT` 的 origin）。
+   不加的话浏览器会拒绝上传与播放（CSP `connect-src` / `media-src`）。
+5. **生命周期规则**：建议"未完成的分段上传 1 天后清除"。上传分片（`upload-parts/…`）在合成后由系统删除，保留清理任务会处理过期上传意图。
+6. API、Worker、清理 CLI 配同一组 `ANCS_S3_*`；`s3` 模式不需要 `ANCS_STORAGE_SECRET` 与 `storage` 卷。
+
+如实说明：
+- 上传时的启发式扫描（EICAR、可执行文件头等）只作用于经 API 端点写入的字节；S3 直传不经过 API，完成上传时仍做内容嗅探（类型白名单）与 SHA-256 校验。
+  需要真正的杀毒或内容审核时，在上传完成后接入审核端口（生产清单第 1 节第 8 项）。
+- 预签名上传把 Content-Type 与**精确字节数**签进签名，与上传意图声明的不符即被存储服务拒绝；URL 有效期 15 分钟，上限 1 小时。
+- 分片合成：每片 ≥5 MiB 时在存储服务内拼接（UploadPartCopy），更小的分片流式读出再写入；合成后的原件类型是 `application/octet-stream`（播放用的是代理文件）。
+
+演练记录（2026-10-21，本容器，SeaweedFS 4.48 校验 SigV4 签名）：
+- `packages/providers/storage-s3` 集成测试 8/8：服务端读写 / 探测 / 前缀读取 / SHA-256；预签名直传在长度或类型不符、路径被改时被拒；预签名下载支持 Range；
+  20 MiB 文件流式写回与物化；小分片流式拼接与 ≥5 MiB 分片服务端拼接逐字节一致；复制；HeadBucket 自检（桶不存在 404、密钥错误 403）；前缀隔离。
+- 共看片室全流程跑在 S3 上（`ANCS_STUDIO_S3_ENDPOINT=… node scripts/studio-browser-check.mjs`）15/15：浏览器分片直传 → Worker（FFmpeg）探测 / 代理 / 索引 →
+  AI 第一版试改播放 → 采用 → 局部试改 → 导出并下载成片（1920×1080，9 s）；桶内 30 个对象。证据 `docs/verification/artifacts/storage-s3/`。
+  过程中发现并修正：Web 的 CSP 只放行本源时浏览器直传被拦——Dockerfile 新增 `ANCS_CSP_EXTRA_ORIGINS` 构建参数（第 4 步）。
+- 本地起测试用 S3：`docker run -d --name ancs-s3 -p 58333:8333 -v <含 s3.json 的目录>:/etc/seaweed-cfg:ro chrislusf/seaweedfs:4.48 server -s3 -s3.config=/etc/seaweed-cfg/s3.json -dir=/data`
+  （`s3.json` 的身份与密钥见 `.github/workflows/ci.yml` 同名步骤；集成测试默认连 `http://127.0.0.1:58333`，可用 `ANCS_TEST_S3_ENDPOINT` 改）。
+- 真实云账号（AWS / R2 / OSS）上的验证需要你的桶与密钥（生产清单第 1 节第 2 项的 👤 部分）。
+

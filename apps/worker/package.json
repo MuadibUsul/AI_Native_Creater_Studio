@@ -23,6 +23,7 @@
     "@ancs/providers-mock-provider": "workspace:*",
     "@ancs/providers-queue-bullmq": "workspace:*",
     "@ancs/providers-storage-local": "workspace:*",
+    "@ancs/providers-storage-s3": "workspace:*",
     "drizzle-orm": "0.45.3"
   },
   "devDependencies": {

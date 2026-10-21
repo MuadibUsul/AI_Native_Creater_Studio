@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -30,10 +30,10 @@ describe('validateEnv（API）', () => {
     expect(result.issues.find((issue) => issue.variable === 'BETTER_AUTH_SECRET')?.message).toContain('≥16');
   });
 
-  it('未实现的驱动名 → 显式失败（不静默降级：s3/r2 与真实 LLM/TTS 驱动均拒绝）', () => {
-    const storage = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3' });
+  it('未实现的驱动名 → 显式失败（不静默降级：未知存储驱动与真实 LLM/TTS 驱动均拒绝）', () => {
+    const storage = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 'gcs' });
     expect(storage.ok).toBe(false);
-    expect(storage.issues.find((issue) => issue.variable === 'ANCS_STORAGE_DRIVER')?.message).toContain('仅支持 local');
+    expect(storage.issues.find((issue) => issue.variable === 'ANCS_STORAGE_DRIVER')?.message).toContain('只能是 local 或 s3');
 
     const llm = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LLM_DRIVER: 'openai' });
     expect(llm.ok).toBe(false);
@@ -49,6 +49,24 @@ describe('validateEnv（API）', () => {
     const bad = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LEGACY_PIPELINE: 'real' });
     expect(bad.ok).toBe(false);
     expect(bad.issues.find((issue) => issue.variable === 'ANCS_LEGACY_PIPELINE')?.message).toContain('mock 或 off');
+  });
+
+  it('S3 存储：缺桶 / 区域、密钥只配一半、只配浏览器端点 → 逐项说明；API、Worker、清理 CLI 同一规则；配齐通过', () => {
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3', ANCS_S3_ACCESS_KEY_ID: 'id', ANCS_S3_PUBLIC_ENDPOINT: 'https://files.example.com' });
+    expect(api.ok).toBe(true);
+    expect(crossCheckStorageEnv(api.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_S3_BUCKET', 'ANCS_S3_PUBLIC_ENDPOINT', 'ANCS_S3_REGION', 'ANCS_S3_SECRET_ACCESS_KEY']);
+    expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toContain('ANCS_S3_BUCKET');
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3' });
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable)).toEqual(expect.arrayContaining(['ANCS_S3_BUCKET', 'ANCS_S3_REGION']));
+    const sweep = validateEnv(retentionCliEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3', ANCS_S3_BUCKET: 'media', ANCS_S3_REGION: 'auto' });
+    expect(sweep.ok).toBe(true);
+    expect(crossCheckStorageEnv(sweep.value!)).toEqual([]);
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_S3_KEY_PREFIX: '../x' }).ok).toBe(false);
+    // s3 生产部署不需要本地签名密钥；local 仍然需要
+    const prodS3 = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_CREDENTIAL_KEYS: 'v1:key', ANCS_STORAGE_DRIVER: 's3', ANCS_S3_BUCKET: 'media', ANCS_S3_REGION: 'us-east-1' });
+    expect(crossCheckWorkerEnv(prodS3.value!).map((issue) => issue.variable)).not.toContain('ANCS_STORAGE_SECRET');
+    const prodLocal = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_CREDENTIAL_KEYS: 'v1:key' });
+    expect(crossCheckWorkerEnv(prodLocal.value!).map((issue) => issue.variable)).toContain('ANCS_STORAGE_SECRET');
   });
 
   it('非法 PORT / 非法 URL → 明确原因', () => {

@@ -83,6 +83,52 @@ export const baseEnvShape = {
   BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET 未配置或过短（≥16 字符；经 KMS/Secrets 注入，禁止入库）'),
 } satisfies z.ZodRawShape;
 
+/**
+ * S3 兼容对象存储（`ANCS_STORAGE_DRIVER=s3`：AWS S3 / Cloudflare R2 / 阿里云 OSS / SeaweedFS 等）。
+ * API、Worker、清理 CLI 必须指向同一个桶；浏览器经预签名 URL 直传直下（桶需配置允许你域名 PUT/GET 的 CORS）。
+ * 访问密钥两项要么都配，要么都不配（都不配时用运行环境的凭据链，如云主机角色）。
+ */
+export const s3StorageEnvShape = {
+  ANCS_S3_BUCKET: nonEmpty('ANCS_S3_BUCKET').optional(),
+  /** 区域（AWS 如 us-east-1；R2 写 auto） */
+  ANCS_S3_REGION: nonEmpty('ANCS_S3_REGION').optional(),
+  /** 非 AWS 的服务端点（R2：https://<账号>.r2.cloudflarestorage.com；OSS：https://oss-cn-hangzhou.aliyuncs.com） */
+  ANCS_S3_ENDPOINT: z.string().url('ANCS_S3_ENDPOINT 必须是完整 URL').optional(),
+  /** 浏览器使用的端点（内网端点与公网地址不同时；缺省同 ANCS_S3_ENDPOINT） */
+  ANCS_S3_PUBLIC_ENDPOINT: z.string().url('ANCS_S3_PUBLIC_ENDPOINT 必须是完整 URL').optional(),
+  /** 路径风格寻址（自建 SeaweedFS 等通常需要 1） */
+  ANCS_S3_FORCE_PATH_STYLE: z.enum(['0', '1'], { message: 'ANCS_S3_FORCE_PATH_STYLE 仅支持 0 | 1' }).optional(),
+  ANCS_S3_ACCESS_KEY_ID: nonEmpty('ANCS_S3_ACCESS_KEY_ID').optional(),
+  ANCS_S3_SECRET_ACCESS_KEY: nonEmpty('ANCS_S3_SECRET_ACCESS_KEY').optional(),
+  /** 桶内前缀（多个环境共用一个桶时区分；如 prod/） */
+  ANCS_S3_KEY_PREFIX: z
+    .string()
+    .regex(/^[A-Za-z0-9._\-/]*$/, 'ANCS_S3_KEY_PREFIX 仅允许字母、数字、._-/')
+    .refine((value) => !value.startsWith('/') && !value.split('/').includes('..'), 'ANCS_S3_KEY_PREFIX 不得以 / 开头或包含 ..')
+    .optional(),
+} satisfies z.ZodRawShape;
+
+const storageDriverSchema = z.enum(['local', 's3'], { message: 'ANCS_STORAGE_DRIVER 只能是 local 或 s3' }).default('local');
+
+export type S3StorageEnv = { [K in keyof typeof s3StorageEnvShape]?: string | undefined };
+
+/** 存储驱动的跨字段规则（API、Worker、清理 CLI 共用）。 */
+export function crossCheckStorageEnv(value: { ANCS_STORAGE_DRIVER: 'local' | 's3' } & S3StorageEnv): EnvIssue[] {
+  if (value.ANCS_STORAGE_DRIVER !== 's3') return [];
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_S3_BUCKET === undefined) issues.push({ variable: 'ANCS_S3_BUCKET', message: 'ANCS_STORAGE_DRIVER=s3 时必须配置桶名' });
+  if (value.ANCS_S3_REGION === undefined) issues.push({ variable: 'ANCS_S3_REGION', message: 'ANCS_STORAGE_DRIVER=s3 时必须配置区域（R2 写 auto）' });
+  if ((value.ANCS_S3_ACCESS_KEY_ID === undefined) !== (value.ANCS_S3_SECRET_ACCESS_KEY === undefined)) {
+    const pair = [['ANCS_S3_ACCESS_KEY_ID', value.ANCS_S3_ACCESS_KEY_ID], ['ANCS_S3_SECRET_ACCESS_KEY', value.ANCS_S3_SECRET_ACCESS_KEY]] as const;
+    const missingHalf = pair.find(([, configured]) => configured === undefined)![0];
+    issues.push({ variable: missingHalf, message: '访问密钥两项要么都配，要么都不配（都不配时用运行环境的凭据链）' });
+  }
+  if (value.ANCS_S3_PUBLIC_ENDPOINT !== undefined && value.ANCS_S3_ENDPOINT === undefined) {
+    issues.push({ variable: 'ANCS_S3_PUBLIC_ENDPOINT', message: '只有配置了 ANCS_S3_ENDPOINT 时才需要单独的浏览器端点' });
+  }
+  return issues;
+}
+
 /** API 服务环境（apps/api）。 */
 export const apiEnvSchema = z.object({
   ...baseEnvShape,
@@ -95,11 +141,12 @@ export const apiEnvSchema = z.object({
    */
   ANCS_CREDENTIAL_KEYS: z.string().min(1, 'ANCS_CREDENTIAL_KEYS 不能为空字符串（格式 v1:<base64 32B>）').optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL（如 https://api.example.com）').optional(),
-  /** 存储驱动：V1 仅 local（S3/R2 适配器未实现 → 明确失败，不静默降级） */
-  ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local（S3/R2 适配器属后续阶段）' }).default('local'),
+  /** 存储驱动：local（单机磁盘，经 API 端点转发字节）| s3（S3 兼容对象存储，浏览器预签名直传；见 s3StorageEnvShape） */
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
   /**
    * 旧 V4 流水线（脚本 / 分镜 / 旧编辑器的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）：
    * mock = 装配测试替身（开发缺省）；off = 不装配，相关端点 501（**生产缺省**）。V6 共看片室、文章、自主制作不依赖它们。
@@ -167,7 +214,7 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value)];
   if (value.PLATFORM_PROVIDER_KEYS !== undefined && value.PLATFORM_PROVIDER_KEYS.trim() !== '') {
     issues.push({ variable: 'PLATFORM_PROVIDER_KEYS', message: '该变量名从未生效，已统一为 ANCS_PLATFORM_PROVIDER_KEYS（格式 供应商:密钥,…）——请改名后重启' });
   }
@@ -209,7 +256,7 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
     if (value.ANCS_STORAGE_DRIVER === 'local') {
       issues.push({
         variable: 'ANCS_STORAGE_DRIVER',
-        message: 'live 模式不得使用 local 存储（需 S3/R2 等对象存储适配器——未实现前不得开启 SaaS）',
+        message: 'live 模式不得使用 local 存储（单机磁盘无法多机扩容；设 ANCS_STORAGE_DRIVER=s3）',
       });
     }
     if (value.BETTER_AUTH_URL === undefined || !value.BETTER_AUTH_URL.startsWith('https://')) {
@@ -244,9 +291,12 @@ export const workerEnvSchema = z.object({
   /** 队列驱动：db（默认，权威状态轮询）| bullmq（需 REDIS_URL） */
   ANCS_QUEUE_DRIVER: z.enum(['db', 'bullmq'], { message: 'ANCS_QUEUE_DRIVER 仅支持 db | bullmq' }).default('db'),
   REDIS_URL: z.string().url('REDIS_URL 必须是完整 URL（如 redis://localhost:6379）').optional(),
+  /** 与 API 相同的存储驱动与桶（同一份对象） */
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
   REMOTION_BROWSER_EXECUTABLE: nonEmpty('REMOTION_BROWSER_EXECUTABLE').optional(),
   ANCS_RENDER_EXECUTOR_CMD: nonEmpty('ANCS_RENDER_EXECUTOR_CMD').optional(),
   ANCS_MOTION_VALIDATOR_CMD: nonEmpty('ANCS_MOTION_VALIDATOR_CMD').optional(),
@@ -404,11 +454,11 @@ export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 
 /** 跨字段规则（schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value)];
   if (value.ANCS_QUEUE_DRIVER === 'bullmq' && value.REDIS_URL === undefined) {
     issues.push({ variable: 'REDIS_URL', message: 'ANCS_QUEUE_DRIVER=bullmq 时必须配置 REDIS_URL' });
   }
-  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_SECRET === undefined) {
+  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_DRIVER === 'local' && value.ANCS_STORAGE_SECRET === undefined) {
     issues.push({
       variable: 'ANCS_STORAGE_SECRET',
       message: '生产环境必须显式配置 ANCS_STORAGE_SECRET（≥16）——与 API 同一把签名密钥，不得从 BETTER_AUTH_SECRET 派生',
@@ -495,10 +545,11 @@ export const retentionCliEnvSchema = z.object({
   ...baseEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
-  ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local' }).default('local'),
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
   ANCS_TRASH_RETENTION_DAYS: z.coerce.number().int().min(1, 'ANCS_TRASH_RETENTION_DAYS ≥ 1').max(3650).optional(),
   ANCS_IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1, 'ANCS_IDEMPOTENCY_TTL_HOURS ≥ 1').max(24 * 365).optional(),
 });

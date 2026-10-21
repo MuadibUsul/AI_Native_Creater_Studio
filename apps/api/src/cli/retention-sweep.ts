@@ -1,7 +1,8 @@
-import { formatEnvFailure, retentionCliEnvSchema, validateEnv } from '@ancs/contracts';
+import { crossCheckStorageEnv, formatEnvFailure, retentionCliEnvSchema, validateEnv } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { runRetentionSweep, type DomainDeps } from '@ancs/domain';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
+import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
 
 /**
  * 保留清理入口（P02-05；CLI/Worker 形态，可重入）。
@@ -20,14 +21,20 @@ if (!envResult.ok || envResult.value === null) {
   process.exit(1);
 }
 const config = envResult.value;
-if (config.NODE_ENV === 'production' && config.ANCS_STORAGE_SECRET === undefined) {
-  console.error(formatEnvFailure('retention-sweep', [{ variable: 'ANCS_STORAGE_SECRET', message: '生产环境必须显式配置（与 API 同一把签名密钥）' }]));
+const configIssues = [
+  ...crossCheckStorageEnv(config),
+  ...(config.NODE_ENV === 'production' && config.ANCS_STORAGE_DRIVER === 'local' && config.ANCS_STORAGE_SECRET === undefined
+    ? [{ variable: 'ANCS_STORAGE_SECRET', message: '生产环境必须显式配置（与 API 同一把签名密钥）' }]
+    : []),
+];
+if (configIssues.length > 0) {
+  console.error(formatEnvFailure('retention-sweep', configIssues));
   process.exit(1);
 }
 const databaseUrl = config.DATABASE_URL;
 
 const handle = createDb(databaseUrl);
-const storage = new LocalObjectStorage(localStorageOptionsFromEnv(config));
+const storage = config.ANCS_STORAGE_DRIVER === 's3' ? new S3ObjectStorage(s3StorageOptionsFromEnv(config)) : new LocalObjectStorage(localStorageOptionsFromEnv(config));
 
 const deps: DomainDeps = {
   db: handle.db,

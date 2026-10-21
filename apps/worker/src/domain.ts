@@ -4,6 +4,7 @@ import { MAINTENANCE_DISPATCH_JOB_TYPE, MAINTENANCE_RETENTION_JOB_TYPE, NOOP_JOB
 import type { WorkerEnv } from '@ancs/contracts';
 import { CMS_WRITEBACK_JOB_TYPE, MEDIA_AUDIO_ANALYSIS_JOB_TYPE, MEDIA_INDEX_JOB_TYPE, MEDIA_PROBE_JOB_TYPE, MEDIA_PROXY_JOB_TYPE, MEDIA_TRANSCRIPT_JOB_TYPE, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, MOTION_GENERATE_JOB_TYPE, RENDER_FINAL_JOB_TYPE, RENDER_QA_JOB_TYPE } from '@ancs/contracts';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
+import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
 import { BullMqJobQueue } from '@ancs/providers-queue-bullmq';
 import { createHttpResultFetcher } from './fetcher.js';
 import { createCredentialVaultFromEnv } from '@ancs/providers-credential-vault-local';
@@ -49,7 +50,8 @@ export function createDomainDeps(handle: ReturnType<typeof createDb>, config: Wo
       ANCS_CREDENTIAL_KEYS: config.ANCS_CREDENTIAL_KEYS,
     }),
     cmsWritebackSender: createHttpCmsWritebackSender(),
-    storage: new LocalObjectStorage(localStorageOptionsFromEnv(config)),
+    // 与 API 同一个驱动与桶：s3 时物化 / 写回直接走对象存储，Worker 不需要共享磁盘卷
+    storage: config.ANCS_STORAGE_DRIVER === 's3' ? new S3ObjectStorage(s3StorageOptionsFromEnv(config)) : new LocalObjectStorage(localStorageOptionsFromEnv(config)),
   };
   if (config.ANCS_QUEUE_DRIVER === 'bullmq' && config.REDIS_URL !== undefined) {
     deps.queue = new BullMqJobQueue({ redisUrl: config.REDIS_URL });

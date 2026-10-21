@@ -26,11 +26,14 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 FROM base AS build
-# 前端构建期常量：实时语音网关的浏览器地址（空 = 与 Web 同源的 /realtime 路径），API 内网地址（Web 的 /api/v1 转发目标）
+# 前端构建期常量：实时语音网关的浏览器地址（空 = 与 Web 同源的 /realtime 路径），API 内网地址（Web 的 /api/v1 转发目标），
+# CSP 额外放行的来源（用 S3 兼容存储时填浏览器直传直下的存储 origin，逗号分隔；空 = 只放行本源）
 ARG NEXT_PUBLIC_ANCS_REALTIME_URL=
 ARG ANCS_API_INTERNAL_URL=http://api:3001
+ARG ANCS_CSP_EXTRA_ORIGINS=
 ENV NEXT_PUBLIC_ANCS_REALTIME_URL=${NEXT_PUBLIC_ANCS_REALTIME_URL} \
-    ANCS_API_INTERNAL_URL=${ANCS_API_INTERNAL_URL}
+    ANCS_API_INTERNAL_URL=${ANCS_API_INTERNAL_URL} \
+    ANCS_CSP_EXTRA_ORIGINS=${ANCS_CSP_EXTRA_ORIGINS}
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     --mount=type=secret,id=extra_ca,required=false \

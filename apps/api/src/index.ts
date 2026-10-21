@@ -1,8 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, originOf, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
+import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
 import { buildServer } from './server.js';
 import { createShutdown } from './shutdown.js';
 import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
@@ -60,33 +61,41 @@ const auth = createAuth({
 });
 
 /**
- * 对象存储（P02-04）：默认本地驱动（开发）；生产接 S3/R2 预签名直传（真实凭据阶段，P08/P12）。
- * 本地驱动的端点签名密钥独立于会话密钥：未显式配置时由 BETTER_AUTH_SECRET 派生（作用域隔离，仅非生产）；
- * 派生规则与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`（同一把密钥、同一公开基址）。
+ * 对象存储（P02-04）：local = 单机磁盘（字节经 API 端点转发，签名密钥与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`）；
+ * s3 = S3 兼容对象存储（浏览器预签名直传直下，API 不转发字节、不注册本地端点；多机部署用它）。
+ * 上传扫描：启发式扫描器检查经 API 端点写入的字节；s3 直传不经过 API，完成上传时仍做内容嗅探与 SHA-256 校验。
  */
 const storageDriver = config.ANCS_STORAGE_DRIVER;
-let storageDeps;
-if (storageDriver === 'local') {
-  storageDeps = createStorageDeps(
-    new LocalObjectStorage(localStorageOptionsFromEnv(config)),
-    {
-      // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
-      scanner: new HeuristicMalwareScanner(),
-      auditSink: async (entry) => {
-        await recordAudit({ db: handle.db }, {
-          actorKind: 'SYSTEM',
-          action: entry.action,
-          targetType: 'storage_object',
-          targetId: entry.key,
-          workspaceId: entry.workspaceId,
-          details: { filename: entry.filename, contentType: entry.contentType, findings: entry.findings, scanner: entry.scanner },
-        });
-      },
+if (storageDriver === 's3') console.info(`[api] 对象存储 = s3（桶 ${String(config.ANCS_S3_BUCKET)}${config.ANCS_S3_ENDPOINT === undefined ? '' : `，端点 ${originOf(config.ANCS_S3_ENDPOINT) ?? '已配置'}`}）`);
+const s3Storage = storageDriver === 's3' ? new S3ObjectStorage(s3StorageOptionsFromEnv(config)) : null;
+const storageDeps = createStorageDeps(
+  s3Storage ?? new LocalObjectStorage(localStorageOptionsFromEnv(config)),
+  {
+    // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
+    scanner: new HeuristicMalwareScanner(),
+    auditSink: async (entry) => {
+      await recordAudit({ db: handle.db }, {
+        actorKind: 'SYSTEM',
+        action: entry.action,
+        targetType: 'storage_object',
+        targetId: entry.key,
+        workspaceId: entry.workspaceId,
+        details: { filename: entry.filename, contentType: entry.contentType, findings: entry.findings, scanner: entry.scanner },
+      });
     },
-  );
-} else {
-  console.error(`启动失败：未知的 ANCS_STORAGE_DRIVER=${storageDriver}（当前仅支持 local；S3/R2 适配器在真实凭据阶段接入）。`);
-  process.exit(1);
+  },
+);
+
+// s3：启动时探一次桶（HeadBucket），桶名、区域或凭据错误立即启动失败，不等到用户上传才暴露
+if (s3Storage !== null) {
+  try {
+    await s3Storage.checkBucket();
+  } catch (error) {
+    const failure = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    const status = failure.$metadata?.httpStatusCode;
+    console.error(`启动失败：对象存储不可用（${failure.name ?? 'Error'}${status === undefined ? '' : `，HTTP ${String(status)}`}）——检查 ANCS_S3_BUCKET、ANCS_S3_REGION、ANCS_S3_ENDPOINT 与访问密钥。`);
+    process.exit(1);
+  }
 }
 
 const credentialDeps = credentialDepsFromEnv();
