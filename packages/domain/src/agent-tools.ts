@@ -742,6 +742,7 @@ export function defaultAgentToolCatalog(): AgentToolCatalog {
     .register(editTimelineTool)
     .register(EDIT_POINT_AGENT_TOOLS[1])
     .register(reviewDraftTool)
+    .register(EDIT_POINT_AGENT_TOOLS[2])
     .register(lookAtTimelineTool)
     .register(EFFECT_AGENT_TOOLS[0])
     .register(EFFECT_AGENT_TOOLS[1])

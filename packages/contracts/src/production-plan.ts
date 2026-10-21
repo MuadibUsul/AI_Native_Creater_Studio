@@ -71,6 +71,11 @@ export const narrativeBlueprintSchema = z.object({
   pacing: z.string().trim().max(300).default(''),
   styleNotes: z.string().trim().max(500).default(''),
   targetDurationSeconds: z.number().positive().max(4 * 3600).nullable().default(null),
+  /** 节奏目标（0.2 节奏谱 B0：每分钟剪辑数、每秒词数）；只用于对照实测、给出建议，不自动改片 */
+  paceTarget: z.object({
+    cutsPerMinute: z.number().min(0).max(240).nullable().default(null),
+    wordsPerSecond: z.number().min(0).max(10).nullable().default(null),
+  }).strict().nullable().default(null),
   mustKeep: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
   avoid: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
 }).strict();

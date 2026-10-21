@@ -10,6 +10,7 @@ import {
 import { assetVersions, assets, createDb, mediaIndexEntries, mediaIndexRuns, mediaTranscriptRuns, mediaTranscriptVersions, projects, resolveTestDatabaseUrl, runMigrations, workspaces, type DbHandle } from '@ancs/db';
 import { createChannel, createProject, createSequence, type DomainDeps } from './index.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolContext } from './agent-tools.js';
+import { saveProductionPlan } from './production-plan.js';
 
 /**
  * AP-01 编辑候选层的两个导演工具（真实 PostgreSQL + 编辑内核）：
@@ -157,6 +158,32 @@ describe('AP-01 编辑候选层（工具）', () => {
     expect(replacedView.captions.map((caption) => caption.text)).toEqual(['今天我们去', '冰川。', '那里很冷。']);
     expect(replacedView.captions.every((caption) => caption.text.length <= 6)).toBe(true);
   }, 90_000);
+
+  it('measure_pace（0.2 B0）：草稿的切点密度与语速按窗口实测；计划设了节奏目标时列出偏差', async () => {
+    const { context, footageId } = await fixture({ transcript: true });
+    const placed = await tool('edit_timeline').run(context, { operations: [
+      { op: 'place_clip', footageId, sourceStart: '0', sourceEnd: '1.5' },
+      { op: 'place_clip', footageId, sourceStart: '3.5', sourceEnd: '5.5' },
+      { op: 'place_clip', footageId, sourceStart: '5.5', sourceEnd: '8' },
+      { op: 'fit_length' },
+    ] });
+    const draft: AgentToolContext = { ...context, draft: { baseRevision: placed.baseRevision ?? context.draft.baseRevision, operations: placed.draftOperations! } };
+    const before = JSON.parse((await tool('measure_pace').run(draft, {})).content) as { overall: { cutsPerMinute: number; wordsPerSecond: number }; windows: { at: [string, string]; cutsPerMinute: number; wordsPerSecond: number | null }[]; target: unknown; deviations: unknown[] };
+    // 6 秒的片子、2 个剪辑点（1.5 s、3.5 s）→ 每分钟 20 刀；说话的 6 个词（"呃"也算词）落在第一窗
+    expect(before.overall.cutsPerMinute).toBe(20);
+    expect(before.windows.map((window) => window.at)).toEqual([['0.000', '6.000']]);
+    expect(before.windows[0]).toMatchObject({ cutsPerMinute: 20 });
+    expect(before.target).toBeNull();
+    expect(before.deviations).toEqual([]);
+
+    await saveProductionPlan(context.deps, { workspaceId: context.workspaceId, projectId: context.projectId, turnId: null, baseRevision: context.draft.baseRevision, plan: {
+      blueprint: { logline: '冰川口播', structure: '两句话', paceTarget: { cutsPerMinute: 60, wordsPerSecond: null } },
+      scenes: [{ id: 's1', title: '全片', goal: '讲清楚' }],
+    } });
+    const after = JSON.parse((await tool('measure_pace').run(draft, {})).content) as { target: unknown; deviations: { component: string; direction: string; measured: number; target: number }[] };
+    expect(after.target).toEqual({ cutsPerMinute: 60, wordsPerSecond: null });
+    expect(after.deviations).toEqual([{ at: ['0.000', '6.000'], component: 'cutDensity', measured: 20, target: 60, direction: 'SLOWER' }]);
+  }, 60_000);
 
   it('caption_speech：片段没有转写时不编造字幕', async () => {
     const { context, footageId } = await fixture({ transcript: false });

@@ -735,3 +735,6 @@ export type { AutonomySpendKind } from './autonomy.js';
 export { saveProductionPlan, getLatestProductionPlan, compactPlanView } from './production-plan.js';
 export { findEditPoints, captionLinesFromWords, isFillerWord } from './edit-candidates.js';
 export type { EditPoints, EditPointsInput, CutPoint, RemovalCandidate, CaptionLine, TimedWord } from './edit-candidates.js';
+export { measurePace, paceDeviations } from './pace-score.js';
+export type { PaceScore, PaceWindow, PaceTarget, PaceDeviation } from './pace-score.js';
+export { draftPace, timelineSpeech } from './agent-edit-points.js';

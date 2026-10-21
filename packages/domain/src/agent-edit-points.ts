@@ -13,11 +13,14 @@ import {
   json,
   listProjectFootage,
   simulateAgentDraft,
+  type AgentTimelineView,
   type AgentToolContext,
   type AgentToolDefinition,
   type FootageRow,
 } from './agent-tools.js';
 import { captionLinesFromWords, findEditPoints, type EditPointsInput, type TimedWord } from './edit-candidates.js';
+import { measurePace, paceDeviations, type PaceScore, type PaceTarget } from './pace-score.js';
+import { getLatestProductionPlan } from './production-plan.js';
 
 /**
  * 编辑候选层的两个导演工具（裁决 0020，AP-01；统一工具目录，不按视频类型分支）：
@@ -91,6 +94,74 @@ const toMs = (value: string | number | undefined): number | null => {
   const text = typeof value === 'number' ? value.toFixed(3) : value;
   return isDecimalSecondsText(text) ? msOf(text) : Number.NaN;
 };
+
+interface TimelineSpeech {
+  /** 时间线上的词（按开始时间排好） */
+  words: TimedWord[];
+  /** 句末词在 words 里的下标 */
+  sentenceEnds: Set<number>;
+  language: string | null;
+  /** 有说话的片段数（不含讲述与特效） */
+  speakingClips: number;
+  /** 没有转写的说话片段 */
+  notCaptioned: string[];
+}
+
+/**
+ * 时间线上说了什么：取未静音的声音轨上来自素材的片段（讲述配音与特效除外），把素材转写里的词按片段的
+ * 源区间 → 时间线区间线性映射；词的大半在片段里才算（切点落在词中间时，只留下半个词的那一侧不算）。
+ */
+export async function timelineSpeech(
+  context: AgentToolContext,
+  view: AgentTimelineView,
+  options: { from?: number | null; to?: number | null; clipIds?: readonly string[] | null } = {},
+): Promise<TimelineSpeech> {
+  const from = options.from ?? null;
+  const to = options.to ?? null;
+  const audioTracks = new Set(view.tracks.filter((track) => track.kind === 'AUDIO' && !track.muted).map((track) => track.id));
+  const wanted = options.clipIds === undefined || options.clipIds === null ? null : new Set(options.clipIds.flatMap((id) => [id, ...(view.clips.find((clip) => clip.id === id)?.linkedClips ?? [])]));
+  const speaking = view.clips.filter((clip) => audioTracks.has(clip.track) && clip.footageId !== null && clip.narration === undefined && clip.effect === undefined && (wanted === null || wanted.has(clip.id)));
+  const footageRows = await listProjectFootage(context, [...new Set(speaking.map((clip) => clip.footageId!))]);
+  const analyses = new Map<string, FootageAnalysis>();
+  for (const row of footageRows) analyses.set(row.footageId, await loadFootageAnalysis(context, row));
+  const collected: TimedWord[] = [];
+  const ends = new Set<number>();
+  let language: string | null = null;
+  const notCaptioned: string[] = [];
+  for (const clip of speaking) {
+    const analysis = analyses.get(clip.footageId!);
+    if (analysis === undefined || analysis.transcript !== 'READY') { notCaptioned.push(clip.id); continue; }
+    language ??= analysis.language;
+    const [sourceStart, sourceEnd] = [msOf(clip.source[0]), msOf(clip.source[1])];
+    const [atStart, atEnd] = [msOf(clip.at[0]), msOf(clip.at[1])];
+    if (sourceEnd <= sourceStart || atEnd <= atStart) continue;
+    const scale = (atEnd - atStart) / (sourceEnd - sourceStart);
+    const words = analysis.input.words;
+    const lastWordOfSentence = new Set(analysis.input.sentences.map((sentence) => {
+      let last = -1;
+      words.forEach((word, index) => { if (word.startMs >= sentence.startMs - 1 && word.startMs < sentence.endMs) last = index; });
+      return last;
+    }));
+    words.forEach((word, index) => {
+      const overlap = Math.min(word.endMs, sourceEnd) - Math.max(word.startMs, sourceStart);
+      if (overlap <= (word.endMs - word.startMs) / 2) return;
+      const start = atStart + (Math.max(word.startMs, sourceStart) - sourceStart) * scale;
+      const end = atStart + (Math.min(word.endMs, sourceEnd) - sourceStart) * scale;
+      if ((from !== null && end <= from) || (to !== null && start >= to)) return;
+      collected.push({ startMs: start, endMs: end, text: word.text, speaker: word.speaker });
+      if (lastWordOfSentence.has(index)) ends.add(collected.length - 1);
+    });
+  }
+  // 片段可能交叠或乱序：按时间排好，句末下标随之换算
+  const order = collected.map((word, index) => ({ word, index })).sort((left, right) => left.word.startMs - right.word.startMs);
+  return {
+    words: order.map((item) => item.word),
+    sentenceEnds: new Set(order.flatMap((item, position) => (ends.has(item.index) ? [position] : []))),
+    language,
+    speakingClips: speaking.length,
+    notCaptioned,
+  };
+}
 
 const findEditPointsInput = z.object({
   footageId: z.string().min(1).max(200),
@@ -173,54 +244,17 @@ const captionSpeechTool: AgentToolDefinition<z.infer<typeof captionSpeechInput>>
     const simulated = await simulateAgentDraft(context, context.draft);
     const { view } = await agentTimelineViewOf(context, simulated.timeline, context.sequenceId);
     const lengthMs = msOf(view.length);
-    const audioTracks = new Set(view.tracks.filter((track) => track.kind === 'AUDIO' && !track.muted).map((track) => track.id));
-    const wanted = input.clipIds === undefined ? null : new Set(input.clipIds.flatMap((id) => [id, ...(view.clips.find((clip) => clip.id === id)?.linkedClips ?? [])]));
-    const speaking = view.clips.filter((clip) => audioTracks.has(clip.track) && clip.footageId !== null && clip.narration === undefined && clip.effect === undefined && (wanted === null || wanted.has(clip.id)));
-    const footageRows = await listProjectFootage(context, [...new Set(speaking.map((clip) => clip.footageId!))]);
-    const analyses = new Map<string, FootageAnalysis>();
-    for (const row of footageRows) analyses.set(row.footageId, await loadFootageAnalysis(context, row));
-
-    // 素材里的词 → 时间线上的词（按片段的源区间与时间线区间线性映射；倒放片段不加字幕）
-    const timelineWords: TimedWord[] = [];
-    const sentenceEnds = new Set<number>();
-    let language: string | null = null;
-    const notCaptioned: string[] = [];
-    for (const clip of speaking) {
-      const analysis = analyses.get(clip.footageId!);
-      if (analysis === undefined || analysis.transcript !== 'READY') { notCaptioned.push(clip.id); continue; }
-      language ??= analysis.language;
-      const [sourceStart, sourceEnd] = [msOf(clip.source[0]), msOf(clip.source[1])];
-      const [atStart, atEnd] = [msOf(clip.at[0]), msOf(clip.at[1])];
-      if (sourceEnd <= sourceStart || atEnd <= atStart) continue;
-      const scale = (atEnd - atStart) / (sourceEnd - sourceStart);
-      const words = analysis.input.words;
-      const lastWordOfSentence = new Set(analysis.input.sentences.map((sentence) => {
-        let last = -1;
-        words.forEach((word, index) => { if (word.startMs >= sentence.startMs - 1 && word.startMs < sentence.endMs) last = index; });
-        return last;
-      }));
-      words.forEach((word, index) => {
-        // 词的大半在片段里才算（切点落在词中间时，只留下半个词的那一侧不加）
-        const overlap = Math.min(word.endMs, sourceEnd) - Math.max(word.startMs, sourceStart);
-        if (overlap <= (word.endMs - word.startMs) / 2) return;
-        const start = atStart + (Math.max(word.startMs, sourceStart) - sourceStart) * scale;
-        const end = atStart + (Math.min(word.endMs, sourceEnd) - sourceStart) * scale;
-        if ((from !== null && end <= from) || (to !== null && start >= to)) return;
-        timelineWords.push({ startMs: start, endMs: end, text: word.text, speaker: word.speaker });
-        if (lastWordOfSentence.has(index)) sentenceEnds.add(timelineWords.length - 1);
-      });
-    }
-    if (timelineWords.length === 0) {
+    const speech = await timelineSpeech(context, view, { from, to, clipIds: input.clipIds ?? null });
+    const { notCaptioned, language } = speech;
+    if (speech.words.length === 0) {
       return {
-        content: json({ applied: 0, note: speaking.length === 0 ? 'no speaking clips on the timeline' : 'no transcript for the speaking clips yet', notCaptioned }),
+        content: json({ applied: 0, note: speech.speakingClips === 0 ? 'no speaking clips on the timeline' : 'no transcript for the speaking clips yet', notCaptioned }),
         isError: false,
         summary: 'no speech to caption',
       };
     }
-    // 片段可能交叠或乱序：按时间排好，句末下标随之换算
-    const order = timelineWords.map((word, index) => ({ word, index })).sort((left, right) => left.word.startMs - right.word.startMs);
-    const sorted = order.map((item) => item.word);
-    const sortedEnds = new Set(order.flatMap((item, position) => (sentenceEnds.has(item.index) ? [position] : [])));
+    const sorted = speech.words;
+    const sortedEnds = speech.sentenceEnds;
     const lines = captionLinesFromWords({ words: sorted, sentenceEndAfter: sortedEnds }, input.maxCharsPerLine === undefined ? {} : { maxChars: input.maxCharsPerLine })
       .map((line) => ({ ...line, endMs: Math.min(line.endMs, lengthMs) }))
       .filter((line) => line.endMs > line.startMs);
@@ -244,4 +278,42 @@ const captionSpeechTool: AgentToolDefinition<z.infer<typeof captionSpeechInput>>
   },
 };
 
-export const EDIT_POINT_AGENT_TOOLS = [findEditPointsTool, captionSpeechTool] as const;
+/**
+ * 当前草稿的节奏谱（0.2 B0）：画面剪辑点 + 时间线上的说话词 → 每 5 秒的切点密度与语速；与计划里的节奏目标比较。
+ * 交付报告与 measure_pace 工具共用。
+ */
+export async function draftPace(context: AgentToolContext, options: { windowSeconds?: number } = {}): Promise<{ score: PaceScore; target: PaceTarget | null; deviations: ReturnType<typeof paceDeviations> }> {
+  const simulated = await simulateAgentDraft(context, context.draft);
+  const { view } = await agentTimelineViewOf(context, simulated.timeline, context.sequenceId);
+  const videoTracks = new Set(view.tracks.filter((track) => track.kind === 'VIDEO' && !track.hidden).map((track) => track.id));
+  const cuts = [...new Set(view.clips.filter((clip) => videoTracks.has(clip.track) && clip.effect === undefined).map((clip) => msOf(clip.at[0])))];
+  const speech = await timelineSpeech(context, view);
+  const score = measurePace({ lengthMs: msOf(view.length), cutsMs: cuts, words: speech.words }, options.windowSeconds === undefined ? {} : { windowMs: options.windowSeconds * 1000 });
+  const plan = await getLatestProductionPlan(context.deps, { workspaceId: context.workspaceId, projectId: context.projectId });
+  const target = plan?.blueprint.paceTarget ?? null;
+  return { score, target, deviations: target === null ? [] : paceDeviations(score, target) };
+}
+
+const measurePaceTool: AgentToolDefinition<{ windowSeconds?: number | undefined }> = {
+  descriptor: {
+    name: 'measure_pace', capability: 'timeline.pace', effect: 'READ', permission: 'project:read', metered: false,
+    description: 'Measure the pace of your current draft in fixed windows (default 5 seconds): cuts per minute and spoken words per second, plus overall values. When the production plan sets a paceTarget, windows that deviate from it by more than 50% are listed. This is evidence for judgment, not a rule: fix pacing where it hurts the story, and say when a deviation is intended.',
+  },
+  input: z.object({ windowSeconds: z.number().min(2).max(60).optional() }).strict(),
+  async run(context, input) {
+    const { score, target, deviations } = await draftPace(context, input);
+    return {
+      content: json({
+        windowSeconds: score.windowMs / 1000,
+        overall: score.overall,
+        windows: score.windows.map((window) => ({ at: [sec(window.startMs), sec(window.endMs)], cutsPerMinute: window.cutsPerMinute, wordsPerSecond: window.wordsPerSecond })),
+        target,
+        deviations: deviations.map((deviation) => ({ at: [sec(deviation.startMs), sec(deviation.endMs)], component: deviation.component, measured: deviation.measured, target: deviation.target, direction: deviation.direction })),
+      }),
+      isError: false,
+      summary: `pace: ${String(score.overall.cutsPerMinute)} cuts/min${deviations.length > 0 ? `, ${String(deviations.length)} deviations` : ''}`,
+    };
+  },
+};
+
+export const EDIT_POINT_AGENT_TOOLS = [findEditPointsTool, captionSpeechTool, measurePaceTool] as const;
