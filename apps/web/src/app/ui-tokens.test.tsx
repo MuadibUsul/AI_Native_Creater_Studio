@@ -92,6 +92,8 @@ const aiAccentAllowlist = [
   'apps/web/src/app/ui-tokens.css|.ui-prompt:focus-within',
   'apps/web/src/components/quiet-frame/public-entry.module.css|.publicLanding :global(.landing-hero)::before',
   'apps/web/src/studio/studio.module.css|.aiMessage::before',
+  'apps/web/src/studio/studio.module.css|.editorChip',
+  'apps/web/src/studio/studio.module.css|.voiceHero:hover:not(:disabled)',
   "apps/web/src/voice/voice.module.css|.layer:is([data-phase='listening'], [data-phase='recognizing']) .pill",
   'apps/web/src/voice/voice.module.css|.toggleOn, .toggleOn:hover:not(:disabled)',
 ].sort();

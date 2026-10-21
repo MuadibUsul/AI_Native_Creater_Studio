@@ -28,7 +28,11 @@ let page;
 
 try {
   await mkdir(evidenceDir, { recursive: true });
-  env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-board-' });
+  // 每一步慢一点（测试替身本身是瞬时的），才能在运行中看到剪辑师光标走到它正在处理的画框
+  class PacedDirector extends ScriptedDirector {
+    async respond(request) { await new Promise((done) => setTimeout(done, 2500)); return super.respond(request); }
+  }
+  env = await startStudioEnv({ director: new PacedDirector(), webPort, workDirPrefix: 'ancs-board-' });
   const { client, password } = await env.signedInClient(email);
   const workspace = await client.workspaces.create({ name: '无限画布验收' });
   const footageDir = join(env.workDir, 'footage');
@@ -64,6 +68,7 @@ try {
   const stage = page.getByRole('region', { name: '作品画面' });
   const view = stage.getByRole('toolbar', { name: '画布视图' });
   await view.waitFor();
+  await stage.getByRole('button', { name: '和剪辑师说话' }).waitFor();
   await shot('01-empty-board');
   await page.locator('input[type=file]').setInputFiles(sources.map(([name]) => join(footageDir, name)));
   await page.getByRole('button', { name: '让 AI 剪第一版' }).waitFor({ timeout: 120_000 });
@@ -72,7 +77,17 @@ try {
   await dialog.getByLabel('你想要一条什么样的视频').fill('剪一条 9 秒的冰岛短片，开头要抓人');
   await dialog.getByRole('radio', { name: /自检通过就直接用/ }).click();
   await dialog.getByRole('button', { name: '交给 AI', exact: true }).click();
+  // 剪辑师在场：写完计划时光标在计划画框旁、对话里是"第 1 步 · 在写制作计划"；开始剪时光标回到成片
+  await page.locator('[data-target="plan"]').waitFor({ timeout: 120_000 });
+  await page.getByText('第 1 步 · 在写制作计划').waitFor();
+  const cursorText = await page.locator('[data-target="plan"]').textContent();
+  await shot('02a-editor-at-plan');
+  await page.locator('[data-target="monitor"]').waitFor({ timeout: 60_000 });
+  await page.getByText(/^第 \d+ 步 · (在剪|在自检|在量节奏)$/).waitFor();
+  await shot('02b-editor-cutting');
   await page.getByRole('article', { name: 'AI 自己剪' }).getByText('剪好了', { exact: true }).waitFor({ timeout: 240_000 });
+  if (await page.locator('[data-target]').count() !== 0) throw new Error('the editor cursor should leave when the turn is done');
+  pass('剪辑师在场', `运行中光标随真实工具记录移动：写计划时在计划画框旁（"${String(cursorText)}"），剪辑与自检时回到成片；结束后光标离开；对话里逐步显示"第 N 步 · 在做什么"`);
   await page.getByText('当前版本', { exact: true }).waitFor({ timeout: 120_000 });
   const planFrame = stage.getByRole('region', { name: '制作计划 · 第 1 版' });
   await stage.getByRole('region', { name: '素材 3' }).waitFor();

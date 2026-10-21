@@ -15,6 +15,7 @@ import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanv
 import { StudioConversation } from './StudioConversation';
 import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive } from './StudioAutonomy';
 import { ArticleBoardFrame, FootageBoardFrame, PlanBoardFrame } from './StudioBoardFrames';
+import { presenceOf, totalFootageSeconds } from './editor-presence';
 import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
@@ -136,6 +137,11 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     enabled: state !== undefined,
     retry: false,
   });
+  // AI 这一轮里写了计划：马上重读，计划画框在画布上出现（剪辑师光标能走到它旁边）
+  const planWrites = latest?.status === 'RUNNING' ? latest.toolCalls.filter((call) => call.name === 'plan_production').length : 0;
+  useEffect(() => {
+    if (planWrites > 0) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
+  }, [planWrites, queryClient, workspaceId, projectId]);
   const planRevision = state?.project.revision;
   useEffect(() => {
     if (planRevision !== undefined) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
@@ -667,6 +673,22 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     />
   );
 
+  // 剪辑师在场：这一轮进行中时，最近一步在做什么、在画布哪一块（来自真实工具记录）；开场只说工程里的事实
+  const tp = t.presence;
+  const presence = running && latest !== undefined ? presenceOf(latest.toolCalls.at(-1)?.name ?? null) : null;
+  const presenceText = presence === null ? null : tp.activities[presence.activity];
+  const liveStep = presence === null || presenceText === null || latest === undefined || latest.toolCalls.length === 0 ? null : tp.step(latest.toolCalls.length, presenceText);
+  const readyCount = state.footage.filter((item) => item.status === 'READY').length;
+  const greeting = article != null ? tp.greetingArticle(article.title, article.paragraphs)
+    : state.footage.length === 0 ? null
+      : readyCount < state.footage.length ? tp.greetingProcessing(readyCount, state.footage.length)
+        : tp.greetingFootage(readyCount, totalFootageSeconds(state.footage.map((item) => item.duration)));
+  const voiceHero = phase === 'off' && canEdit ? (
+    <button type="button" className={styles['voiceHero']} title={tp.voiceHeroHint} onClick={() => void voice.start()}>
+      <QuietIcon name="voice" />{tp.voiceHero}
+    </button>
+  ) : null;
+
   const ruleGroup = (
     <StudioRuleGroup
       label={t.rulesLabel}
@@ -780,6 +802,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         rules={ruleGroup}
         onUpload={() => fileInput.current?.click()}
         initialDraft={brief}
+        greeting={greeting}
+        liveStep={liveStep}
         voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}
       />
 
@@ -826,6 +850,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           drawing={drawing}
           onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
           voiceDock={voiceDock}
+          voiceHero={voiceHero}
+          presence={presence === null || presenceText === null ? null : { target: presence.target, label: tp.cursor(presenceText) }}
           boardFrames={state.footage.length === 0 && planQuery.data == null && article == null ? null : (
             <>
               {state.footage.length > 0 ? <FootageBoardFrame workspaceId={workspaceId} footage={state.footage} onOpenDetails={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(true); }} /> : null}

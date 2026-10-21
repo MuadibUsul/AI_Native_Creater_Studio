@@ -265,6 +265,20 @@ const zhCN = {
       articleFacts: (paragraphs: number, characters: string) => `${String(paragraphs)} 段 · ${characters} 字`,
       articleSource: (host: string) => `来自 ${host}`,
     },
+    presence: {
+      editor: '剪辑师',
+      cursor: (activity: string) => `剪辑师 · ${activity}`,
+      step: (count: number, activity: string) => `第 ${String(count)} 步 · ${activity}`,
+      activities: {
+        thinking: '在想', watching: '在看成片', footage: '在看素材', editPoints: '在找剪点', planning: '在写制作计划', cutting: '在剪',
+        captions: '在加字幕', checking: '在自检', pace: '在量节奏', effects: '在做特效', narration: '在配讲述', reading: '在读文章', quoting: '在报价',
+      },
+      greetingFootage: (count: number, seconds: number | null) => (seconds === null ? `${String(count)} 段素材已就绪。` : `${String(count)} 段素材已就绪，共约 ${String(seconds)} 秒。`),
+      greetingProcessing: (ready: number, total: number) => `素材还在处理：已就绪 ${String(ready)}/${String(total)} 段。处理好我就能开始看。`,
+      greetingArticle: (title: string, paragraphs: number) => `文章《${title}》已读入，共 ${String(paragraphs)} 段。`,
+      voiceHero: '和剪辑师说话',
+      voiceHeroHint: '开着麦克风边看边说；说"这里"时指着画面或时间带（V）',
+    },
     transport: {
       play: '播放',
       pause: '暂停',
@@ -935,6 +949,20 @@ const en: Messages = {
       article: 'Article',
       articleFacts: (paragraphs: number, characters: string) => `${String(paragraphs)} paragraph${paragraphs === 1 ? '' : 's'} · ${characters} characters`,
       articleSource: (host: string) => `From ${host}`,
+    },
+    presence: {
+      editor: 'Editor',
+      cursor: (activity: string) => `Editor · ${activity}`,
+      step: (count: number, activity: string) => `Step ${String(count)} · ${activity}`,
+      activities: {
+        thinking: 'thinking', watching: 'watching the cut', footage: 'looking at footage', editPoints: 'finding cut points', planning: 'writing the plan', cutting: 'cutting',
+        captions: 'adding captions', checking: 'checking the cut', pace: 'measuring pace', effects: 'making effects', narration: 'adding narration', reading: 'reading the article', quoting: 'getting a quote',
+      },
+      greetingFootage: (count: number, seconds: number | null) => (seconds === null ? `${String(count)} clip${count === 1 ? '' : 's'} ready.` : `${String(count)} clip${count === 1 ? '' : 's'} ready, about ${String(seconds)} s in total.`),
+      greetingProcessing: (ready: number, total: number) => `Footage is still processing: ${String(ready)} of ${String(total)} ready. I can start looking once it is done.`,
+      greetingArticle: (title: string, paragraphs: number) => `Article "${title}" is in, ${String(paragraphs)} paragraph${paragraphs === 1 ? '' : 's'}.`,
+      voiceHero: 'Talk to the editor',
+      voiceHeroHint: 'Keep the mic on and talk while you watch; point at the picture or the timeline when you say "here" (V)',
     },
     transport: {
       play: 'Play',

@@ -13,9 +13,9 @@ import styles from './studio.module.css';
  * 画框只读服务端已有的事实；改动仍然经对话 / 语音交给 AI，或在素材面板里操作。
  */
 
-export function BoardFrame({ label, children }: { label: string; children: ReactNode }) {
+export function BoardFrame({ label, frameKey, children }: { label: string; frameKey: 'footage' | 'plan' | 'article'; children: ReactNode }) {
   return (
-    <section data-board-frame className={styles['boardFrame']} aria-label={label}>
+    <section data-board-frame data-frame-key={frameKey} className={styles['boardFrame']} aria-label={label}>
       <h3 className={styles['boardLabel']}>{label}</h3>
       <div className={styles['boardFrameBody']}>{children}</div>
     </section>
@@ -51,7 +51,7 @@ export function FootageBoardFrame({ workspaceId, footage, onOpenDetails }: { wor
   const tf = messages.studio.footage;
   const shown = footage.slice(0, FOOTAGE_SHOWN);
   return (
-    <BoardFrame label={t.footage(footage.length)}>
+    <BoardFrame label={t.footage(footage.length)} frameKey="footage">
       <ul className={styles['footageGrid']}>
         {shown.map((item) => (
           <li key={item.assetId} className={styles['footageCard']} data-status={item.status}>
@@ -72,7 +72,7 @@ export function PlanBoardFrame({ plan }: { plan: ProductionPlan }) {
   const { messages } = useI18n();
   const t = messages.studio.board;
   return (
-    <BoardFrame label={t.plan(plan.version)}>
+    <BoardFrame label={t.plan(plan.version)} frameKey="plan">
       <p className={styles['planLogline']}>{plan.blueprint.logline}</p>
       <p className={styles['planMeta']}>
         {t.planStructure(plan.blueprint.structure)}
@@ -112,7 +112,7 @@ export function ArticleBoardFrame({ article, locale }: { article: NonNullable<St
   const t = messages.studio.board;
   const host = hostOf(article.sourceUrl ?? null);
   return (
-    <BoardFrame label={t.article}>
+    <BoardFrame label={t.article} frameKey="article">
       <p className={styles['planLogline']}>{article.title}</p>
       <p className={styles['planMeta']}>{t.articleFacts(article.paragraphs, article.characters.toLocaleString(locale))}{host !== null ? ` · ${t.articleSource(host)}` : ''}</p>
     </BoardFrame>

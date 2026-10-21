@@ -632,3 +632,15 @@
 .planIntents { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .planIntents li { display: flex; gap: 8px; align-items: baseline; }
 .planIntents b { flex: none; font-weight: 500; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--ui-tonal-bg); color: var(--ui-fg-primary); border: 1px solid var(--ui-border-subtle); }
+/* 剪辑师在场：AI 正在处理的画框旁的光标（在世界里滑动，屏幕上恒定大小）与画布底部的"和剪辑师说话" */
+.editorCursor { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; transition: transform 700ms var(--ui-ease-standard); }
+.editorCursorInner { display: flex; align-items: flex-start; gap: 2px; transform: scale(var(--board-inv, 1)); transform-origin: top left; }
+.editorArrow { flex: none; fill: var(--ui-ai-violet); stroke: var(--ui-bg-elevated); stroke-width: 1.5; stroke-linejoin: round; }
+.editorChip { margin-top: 14px; padding: 3px 10px; border-radius: var(--ui-radius-pill); background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); box-shadow: var(--ui-ai-glow); font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap; }
+.voiceHero { position: absolute; left: 50%; bottom: 20px; z-index: 5; transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--ui-space-2); min-height: 48px; padding: 0 22px; border: 0; border-radius: var(--ui-radius-pill); background: var(--ui-action-primary-bg); color: var(--ui-action-primary-fg); box-shadow: var(--ui-shadow-3); font-size: 15px; font-weight: 500; cursor: pointer; transition: box-shadow var(--ui-motion-feedback) var(--ui-ease-standard); }
+.voiceHero:hover:not(:disabled) { box-shadow: var(--ui-ai-glow), var(--ui-shadow-3); }
+.voiceHero:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 3px; }
+.voiceHero :global(.icon) { width: 20px; height: 20px; }
+.greeting { color: var(--ui-fg-primary); }
+.liveStep { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
+@media (prefers-reduced-motion: reduce) { .editorCursor { transition: none; } }

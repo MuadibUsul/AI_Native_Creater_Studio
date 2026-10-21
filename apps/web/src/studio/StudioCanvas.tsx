@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import type { FrameRegion, RenderPlanCaption, SequencePreview } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { unionRect, useBoardCamera } from './board-camera';
+import type { PresenceTarget } from './editor-presence';
 import styles from './studio.module.css';
 
 /**
@@ -151,6 +152,10 @@ export function StudioCanvas(props: {
   voiceDock?: ReactNode;
   /** 无限画布：成片屏幕右侧的画框（素材、制作计划、文章…）；手机宽度不显示 */
   boardFrames?: ReactNode;
+  /** 剪辑师在场：AI 这一轮正在做事时，光标移到它正在处理的画框（文案已翻译） */
+  presence?: { target: PresenceTarget; label: string } | null;
+  /** 没开语音时画布底部的"和剪辑师说话"（手机宽度不显示，输入框旁有麦克风） */
+  voiceHero?: ReactNode;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.canvas;
@@ -165,6 +170,7 @@ export function StudioCanvas(props: {
   const hasSide = board && props.boardFrames !== undefined && props.boardFrames !== null;
   const sideHeight = useLayoutHeight(sideRef, hasSide);
   const voiceOn = props.voiceDock !== undefined && props.voiceDock !== null;
+  const heroOn = board && !voiceOn && props.voiceHero !== undefined && props.voiceHero !== null;
   const monitorRect = { x: 0, y: 0, width: monitor.width, height: monitor.height };
   const all = hasSide && sideHeight > 0 ? unionRect([monitorRect, { x: monitor.width + BOARD_GAP, y: 0, width: BOARD_SIDE_WIDTH, height: sideHeight }]) : null;
   // 画框标签浮在画框上方（屏幕上恒定大小），留白里已给它让出位置
@@ -172,9 +178,19 @@ export function StudioCanvas(props: {
     enabled: board,
     all,
     monitor: monitorRect,
-    insets: { top: 92, right: 32, bottom: voiceOn ? 124 : 32, left: 32 },
+    insets: { top: 92, right: 32, bottom: voiceOn ? 124 : heroOn ? 84 : 32, left: 32 },
     initial: 'all',
   });
+  // 剪辑师光标：量出目标画框在世界里的位置（右侧画框相对右侧列偏移），光标滑过去；目标画框不在时落在成片上
+  const worldRef = useRef<HTMLDivElement | null>(null);
+  const [cursorAt, setCursorAt] = useState<{ x: number; y: number } | null>(null);
+  const presenceTarget = props.presence?.target ?? null;
+  useLayoutEffect(() => {
+    if (!board || presenceTarget === null) { setCursorAt(null); return; }
+    const frame = presenceTarget === 'monitor' ? null : worldRef.current?.querySelector<HTMLElement>(`[data-frame-key="${presenceTarget}"]`) ?? null;
+    if (frame === null) { setCursorAt({ x: monitor.width * 0.72, y: monitor.height * 0.18 }); return; }
+    setCursorAt({ x: monitor.width + BOARD_GAP + frame.offsetLeft + frame.offsetWidth * 0.62, y: frame.offsetTop + 28 });
+  }, [board, presenceTarget, sideHeight, monitor.width, monitor.height]);
   // 键盘：Shift+1 看全部，Shift+2 只看成片（正在输入、带其他修饰键时不接管）
   useEffect(() => {
     if (!board) return;
@@ -356,7 +372,7 @@ export function StudioCanvas(props: {
     >
       {board ? (
         <>
-          <div className={styles['world']} style={{ transform: `translate(${String(x)}px, ${String(y)}px) scale(${String(k)})`, ['--board-inv' as string]: String(1 / k) }}>
+          <div ref={worldRef} className={styles['world']} style={{ transform: `translate(${String(x)}px, ${String(y)}px) scale(${String(k)})`, ['--board-inv' as string]: String(1 / k) }}>
             <section data-board-frame className={styles['monitor']} style={{ width: `${String(monitor.width)}px`, height: `${String(monitor.height)}px` }} data-mode={props.mode}>
               <h3 className={styles['boardLabel']}>{tb.monitor}</h3>
               {content}
@@ -364,6 +380,14 @@ export function StudioCanvas(props: {
             {hasSide ? (
               <div ref={sideRef} className={styles['boardSide']} style={{ left: `${String(monitor.width + BOARD_GAP)}px`, width: `${String(BOARD_SIDE_WIDTH)}px` }}>
                 {props.boardFrames}
+              </div>
+            ) : null}
+            {cursorAt !== null && props.presence ? (
+              <div className={styles['editorCursor']} style={{ transform: `translate(${String(cursorAt.x)}px, ${String(cursorAt.y)}px)` }} data-target={props.presence.target} aria-hidden="true">
+                <span className={styles['editorCursorInner']}>
+                  <svg viewBox="0 0 24 24" width="22" height="22" className={styles['editorArrow']}><path d="M4 2.5 20 11l-7.2 1.8L9.6 20Z" /></svg>
+                  <span className={styles['editorChip']}>{props.presence.label}</span>
+                </span>
               </div>
             ) : null}
           </div>
@@ -378,6 +402,7 @@ export function StudioCanvas(props: {
         </>
       ) : content}
       {props.voiceDock ?? null}
+      {heroOn ? props.voiceHero : null}
       {dragging ? <span className={styles['visuallyHidden']} role="status">{t.dropHere}</span> : null}
     </div>
   );

@@ -228,6 +228,22 @@ describe('V6-1c 共看片室', () => {
     expect(screen.getByRole('complementary', { name: '素材' })).toBeTruthy();
   });
 
+  it('剪辑师在场：开场按工程事实打招呼；这一轮进行中显示"第 N 步 · 在做什么"，画布上的剪辑师光标移到对应画框；没开语音时画布上有"和剪辑师说话"', async () => {
+    const idle = client({ turns: [] });
+    const { unmount } = renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, idle.sdk);
+    expect(await screen.findByText('2 段素材已就绪，共约 12 秒。')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '和剪辑师说话' })).toBeTruthy();
+    expect(document.querySelector('[data-target]')).toBeNull();
+    unmount();
+
+    const working = turn({ id: 'agt_3', status: 'RUNNING', reply: null, proposalId: null, completedAt: null,
+      toolCalls: [{ name: 'look_at_footage', ok: true, summary: 'looked at glacier.mp4' }, { name: 'edit_timeline', ok: true, summary: '3 edits applied' }] });
+    const busy = client({ turns: [working] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, busy.sdk);
+    expect(await screen.findByText('第 2 步 · 在剪')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('[data-target="monitor"]')?.textContent).toBe('剪辑师 · 在剪'));
+  });
+
   it('V6-9 交给 AI 剪完：还没剪时画布给出入口，打开设置签署并开始；进行中时进度卡在对话里、可停下，画布不再给入口', async () => {
     const policy = { approval: 'ASK_EACH', budgetMicros: null, perGenerationMicros: null, allowOwnLikeness: false, maxRetriesPerTask: 2, signature: null };
     const active = {

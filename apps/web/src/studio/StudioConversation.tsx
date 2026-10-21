@@ -61,6 +61,10 @@ export interface ConversationProps {
   onUpload?: () => void;
   /** 从首页带来的一句想法：预填到输入框（不自动发送） */
   initialDraft?: string | null;
+  /** 剪辑师开场：按工程真实状态说的一句（素材几段、处理到哪、文章几段）；没有可说的事实时为空 */
+  greeting?: string | null;
+  /** 这一轮进行中：最近一步在做什么（来自真实的工具记录） */
+  liveStep?: string | null;
 }
 
 export function StudioConversation(props: ConversationProps) {
@@ -105,7 +109,13 @@ export function StudioConversation(props: ConversationProps) {
       </div>
       <div ref={threadRef} className={styles['thread']} aria-live="polite">
         {latest === undefined ? (
-          <div className={styles['aiMessage']}><span className={styles['speaker']}>{t.ai}</span><p>{t.intro}</p></div>
+          <div className={styles['aiMessage']}>
+            <span className={styles['speaker']}>{t.ai}</span>
+            <div className={styles['lineBody']}>
+              {props.greeting ? <p className={styles['greeting']}>{props.greeting}</p> : null}
+              <p>{t.intro}</p>
+            </div>
+          </div>
         ) : null}
         {earlier.slice().reverse().map((turn) => (
           <div key={turn.id} className={styles['earlierTurn']}>
@@ -126,7 +136,9 @@ export function StudioConversation(props: ConversationProps) {
                       {props.cancelling ? t.stopping : t.stop}
                     </button>
                   </div>
-                ) : latest.status === 'CANCELLED' ? (
+                ) : null}
+                {running ? (props.liveStep ? <div className={styles['liveStep']} aria-live="polite">{props.liveStep}</div> : null)
+                  : latest.status === 'CANCELLED' ? (
                   <p>{t.stopped}</p>
                 ) : latest.status === 'FAILED' ? (
                   <div className={styles['alert']} role="alert"><strong>{t.failedTitle}</strong><div>{turnFailureText(latest, t)}</div></div>
