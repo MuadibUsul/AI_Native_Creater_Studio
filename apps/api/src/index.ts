@@ -4,6 +4,7 @@ import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailur
 import { createDb, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { buildServer } from './server.js';
+import { createShutdown } from './shutdown.js';
 import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
 import { createStorageDeps } from './plugins/storage.js';
 import { createAdminDeps } from './plugins/admin.js';
@@ -180,6 +181,16 @@ const webhookDeps = {
   ...(storageDeps.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
 };
 
+// 优雅退出：排空 → 停止接新请求并等进行中的请求 → 释放连接池（超时强制退出）
+const lifecycle = createShutdown({
+  drainMs: config.ANCS_SHUTDOWN_DRAIN_SECONDS * 1000,
+  timeoutMs: config.ANCS_SHUTDOWN_TIMEOUT_SECONDS * 1000,
+  closeServer: () => app.close(),
+  closeResources: () => handle.close(),
+  exit: (code) => process.exit(code),
+  log: (message) => app.log.info(message),
+});
+
 const app = await buildServer({
   logger: true,
   credentials: credentialDeps,
@@ -216,6 +227,11 @@ const app = await buildServer({
   voice: config.ANCS_VOICE_SESSION_SECRET === undefined ? {} : { sessionSecret: config.ANCS_VOICE_SESSION_SECRET },
   distribution: { providers: distributionProviders },
   providerInventory,
+  // 就绪探针：数据库能查询、没有在退出排空（生产部署编排用；/health 只看存活）
+  readiness: {
+    checks: { database: async () => (await handle.pool.query('select 1')).rowCount === 1 },
+    draining: () => lifecycle.isDraining(),
+  },
   // V5-M4 Edge：CORS/Origin 白名单、按 IP 限流（可信代理跳数决定客户端 IP）、生产 HSTS
   edge: {
     allowedOrigins: resolveAllowedOrigins(config),
@@ -224,6 +240,9 @@ const app = await buildServer({
     trustProxyHops: config.ANCS_TRUST_PROXY_HOPS,
   },
 });
+
+process.on('SIGTERM', () => { void lifecycle.shutdown('SIGTERM'); });
+process.on('SIGINT', () => { void lifecycle.shutdown('SIGINT'); });
 
 try {
   await app.listen({ port, host: '0.0.0.0' });

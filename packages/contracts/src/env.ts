@@ -148,6 +148,12 @@ export const apiEnvSchema = z.object({
   ).optional(),
   /** 前置可信代理跳数（0 = 不信任 X-Forwarded-For；按 IP 限流依赖它取得真实客户端地址） */
   ANCS_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5, 'ANCS_TRUST_PROXY_HOPS ≤ 5').default(0),
+  /**
+   * 优雅退出（生产部署）：收到 SIGTERM 后先标记"排空"（/ready 返回 503）并等待这么多秒让负载均衡摘掉实例，
+   * 再停止接新连接、等进行中的请求处理完；超过 ANCS_SHUTDOWN_TIMEOUT_SECONDS 强制退出。
+   */
+  ANCS_SHUTDOWN_DRAIN_SECONDS: z.coerce.number().int().min(0).max(120).default(0),
+  ANCS_SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(600).default(25),
   /** 限流开关（生产不得关闭） */
   ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
 });
@@ -466,6 +472,20 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
 }
 
 /** 保留清理 CLI 环境（apps/api retention:sweep）：与 API 同一存储签名规则。 */
+/** 建首个账号（部署后一次性运行；公开注册上线前的唯一建号方式）。密码只从环境变量读，不经命令行参数（会进 shell 历史与进程列表）。 */
+export const createUserCliEnvSchema = z.object({
+  ...baseEnvShape,
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ANCS_NEW_USER_EMAIL: z.string().email('ANCS_NEW_USER_EMAIL 必须是邮箱'),
+  ANCS_NEW_USER_NAME: z.string().trim().min(1).max(80).default('Owner'),
+  ANCS_NEW_USER_PASSWORD: z.string().min(12, 'ANCS_NEW_USER_PASSWORD 至少 12 位'),
+});
+
+/** 迁移任务（部署时一次性运行，只需要数据库连接）。 */
+export const migrateCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+});
+
 export const retentionCliEnvSchema = z.object({
   ...baseEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),

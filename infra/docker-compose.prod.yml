@@ -1,0 +1,98 @@
+# 生产编排样例（单机；多机请把本地存储换成对象存储，见生产清单第 1 节第 2 项）
+#
+#   docker build --target runtime -t ancs:runtime .
+#   docker build --target worker  -t ancs:worker  .
+#   cp infra/production.env.example infra/production.env   # 填写真实值；不要提交
+#   docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env up -d
+#
+# 启动顺序：数据库健康 → 迁移任务成功退出 → API / Worker / Realtime / Web。
+# 对外只暴露 Web（3000）与实时语音网关（3002）；前面放 TLS 反向代理（Caddy / Nginx / 云负载均衡），
+# 健康检查用 /api/v1/health（存活）与 /api/v1/ready（就绪：数据库可用、没有在退出）。
+name: ancs
+
+x-app-env: &app-env
+  env_file: production.env
+  restart: unless-stopped
+
+services:
+  db:
+    image: ${ANCS_POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ancs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in production.env}
+      POSTGRES_DB: ${POSTGRES_DB:-ancs}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}
+    env_file: production.env
+    command: ["node", "apps/api/dist/cli/migrate.js"]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    <<: *app-env
+    image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}
+    command: ["node", "apps/api/dist/index.js"]
+    environment:
+      PORT: "3001"
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/ready').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  worker:
+    <<: *app-env
+    image: ${ANCS_WORKER_IMAGE:-ancs:worker}
+    command: ["node", "apps/worker/dist/main.js"]
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 60s
+
+  realtime:
+    <<: *app-env
+    image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}
+    command: ["node", "apps/realtime/dist/main.js"]
+    environment:
+      PORT: "3002"
+    ports:
+      - "${ANCS_REALTIME_PUBLISH:-127.0.0.1:3002}:3002"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    <<: *app-env
+    image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}
+    working_dir: /app/apps/web
+    command: ["node", "node_modules/next/dist/bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
+    ports:
+      - "${ANCS_WEB_PUBLISH:-127.0.0.1:3000}:3000"
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/sign-in').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  pgdata:
+  storage:

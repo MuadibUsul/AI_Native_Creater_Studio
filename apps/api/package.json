@@ -10,7 +10,9 @@
     "start": "node dist/index.js",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "retention:sweep": "node dist/cli/retention-sweep.js",
-    "events:dispatch": "node dist/cli/event-dispatch.js"
+    "events:dispatch": "node dist/cli/event-dispatch.js",
+    "db:migrate": "node dist/cli/migrate.js",
+    "user:create": "node dist/cli/create-user.js"
   },
   "dependencies": {
     "@ancs/auth": "workspace:*",

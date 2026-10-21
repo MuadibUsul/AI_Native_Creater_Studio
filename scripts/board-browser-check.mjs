@@ -95,7 +95,7 @@ try {
   await planFrame.getByText('钩子', { exact: true }).waitFor();
   if (await planFrame.getByText('计划之后作品又改过').count() !== 0) throw new Error('the plan is marked stale after its own cut was adopted');
   // 素材画框的预览画面真的加载了（签名地址 + 只读元数据）
-  await page.waitForFunction(() => [...globalThis.document.querySelectorAll('video[aria-hidden="true"]')].filter((video) => video.readyState >= 1 && video.videoWidth > 0).length === 3, null, { timeout: 30_000 });
+  await page.waitForFunction(() => [...globalThis.document.querySelectorAll('video[aria-hidden="true"]')].filter((video) => video.readyState >= 2 && video.videoWidth > 0).length === 3, null, { timeout: 30_000 });
   const fitted = await camera();
   const inside = await page.evaluate(() => {
     const stageBox = globalThis.document.querySelector('[data-board="on"]').getBoundingClientRect();

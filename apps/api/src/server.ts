@@ -134,6 +134,8 @@ export interface BuildServerOptions {
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
+  /** 就绪探针（生产部署）：依赖检查与退出排空状态；未提供时 /ready 只看排空 */
+  readiness?: import('./routes/health.js').ReadinessDeps;
 }
 
 /** 信任最近 N 跳代理（proxy-addr 信任函数：第 hop 跳 < N 时可信）；0/未配置 = 不信任 X-Forwarded-For。 */
@@ -299,7 +301,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   await app.register(
     async (instance) => {
-      registerHealthRoutes(instance);
+      registerHealthRoutes(instance, options.readiness);
       registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [] });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);

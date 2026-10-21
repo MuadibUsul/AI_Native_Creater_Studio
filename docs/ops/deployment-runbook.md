@@ -93,8 +93,8 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 ```bash
 # 预检
 psql "$DATABASE_URL" -c 'select 1'
-# 迁移（drizzle-kit 生成的版本化迁移；幂等，可重复执行）
-node -e "import('@ancs/db').then(async ({createDb,runMigrations})=>{const h=createDb(process.env.DATABASE_URL);await runMigrations(h);console.log('migrated');await h.close();})"
+# 迁移（drizzle-kit 生成的版本化迁移；幂等，可重复执行；先取咨询锁，多个实例同时执行只有一个在跑）
+pnpm db:migrate          # = node apps/api/dist/cli/migrate.js；退出码非 0 时新版本不应启动
 # 核对（表数量应 ≥ 30；当前 54）
 psql "$DATABASE_URL" -c "select count(*) from information_schema.tables where table_schema='public'"
 ```
@@ -114,7 +114,14 @@ node apps/api/dist/index.js            # 期望日志：数据库（脱敏连接
 node apps/worker/dist/main.js          # 常驻循环；或 --once 单轮自检
 ```
 
-健康检查：`GET /api/v1/health`（无需认证）→ `{ "status": "ok", "service": "ancs-api", ... }`。
+健康检查（无需认证）：
+- 存活 `GET /api/v1/health` → `{ "status": "ok", "service": "ancs-api", ... }`：只说明进程活着，编排器据此决定是否重启；
+- 就绪 `GET /api/v1/ready` → 200 `{ "status": "ready", "draining": false, "checks": { "database": "ok" } }`；数据库查不通、超时（2 s）或正在退出时 503
+  `status: "not_ready"`（不含错误细节）。负载均衡 / 编排器用它决定是否转发流量。
+
+优雅退出：API 收到 `SIGTERM` / `SIGINT` 后先标记排空（`/ready` 变 503），等 `ANCS_SHUTDOWN_DRAIN_SECONDS`（缺省 0，
+放在负载均衡后建议 5）让实例被摘除，再停止接新连接、等进行中的请求处理完、释放连接池，退出码 0；超过
+`ANCS_SHUTDOWN_TIMEOUT_SECONDS`（缺省 25）强制退出（退出码 1）。编排器的停止宽限期应大于两者之和（compose 样例为 40 s）。
 
 ### 5.1 Realtime Gateway（V6-2 实时语音，可选）
 
@@ -205,3 +212,42 @@ node scripts/launch-gate-check.mjs --live   # 放行判定：任一人工条件�
   现状**全部 BLOCKED**（需人工：法务/商务/财务）；`APPROVED` 必须附可核对证据。
 - **放行顺序**：台账逐条举证 → `--live` 判定通过 → 以 live 配置部署（启动再校验一次）；
   当前无公开注册端点（账号经内部 CLI 创建），与门禁一致。
+
+## 10. 容器部署（V6）
+
+镜像与编排在仓库里：`Dockerfile`（目标 `runtime`：API / Web / Realtime / 迁移；目标 `worker`：再加 FFmpeg、Chromium、中日韩字体）、
+`infra/docker-compose.prod.yml`（单机编排样例）、`infra/production.env.example`（变量样例；真实文件 `infra/production.env` 已忽略，不入库）。
+
+```bash
+docker build --target runtime -t ancs:runtime \
+  --build-arg ANCS_API_INTERNAL_URL=http://api:3001 \
+  --build-arg NEXT_PUBLIC_ANCS_REALTIME_URL= .     # 空 = 浏览器走 Web 同源的 /realtime/v1/voice
+docker build --target worker -t ancs:worker .
+cp infra/production.env.example infra/production.env  # 填写；三把密钥互不相同
+docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env up -d
+```
+
+- 启动顺序：`db` 健康 → `migrate` 成功退出 → `api`（就绪探针）/ `worker` / `realtime` → `web`（等 API 就绪）。迁移失败时其余服务不会启动。
+- 对外只发布 Web（3000）与实时语音网关（3002，缺省只绑 127.0.0.1）；前面放 TLS 反向代理：`/` → web:3000，`/realtime/v1/voice`（WebSocket）→ realtime:3002。
+  API 不直接对外，浏览器经 Web 的 `/api/v1/*` 转发（`ANCS_API_INTERNAL_URL` 在构建 Web 时写入转发规则）。
+- 本地存储驱动要求 API 与 Worker 挂同一个卷（样例里的 `storage`），所以这份编排是**单机**的；多机扩容需要对象存储驱动（生产清单第 1 节第 2 项）。
+- 构建期需要访问 npm 源；需要企业根证书时用 `--secret id=extra_ca,src=<pem>` 传入（只在安装依赖时可见，不写进镜像）。
+- **当前限制（如实）**：生产模式下旧 V4 流水线的 Mock 驱动会被启动校验拦下（生产清单第 1 节第 1 项）。在它完成前，演练环境需在
+  `production.env` 里显式写 `ANCS_ALLOW_MOCK_PROVIDERS=1`，界面与产物会标识 Mock；正式上线前必须去掉。
+
+### 10.1 首个账号
+
+公开注册上线前，用 `user:create` 建账号（在 api 容器里跑；密码只经环境变量，不进命令行参数与输出）：
+
+```bash
+ANCS_NEW_USER_PASSWORD='…' docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env \
+  run --rm --no-deps -e ANCS_NEW_USER_EMAIL=owner@example.com -e ANCS_NEW_USER_PASSWORD api node apps/api/dist/cli/create-user.js
+```
+
+### 10.2 演练记录（2026-10-21，本容器，`scripts/compose-browser-check.mjs`）
+
+- 镜像：`ancs:runtime`（压缩后约 0.5 GB）、`ancs:worker`（约 0.9 GB，FFmpeg 5.1 含 flite、Chromium、Node 24）；构建上下文不含密钥，企业根证书只经 BuildKit secret 进入安装步骤；
+- 全新数据库上 `migrate` 应用 98 个迁移后退出 0，其余服务随后启动；API、Web 健康检查通过，经 Web 转发的 `/api/v1/ready` 为 ready；
+- 真实浏览器：`user:create` 建号 → 登录 → 建工作区 → 新建视频 → 上传素材 → 容器里的 Worker 探测 / 代理 / 索引用时约 3 s → 画布素材画框预览经签名地址加载；
+- `docker stop api`：排空期间 `/api/v1/ready` 503（`draining: true`）、退出码 0、日志"已优雅退出"；重新启动后就绪，作品与素材都在；
+- 本环境的限制：Docker Hub 拉取 `postgres:16-alpine` 被限流（429），演练用 `ANCS_POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine`；构建用 `DEBIAN_MIRROR=https://deb.debian.org`（这里只能走 HTTPS 出网）。演练里设置了 `ANCS_ALLOW_MOCK_PROVIDERS=1`（见上文"当前限制"）。

@@ -42,7 +42,9 @@ function FootagePreview({ workspaceId, item }: { workspaceId: string; item: Stud
   }
   return item.kind === 'image'
     ? <img className={styles['footageThumb']} src={src} alt="" onError={() => setFailed(true)} />
-    : <video className={styles['footageThumb']} src={`${src}#t=0.5`} muted playsInline preload="metadata" aria-hidden="true" tabIndex={-1} onError={() => setFailed(true)} />;
+    // 只读元数据；读到后跳到靠前的一帧，浏览器才会解码出画面（只靠 #t= 有的浏览器不画）
+    : <video className={styles['footageThumb']} src={`${src}#t=0.5`} muted playsInline preload="metadata" aria-hidden="true" tabIndex={-1} onError={() => setFailed(true)}
+      onLoadedMetadata={(event) => { const video = event.currentTarget; if (video.readyState < 2) video.currentTime = Math.min(0.5, (video.duration || 1) / 2); }} />;
 }
 
 export function FootageBoardFrame({ workspaceId, footage, onOpenDetails }: { workspaceId: string; footage: StudioFootage[]; onOpenDetails: () => void }) {

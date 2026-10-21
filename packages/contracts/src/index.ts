@@ -1256,6 +1256,8 @@ export {
   crossCheckApiEnv,
   resolveAllowedOrigins,
   retentionCliEnvSchema,
+  migrateCliEnvSchema,
+  createUserCliEnvSchema,
 } from './env.js';
 export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv } from './env.js';
 export {
@@ -2176,8 +2178,8 @@ export {
 } from './invitations.js';
 export type { InvitationStatus, WorkspaceInvitation, MyInvitation, CreateInvitationRequest, InvitationErrorReason } from './invitations.js';
 
-export { healthResponseSchema } from './health.js';
-export type { HealthResponse } from './health.js';
+export { healthResponseSchema, readinessResponseSchema, READINESS_CHECK_STATES } from './health.js';
+export type { HealthResponse, ReadinessResponse } from './health.js';
 
 // SaaS 安全运营契约（P09-05 / §43.3、§67、§24.2）
 export {

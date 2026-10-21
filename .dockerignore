@@ -1,0 +1,21 @@
+# 构建上下文只带源码；依赖与产物在镜像里重新安装与构建
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+.git
+.storage
+.artifacts
+Videos
+provider-smoke-output
+coverage
+docs/verification/artifacts
+docs/design-reference
+docs/**/*.zip
+**/*.log
+.env
+.env.*
+!.env.example
+.tmp-*
+dump.rdb
