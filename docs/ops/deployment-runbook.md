@@ -87,7 +87,8 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_GENERATION_DRIVER`（Worker） | 未配置 | V6-8 视频生成：`process`（需 `ANCS_GENERATION_EXECUTABLE` 与 `ANCS_GENERATION_OFFERS_JSON`；可选 `ANCS_GENERATION_ARGS_JSON`、`ANCS_GENERATION_PASS_ENV`、`ANCS_GENERATION_TIMEOUT_SECONDS`） |
 | `ANCS_ALLOWED_ORIGINS` | `BETTER_AUTH_URL` 的 origin（非生产另加 `http://localhost:3000`、`http://127.0.0.1:3000`） | API 的 CORS 白名单与带 Cookie 写请求的 Origin 校验（逗号分隔完整 origin；Web 经同源代理访问 API 时填 Web 的 origin） |
 | `ANCS_TRUST_PROXY_HOPS` | `0` | 前置可信代理跳数；为 0 时不信任 `X-Forwarded-For`。部署在负载均衡/反向代理后必须如实设置，否则所有用户共享代理 IP 的限流桶 |
-| `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流（每实例内存）；生产不得为 `off` |
+| `ANCS_RATE_LIMIT` | `enforce` | 按端点类别 × 客户端 IP 限流；生产不得为 `off` |
+| `ANCS_RATE_LIMIT_REDIS_URL` | 未配置（每个 API 进程各自限流） | 多台 API 时配置：额度存在 Redis 里共用（Lua 原子令牌桶，用 Redis 服务器时间）；启动时连不上即失败；运行中 Redis 出错退回本进程限流并告警（每分钟最多一条） |
 | `ANCS_CSP_EXTRA_ORIGINS`（Web **构建期**） | 非生产为本地 API 端口 | Web CSP 额外放行的媒体/上传来源（签名 URL 直达的存储或 API origin）；Next 在构建时固化安全头，修改后需重新构建 Web |
 
 生产（`NODE_ENV=production`）额外必填：`ANCS_CREDENTIAL_KEYS`（API 与 Worker 同一值）、`ANCS_STORAGE_SECRET`（API、Worker、清理 CLI 同一值；不得从会话密钥派生）、`ANCS_OPS_ENVIRONMENT=PRODUCTION`（API）。

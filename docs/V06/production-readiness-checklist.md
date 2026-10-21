@@ -61,7 +61,7 @@
 
 | 项 | 谁 | 内容 | 进度 |
 |---|---|---|---|
-| 限流共享存储 | 🔧 | 现在限流桶在进程内存里，多实例各算各的；改为可选 Redis 共享 | 待做 |
+| 限流共享存储 | 🔧 | 现在限流桶在进程内存里，多实例各算各的；改为可选 Redis 共享 | ✅ `ANCS_RATE_LIMIT_REDIS_URL`（`packages/providers/ratelimit-redis`）：两个真实 API 进程共用额度（第 21 次登录尝试被拒）；Redis 停掉时退回本进程限流、请求照常服务并告警；对真实 Redis 的集成测试 3/3 |
 | 数据库连接池 | 🔧 | 连接池写死每进程 5 个，改为配置项 | ✅ `ANCS_DB_POOL_MAX` / `ANCS_DB_CONNECT_TIMEOUT_MS` / `ANCS_DB_STATEMENT_TIMEOUT_MS`（API、Worker、实时网关、清理命令共用；缺省不变）；对真实 PostgreSQL 验证语句超时与连接超时生效 |
 | 前端错误边界与 404 | 🔧 | Web 没有 `error.tsx` / `not-found.tsx` | ✅ 中英找不到页面（真实 404 状态）、页面出错（重试 + 错误编号，不显示详情）、根布局出错兜底页（中英并列）；浏览器实测桌面 / 深色 / 手机（`docs/verification/artifacts/system-pages/`） |
 | 错误上报端口 | 🔧 / 👤 | 🔧 留出可选的错误上报（配置了地址才启用）；👤 选 Sentry 或国内同类服务并给出地址 | 待做 |

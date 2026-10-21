@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { RateLimitStore } from '@ancs/contracts';
 import { DEFAULT_RATE_LIMITS, TokenBuckets, classifyRequest } from './plugins/edge.js';
 import { buildServer } from './server.js';
 
@@ -113,6 +114,35 @@ describe('Edge 中间件（Fastify inject）', () => {
     // 健康检查豁免
     for (let index = 0; index < 5; index += 1) expect((await app.inject({ method: 'GET', url: '/api/v1/health' })).statusCode).toBe(200);
     await app.close();
+  });
+
+  it('共享限流存储：两台 API 共用同一份额度（第二台也拒）；存储出错时退回本进程令牌桶，仍然限流', async () => {
+    // 共享存储替身（真实 Redis 实现见 packages/providers/ratelimit-redis 的集成测试）
+    const used = new Map<string, number>();
+    const shared: RateLimitStore = {
+      kind: 'shared-test',
+      take: async (key, rule) => {
+        const count = (used.get(key) ?? 0) + 1;
+        used.set(key, count);
+        return count <= rule.capacity ? { allowed: true } : { allowed: false, retryAfterSeconds: 7 };
+      },
+    };
+    const first = await buildServer({ edge: { allowedOrigins: [APP], rateLimits: tightLimits, rateLimitStore: shared } });
+    const second = await buildServer({ edge: { allowedOrigins: [APP], rateLimits: tightLimits, rateLimitStore: shared } });
+    expect((await first.inject({ method: 'GET', url: '/api/v1/capabilities' })).statusCode).toBe(200);
+    expect((await second.inject({ method: 'GET', url: '/api/v1/capabilities' })).statusCode).toBe(200);
+    const limited = await first.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers['retry-after']).toBe('7');
+    await first.close();
+    await second.close();
+
+    const broken: RateLimitStore = { kind: 'broken', take: async () => { throw new Error('connection refused'); } };
+    const degraded = await buildServer({ edge: { allowedOrigins: [APP], rateLimits: tightLimits, rateLimitStore: broken, now: () => 0 } });
+    expect((await degraded.inject({ method: 'GET', url: '/api/v1/capabilities' })).statusCode).toBe(200);
+    expect((await degraded.inject({ method: 'GET', url: '/api/v1/capabilities' })).statusCode).toBe(200);
+    expect((await degraded.inject({ method: 'GET', url: '/api/v1/capabilities' })).statusCode).toBe(429);
+    await degraded.close();
   });
 
   it('客户端 IP：不信任代理时伪造 X-Forwarded-For 不能绕过限流；配置可信跳数后按真实客户端分桶', async () => {

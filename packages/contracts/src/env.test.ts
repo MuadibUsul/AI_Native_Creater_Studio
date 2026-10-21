@@ -69,6 +69,12 @@ describe('validateEnv（API）', () => {
     expect(crossCheckWorkerEnv(prodLocal.value!).map((issue) => issue.variable)).toContain('ANCS_STORAGE_SECRET');
   });
 
+  it('共享限流 Redis 地址：只接受 redis:// 或 rediss://', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_RATE_LIMIT_REDIS_URL: 'rediss://cache.internal:6380' }).ok).toBe(true);
+    const bad = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_RATE_LIMIT_REDIS_URL: 'http://cache.internal' });
+    expect(bad.issues.map((issue) => issue.variable)).toEqual(['ANCS_RATE_LIMIT_REDIS_URL']);
+  });
+
   it('非法 PORT / 非法 URL → 明确原因', () => {
     const result = validateEnv(apiEnvSchema, { ...validApiEnv, PORT: '0', BETTER_AUTH_URL: 'not-a-url' });
     expect(result.ok).toBe(false);

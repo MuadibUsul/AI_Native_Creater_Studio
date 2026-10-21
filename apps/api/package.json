@@ -24,6 +24,7 @@
     "@ancs/providers-mock-llm": "workspace:*",
     "@ancs/providers-youtube": "workspace:*",
     "@ancs/providers-storage-local": "workspace:*",
+    "@ancs/providers-ratelimit-redis": "workspace:*",
     "@ancs/providers-storage-s3": "workspace:*",
     "@fastify/swagger": "9.9.1",
     "drizzle-orm": "0.45.3",

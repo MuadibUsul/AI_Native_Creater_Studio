@@ -216,6 +216,8 @@ export const apiEnvSchema = z.object({
   ANCS_SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(600).default(25),
   /** 限流开关（生产不得关闭） */
   ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
+  /** 共享限流（多台 API 共用额度）：Redis 地址；不配则每个 API 进程各自限流 */
+  ANCS_RATE_LIMIT_REDIS_URL: z.string().regex(/^rediss?:\/\//, 'ANCS_RATE_LIMIT_REDIS_URL 必须是 redis:// 或 rediss:// 地址').optional(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

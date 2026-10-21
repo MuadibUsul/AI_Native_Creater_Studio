@@ -4,6 +4,7 @@ import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailur
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
+import { RedisRateLimitStore } from '@ancs/providers-ratelimit-redis';
 import { buildServer } from './server.js';
 import { createShutdown } from './shutdown.js';
 import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
@@ -96,6 +97,19 @@ if (s3Storage !== null) {
     console.error(`启动失败：对象存储不可用（${failure.name ?? 'Error'}${status === undefined ? '' : `，HTTP ${String(status)}`}）——检查 ANCS_S3_BUCKET、ANCS_S3_REGION、ANCS_S3_ENDPOINT 与访问密钥。`);
     process.exit(1);
   }
+}
+
+// 共享限流：多台 API 共用同一份额度；启动时连不上即失败（配置了就要能用），运行中出错时退回本进程限流
+const rateLimitStore = config.ANCS_RATE_LIMIT_REDIS_URL === undefined || config.ANCS_RATE_LIMIT === 'off'
+  ? undefined
+  : new RedisRateLimitStore({ url: config.ANCS_RATE_LIMIT_REDIS_URL });
+if (rateLimitStore !== undefined) {
+  const reachable = await rateLimitStore.ping().catch(() => false);
+  if (!reachable) {
+    console.error('启动失败：共享限流的 Redis 连不上——检查 ANCS_RATE_LIMIT_REDIS_URL（地址、密码、网络）。');
+    process.exit(1);
+  }
+  console.info('[api] 限流 = Redis 共享（多台 API 共用额度）');
 }
 
 const credentialDeps = credentialDepsFromEnv();
@@ -212,7 +226,7 @@ const lifecycle = createShutdown({
   drainMs: config.ANCS_SHUTDOWN_DRAIN_SECONDS * 1000,
   timeoutMs: config.ANCS_SHUTDOWN_TIMEOUT_SECONDS * 1000,
   closeServer: () => app.close(),
-  closeResources: () => handle.close(),
+  closeResources: async () => { await rateLimitStore?.close(); await handle.close(); },
   exit: (code) => process.exit(code),
   log: (message) => app.log.info(message),
 });
@@ -265,6 +279,7 @@ const app = await buildServer({
     rateLimits: config.ANCS_RATE_LIMIT === 'off' ? false : DEFAULT_RATE_LIMITS,
     hsts: config.NODE_ENV === 'production',
     trustProxyHops: config.ANCS_TRUST_PROXY_HOPS,
+    ...(rateLimitStore === undefined ? {} : { rateLimitStore }),
   },
 });
 
