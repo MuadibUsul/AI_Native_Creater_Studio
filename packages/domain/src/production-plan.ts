@@ -11,7 +11,7 @@ import {
   type ProductionPlan,
   type ProductionPlanInput,
 } from '@ancs/contracts';
-import { productionPlans, projects } from '@ancs/db';
+import { agentTurns, productionPlans, projects, proposals } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { json, listProjectFootage, type AgentToolContext, type AgentToolDefinition } from './agent-tools.js';
 
@@ -19,18 +19,33 @@ import { json, listProjectFootage, type AgentToolContext, type AgentToolDefiniti
  * 导演蓝图与场景契约（裁决 0020 第 4 条，AP-04；含 Proposal 0.2 A0 剪辑意图）。
  *
  * 规划记录是**附属**的：每次导演写计划新增一版（同一工程内版本号递增），记录制定时的工程版本号；
- * 它不进入组合状态、不阻塞任何编辑，读取时如实给出"计划之后工程是否又改过"。
+ * 它不进入组合状态、不阻塞任何编辑，读取时如实给出"计划之后工程是否又改过"（`changedSincePlan`）。
  */
 
 type Row = typeof productionPlans.$inferSelect;
 
-function toPlan(row: Row, currentRevision: number): ProductionPlan {
+/**
+ * 计划之后作品是否又改过：版本号没变 → 没改；唯一的变化是制定这份计划的那一轮的提案被采用（基于同一版本、
+ * 采用后正是当前版本）→ 那是计划的落实，不算"之后又改过"；其他情况（用户又改了、撤销了、另一轮改了）都算。
+ */
+async function changedSincePlan(deps: DomainDeps, row: Row, currentRevision: number): Promise<boolean> {
+  if (currentRevision === row.baseRevision) return false;
+  if (row.turnId === null) return true;
+  const own = await deps.db.select({ base: proposals.baseProjectRevision, committed: proposals.committedRevision })
+    .from(agentTurns).innerJoin(proposals, eq(proposals.id, agentTurns.proposalId))
+    .where(eq(agentTurns.id, row.turnId)).limit(1);
+  const proposal = own[0];
+  return !(proposal !== undefined && proposal.base === row.baseRevision && proposal.committed === currentRevision);
+}
+
+async function toPlan(deps: DomainDeps, row: Row, currentRevision: number): Promise<ProductionPlan> {
   return productionPlanSchema.parse({
     id: row.id,
     projectId: row.projectId,
     version: row.version,
     baseRevision: row.baseRevision,
     currentRevision,
+    changedSincePlan: await changedSincePlan(deps, row, currentRevision),
     turnId: row.turnId,
     blueprint: narrativeBlueprintSchema.parse(row.blueprint),
     scenes: sceneContractSchema.array().parse(row.scenes),
@@ -70,7 +85,7 @@ export async function saveProductionPlan(deps: DomainDeps, input: {
       scenes: plan.scenes,
     }).onConflictDoNothing().returning();
     const row = inserted[0];
-    if (row !== undefined) return toPlan(row, await projectRevision(deps, input));
+    if (row !== undefined) return toPlan(deps, row, await projectRevision(deps, input));
   }
   throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'another plan was saved at the same time; retry', 409);
 }
@@ -81,14 +96,14 @@ export async function getLatestProductionPlan(deps: DomainDeps, input: { workspa
   const rows = await deps.db.select().from(productionPlans)
     .where(and(eq(productionPlans.workspaceId, input.workspaceId), eq(productionPlans.projectId, input.projectId)))
     .orderBy(desc(productionPlans.version)).limit(1);
-  return rows[0] === undefined ? null : toPlan(rows[0], revision);
+  return rows[0] === undefined ? null : toPlan(deps, rows[0], revision);
 }
 
 /** 给模型看的计划摘要（上下文与工具共用）：蓝图要点 + 每段的 id、标题、时间窗、意图（类型 + 目标感受）。 */
 export function compactPlanView(plan: ProductionPlan): Record<string, unknown> {
   return {
     version: plan.version,
-    ...(plan.currentRevision !== plan.baseRevision ? { projectChangedSincePlan: true } : {}),
+    ...(plan.changedSincePlan ? { projectChangedSincePlan: true } : {}),
     logline: plan.blueprint.logline,
     structure: plan.blueprint.structure,
     ...(plan.blueprint.targetDurationSeconds === null ? {} : { targetDurationSeconds: plan.blueprint.targetDurationSeconds }),
@@ -155,7 +170,7 @@ const getProductionPlanTool: AgentToolDefinition<{ full?: boolean | undefined }>
     const plan = await getLatestProductionPlan(context.deps, { workspaceId: context.workspaceId, projectId: context.projectId });
     if (plan === null) return { content: json({ plan: null, note: 'no plan yet; write one with plan_production' }), isError: false, summary: 'no plan yet' };
     return {
-      content: json(input.full === true ? { plan: { ...plan, projectChangedSincePlan: plan.currentRevision !== plan.baseRevision } } : { plan: compactPlanView(plan) }),
+      content: json(input.full === true ? { plan } : { plan: compactPlanView(plan) }),
       isError: false,
       summary: `plan v${String(plan.version)}`,
     };

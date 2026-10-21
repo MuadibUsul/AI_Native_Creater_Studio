@@ -201,6 +201,33 @@ describe('V6-1c 共看片室', () => {
     await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '用这些素材剪出第一版。', pointer: { timeRange: null, clipIds: [], frameRegion: null } }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
   });
 
+  it('无限画布：成片屏幕旁边并排素材与制作计划（场景、剪辑意图）画框；视图按钮切换看全部 / 只看成片；画框里打开素材面板', async () => {
+    const plan = {
+      id: 'ppl_1', projectId: 'prj_1', version: 2, baseRevision: 4, currentRevision: 5, changedSincePlan: true, turnId: 'agt_1', createdAt: '2026-10-21T00:00:00.000Z',
+      blueprint: { logline: '冰川在后退', audience: '', openingPromise: '', structure: '钩子 → 出发 → 冰川', emotionArc: '', pacing: '', styleNotes: '', targetDurationSeconds: 30, paceTarget: null, mustKeep: [], avoid: [] },
+      scenes: [{ id: 'scene_hook', title: '开场', goal: '先给最好看的画面', window: { start: '0', end: '4' }, sources: [{ footageId: 'av_g', from: '6', to: '9.5' }], needs: [], acceptance: [],
+        intents: [{ id: 'intent_hook', type: 'HOOK', targetFeeling: '一眼想看下去', reason: '冰川航拍最抓人', timeRange: null, evidence: [], rejectedAlternatives: [] }] }],
+    };
+    const { sdk } = client({ turns: [turn()], extra: { autonomy: { latestPlan: vi.fn().mockResolvedValue(plan) } } });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const canvas = await screen.findByRole('region', { name: '作品画面' });
+    const footageFrame = await within(canvas).findByRole('region', { name: '素材 2' });
+    expect(within(footageFrame).getByText('glacier.mp4')).toBeTruthy();
+    const planFrame = await within(canvas).findByRole('region', { name: '制作计划 · 第 2 版' });
+    expect(within(planFrame).getByText('冰川在后退')).toBeTruthy();
+    expect(within(planFrame).getByText('结构：钩子 → 出发 → 冰川 · 目标约 30 秒')).toBeTruthy();
+    expect(within(planFrame).getByText('计划之后作品又改过')).toBeTruthy();
+    expect(within(planFrame).getByText('钩子').closest('li')?.getAttribute('title')).toBe('冰川航拍最抓人');
+    const view = within(canvas).getByRole('toolbar', { name: '画布视图' });
+    expect(within(view).getByRole('button', { name: '看全部' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(within(view).getByRole('button', { name: '只看成片' }));
+    expect(within(view).getByRole('button', { name: '只看成片' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(within(view).getByRole('button', { name: '放大' }));
+    expect(within(view).getByRole('button', { name: '只看成片' }).getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(within(footageFrame).getByRole('button', { name: '素材面板' }));
+    expect(screen.getByRole('complementary', { name: '素材' })).toBeTruthy();
+  });
+
   it('V6-9 交给 AI 剪完：还没剪时画布给出入口，打开设置签署并开始；进行中时进度卡在对话里、可停下，画布不再给入口', async () => {
     const policy = { approval: 'ASK_EACH', budgetMicros: null, perGenerationMicros: null, allowOwnLikeness: false, maxRetriesPerTask: 2, signature: null };
     const active = {

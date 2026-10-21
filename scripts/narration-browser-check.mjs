@@ -103,7 +103,7 @@ try {
   if ((await narrationClips.count()) !== 3) throw new Error(`expected 3 narration clips, found ${String(await narrationClips.count())}`);
   const cardClips = page.getByRole('button', { name: /^片段 特效 / });
   if ((await cardClips.count()) !== 3) throw new Error(`expected 3 diagram cards, found ${String(await cardClips.count())}`);
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   const seekTo = async (seconds) => {
     await video.evaluate((element, at) => new Promise((done) => { element.pause(); element.addEventListener('seeked', () => done(undefined), { once: true }); element.currentTime = at; }), seconds);
     await page.waitForTimeout(400);

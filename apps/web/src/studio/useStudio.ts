@@ -21,6 +21,8 @@ export const studioKeys = {
   previewRequest: (projectId: string, sequenceId: string, target: string) => ['studio', 'preview-request', projectId, sequenceId, target] as const,
   preview: (workspaceId: string, previewId: string) => ['studio', 'preview', workspaceId, previewId] as const,
   exportRun: (workspaceId: string, runId: string) => ['studio', 'export', workspaceId, runId] as const,
+  /** 最新的制作计划（无限画布上的计划画框，AP-04） */
+  plan: (workspaceId: string, projectId: string) => ['studio', 'plan', workspaceId, projectId] as const,
   /** 这条视频的导出运行列表（任务中心只读） */
   exports: (workspaceId: string, projectId: string) => ['studio', 'exports', workspaceId, projectId] as const,
 };

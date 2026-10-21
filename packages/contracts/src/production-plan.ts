@@ -106,8 +106,10 @@ export const productionPlanSchema = z.object({
   version: z.number().int().positive(),
   /** 制定计划时的工程版本号 */
   baseRevision: z.number().int().nonnegative(),
-  /** 工程当前版本号（读取时填写；与 baseRevision 不同说明计划之后作品又改过） */
+  /** 工程当前版本号（读取时填写） */
   currentRevision: z.number().int().nonnegative(),
+  /** 计划之后作品又改过（不算制定这份计划的那一轮的改动被采用——那是计划本身的落实） */
+  changedSincePlan: z.boolean(),
   turnId: opaqueIdSchema.nullable(),
   blueprint: narrativeBlueprintSchema,
   scenes: z.array(sceneContractSchema),

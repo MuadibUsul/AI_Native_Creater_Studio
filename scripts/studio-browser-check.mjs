@@ -122,7 +122,7 @@ try {
   await page.getByText('试改预览 · 还没采用').waitFor({ timeout: 120_000 });
   const revisionOf = async () => `版本 ${String(await page.locator('header [data-revision]').getAttribute('data-revision'))}`;
   const revisionBefore = await revisionOf();
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   await video.evaluate((element) => element.play());
   await page.waitForTimeout(1500);
   const playedTo = await video.evaluate((element) => element.currentTime);

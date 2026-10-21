@@ -593,3 +593,42 @@
   .autonomyBackdrop { align-items: flex-end; padding: 0; }
   .autonomyDialog { width: 100%; max-height: 90vh; border-radius: var(--ui-radius-container) var(--ui-radius-container) 0 0; }
 }
+
+/* 无限画布（参照 Stitch）：视口不滚动，世界层整体变换；画框在世界里，视图按钮与语音条浮在视口上 */
+.stage[data-board='on'] { display: block; padding: 0; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.stage[data-board='on'][data-panning='true'] { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; will-change: transform; }
+.monitor { position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; cursor: auto; user-select: text; -webkit-user-select: text; }
+.monitor > .frame { flex: none; }
+.monitor:not([data-mode='video']) > .empty { box-sizing: border-box; width: 100%; height: 100%; max-width: none; justify-content: center; }
+/* 画框名与成片屏幕里的界面元素（角标、预览状态）在屏幕上保持恒定大小：按镜头缩放的倒数反向缩放 */
+.boardLabel { position: absolute; left: 2px; bottom: 100%; margin: 0 0 8px; transform: scale(var(--board-inv, 1)); transform-origin: bottom left; font-size: 13px; font-weight: 500; line-height: 1.2; color: var(--ui-fg-secondary); white-space: nowrap; letter-spacing: 0; pointer-events: none; }
+.monitor .badge { transform: scale(var(--board-inv, 1)); transform-origin: top left; max-width: none; }
+.monitor .stageStatus > div { transform: scale(var(--board-inv, 1)); }
+.boardSide { position: absolute; top: 0; display: flex; flex-direction: column; gap: 56px; }
+.boardFrame { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid var(--ui-border-subtle); border-radius: 18px; background: var(--ui-bg-elevated); box-shadow: var(--ui-shadow-2); font-size: 15px; line-height: 1.5; cursor: auto; user-select: text; -webkit-user-select: text; }
+.boardFrameBody { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.boardFrameBody p { margin: 0; overflow-wrap: anywhere; }
+.boardFrame :global(.textbtn) { align-self: flex-start; font-size: 14px; }
+.boardControls { position: absolute; left: var(--ui-space-3); top: var(--ui-space-2); z-index: 5; display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: var(--ui-radius-pill); cursor: auto; }
+.boardControls :global(.btn[aria-pressed='true']) { background: var(--ui-selection-bg); }
+.boardZoom { min-width: 48px; text-align: center; font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); font-variant-numeric: tabular-nums; }
+.footageGrid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.footageCard { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 14px; }
+.footageCard strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.footageCard span { color: var(--ui-fg-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.footageCard[data-status='FAILED'] span { color: var(--ui-fg-primary); }
+.footageThumb { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; background: var(--ui-bg-subtle); color: var(--ui-fg-secondary); border: 1px solid var(--ui-border-subtle); }
+.footageThumb :global(.icon) { width: 28px; height: 28px; }
+.planLogline { font-size: 18px; font-weight: 500; line-height: 1.35; letter-spacing: -.005em; }
+.planMeta { color: var(--ui-fg-secondary); font-size: 14px; }
+.planStale { font-size: 13px; padding-left: 10px; border-left: 2px solid var(--ui-fg-primary); }
+.planScenes { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 12px; }
+.planScenes > li { padding-left: 2px; }
+.planScenes > li p { color: var(--ui-fg-secondary); font-size: 14px; }
+.planSceneHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.planSceneHead strong { font-weight: 500; }
+.planSceneHead span { color: var(--ui-fg-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.planIntents { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.planIntents li { display: flex; gap: 8px; align-items: baseline; }
+.planIntents b { flex: none; font-weight: 500; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--ui-tonal-bg); color: var(--ui-fg-primary); border: 1px solid var(--ui-border-subtle); }

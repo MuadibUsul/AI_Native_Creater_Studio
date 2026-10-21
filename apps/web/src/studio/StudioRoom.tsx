@@ -14,6 +14,7 @@ import { QuietIcon } from '@/ui/QuietIcon';
 import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanvas';
 import { StudioConversation } from './StudioConversation';
 import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive } from './StudioAutonomy';
+import { ArticleBoardFrame, FootageBoardFrame, PlanBoardFrame } from './StudioBoardFrames';
 import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
@@ -121,11 +122,24 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     mutationFn: (runId: string) => client.autonomy.cancelRun(workspaceId, projectId, runId, { idempotencyKey: `autonomy-cancel-${runId}` }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
   });
-  // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）
+  // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）与制作计划
   const latestDone = latest !== undefined && latest.status !== 'RUNNING' ? latest.id : null;
   useEffect(() => {
-    if (latestDone !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+    if (latestDone === null) return;
+    void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+    void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
   }, [latestDone, queryClient, workspaceId, projectId]);
+  // 无限画布上的制作计划画框（AP-04）：AI 写过计划才显示；版本号变了就重读（标注计划是否过期）
+  const planQuery = useQuery({
+    queryKey: studioKeys.plan(workspaceId, projectId),
+    queryFn: () => client.autonomy.latestPlan(workspaceId, projectId),
+    enabled: state !== undefined,
+    retry: false,
+  });
+  const planRevision = state?.project.revision;
+  useEffect(() => {
+    if (planRevision !== undefined) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
+  }, [planRevision, queryClient, workspaceId, projectId]);
 
   const hasClips = (timeline?.clips.length ?? 0) > 0;
   const revision = state?.project.revision;
@@ -812,6 +826,13 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           drawing={drawing}
           onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
           voiceDock={voiceDock}
+          boardFrames={state.footage.length === 0 && planQuery.data == null && article == null ? null : (
+            <>
+              {state.footage.length > 0 ? <FootageBoardFrame workspaceId={workspaceId} footage={state.footage} onOpenDetails={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(true); }} /> : null}
+              {planQuery.data != null ? <PlanBoardFrame plan={planQuery.data} /> : null}
+              {article != null ? <ArticleBoardFrame article={article} locale={locale} /> : null}
+            </>
+          )}
         />
 
         <div className={`${styles['dock']} ui-glass`}>

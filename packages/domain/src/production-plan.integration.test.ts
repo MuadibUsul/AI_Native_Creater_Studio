@@ -103,9 +103,9 @@ describe('AP-04 制作计划（工具与规划记录）', () => {
 
     const summary = JSON.parse((await run('get_production_plan', f.context, {})).content) as { plan: Record<string, unknown> };
     expect(summary.plan).toEqual(compact);
-    const full = JSON.parse((await run('get_production_plan', f.context, { full: true })).content) as { plan: { scenes: { sources: unknown[] }[]; projectChangedSincePlan: boolean } };
+    const full = JSON.parse((await run('get_production_plan', f.context, { full: true })).content) as { plan: { scenes: { sources: unknown[] }[]; changedSincePlan: boolean } };
     expect(full.plan.scenes[0]!.sources).toEqual([{ footageId: f.footageId, from: '6', to: '9.5' }]);
-    expect(full.plan.projectChangedSincePlan).toBe(true);
+    expect(full.plan.changedSincePlan).toBe(true);
 
     const context = compileAgentContext({ locale: 'zh-CN', project: { title: '冰岛', mode: 'FOOTAGE_EDIT' }, timeline: {}, footage: [], pointer: {}, plan: compact, strategy: null, recentTurns: [], request: '开头不够抓人' });
     expect(context).toContain('<production_plan>\n{"version":2,"projectChangedSincePlan":true,"logline":"冰川在后退"');

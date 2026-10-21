@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   AUTONOMOUS_RUN_ERROR_REASONS,
@@ -198,7 +198,12 @@ describe('V6-9 自主制作闭环（AP-05）', () => {
       cost: { spentMicros: 5 * CALL_MICROS, budgetMicros: 5_000_000, unpricedCalls: 0 },
     });
     expect(run.report!.pace).toMatchObject({ cutsPerMinute: 0, target: { cutsPerMinute: 10 } });
-    expect((await getLatestProductionPlan(deps(), f))!.turnId).toBe(run.turnId);
+    // 计划的落实（同一轮的提案被采用）不算"计划之后作品又改过"；之后再有别的改动才算
+    const planned = (await getLatestProductionPlan(deps(), f))!;
+    expect(planned).toMatchObject({ turnId: run.turnId, currentRevision: run.adoptedRevision, changedSincePlan: false });
+    expect(planned.baseRevision).toBeLessThan(run.adoptedRevision!);
+    await handle.db.update(projects).set({ revision: sql`${projects.revision} + 1` }).where(eq(projects.id, f.projectId));
+    expect((await getLatestProductionPlan(deps(), f))!.changedSincePlan).toBe(true);
     expect((await listAutonomousRuns(deps(), f)).map((item) => item.id)).toEqual([run.id]);
   }, 120_000);
 
