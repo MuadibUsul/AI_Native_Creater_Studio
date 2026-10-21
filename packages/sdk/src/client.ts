@@ -546,6 +546,10 @@ import {
   type UploadPartTargetResponse,
   productionPolicySchema,
   updateProductionPolicyRequestSchema,
+  autonomyPolicySchema,
+  signAutonomyRequestSchema,
+  type AutonomyPolicy,
+  type SignAutonomyRequest,
   type ProductionPolicy,
   type UpdateProductionPolicyRequest,
   distillRunSchema,
@@ -1486,6 +1490,14 @@ export interface AncsClient {
     updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
     /** 从链接导入文章原文（服务端抓取并抽正文，不建工程；用户核对后随 create 的 article 提交） */
     fetchArticle(workspaceId: string, input: FetchStudioArticleRequest): Promise<StudioArticleDraft>;
+  };
+  /** 裁决 0020 / V6-9：自主制作授权（审批档位 + 预算；总预算在任何档位都是硬上限） */
+  autonomy: {
+    get(workspaceId: string, projectId: string): Promise<AutonomyPolicy>;
+    /** 签署或重新签署（预算必填）；签署人与时间由服务端写入 */
+    sign(workspaceId: string, projectId: string, input: SignAutonomyRequest, options?: MutationOptions): Promise<AutonomyPolicy>;
+    /** 撤回：回到逐项审批、不授权任何花费 */
+    revoke(workspaceId: string, projectId: string, options?: MutationOptions): Promise<AutonomyPolicy>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -3144,6 +3156,17 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
     },
 
+    autonomy: {
+      get: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema),
+      sign: (workspaceId, projectId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, {
+          body: input,
+          bodySchema: signAutonomyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revoke: (workspaceId, projectId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, { idempotencyKey: mutation?.idempotencyKey }),
+    },
     generations: {
       list: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations`, generationListSchema)).items,

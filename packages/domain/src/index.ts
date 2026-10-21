@@ -730,3 +730,5 @@ export { DISTILL_PROMPT_VERSION, composeStrategyFromStats, composeStrategyWithMo
 export type { ComposedPack, DistillSource } from './distill-compose.js';
 export { getReferenceDistill, referenceDistillWorkflow, startReferenceDistill, updateStrategyPack } from './reference-distill.js';
 export type { ReferenceDistillPorts } from './reference-distill.js';
+export { autonomySpendDecision, autonomyMayAdopt, autonomyRemainingMicros, getProjectAutonomy, signProjectAutonomy, revokeProjectAutonomy } from './autonomy.js';
+export type { AutonomySpendKind } from './autonomy.js';

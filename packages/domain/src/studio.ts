@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import {
+  DEFAULT_AUTONOMY_POLICY,
   ApiFailure,
   ERROR_CODES,
   MEDIA_ANALYSIS_ERROR_CODES,
@@ -174,6 +175,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
       allowEffects: policy?.allowProceduralGraphics === true,
       allowNarration: policy?.allowGeneratedSpeech === true,
       allowGeneratedVideo: policy?.allowGeneratedVideo === true,
+      autonomy: policy?.autonomy ?? DEFAULT_AUTONOMY_POLICY,
       article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length, sourceUrl: article.sourceUrl ?? null },
     },
     sequenceId: sequence.id,

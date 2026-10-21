@@ -6,6 +6,7 @@ import { revisionSchema } from './common/revision.js';
 import { identitySnapshotSchema, sceneGraphSchema, sourceReferenceSchema } from './scene-graph.js';
 import { privacyTierSchema } from './workspaces.js';
 import { projectArticleSchema } from './narration.js';
+import { DEFAULT_AUTONOMY_POLICY, autonomyPolicySchema } from './autonomy.js';
 import { clipSchema, sequenceSchema, trackSchema } from './composition.js';
 import {
   animationBindingSchema,
@@ -58,6 +59,8 @@ export const productionPolicySchema = z.object({
   privacyClass: privacyTierSchema.default('STANDARD'),
   perProposalBudgetCredits: creditsSchema.nonnegative().nullable().default(null),
   projectBudgetCredits: creditsSchema.nonnegative().nullable().default(null),
+  /** 自主制作的审批档位与预算授权（裁决 0020）；与内容来源 `mode` 是两个独立维度 */
+  autonomy: autonomyPolicySchema.default(DEFAULT_AUTONOMY_POLICY),
 }).strict();
 export type ProductionPolicy = z.infer<typeof productionPolicySchema>;
 

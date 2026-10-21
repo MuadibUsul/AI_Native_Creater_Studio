@@ -3,6 +3,7 @@ import { opaqueIdSchema } from './common/ids.js';
 import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
 import { MAX_ARTICLE_CHARS, projectArticleSchema } from './narration.js';
 import { generationBudgetSchema, generationSchema } from './paid-generation.js';
+import { DEFAULT_AUTONOMY_POLICY, autonomyPolicySchema } from './autonomy.js';
 
 /**
  * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
@@ -109,6 +110,8 @@ export const studioStateSchema = z.object({
     allowNarration: z.boolean(),
     /** 项目制作规则是否允许付费生成画面（数字人出镜、生成镜头、选区重绘；V6-7/V6-8） */
     allowGeneratedVideo: z.boolean(),
+    /** 自主制作的审批档位与预算授权（裁决 0020）；未签署时为逐项审批、无预算 */
+    autonomy: autonomyPolicySchema.default(DEFAULT_AUTONOMY_POLICY),
     /** 从文章开始的工程：文章概况（原文在工程简报里） */
     article: z.object({
       title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative(),

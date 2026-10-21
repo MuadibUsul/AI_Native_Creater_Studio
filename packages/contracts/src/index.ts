@@ -2967,3 +2967,22 @@ export type {
   RevokeIdentityConsentRequest,
   SetIdentityReferenceRequest,
 } from './identity-profile.js';
+export {
+  APPROVAL_TIERS,
+  approvalTierSchema,
+  MAX_AUTONOMY_BUDGET_MICROS,
+  MAX_AUTONOMY_RETRIES,
+  autonomySignatureSchema,
+  autonomyPolicySchema,
+  DEFAULT_AUTONOMY_POLICY,
+  signAutonomyRequestSchema,
+  AUTONOMY_ERROR_REASONS,
+} from './autonomy.js';
+export type {
+  ApprovalTier,
+  AutonomySignature,
+  AutonomyPolicy,
+  SignAutonomyRequest,
+  AutonomyErrorReason,
+  AutonomySpendDecision,
+} from './autonomy.js';
