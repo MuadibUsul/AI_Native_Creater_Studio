@@ -425,6 +425,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     workspaceId, projectId, locale,
     onUtterance: ({ utteranceId, text, attention }) => setVoiceQueue((queue) => (queue.some((item) => item.id === utteranceId) ? queue : [...queue, { id: utteranceId, text, pointer: attention.pointer, failed: null }])),
     onSpeechStart: speech.stop,
+    busy: latest?.status === 'RUNNING' || actions.send.isPending || voiceQueue.some((item) => item.failed === null),
   });
   const turnRunning = latest?.status === 'RUNNING';
   const voiceHead = voiceQueue[0];
@@ -684,9 +685,12 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       : readyCount < state.footage.length ? tp.greetingProcessing(readyCount, state.footage.length)
         : tp.greetingFootage(readyCount, totalFootageSeconds(state.footage.map((item) => item.duration)));
   const voiceHero = phase === 'off' && canEdit ? (
-    <button type="button" className={styles['voiceHero']} title={tp.voiceHeroHint} onClick={() => void voice.start()}>
-      <QuietIcon name="voice" />{tp.voiceHero}
-    </button>
+    <>
+      {voiceNotice !== null ? <p className={`${styles['voiceHeroNotice']} ui-glass`} role="status">{voiceNotice}</p> : null}
+      <button type="button" className={styles['voiceHero']} title={tp.voiceHeroHint} onClick={() => void voice.start()}>
+        <QuietIcon name="voice" />{tp.voiceHero}
+      </button>
+    </>
   ) : null;
 
   const ruleGroup = (

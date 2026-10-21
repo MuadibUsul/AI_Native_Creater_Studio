@@ -644,3 +644,4 @@
 .greeting { color: var(--ui-fg-primary); }
 .liveStep { font-size: var(--ui-type-metadata); color: var(--ui-fg-secondary); }
 @media (prefers-reduced-motion: reduce) { .editorCursor { transition: none; } }
+.voiceHeroNotice { position: absolute; left: 50%; bottom: 80px; z-index: 5; transform: translateX(-50%); max-width: min(560px, calc(100% - 32px)); margin: 0; padding: 8px 14px; border-radius: 14px; font-size: var(--ui-type-metadata); text-align: center; }

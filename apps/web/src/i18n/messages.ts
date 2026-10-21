@@ -569,6 +569,7 @@ const zhCN = {
         TURN_STOPPED: '已让 AI 停下这一轮。',
         TURN_STOPPED_QUEUE: (count: number) => `已让 AI 停下这一轮，排队的 ${String(count)} 句也取消了。`,
         TURN_FAILED: '刚才那句 AI 没能完成，原因在对话里。',
+        IDLE_STOPPED: '有一阵没听到你说话，已停止收音（语音识别按时长计费）。要说话时再点"和剪辑师说话"。',
       },
       errors: {
         UNSUPPORTED: '这个浏览器不支持实时语音，请用文字。',
@@ -1254,6 +1255,7 @@ const en: Messages = {
         TURN_STOPPED: 'Asked the AI to stop this turn.',
         TURN_STOPPED_QUEUE: (count: number) => `Asked the AI to stop this turn; ${String(count)} queued ${count === 1 ? 'sentence was' : 'sentences were'} cancelled too.`,
         TURN_FAILED: 'The AI could not finish that one; the reason is in the conversation.',
+        IDLE_STOPPED: 'Stopped listening after a quiet stretch (speech recognition is billed by time). Tap "Talk to the editor" when you want to talk again.',
       },
       errors: {
         UNSUPPORTED: 'This browser does not support live voice. Please type instead.',

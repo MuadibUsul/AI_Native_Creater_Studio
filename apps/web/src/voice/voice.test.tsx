@@ -251,6 +251,39 @@ describe('V6-2 / Issue #9 连续语音（浏览器侧）', () => {
     expect(socket.json().at(-1)).toEqual({ type: 'end' });
   });
 
+  it('空等太久自动停止收音（识别按时长计费）：有人说话或 AI 在忙时不计；停下后如实提示', async () => {
+    const sdkClient = client();
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdkClient.sdk);
+    await screen.findByRole('button', { name: '开始语音' });
+    await userEvent.keyboard('v');
+    await waitFor(() => expect(FakeSocket.instances).toHaveLength(1));
+    const socket = FakeSocket.instances[0]!;
+    act(() => socket.open());
+    act(() => socket.receive({ type: 'ready', asr: { providerId: 'deepgram', implementation: 'REAL', model: null }, tts: null }));
+    await waitFor(() => expect(phase()).toBe('listening'));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // 2 分钟后开口说了半句：重新计时
+      act(() => { vi.advanceTimersByTime(2 * 60_000); });
+      act(() => socket.receive({ type: 'speech-start' }));
+      act(() => socket.receive({ type: 'transcript', utteranceId: 'utt_idle', revision: 1, text: '这里', isFinal: false }));
+      act(() => { vi.advanceTimersByTime(2 * 60_000); });
+      expect(socket.json().some((message) => message['type'] === 'end')).toBe(false);
+      act(() => socket.receive({ type: 'utterance', utteranceId: 'utt_idle', text: '这里再短一点', attention: { pointer: { timeRange: null, clipIds: [], frameRegion: null }, evidence: 'NONE', word: null, atSeconds: null, label: null } }));
+      await waitFor(() => expect(sdkClient.startTurn).toHaveBeenCalledTimes(1));
+      sdkClient.listTurns.mockResolvedValue([turn({ status: 'COMPLETED', reply: '剪短了。' })]);
+      // 这一轮结束（回应用浏览器朗读）后才重新开始空等计时
+      await waitFor(() => expect(speak).toHaveBeenCalledTimes(1), { timeout: 4000 });
+      expect(socket.json().some((message) => message['type'] === 'end')).toBe(false);
+      act(() => { vi.advanceTimersByTime(3 * 60_000 + 1_000); });
+      await waitFor(() => expect(socket.json().some((message) => message['type'] === 'end')).toBe(true));
+    } finally {
+      vi.useRealTimers();
+    }
+    act(() => socket.close());
+    expect(await screen.findByText('有一阵没听到你说话，已停止收音（语音识别按时长计费）。要说话时再点"和剪辑师说话"。')).toBeTruthy();
+  });
+
   it('用语音交出的一句 AI 没能完成：画布边缘如实提示，不朗读', async () => {
     const sdkClient = client();
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdkClient.sdk);
