@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { createDb, redactDatabaseUrl } from '@ancs/db';
+import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
@@ -90,7 +90,7 @@ const heartbeatIntervalMs = config.ANCS_WORKER_HEARTBEAT_MS ?? Math.max(1000, (l
 
 // 部署策略一次性注入领域层（领域层不读 process.env）
 configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
-const handle = createDb(databaseUrl);
+const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const deps = createDomainDeps(handle, config);
 const ffmpegPaths = {
   ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),

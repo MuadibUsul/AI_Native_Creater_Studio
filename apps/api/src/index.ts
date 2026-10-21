@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
 import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, originOf, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
-import { createDb, redactDatabaseUrl } from '@ancs/db';
+import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
 import { buildServer } from './server.js';
@@ -53,7 +53,7 @@ try {
   process.exit(1);
 }
 
-const handle = createDb(databaseUrl);
+const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const auth = createAuth({
   db: handle.db,
   secret,

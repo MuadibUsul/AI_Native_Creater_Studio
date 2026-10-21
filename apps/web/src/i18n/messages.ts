@@ -6,6 +6,7 @@ import { DELIVERY_TEXT } from './pages/delivery';
 import { ENTRY_TEXT } from './pages/entry';
 import { AUTONOMY_TEXT } from './pages/autonomy';
 import { LEGACY_TEXT } from './pages/legacy';
+import { SYSTEM_TEXT } from './pages/system';
 
 /**
  * 界面文案目录（中文为基准，英文必须覆盖同一结构——类型检查保证不缺键）。
@@ -696,6 +697,7 @@ const zhCN = {
   entry: ENTRY_TEXT['zh-CN'],
   autonomy: AUTONOMY_TEXT['zh-CN'],
   legacy: LEGACY_TEXT['zh-CN'],
+  system: SYSTEM_TEXT['zh-CN'],
 };
 
 export type Messages = typeof zhCN;
@@ -1384,6 +1386,7 @@ const en: Messages = {
   entry: ENTRY_TEXT.en,
   autonomy: AUTONOMY_TEXT.en,
   legacy: LEGACY_TEXT.en,
+  system: SYSTEM_TEXT.en,
 };
 
 export const MESSAGES: Record<Locale, Messages> = { 'zh-CN': zhCN, en };

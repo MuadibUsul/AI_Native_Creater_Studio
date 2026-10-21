@@ -1,5 +1,5 @@
 import { crossCheckStorageEnv, formatEnvFailure, retentionCliEnvSchema, validateEnv } from '@ancs/contracts';
-import { createDb, redactDatabaseUrl } from '@ancs/db';
+import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { runRetentionSweep, type DomainDeps } from '@ancs/domain';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
@@ -33,7 +33,7 @@ if (configIssues.length > 0) {
 }
 const databaseUrl = config.DATABASE_URL;
 
-const handle = createDb(databaseUrl);
+const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const storage = config.ANCS_STORAGE_DRIVER === 's3' ? new S3ObjectStorage(s3StorageOptionsFromEnv(config)) : new LocalObjectStorage(localStorageOptionsFromEnv(config));
 
 const deps: DomainDeps = {

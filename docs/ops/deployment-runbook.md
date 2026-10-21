@@ -50,6 +50,7 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
+| `ANCS_DB_POOL_MAX` / `ANCS_DB_CONNECT_TIMEOUT_MS` / `ANCS_DB_STATEMENT_TIMEOUT_MS` | 5 / 无 / 无 | 连接池（缺省每进程 5 个连接、不设超时）。所有 API、Worker、实时网关副本的连接数之和要低于数据库 `max_connections` 并留余量；建议设连接超时（如 10000）让数据库不可达时快速失败，语句超时（如 60000）防止失控查询占住连接 |
 | `PORT` | `3001` | API 端口 |
 | `BETTER_AUTH_URL` | `http://localhost:$PORT` | 对外基址（签名/回调） |
 | `ANCS_STORAGE_DRIVER` | `local` | `local`（单机磁盘）或 `s3`（S3 兼容对象存储，§10.3）；其他值启动失败，不静默降级。API、Worker、清理 CLI 必须一致 |

@@ -7,12 +7,36 @@ export interface DbHandle {
   close(): Promise<void>;
 }
 
+/** 连接池参数（由入口从已校验配置注入；缺省保持原值：最多 5 个连接、不设超时）。 */
+export interface DbPoolOptions {
+  /** 每个进程最多几个连接（API 副本数 × 它 + Worker 副本数 × 它 ≤ 数据库 max_connections 减余量） */
+  max?: number;
+  /** 等待取得连接的上限（毫秒）；数据库不可达时请求失败而不是无限挂起 */
+  connectionTimeoutMs?: number;
+  /** 单条语句的上限（毫秒，PostgreSQL statement_timeout）；防止失控查询占住连接 */
+  statementTimeoutMs?: number;
+}
+
+/** 已校验配置 → 连接池参数（API、Worker、实时网关与命令行共用同一组变量）。 */
+export function dbPoolOptionsFromEnv(env: { ANCS_DB_POOL_MAX?: number | undefined; ANCS_DB_CONNECT_TIMEOUT_MS?: number | undefined; ANCS_DB_STATEMENT_TIMEOUT_MS?: number | undefined }): DbPoolOptions {
+  return {
+    ...(env.ANCS_DB_POOL_MAX !== undefined ? { max: env.ANCS_DB_POOL_MAX } : {}),
+    ...(env.ANCS_DB_CONNECT_TIMEOUT_MS !== undefined ? { connectionTimeoutMs: env.ANCS_DB_CONNECT_TIMEOUT_MS } : {}),
+    ...(env.ANCS_DB_STATEMENT_TIMEOUT_MS !== undefined ? { statementTimeoutMs: env.ANCS_DB_STATEMENT_TIMEOUT_MS } : {}),
+  };
+}
+
 /**
  * 创建数据库句柄（P00-03 基线）。
  * 表结构与迁移在 P02 起按任务加入（DEC-12：按实际阶段建表）。
  */
-export function createDb(connectionString: string): DbHandle {
-  const pool = new Pool({ connectionString, max: 5 });
+export function createDb(connectionString: string, options: DbPoolOptions = {}): DbHandle {
+  const pool = new Pool({
+    connectionString,
+    max: options.max ?? 5,
+    ...(options.connectionTimeoutMs !== undefined ? { connectionTimeoutMillis: options.connectionTimeoutMs } : {}),
+    ...(options.statementTimeoutMs !== undefined ? { statement_timeout: options.statementTimeoutMs } : {}),
+  });
   const db = drizzle(pool);
   return {
     db,

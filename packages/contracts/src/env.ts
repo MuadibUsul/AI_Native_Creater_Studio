@@ -77,9 +77,17 @@ export function originOf(value: string): string | null {
   return port === undefined || port === defaultPort ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
 }
 
+/** 数据库连接池（API、Worker、实时网关与命令行共用；缺省：5 个连接、不设超时）。 */
+export const dbPoolEnvShape = {
+  ANCS_DB_POOL_MAX: z.coerce.number().int().min(1, 'ANCS_DB_POOL_MAX ≥ 1').max(200, 'ANCS_DB_POOL_MAX ≤ 200').optional(),
+  ANCS_DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100, 'ANCS_DB_CONNECT_TIMEOUT_MS ≥ 100').max(120_000, 'ANCS_DB_CONNECT_TIMEOUT_MS ≤ 120000').optional(),
+  ANCS_DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1000, 'ANCS_DB_STATEMENT_TIMEOUT_MS ≥ 1000').max(3_600_000, 'ANCS_DB_STATEMENT_TIMEOUT_MS ≤ 3600000').optional(),
+} satisfies z.ZodRawShape;
+
 /** API 与 Worker 共用的基础连接配置。 */
 export const baseEnvShape = {
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  ...dbPoolEnvShape,
   BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET 未配置或过短（≥16 字符；经 KMS/Secrets 注入，禁止入库）'),
 } satisfies z.ZodRawShape;
 
@@ -567,6 +575,7 @@ export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
  */
 export const realtimeEnvSchema = z.object({
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  ...dbPoolEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3002),
   /** 与 API 相同的语音会话签名密钥（网关用它校验浏览器带来的短期凭证） */
