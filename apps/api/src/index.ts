@@ -9,6 +9,8 @@ import { buildServer } from './server.js';
 import { createShutdown } from './shutdown.js';
 import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
 import { createStorageDeps } from './plugins/storage.js';
+import { createAccountEmailOptions, createEmailSender, type AccountsDeps } from './plugins/email.js';
+import { describeSmtpError, SmtpEmailSender } from '@ancs/providers-email-smtp';
 import { createAdminDeps } from './plugins/admin.js';
 import { MockPaymentProvider } from '@ancs/providers-mock-payments';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
@@ -55,11 +57,6 @@ try {
 }
 
 const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
-const auth = createAuth({
-  db: handle.db,
-  secret,
-  baseUrl: config.BETTER_AUTH_URL ?? `http://localhost:${String(port)}`,
-});
 
 /**
  * 对象存储（P02-04）：local = 单机磁盘（字节经 API 端点转发，签名密钥与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`）；
@@ -111,6 +108,31 @@ if (rateLimitStore !== undefined) {
   }
   console.info('[api] 限流 = Redis 共享（多台 API 共用额度）');
 }
+
+/**
+ * 账号自助（D-04）：注册方式 + 账号邮件（验证邮箱、找回密码、邀请）。配置已在上面校验：invite / open 必须配了发信，
+ * 生产不得用 log 驱动。SMTP 启动自检失败只告警（不让整个服务因发信商短暂故障而起不来），注册与找回密码在恢复前收不到邮件。
+ */
+const emailSender = createEmailSender(config);
+const accountEmail = emailSender === null ? undefined : createAccountEmailOptions({
+  config,
+  sender: emailSender,
+  fallbackWebBaseUrl: `http://localhost:${String(port)}`,
+  rateLimitStore,
+  log: { warn: (details, message) => console.warn(`[api] ${message}`, details) },
+});
+const accounts: AccountsDeps = { signupMode: config.ANCS_SIGNUP_MODE, ...(accountEmail === undefined ? {} : { email: accountEmail }) };
+console.info(`[api] 账号：注册方式 = ${accounts.signupMode}，发信 = ${emailSender?.kind ?? '未配置（不能注册、不能找回密码）'}`);
+if (emailSender instanceof SmtpEmailSender) {
+  await emailSender.verify().catch((error: unknown) => console.warn(`[api] SMTP 自检失败（${describeSmtpError(error)}）——检查 ANCS_SMTP_URL；恢复前注册与找回密码收不到邮件`));
+}
+
+const auth = createAuth({
+  db: handle.db,
+  secret,
+  baseUrl: config.BETTER_AUTH_URL ?? `http://localhost:${String(port)}`,
+  ...(accountEmail === undefined ? {} : { email: accountEmail }),
+});
 
 const credentialDeps = credentialDepsFromEnv();
 
@@ -226,7 +248,7 @@ const lifecycle = createShutdown({
   drainMs: config.ANCS_SHUTDOWN_DRAIN_SECONDS * 1000,
   timeoutMs: config.ANCS_SHUTDOWN_TIMEOUT_SECONDS * 1000,
   closeServer: () => app.close(),
-  closeResources: async () => { await rateLimitStore?.close(); await handle.close(); },
+  closeResources: async () => { await rateLimitStore?.close(); if (emailSender instanceof SmtpEmailSender) emailSender.close(); await handle.close(); },
   exit: (code) => process.exit(code),
   log: (message) => app.log.info(message),
 });
@@ -268,6 +290,7 @@ const app = await buildServer({
   distribution: { providers: distributionProviders },
   providerInventory,
   legacyPipeline,
+  accounts,
   // 就绪探针：数据库能查询、没有在退出排空（生产部署编排用；/health 只看存活）
   readiness: {
     checks: { database: async () => (await handle.pool.query('select 1')).rowCount === 1 },

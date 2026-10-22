@@ -22,7 +22,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | D-01 | Target markets and data residency | P0 | **Markets decided: global, not mainland China.** Still open: where data is stored (region) |
 | D-02 | Brand: product name, logo, domain | P1 | Domain/TLS, email sending domain, legal documents |
 | D-03 | Plans, prices and free quota | P1 | Stripe products, usage billing, free-quota enforcement, `ANCS_DEFAULT_PLAN` |
-| D-04 | Sign-up policy and login methods | P1 | Building sign-up / password reset |
+| D-04 | Sign-up policy and login methods | Decided | Invite-only at launch (built). Still open: other login methods (Google, Apple) |
 | D-05 | Content moderation vendor and policy | P1 | Moderation port, launch gate |
 | D-06 | Monitoring, alerting and on-call | P1 | Safe operation in production |
 | D-07 | Error reporting service | P2 | Error reporting port |
@@ -55,7 +55,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | L-06 | Digital human and voice clone consent wording | P1 | Turning on avatars for users |
 | B-01 | Stripe account and products | P1 | Taking payments |
 | B-02 | WeChat Pay / Alipay merchant accounts | Not needed | (You do not serve mainland China) |
-| B-03 | Email provider and sending domain | P1 | Sign-up, verification, password reset |
+| B-03 | Email provider and sending domain | P0 | Sign-up, verification, password reset and invitation emails (all built; they need these SMTP settings) |
 | K-01 | AI director model key | P0 | Every AI editing turn |
 | K-02 | Footage visual understanding | P2 | "Visuals" understanding on footage |
 | K-03 | Batch speech transcription (Deepgram) | P1 | Speech understanding, sentence-safe cuts, captions |
@@ -105,12 +105,12 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Blocks:** B-01, metering into the billing ledger, free-quota enforcement, `ANCS_DEFAULT_PLAN=FREE` for live mode.
 
 ### D-04 Sign-up policy and login methods
-- **What:** Open public sign-up, invite-only or waitlist? Email + password only, or also phone, Google, Apple or WeChat?
-- **Why:** Today accounts can only be created with the `user:create` command; there is no sign-up, verification or password reset.
-- **Do / provide:** For example: "Invite-only beta, email + password, Google login later."
-- **Where:** Reply to me.
-- **Priority:** P1
-- **Blocks:** Building sign-up and password reset (see "Not built yet").
+- **Decided (2026-10-22):** invite-only for the first beta, with email and password.
+- **Built:** sign-up with email verification, password reset, and invitations. `ANCS_SIGNUP_MODE` switches between `closed`, `invite` and `open`; `infra/production.env.example` sets `invite`. You invite people with `pnpm invite:signup add <email>` (runbook §10.4); team members invited to a workspace can also sign up.
+- **Still open:** whether you want Google or Apple sign-in later. Not needed for the beta.
+- **Where:** Reply to me when you want to open sign-up to everyone (`ANCS_SIGNUP_MODE=open`) or add another login method.
+- **Priority:** Decided (other login methods: P3)
+- **Blocks:** Nothing now.
 
 ### D-05 Content moderation vendor and policy
 - **What:** Pick a moderation service and what to block (e.g. Alibaba Cloud Content Security or Tencent Cloud for mainland; Hive or OpenAI Moderation elsewhere).
@@ -510,9 +510,13 @@ Everything that is waiting on you, the project owner, across the whole project: 
   - DNS records for the sending domain: SPF, DKIM and DMARC.
 - **Why:** The repository cannot send email at all yet. Sign-up verification and password reset need it.
 - **Do / provide:** Provider account plus SMTP host, port, user and password (or API key); the from-address; DNS records published and verified by the provider.
-- **Where:** Email provider console, DNS, secrets manager. Variable names will be fixed when the email port is built.
-- **Priority:** P1
-- **Blocks:** Sign-up, email verification and password reset (not built).
+- **Where:** Email provider console and DNS; then these API settings (runbook §10.4):
+  - `ANCS_EMAIL_DRIVER=smtp`
+  - `ANCS_SMTP_URL=smtps://USER:PASSWORD@HOST:465` (a secret; put it only in `infra/production.env` or your secrets manager). Example for Amazon SES in us-east-1: host `email-smtp.us-east-1.amazonaws.com`, with SMTP credentials created in the SES console.
+  - `ANCS_EMAIL_FROM="ANCS <no-reply@your-domain>"`
+  - optional `ANCS_PUBLIC_WEB_URL` (only if the website and API are on different domains) and `ANCS_PRODUCT_NAME` (once D-02 is decided).
+- **Priority:** P0, because launch is invite-only and invited people cannot sign up without email.
+- **Blocks:** Sign-up, email verification, password reset and invitation emails. The code is built and tested against a local SMTP server; delivery through your real provider is verified once these settings exist.
 
 ---
 
@@ -674,7 +678,7 @@ Also on your side: the running cost of every provider, cloud resources and the e
 
 ## 8. Launch sequence (once the items above are done)
 
-1. **Deploy.** Run I-01 to I-09 with `ANCS_SAAS_MODE=internal` and invite a small group.
+1. **Deploy.** Run I-01 to I-09 and B-03 with `ANCS_SAAS_MODE=internal` and `ANCS_SIGNUP_MODE=invite`, create your own account with `user:create`, then invite the beta group with `pnpm invite:signup add <email>`.
 2. **Verify with real providers.** Run C-01 to C-03 and record the results in the milestone files.
 3. **Approve the launch gate.** Complete L-01 to L-06 and B-01 to B-03, then mark each launch gate row `APPROVED` with its evidence.
 4. **Check machine conditions.** Set `ANCS_DEFAULT_PLAN=FREE`, `ANCS_PAYMENTS_DRIVER=stripe` (after the adapter is built), `ANCS_STORAGE_DRIVER=s3`, an `https://` `BETTER_AUTH_URL`, and `ANCS_OPS_ENVIRONMENT=PRODUCTION`.
@@ -687,7 +691,7 @@ Also on your side: the running cost of every provider, cloud resources and the e
 
 | Work | Status | Waiting on |
 |---|---|---|
-| Email sign-up, email verification, password reset, email sending port | Not started | D-04, B-03 |
+| Email sign-up, email verification, password reset, email sending port | **Built and verified** (invite-only at launch; real-browser check with real SMTP to a local mail server). Real provider delivery pending | B-03 (SMTP settings) |
 | Stripe adapter (Checkout, customer portal, webhooks, de-duplication, reconciliation) | Not started; `ANCS_PAYMENTS_DRIVER=stripe` fails at start-up on purpose | B-01 (test keys), D-03 |
 | WeChat Pay / Alipay adapters | Not planned (D-01: no mainland China) | — |
 | Metering AI usage into the billing ledger (director model, recognition, visual understanding, narration) and free-quota enforcement | Not started; these costs are recorded but do not deduct credits. Only paid generation deducts credits today | D-03 |

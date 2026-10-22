@@ -34,7 +34,8 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
  *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite', synthesizer?: (probe: object) => object },
- *   generation?: { provider?: object, behavior?: () => string }, articleFetcher?: object }} options
+ *   generation?: { provider?: object, behavior?: () => string }, articleFetcher?: object,
+ *   accounts?: { signupMode: 'closed' | 'invite' | 'open', sender: object } }} options
  *   articleFetcher：从链接导入文章用的网页抓取器（真实抓取器会拦下本机地址，验收脚本注入脚本化抓取器）。
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
@@ -60,7 +61,9 @@ export async function startStudioEnv(options) {
   });
   const proxyPort = await new Promise((done, fail) => { proxy.once('error', fail); proxy.listen(0, '127.0.0.1', () => done(proxy.address().port)); });
   const baseUrl = `http://127.0.0.1:${String(proxyPort)}`;
-  const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl });
+  // accounts（D-04）：注册方式 + 账号邮件驱动（如真实 SMTP 驱动连本机收信服务）；邮件链接指向本代理（同时承载网站与 API）
+  const accountEmail = options.accounts === undefined ? undefined : { sender: options.accounts.sender, webBaseUrl: baseUrl, productName: 'ANCS' };
+  const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl, ...(accountEmail === undefined ? {} : { email: accountEmail }) });
   // ANCS_STUDIO_S3_ENDPOINT：同一套验收改跑在 S3 兼容存储上（浏览器预签名直传直下、Worker 物化 / 写回都走对象存储；
   // 桶需已存在，每次运行用独立前缀）。缺省是本地磁盘。
   const s3Endpoint = process.env.ANCS_STUDIO_S3_ENDPOINT;
@@ -75,7 +78,7 @@ export async function startStudioEnv(options) {
       keyPrefix: `studio-${randomUUID()}`,
     });
   const voiceSecret = randomBytes(32).toString('hex');
-  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }) });
+  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }), ...(options.accounts === undefined ? {} : { accounts: { signupMode: options.accounts.signupMode, email: accountEmail } }) });
 
   // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
   let realtime = null;
@@ -171,6 +174,8 @@ export async function startStudioEnv(options) {
     baseUrl,
     db,
     deps,
+    /** 账号邮件配置（装配了 accounts 时；验收脚本用它发平台邀请邮件） */
+    accountEmail,
     workDir,
     /** 语音：本地假识别服务的连接记录（查询参数、音频字节数等） */
     voiceAsrConnections: realtime?.fakeAsr?.connections ?? [],

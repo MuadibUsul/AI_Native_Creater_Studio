@@ -31,6 +31,7 @@
     "verify": "node scripts/verify.mjs",
     "db:migrate": "pnpm --filter @ancs/api run db:migrate",
     "user:create": "pnpm --filter @ancs/api run user:create",
+    "invite:signup": "pnpm --filter @ancs/api run invite:signup --",
     "clean": "pnpm -r run clean",
     "test:web": "vitest run --project web",
     "provider:verify": "node scripts/provider-verify.mjs",

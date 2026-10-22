@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckApiEnv, crossCheckEmailEnv, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -355,5 +355,46 @@ describe('Issue #9 语音网关 / 自定义模型网关配置', () => {
     }
     expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_OPENAI_BASE_URL: 'http://gateway.example.com/v1' }).ok).toBe(false);
     expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'browser' }).ok).toBe(false);
+  });
+});
+
+describe('D-04 账号自助：注册方式与发信', () => {
+  const check = (extra: Record<string, string>) => {
+    const parsed = validateEnv(apiEnvSchema, { ...validApiEnv, ...extra });
+    return [...parsed.issues, ...(parsed.value === null ? [] : crossCheckApiEnv(parsed.value))].map((issue) => issue.variable);
+  };
+  const smtp = { ANCS_EMAIL_DRIVER: 'smtp', ANCS_SMTP_URL: 'smtps://mailer:password@smtp.example.com:465', ANCS_EMAIL_FROM: 'ANCS <no-reply@example.com>' }; // secrets:check-ignore：测试专用假密钥
+
+  it('缺省 closed、不发信；产品名缺省 ANCS', () => {
+    const parsed = validateEnv(apiEnvSchema, validApiEnv);
+    expect(parsed.value).toMatchObject({ ANCS_SIGNUP_MODE: 'closed', ANCS_PRODUCT_NAME: 'ANCS' });
+    expect(parsed.value?.ANCS_EMAIL_DRIVER).toBeUndefined();
+    expect(check({})).toEqual([]);
+  });
+
+  it('invite / open 必须配置发信；配好 SMTP 即通过（所有者决定内测用 invite）', () => {
+    expect(check({ ANCS_SIGNUP_MODE: 'invite' })).toEqual(['ANCS_SIGNUP_MODE']);
+    expect(check({ ANCS_SIGNUP_MODE: 'open' })).toEqual(['ANCS_SIGNUP_MODE']);
+    expect(check({ ANCS_SIGNUP_MODE: 'invite', ...smtp })).toEqual([]);
+    expect(check({ ANCS_SIGNUP_MODE: 'public' })).toEqual(['ANCS_SIGNUP_MODE']);
+  });
+
+  it('smtp 驱动缺地址或发件人；只配地址不配驱动；地址与发件人格式', () => {
+    expect(check({ ANCS_EMAIL_DRIVER: 'smtp' }).sort()).toEqual(['ANCS_EMAIL_FROM', 'ANCS_SMTP_URL']);
+    expect(check({ ANCS_SMTP_URL: smtp.ANCS_SMTP_URL })).toEqual(['ANCS_EMAIL_DRIVER']);
+    expect(check({ ...smtp, ANCS_SMTP_URL: 'https://smtp.example.com' })).toEqual(['ANCS_SMTP_URL']);
+    expect(check({ ...smtp, ANCS_EMAIL_FROM: 'no address' })).toEqual(['ANCS_EMAIL_FROM']);
+  });
+
+  it('生产：不得用 log 驱动；邮件链接必须是 https', () => {
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ANCS_EMAIL_DRIVER: 'log', BETTER_AUTH_URL: 'https://studio.example.com' }).map((issue) => issue.variable)).toEqual(['ANCS_EMAIL_DRIVER']);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0]).map((issue) => issue.variable)).toEqual(['ANCS_PUBLIC_WEB_URL']);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://api.internal', ANCS_PUBLIC_WEB_URL: 'https://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0])).toEqual([]);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'development', ANCS_EMAIL_DRIVER: 'log' })).toEqual([]);
+  });
+
+  it('邀请 CLI 只需要数据库连接；发信可选', () => {
+    expect(validateEnv(signupInviteCliEnvSchema, { DATABASE_URL: 'postgres://x' }).ok).toBe(true);
+    expect(validateEnv(signupInviteCliEnvSchema, {}).issues.map((issue) => issue.variable)).toEqual(['DATABASE_URL']);
   });
 });

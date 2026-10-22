@@ -1,15 +1,23 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
+  ACCOUNT_ERROR_REASONS,
+  accountEmailSentResponseSchema,
   ApiFailure,
+  emailOnlyRequestSchema,
   ERROR_CODES,
   errorEnvelope,
   errorEnvelopeSchema,
   nativeAuthorizeQuerySchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
   revokeTokenRequestSchema,
   sessionInfoSchema,
   signInRequestSchema,
   signInResponseSchema,
+  signUpRequestSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
   verifyTotpRequestSchema,
   tokenRequestSchema,
   tokenResponseSchema,
@@ -18,14 +26,23 @@ import {
 import {
   assertRegisteredClient,
   activateOpsSession,
+  authApiErrorCode,
   createAuthorizationCode,
   exchangeAuthorizationCode,
   findUserById,
   refreshTokenPair,
+  requestPasswordReset,
+  resendVerificationEmail,
+  resetPasswordWithToken,
   revokeRefreshToken,
+  signUpWithEmail,
+  verifyEmailToken,
+  withAccountEmailContext,
+  type AccountDeps,
 } from '@ancs/auth';
 import type { AuthDeps } from '../plugins/auth.js';
 import { opsCookieHeader, clearOpsCookieHeader, type AdminDeps } from '../plugins/admin.js';
+import type { AccountsDeps } from '../plugins/email.js';
 
 /** 请求头 → Headers（供 Better Auth 读取 Cookie）。 */
 const toHeaders = (request: FastifyRequest): Headers => {
@@ -54,18 +71,29 @@ const mapUser = (source: { id: string; name: string; email: string; emailVerifie
  * 认证失败统一使用契约错误信封（REQ-33-02）；authorize 的"错误回调"按授权流程惯例
  * 把错误重定向回 redirect_uri（error + state）。
  */
-export function registerAuthRoutes(app: FastifyInstance, deps: AuthDeps, admin: AdminDeps): void {
+export function registerAuthRoutes(app: FastifyInstance, deps: AuthDeps, admin: AdminDeps, accounts: AccountsDeps = { signupMode: 'closed' }): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  const accountDeps: AccountDeps = { auth: deps.auth, db: deps.db, signupMode: accounts.signupMode, emailEnabled: accounts.email !== undefined };
 
   typed.post(
     '/auth/sign-in',
     { schema: { tags: ['auth'], summary: '登录（Web 会话 Cookie）', body: signInRequestSchema, response: { 200: signInResponseSchema } } },
     async (request, reply) => {
-      const result = await deps.auth.api.signInEmail({
-        body: request.body,
-        headers: toHeaders(request),
-        returnHeaders: true,
-      });
+      const { locale, ...credentials } = request.body;
+      let result;
+      try {
+        result = await withAccountEmailContext({ locale }, () => deps.auth.api.signInEmail({
+          body: credentials,
+          headers: toHeaders(request),
+          returnHeaders: true,
+        }));
+      } catch (error) {
+        // 密码正确但邮箱未验证：已重发验证邮件，界面提示去收件箱（D-04）
+        if (authApiErrorCode(error) === 'EMAIL_NOT_VERIFIED') {
+          throw new ApiFailure(ERROR_CODES.FORBIDDEN, 'Please verify your email before signing in', 403, { reason: ACCOUNT_ERROR_REASONS.EMAIL_NOT_VERIFIED });
+        }
+        throw error;
+      }
       copySetCookies(reply, result.headers);
       reply.header('cache-control', 'no-store');
       const challenge = result.response as { twoFactorRedirect?: boolean; twoFactorMethods?: unknown };
@@ -76,6 +104,56 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthDeps, admin: 
         return { twoFactorRequired: true as const, methods: ['totp' as const] };
       }
       return { user: mapUser(result.response.user) };
+    },
+  );
+
+  /**
+   * 账号自助（D-04）。答复不透露邮箱是否已注册；注册方式与发信配置不满足时明确失败（403 / 501）。
+   * 这些端点属于 auth 限流类别（按 IP），邮件另有同一收件人限频。
+   */
+  typed.post(
+    '/auth/sign-up',
+    { schema: { tags: ['auth'], summary: '邮箱注册（发验证邮件；invite 模式需持有邀请）', body: signUpRequestSchema, response: { 202: accountEmailSentResponseSchema } } },
+    async (request, reply) => {
+      const result = await signUpWithEmail(accountDeps, request.body);
+      reply.header('cache-control', 'no-store');
+      return reply.status(202).send(result);
+    },
+  );
+
+  typed.post(
+    '/auth/verify-email',
+    { schema: { tags: ['auth'], summary: '确认邮箱（点开邮件链接；成功即登录）', body: verifyEmailRequestSchema, response: { 200: verifyEmailResponseSchema } } },
+    async (request, reply) => {
+      const verified = await verifyEmailToken(accountDeps, request.body.token);
+      if (verified.setCookies.length > 0) reply.header('set-cookie', verified.setCookies);
+      reply.header('cache-control', 'no-store');
+      // 新会话的 Cookie 换出用户；链接之前已用过（已验证）时没有新会话 → user 为 null，界面请用户直接登录
+      const cookie = verified.setCookies.map((value) => value.split(';')[0]).join('; ');
+      const session = cookie === '' ? null : await deps.auth.api.getSession({ headers: new Headers({ cookie }) });
+      const user = session === null ? null : await findUserById(deps.db, session.user.id);
+      return { status: 'VERIFIED' as const, user };
+    },
+  );
+
+  typed.post(
+    '/auth/resend-verification',
+    { schema: { tags: ['auth'], summary: '重发验证邮件', body: emailOnlyRequestSchema, response: { 202: accountEmailSentResponseSchema } } },
+    async (request, reply) => reply.status(202).send(await resendVerificationEmail(accountDeps, request.body)),
+  );
+
+  typed.post(
+    '/auth/request-password-reset',
+    { schema: { tags: ['auth'], summary: '找回密码（发重设链接）', body: emailOnlyRequestSchema, response: { 202: accountEmailSentResponseSchema } } },
+    async (request, reply) => reply.status(202).send(await requestPasswordReset(accountDeps, request.body)),
+  );
+
+  typed.post(
+    '/auth/reset-password',
+    { schema: { tags: ['auth'], summary: '用邮件里的链接设置新密码（其他会话全部失效）', body: resetPasswordRequestSchema, response: { 200: resetPasswordResponseSchema } } },
+    async (request, reply) => {
+      reply.header('cache-control', 'no-store');
+      return resetPasswordWithToken(accountDeps, request.body);
     },
   );
 

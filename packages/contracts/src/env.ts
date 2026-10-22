@@ -116,6 +116,52 @@ export const s3StorageEnvShape = {
     .optional(),
 } satisfies z.ZodRawShape;
 
+/**
+ * 发信（D-04：注册验证、找回密码、邀请邮件；API 与邀请 CLI 共用）。
+ * - `smtp`：真实投递（AWS SES、Postmark、Resend、SendGrid、Mailgun 等都提供 SMTP），生产用；
+ * - `log`：只在开发环境把邮件打到控制台（正文含一次性链接，生产禁用）；
+ * - 不配：不发信——不能注册（ANCS_SIGNUP_MODE 只能 closed），也不能找回密码。
+ */
+export const emailEnvShape = {
+  ANCS_EMAIL_DRIVER: z.enum(['log', 'smtp'], { message: 'ANCS_EMAIL_DRIVER 只能是 log 或 smtp' }).optional(),
+  /** smtp(s)://用户名:密码@主机:端口（含密码，属于 Secret；465 端口用 smtps://） */
+  ANCS_SMTP_URL: z.string().regex(/^smtps?:\/\/[^\s]+$/, 'ANCS_SMTP_URL 必须是 smtp:// 或 smtps:// 地址').optional(),
+  /** 发件人，如 "ANCS <no-reply@example.com>"（域名需在发信服务商处完成 SPF / DKIM 验证） */
+  ANCS_EMAIL_FROM: z.string().trim().min(3).max(200).refine((value) => /@[^\s@>]+\.[^\s@>]+/.test(value), 'ANCS_EMAIL_FROM 必须包含发件邮箱地址').optional(),
+  /** 邮件里链接指向的网站地址（缺省 BETTER_AUTH_URL；网站与 API 不同域时配置） */
+  ANCS_PUBLIC_WEB_URL: z.string().url('ANCS_PUBLIC_WEB_URL 必须是完整 URL').optional(),
+  /** 邮件里显示的产品名（品牌未定前为 ANCS） */
+  ANCS_PRODUCT_NAME: z.string().trim().min(1).max(60).default('ANCS'),
+} satisfies z.ZodRawShape;
+
+/** 发信配置的跨字段规则（API 与邀请 CLI 共用）。 */
+export function crossCheckEmailEnv(value: {
+  NODE_ENV?: 'development' | 'test' | 'production' | undefined;
+  BETTER_AUTH_URL?: string | undefined;
+  ANCS_EMAIL_DRIVER?: 'log' | 'smtp' | undefined;
+  ANCS_SMTP_URL?: string | undefined;
+  ANCS_EMAIL_FROM?: string | undefined;
+  ANCS_PUBLIC_WEB_URL?: string | undefined;
+}): EnvIssue[] {
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_EMAIL_DRIVER === 'smtp') {
+    if (value.ANCS_SMTP_URL === undefined) issues.push({ variable: 'ANCS_SMTP_URL', message: 'ANCS_EMAIL_DRIVER=smtp 时必须配置 SMTP 地址' });
+    if (value.ANCS_EMAIL_FROM === undefined) issues.push({ variable: 'ANCS_EMAIL_FROM', message: 'ANCS_EMAIL_DRIVER=smtp 时必须配置发件人' });
+  } else if (value.ANCS_SMTP_URL !== undefined) {
+    issues.push({ variable: 'ANCS_EMAIL_DRIVER', message: '配置了 ANCS_SMTP_URL 却没有设 ANCS_EMAIL_DRIVER=smtp——发信配置不会静默生效，请补上驱动' });
+  }
+  if (value.ANCS_EMAIL_DRIVER === 'log' && value.NODE_ENV === 'production') {
+    issues.push({ variable: 'ANCS_EMAIL_DRIVER', message: '生产环境不得使用 log 发信驱动（邮件里的一次性链接会进日志）；请用 smtp' });
+  }
+  if (value.ANCS_EMAIL_DRIVER !== undefined && value.NODE_ENV === 'production') {
+    const linkBase = value.ANCS_PUBLIC_WEB_URL ?? value.BETTER_AUTH_URL;
+    if (linkBase === undefined || !linkBase.startsWith('https://')) {
+      issues.push({ variable: 'ANCS_PUBLIC_WEB_URL', message: '生产环境邮件链接必须指向 https 网站（配置 ANCS_PUBLIC_WEB_URL，或 https 的 BETTER_AUTH_URL）' });
+    }
+  }
+  return issues;
+}
+
 const storageDriverSchema = z.enum(['local', 's3'], { message: 'ANCS_STORAGE_DRIVER 只能是 local 或 s3' }).default('local');
 
 export type S3StorageEnv = { [K in keyof typeof s3StorageEnvShape]?: string | undefined };
@@ -218,13 +264,22 @@ export const apiEnvSchema = z.object({
   ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
   /** 共享限流（多台 API 共用额度）：Redis 地址；不配则每个 API 进程各自限流 */
   ANCS_RATE_LIMIT_REDIS_URL: z.string().regex(/^rediss?:\/\//, 'ANCS_RATE_LIMIT_REDIS_URL 必须是 redis:// 或 rediss:// 地址').optional(),
+  /**
+   * 注册方式（D-04）：closed = 只能由运营建账号（缺省）；invite = 只有收到邀请（平台邀请或工作区邀请）的邮箱能注册；
+   * open = 任何人。invite / open 需要发信（ANCS_EMAIL_DRIVER）。所有者决定首轮内测上线用 invite。
+   */
+  ANCS_SIGNUP_MODE: z.enum(['closed', 'invite', 'open'], { message: 'ANCS_SIGNUP_MODE 只能是 closed、invite 或 open' }).default('closed'),
+  ...emailEnvShape,
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [...crossCheckStorageEnv(value)];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckEmailEnv(value)];
+  if (value.ANCS_SIGNUP_MODE !== 'closed' && value.ANCS_EMAIL_DRIVER === undefined) {
+    issues.push({ variable: 'ANCS_SIGNUP_MODE', message: `ANCS_SIGNUP_MODE=${value.ANCS_SIGNUP_MODE} 需要发信（注册要发验证邮件）：请配置 ANCS_EMAIL_DRIVER` });
+  }
   if (value.PLATFORM_PROVIDER_KEYS !== undefined && value.PLATFORM_PROVIDER_KEYS.trim() !== '') {
     issues.push({ variable: 'PLATFORM_PROVIDER_KEYS', message: '该变量名从未生效，已统一为 ANCS_PLATFORM_PROVIDER_KEYS（格式 供应商:密钥,…）——请改名后重启' });
   }
@@ -550,6 +605,15 @@ export const createUserCliEnvSchema = z.object({
   ANCS_NEW_USER_NAME: z.string().trim().min(1).max(80).default('Owner'),
   ANCS_NEW_USER_PASSWORD: z.string().min(12, 'ANCS_NEW_USER_PASSWORD 至少 12 位'),
 });
+
+/** 内测邀请（D-04 invite 模式）：运营给邮箱发注册邀请 / 列出 / 撤销。配了发信就同时寄出邀请邮件。 */
+export const signupInviteCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ...emailEnvShape,
+});
+export type SignupInviteCliEnv = z.infer<typeof signupInviteCliEnvSchema>;
 
 /** 迁移任务（部署时一次性运行，只需要数据库连接）。 */
 export const migrateCliEnvSchema = z.object({

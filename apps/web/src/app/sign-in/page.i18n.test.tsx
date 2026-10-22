@@ -20,7 +20,7 @@ describe('登录页英文界面', () => {
     expect(await screen.findByRole('heading', { name: 'Sign-in failed' })).toBeTruthy();
     expect(screen.getByText('Invalid email or password')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-    expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'wrong-password' });
+    expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'wrong-password', locale: 'en' });
     expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 

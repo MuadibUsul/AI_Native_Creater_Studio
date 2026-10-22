@@ -24,6 +24,7 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-storage-local': srcAlias('./packages/providers/storage-local/src/index.ts'),
   '@ancs/providers-storage-s3': srcAlias('./packages/providers/storage-s3/src/index.ts'),
   '@ancs/providers-ratelimit-redis': srcAlias('./packages/providers/ratelimit-redis/src/index.ts'),
+  '@ancs/providers-email-smtp': srcAlias('./packages/providers/email-smtp/src/index.ts'),
   '@ancs/providers-queue-bullmq': srcAlias('./packages/providers/queue-bullmq/src/index.ts'),
   '@ancs/providers-credential-vault-local': srcAlias('./packages/providers/credential-vault-local/src/index.ts'),
   '@ancs/providers-youtube': srcAlias('./packages/providers/youtube/src/index.ts'),

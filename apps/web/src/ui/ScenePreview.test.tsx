@@ -58,7 +58,7 @@ describe('SignIn', () => {
     await userEvent.type(screen.getByLabelText('邮箱'), 'a@test.local');
     await userEvent.type(screen.getByLabelText('密码'), 'password-1234');
     await userEvent.click(screen.getByRole('button', { name: '登录' }));
-    await waitFor(() => expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'password-1234' }));
+    await waitFor(() => expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'password-1234', locale: 'zh-CN' }));
     expect(await screen.findByText('登录失败')).toBeTruthy();
     expect(screen.getByText('邮箱或密码不正确')).toBeTruthy();
     expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();

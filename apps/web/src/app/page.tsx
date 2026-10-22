@@ -10,6 +10,7 @@ import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StateBlock } from '@/ui/StateBlock';
 import { useWorkspaceSelection } from '@/ui/StudioShell';
+import { PendingInvitations } from '@/ui/PendingInvitations';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Locale } from '@/i18n/locale';
 import type { Messages } from '@/i18n/messages';
@@ -146,6 +147,7 @@ export default function DashboardPage() {
       <div className={styles['aurora']} aria-hidden="true" />
       <h1 id="home-title" className={styles['heroTitle']}>{t.heroTitle}</h1>
       <p className={styles['heroSubtitle']}>{t.heroSubtitle}</p>
+      <PendingInvitations onJoined={(workspaceId) => { setLocalWorkspaceId(workspaceId); selection.selectWorkspace(workspaceId); }} />
       {workspaces.data?.length === 0 ? <div className={styles['heroState']}><StateBlock variant="empty" title={t.noWorkspaceTitle} description={t.noWorkspaceBody}>
         <form className="row mt16" onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) createWorkspace.mutate(workspaceName.trim()); }}>
           <input className="field" aria-label={t.workspaceNameLabel} placeholder={t.workspaceNamePlaceholder} value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} />

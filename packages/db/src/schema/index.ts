@@ -1,4 +1,4 @@
-export { account, session, user, verification, twoFactor } from './auth.js';
+export { account, session, signupInvitations, user, verification, twoFactor } from './auth.js';
 export { userAppearancePreferences } from './appearance.js';
 export { adminPrincipals, adminRoleGrants, adminRoleScopes, adminSessions } from './ops-auth.js';
 export { adminPermissionPolicyVersions, adminEmergencyGrants } from './ops-governance.js';

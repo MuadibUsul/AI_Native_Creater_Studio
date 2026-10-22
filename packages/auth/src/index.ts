@@ -51,3 +51,25 @@ export type { WorkspaceServiceDeps } from './workspaces.js';
 export { ApiFailure } from '@ancs/contracts';
 export { createInternalUser } from './internal-users.js';
 export type { CreateInternalUserInput, CreatedInternalUser } from './internal-users.js';
+// 账号自助（D-04）：注册、验证邮箱、找回密码、平台内测邀请
+export {
+  authApiErrorCode,
+  createSignupInvitation,
+  hasSignupInvitation,
+  isAuthApiError,
+  listSignupInvitations,
+  normalizeEmail,
+  requestPasswordReset,
+  resendVerificationEmail,
+  resetPasswordWithToken,
+  revokeSignupInvitation,
+  signUpWithEmail,
+  SIGNUP_INVITATION_TTL_DAYS,
+  verifyEmailToken,
+} from './accounts.js';
+export type { AccountDeps, SignupInvitationRow } from './accounts.js';
+export { accountLink, dispatchAccountEmail, withAccountEmailContext } from './account-email.js';
+export type { AccountEmailOptions } from './account-email.js';
+export { renderAccountEmail } from './email-templates.js';
+export type { AccountEmailContent, AccountEmailKind } from './email-templates.js';
+export { EMAIL_VERIFICATION_TTL_SECONDS, RESET_PASSWORD_TTL_SECONDS } from './auth-core.js';

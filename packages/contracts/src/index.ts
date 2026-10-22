@@ -964,6 +964,19 @@ export {
   tokenResponseSchema,
   revokeTokenRequestSchema,
   AUTH_METHODS,
+  // 账号自助（D-04）
+  SIGNUP_MODES,
+  signupModeSchema,
+  accountEmailLocaleSchema,
+  ACCOUNT_ERROR_REASONS,
+  signUpRequestSchema,
+  accountEmailSentResponseSchema,
+  emailOnlyRequestSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
+  accountCapabilitiesSchema,
 } from './auth.js';
 export type {
   AuthUser,
@@ -972,7 +985,16 @@ export type {
   TokenRequest,
   TokenResponse,
   RevokeTokenRequest,
+  SignupMode,
+  AccountEmailLocale,
+  SignUpRequest,
+  AccountEmailSentResponse,
+  EmailOnlyRequest,
+  VerifyEmailRequest,
+  ResetPasswordRequest,
+  AccountCapabilities,
 } from './auth.js';
+export type { EmailMessage, EmailSender } from './email.js';
 
 export { OPS_ENVIRONMENTS, opsEnvironmentSchema, OPS_ROLES, opsRoleSchema, opsSessionSchema, opsMfaEnrollmentRequestSchema, opsMfaEnrollmentSchema, opsRevokeSessionRequestSchema } from './ops-auth.js';
 export type { OpsEnvironment, OpsRole, OpsSession } from './ops-auth.js';
@@ -1259,10 +1281,13 @@ export {
   retentionCliEnvSchema,
   migrateCliEnvSchema,
   createUserCliEnvSchema,
+  signupInviteCliEnvSchema,
+  emailEnvShape,
+  crossCheckEmailEnv,
   s3StorageEnvShape,
   crossCheckStorageEnv,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv, S3StorageEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv, S3StorageEnv, SignupInviteCliEnv } from './env.js';
 export {
   COMPOSITION_FINAL_RENDER_ERROR_REASONS,
   COMPOSITION_FINAL_RENDER_STEPS,

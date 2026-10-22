@@ -268,9 +268,12 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
   </WorkspaceSelectionContext.Provider>;
 }
 
+const PUBLIC_PATHS = new Set(['/sign-in', '/welcome', '/sign-up', '/verify-email', '/forgot-password', '/reset-password']);
+
 export function StudioShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
-  if (pathname === '/sign-in' || pathname === '/welcome') return <>{children}</>;
+  // 未登录也能打开的页面：登录、欢迎页与账号自助（D-04：注册、验证邮箱、找回 / 重设密码）
+  if (PUBLIC_PATHS.has(pathname)) return <>{children}</>;
   // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏（新建页与"我的形象与声音"是普通页面，照常套外壳）
   if (/^\/w\/[^/]+\/studio\/(?!new$|identity$)[^/]+$/.test(pathname)) return <>{children}</>;
   // V6-4 审片（手机网页优先）：同样是自带顶栏的单屏页面

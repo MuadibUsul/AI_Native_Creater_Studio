@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { capabilitiesResponseSchema, type ProviderInventoryEntry } from '@ancs/contracts';
+import { capabilitiesResponseSchema, type AccountCapabilities, type ProviderInventoryEntry } from '@ancs/contracts';
 import type { ExtensionRegistry } from '@ancs/extensions';
 
 export interface ExtensionsDeps {
@@ -10,6 +10,8 @@ export interface ExtensionsDeps {
   providers?: readonly ProviderInventoryEntry[];
   /** 旧 V4 流水线是否装配（缺省 mock） */
   legacyPipeline?: 'mock' | 'off';
+  /** 账号自助：注册方式与能否找回密码（缺省 closed、不能找回） */
+  accounts?: AccountCapabilities;
 }
 
 /**
@@ -40,6 +42,7 @@ export function registerCapabilityRoutes(app: FastifyInstance, deps: ExtensionsD
           requested === undefined ? null : deps.extensions.availability(requested),
         providers: [...(deps.providers ?? [])],
         legacyPipeline: deps.legacyPipeline ?? 'mock',
+        accounts: deps.accounts ?? { signup: 'closed' as const, passwordReset: false },
       };
     },
   );

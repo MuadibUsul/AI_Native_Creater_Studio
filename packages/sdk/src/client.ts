@@ -226,6 +226,13 @@ import {
   userAppearancePreferenceSchema,
   setUserAppearancePreferenceRequestSchema,
   signInRequestSchema,
+  signUpRequestSchema,
+  accountEmailSentResponseSchema,
+  emailOnlyRequestSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
   signInResponseSchema,
   verifyTotpRequestSchema,
   opsSessionSchema,
@@ -308,6 +315,13 @@ import {
   type UserAppearancePreference,
   type SetUserAppearancePreferenceRequest,
   type SignInResponse,
+  type SignUpRequest,
+  type AuthUser,
+  type AccountEmailSentResponse,
+  type AccountEmailLocale,
+  type EmailOnlyRequest,
+  type VerifyEmailRequest,
+  type ResetPasswordRequest,
   type SpeechProfile,
   type TokenResponse,
   type WorkspaceMember,
@@ -712,7 +726,14 @@ export interface AncsClient {
   /** 本部署装配了哪些能力（公开、无凭据；含旧 V4 流水线是否可用） */
   capabilities(): Promise<CapabilitiesResponse>;
   auth: {
-    signIn(input: { email: string; password: string }): Promise<SignInResponse>;
+    signIn(input: { email: string; password: string; locale?: AccountEmailLocale }): Promise<SignInResponse>;
+    /** 邮箱注册（D-04）：答复只说"请查收邮件"；注册方式不允许时 403（SIGNUP_CLOSED / SIGNUP_INVITE_REQUIRED） */
+    signUp(input: SignUpRequest): Promise<AccountEmailSentResponse>;
+    /** 点开验证邮件后确认邮箱（成功即登录；链接已用过时 user 为 null） */
+    verifyEmail(input: VerifyEmailRequest): Promise<{ status: 'VERIFIED'; user: AuthUser | null }>;
+    resendVerification(input: EmailOnlyRequest): Promise<AccountEmailSentResponse>;
+    requestPasswordReset(input: EmailOnlyRequest): Promise<AccountEmailSentResponse>;
+    resetPassword(input: ResetPasswordRequest): Promise<{ status: 'PASSWORD_RESET' }>;
     verifyTotp(input: { code: string }): Promise<SignInResponse>;
     signOut(): Promise<void>;
     session(): Promise<SessionInfo>;
@@ -788,7 +809,7 @@ export interface AncsClient {
     /** 邀请（P09-04；接受时邮箱匹配 + 权威席位检查） */
     invitations: {
       list(workspaceId: string): Promise<WorkspaceInvitation[]>;
-      create(workspaceId: string, input: { email: string; role: WorkspaceMember['role'] }, options?: MutationOptions): Promise<WorkspaceInvitation>;
+      create(workspaceId: string, input: { email: string; role: WorkspaceMember['role']; locale?: AccountEmailLocale }, options?: MutationOptions): Promise<WorkspaceInvitation>;
       revoke(workspaceId: string, invitationId: string, options?: MutationOptions): Promise<WorkspaceInvitation>;
     };
     /** 隐私档位（P09-04 / §20.4；非 STANDARD 需套餐权益 privacyMode） */
@@ -1892,6 +1913,16 @@ export function createClient(options: ClientOptions): AncsClient {
         request('POST', '/api/v1/auth/sign-in', signInResponseSchema, { body: input, bodySchema: signInRequestSchema }),
       verifyTotp: (input) =>
         request('POST', '/api/v1/auth/verify-totp', signInResponseSchema, { body: input, bodySchema: verifyTotpRequestSchema }),
+      signUp: (input) =>
+        request('POST', '/api/v1/auth/sign-up', accountEmailSentResponseSchema, { body: input, bodySchema: signUpRequestSchema }),
+      verifyEmail: (input) =>
+        request('POST', '/api/v1/auth/verify-email', verifyEmailResponseSchema, { body: input, bodySchema: verifyEmailRequestSchema }),
+      resendVerification: (input) =>
+        request('POST', '/api/v1/auth/resend-verification', accountEmailSentResponseSchema, { body: input, bodySchema: emailOnlyRequestSchema }),
+      requestPasswordReset: (input) =>
+        request('POST', '/api/v1/auth/request-password-reset', accountEmailSentResponseSchema, { body: input, bodySchema: emailOnlyRequestSchema }),
+      resetPassword: (input) =>
+        request('POST', '/api/v1/auth/reset-password', resetPasswordResponseSchema, { body: input, bodySchema: resetPasswordRequestSchema }),
       signOut: async () => {
         await request('POST', '/api/v1/auth/sign-out', emptySchema);
         cookieJar.clear();

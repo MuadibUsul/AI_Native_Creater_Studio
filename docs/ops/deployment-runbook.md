@@ -311,3 +311,24 @@ API 与 Worker 可以各自横向扩容、不再共享磁盘。驱动在 `packag
   （`s3.json` 的身份与密钥见 `.github/workflows/ci.yml` 同名步骤；集成测试默认连 `http://127.0.0.1:58333`，可用 `ANCS_TEST_S3_ENDPOINT` 改）。
 - 真实云账号（AWS / R2 / OSS）上的验证需要你的桶与密钥（生产清单第 1 节第 2 项的 👤 部分）。
 
+### 10.4 注册与账号邮件（D-04）
+
+- **注册方式** `ANCS_SIGNUP_MODE`：`closed`（缺省，只能用 `user:create` 建号）| `invite`（只有收到邀请的邮箱能注册；**所有者决定首轮内测用它**）| `open`（任何人）。
+  `invite` / `open` 必须配好发信，否则 API 启动失败。登录页按 `/api/v1/capabilities` 的 `accounts` 显示"创建账号""忘记密码？"。
+- **发信**：`ANCS_EMAIL_DRIVER=smtp` + `ANCS_SMTP_URL`（smtp(s)://用户名:密码@主机:端口，Secret）+ `ANCS_EMAIL_FROM`。AWS SES、Postmark、Resend、SendGrid、Mailgun 都给 SMTP 入口。
+  发件域名在服务商处完成 SPF、DKIM（最好再加 DMARC），否则邮件易进垃圾箱。API 启动时做一次 SMTP 登录自检，失败只告警（不让整站起不来），恢复前注册和找回密码收不到邮件。
+  `log` 驱动只在开发用（把邮件打到控制台），生产启动即失败。邮件链接指向 `ANCS_PUBLIC_WEB_URL`（缺省 `BETTER_AUTH_URL`），生产必须是 https。
+- **流程**：注册 → 验证邮件（24 小时有效，点开即登录）→ 进创作台；未验证前登录会再收到一封验证邮件。找回密码 → 重设链接（1 小时、一次性）→ 设新密码后其他设备全部退出。
+  运营建的账号视为已验证。答复不透露邮箱是否已注册（已注册的邮箱再注册，只给邮箱主人发"你已经有账号了"）。同一收件人同类邮件最多连发 3 封，之后约每 5 分钟 1 封。
+- **发内测邀请**（在 api 容器里跑；配了发信会同时寄出邀请邮件，邀请 30 天有效，重复 add 只顺延）：
+
+```bash
+docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env run --rm --no-deps api \
+  node apps/api/dist/cli/signup-invite.js add someone@example.com --by owner --note "wave 1" --locale en
+# 列出 / 撤销
+docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env run --rm --no-deps api node apps/api/dist/cli/signup-invite.js list
+docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env run --rm --no-deps api node apps/api/dist/cli/signup-invite.js revoke someone@example.com
+```
+
+- 工作区邀请（团队成员）同样会寄邮件；被邀请的邮箱在 invite 模式下也能注册，注册后在首页"你有新的邀请"里接受。
+- 验证：`scripts/account-browser-check.mjs`（真实 SMTP 驱动 → 本机收信服务 → 浏览器打开邮件里的链接；证据 `docs/verification/artifacts/accounts/`）。真实服务商投递待你开通账号后实测。

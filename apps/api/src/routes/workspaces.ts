@@ -48,6 +48,7 @@ import {
   type DomainDeps,
 } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
+import { sendWorkspaceInvitationEmail, type AccountsDeps } from '../plugins/email.js';
 
 const workspaceIdParamsSchema = z.object({ id: opaqueIdSchema });
 const memberParamsSchema = z.object({ id: opaqueIdSchema, userId: opaqueIdSchema });
@@ -75,7 +76,7 @@ async function requireAuth(request: FastifyRequest, instance: FastifyInstance): 
  * 认证（401）→ 成员资格（404 抗枚举）→ 能力（403）。
  * SSE/事件、Project/Asset/Job 路由落地后必须复用同一入口（P02 起）。
  */
-export function registerWorkspaceRoutes(app: FastifyInstance, deps: AuthDeps): void {
+export function registerWorkspaceRoutes(app: FastifyInstance, deps: AuthDeps, accounts?: AccountsDeps): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const domain: DomainDeps = { db: deps.db };
 
@@ -296,6 +297,8 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: AuthDeps): v
         invitedByUserId: context.userId,
         requesterRole: membership.role,
       });
+      // 配置了发信时寄出邀请邮件（不等待投递；邀请本身已生效）
+      await sendWorkspaceInvitationEmail(deps.db, accounts, { workspaceId: request.params.id, email: invitation.email, locale: request.body.locale });
       return reply.status(201).send(invitation);
     },
   );

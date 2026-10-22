@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { providerInventoryEntrySchema } from './provider-kind.js';
+import { accountCapabilitiesSchema } from './auth.js';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 import { distributionProviderRegistrationSchema } from './publishing.js';
@@ -242,6 +243,8 @@ export const capabilitiesResponseSchema = capabilitySnapshotSchema.extend({
   providers: providerInventoryEntrySchema.array().default([]),
   /** 旧 V4 流水线是否装配（off = 脚本 / 分镜等旧页面在此部署不可用，界面隐藏入口并引导到共看片室） */
   legacyPipeline: z.enum(['mock', 'off']).default('mock'),
+  /** 账号自助：注册方式与能否找回密码（未配置发信时只能由运营建账号，也不能找回密码） */
+  accounts: accountCapabilitiesSchema.default({ signup: 'closed', passwordReset: false }),
 });
 
 export type CapabilitiesResponse = z.infer<typeof capabilitiesResponseSchema>;

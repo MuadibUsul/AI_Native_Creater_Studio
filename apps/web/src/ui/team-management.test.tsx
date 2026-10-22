@@ -118,7 +118,7 @@ describe('团队与隐私（P09-04）', () => {
     await userEvent.type(await screen.findByLabelText('邀请邮箱'), 'new@test.local');
     await userEvent.selectOptions(screen.getByLabelText('邀请角色'), 'VIEWER');
     await userEvent.click(screen.getByRole('button', { name: '邀请' }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', { email: 'new@test.local', role: 'VIEWER' }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith('ws_1', { email: 'new@test.local', role: 'VIEWER', locale: 'zh-CN' }));
 
     await userEvent.click(screen.getAllByRole('button', { name: '撤销' })[0] as HTMLButtonElement);
     await waitFor(() => expect(revoke).toHaveBeenCalledWith('ws_1', 'winv_1'));

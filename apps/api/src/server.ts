@@ -133,6 +133,8 @@ export interface BuildServerOptions {
   providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
   /** 旧 V4 流水线是否装配（经 /capabilities 报告；off 时界面隐藏旧入口） */
   legacyPipeline?: 'mock' | 'off';
+  /** 账号自助（D-04）：注册方式与账号邮件（未提供 = closed 且不发信） */
+  accounts?: import('./plugins/email.js').AccountsDeps;
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
@@ -204,10 +206,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     await app.register(
       async (instance) => {
         registerIdempotency(instance, authDeps);
-        registerAuthRoutes(instance, authDeps, adminDeps);
+        registerAuthRoutes(instance, authDeps, adminDeps, options.accounts);
         registerAppearanceRoutes(instance, authDeps);
         registerOpsAuthRoutes(instance, authDeps, adminDeps);
-        registerWorkspaceRoutes(instance, authDeps);
+        registerWorkspaceRoutes(instance, authDeps, options.accounts);
         registerChannelRoutes(instance, authDeps);
         registerCreatorIdentityRoutes(instance, authDeps);
         registerSpeechProfileRoutes(instance, authDeps);
@@ -304,7 +306,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   await app.register(
     async (instance) => {
       registerHealthRoutes(instance, options.readiness);
-      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [], ...(options.legacyPipeline === undefined ? {} : { legacyPipeline: options.legacyPipeline }) });
+      registerCapabilityRoutes(instance, {
+        extensions,
+        providers: options.providerInventory ?? [],
+        ...(options.legacyPipeline === undefined ? {} : { legacyPipeline: options.legacyPipeline }),
+        accounts: { signup: options.accounts?.signupMode ?? 'closed', passwordReset: options.accounts?.email !== undefined },
+      });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);
       }
