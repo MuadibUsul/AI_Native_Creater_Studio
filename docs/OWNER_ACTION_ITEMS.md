@@ -2,7 +2,7 @@
 
 Everything that is waiting on you, the project owner, across the whole project: decisions, accounts, keys, configuration values, external setup, legal work, cost approvals and content only you can provide. The last section lists work that is still not built and what each piece is waiting for.
 
-- **As of:** 2026-10-22, repository HEAD `731c3a3` (branch `codex/v04-foundation`).
+- **As of:** 2026-10-22, repository HEAD `731c3a3` (branch `codex/v04-foundation`). Updated the same day with your D-01 answer: **global market, not mainland China**. Items that only applied to mainland China are marked "Not needed" below.
 - **Sources consolidated here:** `docs/V06/production-readiness-checklist.md`, `docs/V06/integration-checklist.md`, `docs/ops/launch-gate.md`, `docs/ops/deployment-runbook.md`, `docs/V06/milestones/*.md`, `infra/production.env.example` and the configuration schemas in `packages/contracts/src/env.ts`. Those files keep the full technical detail. This document is the to-do list.
 - **Secrets rule:** keys and passwords go only into your secrets manager or the server's `infra/production.env`, which is git-ignored. Never put them in the repository, an issue, a commit or a chat log.
 
@@ -19,7 +19,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 
 | ID | Item | Priority | Blocks |
 |---|---|---|---|
-| D-01 | Target markets and data residency | P0 | Provider choices, filings, payment rails, region of deployment |
+| D-01 | Target markets and data residency | P0 | **Markets decided: global, not mainland China.** Still open: where data is stored (region) |
 | D-02 | Brand: product name, logo, domain | P1 | Domain/TLS, email sending domain, legal documents |
 | D-03 | Plans, prices and free quota | P1 | Stripe products, usage billing, free-quota enforcement, `ANCS_DEFAULT_PLAN` |
 | D-04 | Sign-up policy and login methods | P1 | Building sign-up / password reset |
@@ -28,7 +28,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | D-07 | Error reporting service | P2 | Error reporting port |
 | D-08 | AI editor persona: name, style, default voice | P2 | Final persona prompt and default voice |
 | D-09 | Default autonomy tier and budget | P2 | Defaults for "let AI finish the edit" |
-| D-10 | Mainland China real-time voice provider | P2 | Voice-first experience for mainland users |
+| D-10 | Mainland China real-time voice provider | Not needed | (You do not serve mainland China) |
 | D-11 | Export without the visible AI label on request | P3 | Building that flow |
 | D-12 | Turning on AI-written effect code | P3 | `ANCS_EFFECT_CODEGEN=enabled` |
 | D-13 | Fetching reference videos from platform links | P3 | `ANCS_REFERENCE_FETCH_CMD` |
@@ -48,13 +48,13 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | I-12 | Network egress allowlist | P2 | Each external provider |
 | I-13 | Operations console administrator | P1 | Admin console in production |
 | L-01 | Launch gate legal and business items LG-01 to LG-14 | P1 | `ANCS_SAAS_MODE=live` |
-| L-02 | AI-content producer code `ANCS_AIGC_PRODUCER_CODE` | P1 (China) | Compliant AIGC metadata |
-| L-03 | China filings: algorithm, generative AI service, ICP | P1 (China) | Serving the mainland public |
-| L-04 | EU AI Act Article 50 position | P2 (EU) | Choosing C2PA or another machine-readable mark |
+| L-02 | AI-content producer code `ANCS_AIGC_PRODUCER_CODE` | Not needed | (China-only requirement) |
+| L-03 | China filings: algorithm, generative AI service, ICP | Not needed | (You do not serve mainland China) |
+| L-04 | EU AI Act Article 50 position | P1 | Choosing C2PA or another machine-readable mark for EU users |
 | L-05 | Remotion licence | P1 | Launch gate LG-12 |
 | L-06 | Digital human and voice clone consent wording | P1 | Turning on avatars for users |
 | B-01 | Stripe account and products | P1 | Taking payments |
-| B-02 | WeChat Pay / Alipay merchant accounts | P2 (China) | Mainland payments |
+| B-02 | WeChat Pay / Alipay merchant accounts | Not needed | (You do not serve mainland China) |
 | B-03 | Email provider and sending domain | P1 | Sign-up, verification, password reset |
 | K-01 | AI director model key | P0 | Every AI editing turn |
 | K-02 | Footage visual understanding | P2 | "Visuals" understanding on footage |
@@ -82,10 +82,11 @@ Everything that is waiting on you, the project owner, across the whole project: 
 ### D-01 Target markets and data residency
 - **What:** Decide where you will sell first: mainland China, international, or both. If both, decide whether to deploy two separate regions with separate data.
 - **Why:** This one choice decides which AI, voice and payment providers are usable, whether Chinese filings are required, where data may be stored, and which moderation vendor fits.
-- **Do / provide:** Write down the launch markets and the data residency rule. For example: "Phase 1: international only, data in us-east; Phase 2: separate mainland deployment."
-- **Where:** Reply to me; I record it in `docs/V06/production-readiness-checklist.md` section 5 ("数据驻留").
-- **Priority:** P0
-- **Blocks:** D-05, D-10, L-02, L-03, B-02, I-01 region choice.
+- **Decided (2026-10-22):** global market; you do not serve users in mainland China. Recorded in `docs/V06/production-readiness-checklist.md` section 5 ("数据驻留"). As a result, D-10, L-02, L-03 and B-02 are not needed. L-04 (EU) moves up to P1. Exports now default to an English "AI-generated" badge; the Chinese "AI生成" badge is used only when the user's interface is in Chinese.
+- **Still open:** where user data is stored. For example "one region, us-east" or "EU users in eu-central, everyone else in us-east". This drives I-01, I-03 and I-05, and matters for GDPR.
+- **Where:** Reply to me; I record it in the same checklist row.
+- **Priority:** P0 (the data region only)
+- **Blocks:** D-05, I-01 region choice.
 
 ### D-02 Brand: product name, logo, domain
 - **What:** The final product name, logo files and the production domain.
@@ -156,8 +157,8 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Why:** The verified voice path uses an OpenAI-compatible gateway, which is not suitable for mainland users. V6 §9 plans region routing.
 - **Do / provide:** Vendor choice, account and keys.
 - **Where:** Real-time gateway secrets; the adapter is not built yet.
-- **Priority:** P2 (only if D-01 includes mainland China)
-- **Blocks:** Voice for mainland users.
+- **Priority:** Not needed (D-01: you do not serve mainland China)
+- **Blocks:** Nothing for you.
 
 ### D-11 Export without the visible AI label on request
 - **What:** The labelling rules allow giving a user a copy without the visible "AI生成" badge if the user agreement states the user's labelling duty and logs are kept for at least 6 months.
@@ -443,23 +444,23 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Why:** Since 2025-09-01, China's labelling measures and the GB 45438-2025 standard require it. Exports that contain AI-generated media already get the visible "AI生成" badge and the `AIGC` metadata field, but the producer field stays empty until you set this. The Worker warns at start-up in production when it is missing.
 - **Do / provide:** Your code in the format of the TC260 practice guide. It is built from your organisation's 18-character Unified Social Credit Code, a service-type digit (`1` = generation service) and a 4-character service number. Confirm the exact layout with counsel. Allowed characters: letters, digits, `_` and `-`, up to 64.
 - **Where:** Worker env `ANCS_AIGC_PRODUCER_CODE=<code>`.
-- **Priority:** P1 if you serve the mainland public; otherwise P3
-- **Blocks:** Complete, compliant AIGC metadata.
+- **Priority:** Not needed (D-01). Leave it unset; the Worker prints a one-line reminder at start-up in production, which you can ignore.
+- **Blocks:** Nothing for you.
 
 ### L-03 China filings
 - **What:** Algorithm filing (算法备案), generative AI service filing (生成式人工智能服务备案) and ICP filing (ICP 备案).
 - **Why:** Required to offer generative AI services to the mainland public.
 - **Do / provide:** Confirm with counsel which apply, then file them. Tell me if a filing needs technical documents.
 - **Where:** The relevant regulator portals; record the numbers in `docs/ops/launch-gate.md`.
-- **Priority:** P1 (mainland China only)
-- **Blocks:** Serving the mainland public.
+- **Priority:** Not needed (D-01: you do not serve mainland China)
+- **Blocks:** Nothing for you.
 
 ### L-04 EU AI Act Article 50 position
 - **What:** The Article 50 transparency obligations have applied since 2026-08-02. They cover machine-readable marking of synthetic content and disclosure of deepfakes.
-- **Why:** The current label is the Chinese `AIGC` metadata field plus the visible badge. The EU commonly expects C2PA content credentials, which need a signing certificate.
+- **Why:** Today exports that contain AI-generated media carry a visible badge ("AI-generated" in English, "AI生成" in Chinese) and the `AIGC` metadata field from the Chinese standard. The EU commonly expects C2PA content credentials, which need a signing certificate.
 - **Do / provide:** Counsel's view on whether the current labels suffice for your EU users. If C2PA is needed, buy a C2PA signing certificate and tell me.
 - **Where:** Reply to me; the certificate goes into the secrets manager.
-- **Priority:** P2 (only if you serve the EU)
+- **Priority:** P1 (a global launch includes the EU)
 - **Blocks:** C2PA support (not built).
 
 ### L-05 Remotion licence
@@ -499,8 +500,8 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Why:** Stripe does not cover typical mainland consumer payments. These accounts need a legal entity in China.
 - **Do / provide:** Decide whether to open them; if so, open them and share sandbox credentials.
 - **Where:** WeChat Pay and Alipay merchant platforms.
-- **Priority:** P2 (mainland China only)
-- **Blocks:** Mainland payments (adapters not built).
+- **Priority:** Not needed (D-01: you do not serve mainland China)
+- **Blocks:** Nothing for you.
 
 ### B-03 Email provider and sending domain
 - **What:**
@@ -688,15 +689,15 @@ Also on your side: the running cost of every provider, cloud resources and the e
 |---|---|---|
 | Email sign-up, email verification, password reset, email sending port | Not started | D-04, B-03 |
 | Stripe adapter (Checkout, customer portal, webhooks, de-duplication, reconciliation) | Not started; `ANCS_PAYMENTS_DRIVER=stripe` fails at start-up on purpose | B-01 (test keys), D-03 |
-| WeChat Pay / Alipay adapters | Not started | D-01, B-02 |
+| WeChat Pay / Alipay adapters | Not planned (D-01: no mainland China) | — |
 | Metering AI usage into the billing ledger (director model, recognition, visual understanding, narration) and free-quota enforcement | Not started; these costs are recorded but do not deduct credits. Only paid generation deducts credits today | D-03 |
 | Content moderation port (after upload, before and after generation, before export) | Not started | D-05 |
 | Error reporting port | Not started | D-07 |
 | Scheduler sample for retention cleanup and event delivery | Not started (the commands exist) | Nothing; can be done on request |
 | Production bootstrap command for operations-console admins | Not built (only test helpers create operators) | I-13 |
 | Export without the visible AI label on user request (agreement clause and 6-month logs) | Not built | D-11 |
-| C2PA content credentials; integrity hashes in `AIGC` `ReservedCode1/2`; XMP metadata | Not built; the `AIGC` field and the visible badge are built and verified | L-04 |
-| Mainland China real-time voice provider (region routing) | Not built | D-01, D-10 |
+| C2PA content credentials; integrity hashes in `AIGC` `ReservedCode1/2`; XMP metadata | Not built; the `AIGC` field and the visible badge (English "AI-generated" by default, Chinese "AI生成" for a Chinese interface) are built and verified | L-04 |
+| Mainland China real-time voice provider (region routing) | Not planned (D-01: no mainland China) | — |
 | Elorian video understanding | Not started | K-10 |
 | Export of editable project files (Premiere / CapCut) | Not scheduled | Your priority call |
 | Autonomous production phase 2: AI confirms paid generation under the "full authority" tier, concurrent production, fill shots (AP-06 to AP-15, milestones V6-10 and V6-11) | Planned | Nothing; next in the roadmap |

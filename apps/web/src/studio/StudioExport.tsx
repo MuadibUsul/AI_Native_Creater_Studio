@@ -6,7 +6,7 @@ import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
-import { exportContentLabelled, exportVideoAssetId, useExportRun, useStudioActions } from './useStudio';
+import { exportContentLabel, exportVideoAssetId, labelLanguageFor, useExportRun, useStudioActions } from './useStudio';
 import styles from './studio.module.css';
 
 /** 导出尺寸：按作品画幅取 1080p 级（短边 1080）。 */
@@ -30,7 +30,7 @@ export function StudioExport(props: {
   canEdit: boolean;
   onClose: () => void;
 }) {
-  const { messages } = useI18n();
+  const { locale, messages } = useI18n();
   const t = messages.studio.export;
   const client = useAncsClient();
   const actions = useStudioActions(props.workspaceId, props.projectId);
@@ -50,7 +50,8 @@ export function StudioExport(props: {
 
   const start = () => {
     setDownloadError(null);
-    actions.startExport.mutate({ sequenceId: props.sequenceId, ...size, revision: props.revision }, { onSuccess: (started) => setRunId(started.id) });
+    // 成片含 AI 生成内容时，开头角标用当前界面语言
+    actions.startExport.mutate({ sequenceId: props.sequenceId, ...size, revision: props.revision, labelLanguage: labelLanguageFor(locale) }, { onSuccess: (started) => setRunId(started.id) });
   };
   const download = async () => {
     const assetId = exportVideoAssetId(run.data);
@@ -64,6 +65,7 @@ export function StudioExport(props: {
   };
 
   const status = run.data?.status;
+  const contentLabel = exportContentLabel(run.data);
   const failedText = run.data?.status === 'FAILED'
     ? (JSON.stringify(run.data.error ?? {}).includes(COMPOSITION_FINAL_RENDER_ERROR_REASONS.REVISION_CHANGED) ? t.revisionChanged : t.failed)
     : actions.startExport.isError ? describeError(actions.startExport.error).message : null;
@@ -86,7 +88,7 @@ export function StudioExport(props: {
       {status === 'SUCCEEDED' ? (
         <div className="col" style={{ gap: 8 }} role="status">
           <div className="row gap8"><QuietIcon name="check" /><strong>{t.done}</strong></div>
-          {exportContentLabelled(run.data) ? <p className="small muted" data-aigc-label="">{t.aiLabelled}</p> : null}
+          {contentLabel !== null ? <p className="small muted" data-aigc-label={contentLabel}>{t.aiLabelled(contentLabel)}</p> : null}
           <button type="button" className="btn primary" onClick={() => void download()}><QuietIcon name="download" />{t.download}</button>
           {downloadError !== null ? <p role="alert">{downloadError}</p> : null}
         </div>

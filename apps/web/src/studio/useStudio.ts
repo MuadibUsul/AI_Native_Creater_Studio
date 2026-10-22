@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentLocale, AgentPointer, AgentTurn, Clip, Generation, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
+import type { AgentLocale, AgentPointer, AgentTurn, Clip, ContentLabelLanguage, Generation, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
+import type { Locale } from '@/i18n/locale';
 
 /**
  * 共看片室的数据层：一律经 SDK 读写服务端（不维护第二套工程状态）。
@@ -143,9 +144,16 @@ export function exportVideoAssetId(run: WorkflowRun | undefined): string | null 
 }
 
 /** 导出时是否加了 AI 生成合成内容标识（成片含 AI 生成的画面、配音或特效时由服务端加上）。 */
-export function exportContentLabelled(run: WorkflowRun | undefined): boolean {
-  const rendered = run?.outputs['render'] as { contentLabel?: unknown } | undefined;
-  return rendered?.contentLabel !== undefined && rendered.contentLabel !== null;
+/** 导出成片上实际加的 AI 生成显式标识文字；没加标识（不含 AI 生成内容）时为 null */
+export function exportContentLabel(run: WorkflowRun | undefined): string | null {
+  const rendered = run?.outputs['render'] as { contentLabel?: { explicitText?: unknown } | null } | undefined;
+  const text = rendered?.contentLabel?.explicitText;
+  return typeof text === 'string' ? text : null;
+}
+
+/** 界面语言 → 成片显式标识语言 */
+export function labelLanguageFor(locale: Locale): ContentLabelLanguage {
+  return locale === 'zh-CN' ? 'zh' : 'en';
 }
 
 /** 用户选用的风格策略（可选）：包 + 旋钮取值。 */
@@ -215,8 +223,8 @@ export function useStudioActions(workspaceId: string, projectId: string) {
   });
 
   const startExport = useMutation({
-    mutationFn: (input: { sequenceId: string; width: number; height: number; revision: number }) =>
-      client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision }, { idempotencyKey: randomKey('export') }),
+    mutationFn: (input: { sequenceId: string; width: number; height: number; revision: number; labelLanguage: ContentLabelLanguage }) =>
+      client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision, labelLanguage: input.labelLanguage }, { idempotencyKey: randomKey('export') }),
     // 任务中心的导出列表随之刷新（进行中时它自己每 5 秒轮询到结束）
     onSuccess: () => queryClient.invalidateQueries({ queryKey: studioKeys.exports(workspaceId, projectId) }),
   });

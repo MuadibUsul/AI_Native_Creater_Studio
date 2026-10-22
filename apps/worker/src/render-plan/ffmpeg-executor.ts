@@ -55,7 +55,7 @@ async function resolveLabelFont(override: string | undefined, cwd: string): Prom
   const listed = await runTool('fc-list', [':lang=zh-cn', 'file'], { cwd, timeoutMs: 30_000 }).catch(() => null);
   const files = (listed?.stdout ?? '').split('\n').map((line) => line.replace(/:\s*$/, '').trim()).filter((line) => line.length > 0).sort();
   const chosen = files.find((file) => PREFERRED_CJK_FONTS.test(file)) ?? files[0];
-  if (chosen === undefined) throw new Error('找不到支持中文的字体，无法渲染"AI生成"显式标识（Worker 镜像应包含 fonts-noto-cjk）');
+  if (chosen === undefined) throw new Error('找不到支持中文的字体，无法渲染 AI 生成显式标识（中英文案共用一款字体；Worker 镜像应包含 fonts-noto-cjk）');
   return chosen;
 }
 

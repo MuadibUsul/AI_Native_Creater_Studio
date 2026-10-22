@@ -146,6 +146,8 @@ try {
   await page.getByRole('button', { name: '开始导出' }).click();
   await page.getByText('导出完成').waitFor({ timeout: 300_000 });
   await page.locator('[data-aigc-label]').waitFor({ timeout: 10_000 });
+  const zhLabel = await page.locator('[data-aigc-label]').getAttribute('data-aigc-label');
+  if (zhLabel !== 'AI生成') throw new Error(`Chinese interface export label should be "AI生成", got ${String(zhLabel)}`);
   await shot('05b-export-ai-labelled');
   const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载成片' }).click()]);
   const downloaded = join(evidenceDir, '.tmp-export.mp4');
@@ -163,6 +165,24 @@ try {
   await page.getByRole('button', { name: /Voice-over: on/ }).waitFor();
   await page.getByText('Voice-over', { exact: true }).waitFor();
   await shot('06-english');
+
+  // 4b. 英文界面导出：开头角标随界面语言变成 "AI-generated"（面向全球市场）
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Start export' }).click();
+  await page.getByText('Export finished').waitFor({ timeout: 300_000 });
+  const enLabel = await page.locator('[data-aigc-label]').getAttribute('data-aigc-label');
+  if (enLabel !== 'AI-generated') throw new Error(`English interface export label should be "AI-generated", got ${String(enLabel)}`);
+  await shot('06b-export-english');
+  const [exportedEn] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download video' }).click()]);
+  const downloadedEn = join(evidenceDir, '.tmp-export-en.mp4');
+  await exportedEn.saveAs(downloadedEn);
+  const tagsEn = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', downloadedEn]).toString()).format.tags ?? {};
+  if (JSON.parse(tagsEn.AIGC ?? 'null')?.Label !== '1') throw new Error(`English export has no AIGC metadata: ${JSON.stringify(tagsEn)}`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', downloadedEn, '-frames:v', '1', join(evidenceDir, '06c-export-frame-1s-en.png')]);
+  await rm(downloadedEn, { force: true });
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  pass('英文界面导出', '导出面板与成片开头角标为 "AI-generated"；AIGC 元数据 Label=1；1 秒处画面见 06c');
+
   await page.getByRole('button', { name: 'Switch the interface to Chinese' }).click();
   await page.getByRole('button', { name: '切换浅深色' }).click();
   await page.waitForTimeout(300);

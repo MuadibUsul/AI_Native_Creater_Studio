@@ -257,7 +257,8 @@ describe('V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚
     const tags = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', file]).toString()) as { format: { tags: Record<string, string> } };
     expect(Object.keys(JSON.parse(tags.format.tags['AIGC']!) as Record<string, string>)).toEqual(['Label', 'ContentProducer', 'ProduceID', 'ReservedCode1', 'ContentPropagator', 'PropagateID', 'ReservedCode2']);
     expect(JSON.parse(tags.format.tags['AIGC']!)).toMatchObject({ Label: '1', ProduceID: run.id, PropagateID: run.id });
-    expect((finished.outputs['render'] as { contentLabel: { explicitText: string } | null }).contentLabel?.explicitText).toBe('AI生成');
+    // 未指定标识语言 → 英文（面向全球市场）；界面按当前语言传 labelLanguage
+    expect((finished.outputs['render'] as { contentLabel: { explicitText: string } | null }).contentLabel?.explicitText).toBe('AI-generated');
     expect((finished.outputs['qa'] as { checks: { name: string; passed: boolean }[] }).checks.find((check) => check.name === 'aigc.metadata')?.passed).toBe(true);
   });
 

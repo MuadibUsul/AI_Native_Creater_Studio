@@ -129,11 +129,16 @@ describe('compileFfmpegMediaGraph', () => {
     expect(plain.args).toContain('+faststart');
     expect(plain.graphHash).not.toBe(labelled.graphHash);
 
-    // 显式标识须含"AI"与"生成/合成"、至少 2 秒；字体路径与文字里不能有能逃出滤镜参数的字符
+    // 显式标识只能是固定文案、至少 2 秒；字体路径与文字里不能有能逃出滤镜参数的字符
     expect(contentLabelSchema.safeParse({ ...label, explicitText: 'Generated' }).success).toBe(false);
     expect(contentLabelSchema.safeParse({ ...label, explicitSeconds: 1 }).success).toBe(false);
     expect(() => explicitLabelFilter(label, PROFILE, "/fonts/x.ttc:enable='1'")).toThrow();
-    expect(() => explicitLabelFilter({ ...label, explicitText: "AI生成'[x]" }, PROFILE, '/fonts/x.ttc')).toThrow();
+    expect(() => explicitLabelFilter({ ...label, explicitText: "AI生成'[x]" } as unknown as ContentLabel, PROFILE, '/fonts/x.ttc')).toThrow();
+
+    // 英文文案（全球市场缺省）同样画在开头角落，字号规则不变
+    const english = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES, label: { content: { ...label, explicitText: 'AI-generated' }, fontFile: '/usr/share/fonts/cjk.ttc' } });
+    expect(english.filterGraph).toContain("drawtext=fontfile=/usr/share/fonts/cjk.ttc:text='AI-generated'");
+    expect(english.graphHash).not.toBe(labelled.graphHash);
   });
 
   it('确定性：同一输入 → 同一 argv 与 graphHash；内容变化 → 哈希变化', () => {

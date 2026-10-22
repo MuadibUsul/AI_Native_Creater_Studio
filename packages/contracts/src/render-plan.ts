@@ -225,10 +225,15 @@ export const renderPlanExecutionResultSchema = z.object({
 export type RenderPlanExecutionResult = z.infer<typeof renderPlanExecutionResultSchema>;
 
 /**
- * AI 生成合成内容标识（《人工智能生成合成内容标识办法》+ GB 45438-2025）：成片含 AI 生成合成的媒体时，导出文件必须同时带
- * - 显式标识：开头画面角落的文字提示（含"AI"与"生成"，持续 ≥2 秒，字高 ≥ 画面短边 5%）；
+ * AI 生成合成内容标识（《人工智能生成合成内容标识办法》+ GB 45438-2025；欧盟 AI 法案第 50 条同样要求告知）：成片含 AI 生成合成的媒体时，导出文件必须同时带
+ * - 显式标识：开头画面角落的文字提示（持续 ≥2 秒，字高 ≥ 画面短边 5%），文字按导出语言取固定文案；
  * - 隐式标识：文件元数据里的 `AIGC` 字段（附录 E 的七个键，键序固定）。
  */
+export const CONTENT_LABEL_LANGUAGES = ['en', 'zh'] as const;
+export const contentLabelLanguageSchema = z.enum(CONTENT_LABEL_LANGUAGES);
+export type ContentLabelLanguage = z.infer<typeof contentLabelLanguageSchema>;
+/** 显式标识文案（只允许这几种，不接受任意文字）：中文沿用标准示例"AI生成"，其余市场用英文 */
+export const AIGC_EXPLICIT_TEXT = { en: 'AI-generated', zh: 'AI生成' } as const satisfies Record<ContentLabelLanguage, string>;
 export const AIGC_METADATA_KEY = 'AIGC';
 export const AIGC_EXPLICIT_MIN_SECONDS = 2;
 /** 显式标识字高占画面短边的最小比例 */
@@ -263,8 +268,8 @@ export function serializeAigcMetadata(label: AigcMetadataLabel): string {
 }
 
 export const contentLabelSchema = z.object({
-  /** 显式标识文字（须含"AI/人工智能"与"生成/合成"） */
-  explicitText: z.string().min(1).max(40).refine((text) => /AI|人工智能/.test(text) && /生成|合成/.test(text), '显式标识须同时含"AI/人工智能"与"生成/合成"'),
+  /** 显式标识文字（固定文案之一，见 AIGC_EXPLICIT_TEXT） */
+  explicitText: z.enum([AIGC_EXPLICIT_TEXT.en, AIGC_EXPLICIT_TEXT.zh]),
   /** 显式标识在开头显示的秒数（视频更短时全程显示） */
   explicitSeconds: z.number().min(AIGC_EXPLICIT_MIN_SECONDS).max(10),
   metadata: aigcMetadataLabelSchema,
