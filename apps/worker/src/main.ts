@@ -3,6 +3,8 @@ import { hostname } from 'node:os';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
+import { DeepSeekAgentModel } from '@ancs/providers-deepseek';
+import { ElorianAgentModel } from '@ancs/providers-elorian';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
@@ -119,7 +121,7 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
     : undefined;
 
 /**
- * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（anthropic 缺密钥在 env 校验中启动失败）；
+ * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（缺对应密钥在 env 校验中启动失败）；
  * 未配置时装配"未配置"端口：AI 轮次明确失败（501），不回退 Mock。密钥只在本进程内存中。
  */
 /** Claude 经兼容 Anthropic Messages 协议的网关时的基址（不配 = 直连 Anthropic） */
@@ -128,7 +130,9 @@ const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_
   ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5', ...anthropicGateway })
   : config.ANCS_AGENT_DRIVER === 'gemini' && config.GEMINI_API_KEY !== undefined
     ? new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'gemini-flash-latest' })
-    : unconfiguredAgentModel();
+    : config.ANCS_AGENT_DRIVER === 'deepseek' && config.DEEPSEEK_API_KEY !== undefined
+      ? new DeepSeekAgentModel({ apiKey: config.DEEPSEEK_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'deepseek-v4-pro' })
+      : unconfiguredAgentModel();
 /** V6-1b：AI 导演看素材的抽帧（源/代理文件流式物化 + FFmpeg 单帧解码，进程内 LRU 缓存）。 */
 const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) });
 /** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
@@ -246,6 +250,8 @@ const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHRO
   ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5', ...anthropicGateway }), ...ffmpegPaths })
   : visualDriver === 'gemini' && config.GEMINI_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_VISION_MODEL ?? 'gemini-flash-lite-latest' }), ...ffmpegPaths })
+  : visualDriver === 'elorian' && config.ELORIAN_API_KEY !== undefined
+  ? createModelVisualAnalysisAdapter({ model: new ElorianAgentModel({ apiKey: config.ELORIAN_API_KEY, model: config.ANCS_VISION_MODEL ?? 'elorian-1-agent' }), ...ffmpegPaths })
   : visualDriver === 'process' && config.ANCS_VISUAL_ANALYSIS_EXECUTABLE !== undefined
     ? createProcessMediaVisualAnalysisAdapter({
       executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,

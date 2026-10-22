@@ -10,12 +10,29 @@
 
 ## 已接好代码、只差凭据
 
+### DeepSeek 导演（2026-10-15 已真实验证）
+
+Worker 配置 `ANCS_AGENT_DRIVER=deepseek`、`DEEPSEEK_API_KEY`；可选 `ANCS_AGENT_MODEL`，缺省 `deepseek-v4-pro`。
+含图像的会话历史使用 `deepseek-flash`（Pro 为文本模型）；图像只作为 user 消息发送，工具返回图片按调用 id 关联。
+密钥只放服务端环境或未跟踪的 `.env`，不发给浏览器。缺密钥启动失败，不回退 Mock。
+工具调用、提案、预算、工作流重试与用量账本沿用现有导演链路；没有内置价格，界面明确显示未定价调用。
+真实工具往返、浏览器导演轮次和 Flash 看帧验证见 `docs/V06/milestones/deepseek-provider.md`。
+
+### Elorian 视频/画面理解（2026-10-17 接入；真实推理待余额）
+
+Worker 配置 `ANCS_VISUAL_ANALYSIS_DRIVER=elorian`、`ELORIAN_API_KEY`；可选 `ANCS_VISION_MODEL`，缺省 `elorian-1-agent`。
+OpenAI 兼容 Chat Completions（`https://api.elorian.ai/v1/chat/completions`）；模型支持 text/image/video（`/v1/models` 实测），图片以 data URL 放在 user 消息里，工具返回图片按调用 id 关联。
+适配器不自动重试；余额不足返回 429 + `insufficient_quota` 时归为**不可重试**的 AUTH，避免把计费问题当限流反复重试。密钥只放服务端环境或未跟踪的 `.env`；缺密钥启动失败，不回退 Mock。
+**验证状态**：代码、单测、typecheck、build、arch:check 通过；`GET /v1/models` 鉴权成功；**真实推理尚未验证——账户余额 $0.00（HTTP 429 `insufficient_quota`）**。真实素材链路已实测：对 650MB 素材重建 SAMPLING/VISION 阶段，Worker 抽帧后调用 Elorian 并返回 `Elorian request failed (HTTP 429, insufficient quota)`，`attempts=1`、`FAILED_FINAL`（不重试），说明链路已通、只差余额。充值后按表格里的"怎么验证"跑一次并记录模型、用量、耗时与费用。
+
+
 | 能力 | 用在哪 | 进程 | 环境变量 | 没配时 | 怎么验证 |
 |---|---|---|---|---|---|
 | AI 导演（Claude） | 共看片室的每一轮对话：剪第一版、按指令改、自检 | Worker | `ANCS_AGENT_DRIVER=anthropic`、`ANTHROPIC_API_KEY`；可选 `ANCS_AGENT_MODEL`（缺省 `claude-opus-5-5`）；走兼容 Anthropic Messages 协议的网关时加 `ANCS_ANTHROPIC_BASE_URL`（https，填到 `/v1` 之前，Key 填网关发的） | 轮次失败 `AGENT_MODEL_NOT_CONFIGURED`，界面显示"AI 导演还没配置好" | ① 起 API + Worker + Web，新建作品、放 3 条素材、点"让 AI 剪第一版"；② 初剪评测：`node scripts/eval-first-cut.mjs --set evals/first-cut/travel.json --model anthropic --export`（见 `docs/V06/eval/first-cut-rubric.md`） |
 | AI 导演（Google Gemini，已真实验证） | 同上（与 Claude 二选一；风格撰写也用它） | Worker | `ANCS_AGENT_DRIVER=gemini`、`GEMINI_API_KEY`；可选 `ANCS_AGENT_MODEL`（缺省 `gemini-flash-latest`；高峰期 flash 可能 503 或首字很慢，实测用 `gemini-flash-lite-latest`）；网络放行 `generativelanguage.googleapis.com`（本云环境已通） | 同上 | 已验证（2026-10-14，`gemini-flash-lite-latest`，见 `docs/V06/milestones/gemini-provider.md`）：全部导演工具 schema 被接受、思考签名回放、并行工具调用、工具返回的抽帧图像；初剪评测 5 个用例全部完成；浏览器全流程 `scripts/gemini-browser-check.mjs` 4/4。Gemini 的价格本仓库没有可核对的公开价，计量显示"含未定价调用" |
 | 镜头理解（视觉模型） | 素材"理解"中的画面说明，写入统一索引供 AI 检索 | Worker | `ANCS_VISUAL_ANALYSIS_DRIVER=anthropic`、`ANTHROPIC_API_KEY`；可选 `ANCS_VISION_MODEL`（缺省 `claude-haiku-5-5`） | 素材卡显示"画面：未配置"；AI 仍可用 `look_at_footage` 直接看帧（同样需要导演模型） | 上传一条素材，等"画面"变为"已理解"；在评测报告中查看说明质量与单条成本 |
 | 镜头理解（Gemini 视觉，已真实验证） | 同上 | Worker | `ANCS_VISUAL_ANALYSIS_DRIVER=gemini`、`GEMINI_API_KEY`；可选 `ANCS_VISION_MODEL`（缺省 `gemini-flash-lite-latest`） | 同上 | 已验证：3 段素材 16 s 内"画面"全部"已理解"（浏览器截图 `docs/verification/artifacts/gemini/01-footage-understood.png`） |
+| 镜头理解（Elorian，2026-10-17 接入） | 同上 | Worker | `ANCS_VISUAL_ANALYSIS_DRIVER=elorian`、`ELORIAN_API_KEY`；可选 `ANCS_VISION_MODEL`（缺省 `elorian-1-agent`） | 同上（画面"未配置"） | **真实推理待余额**：账户 $0.00 时返回 429 `insufficient_quota`（已归为不可重试的 AUTH）。充值后上传一条素材，等"画面"变为"已理解"，记录模型、用量、耗时与费用；单测与协议形状见 `packages/providers/elorian/src/index.test.ts` |
 | 语音转写（Deepgram 批量） | 素材里的说话内容，供 AI 找句子、不剪断句子 | Worker | `ANCS_ASR_DRIVER=deepgram`、`DEEPGRAM_API_KEY`；可选 `ANCS_DEEPGRAM_MODEL`、`ANCS_DEEPGRAM_LANGUAGE` | 素材卡显示"语音：未配置"；评测里"句子完整"为"无法评估" | 已在 `docs/verification/provider-real-deepgram.md` 核验过适配器；配好后上传一条有人声的素材，看"语音"变为"已理解" |
 | 实时语音识别（共看片室边看边说） | 麦克风 → Realtime Gateway → 流式识别 → 边说边出的文字、"这个/这里"按说出那一刻绑定 → 一句话说完作为一轮对话发给 AI（AI 忙时排队） | Realtime Gateway（`apps/realtime`，新进程） | 二选一：`ANCS_REALTIME_ASR_DRIVER=deepgram` + `DEEPGRAM_API_KEY`（可选 `ANCS_DEEPGRAM_LIVE_MODEL_ZH` / `_EN`）；或 `ANCS_REALTIME_ASR_DRIVER=openai` + `OPENAI_API_KEY`（OpenAI 兼容转写接口；兼容网关另配 `ANCS_OPENAI_BASE_URL`，含 `/v1`；可选 `ANCS_REALTIME_ASR_MODEL` 缺省 `gpt-4o-transcribe`、`ANCS_REALTIME_ASR_INTERIM_MS` 缺省 900）。都需要与 API 同一把 `ANCS_VOICE_SESSION_SECRET`（≥32 字符）、`ANCS_ALLOWED_ORIGINS`；反向代理转发 `/realtime/v1/voice` | 没配会话密钥：开麦提示"语音还没配置好"；没配识别：网关回"未配置"并关闭，界面如实说明 | **openai 驱动已真实验证**（2026-10-15，经 OpenAI 兼容网关，`gpt-4o-transcribe`；Issue #9，见 `docs/V06/milestones/V6-2.md`）：`node scripts/voice-live-check.mjs`。openai 驱动是"分段转写"：网关自己断句，说话中每 0.9 s 音频转写一次出临时文字，词时间按发声段估算；首段文字要等一次转写往返（实测 2–4.5 s），比真正的流式识别慢。Deepgram 流式仍待密钥 |
 | AI 语音回应（服务端合成，可打断） | 用语音说的那一轮，AI 回应的要点由网关合成后边合成边下发、浏览器边收边播；用户一开口立即停播；可切换声音（只列实际可用的） | Realtime Gateway | `ANCS_REALTIME_TTS_DRIVER=openai`、`OPENAI_API_KEY`（与识别共用）；可选 `ANCS_REALTIME_TTS_MODEL`（缺省 `gpt-4o-mini-tts`）、`ANCS_REALTIME_TTS_VOICES_JSON`（如 `[{"id":"coral","name":"Coral"},{"id":"onyx","name":"Onyx"}]`，缺省只有 coral） | 用浏览器自带朗读（语音条标注"浏览器朗读"），不显示声音下拉 | 已真实验证（同上）：回应首块音频 1.5–3.3 s，开口到停声约 0.1 s；用量按字符（只念回应开头至多 360 字、到句号为止） |

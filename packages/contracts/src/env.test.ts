@@ -12,6 +12,30 @@ const validApiEnv = {
   BETTER_AUTH_SECRET: 'deployment-secret-0123456789', // secrets:check-ignore：测试专用假密钥
 };
 
+describe('DeepSeek director configuration', () => {
+  it('requires a server key when DeepSeek is selected and never echoes it', () => {
+    const result = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'deepseek' });
+    expect(result.ok).toBe(true);
+    expect(crossCheckWorkerEnv(result.value!)).toContainEqual(expect.objectContaining({ variable: 'DEEPSEEK_API_KEY' }));
+    const configured = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'deepseek', DEEPSEEK_API_KEY: 'test-only-placeholder' }); // secrets:check-ignore：配置校验假凭据
+    expect(configured.ok).toBe(true);
+    expect(crossCheckWorkerEnv(configured.value!).some((issue) => issue.variable === 'DEEPSEEK_API_KEY')).toBe(false);
+    expect(formatEnvFailure('worker', crossCheckWorkerEnv(configured.value!))).not.toContain('test-only-placeholder');
+  });
+});
+
+describe('Elorian vision analysis configuration', () => {
+  it('requires a server key when Elorian is the visual analysis driver and never echoes it', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'elorian' });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!)).toContainEqual(expect.objectContaining({ variable: 'ELORIAN_API_KEY' }));
+    const configured = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'elorian', ELORIAN_API_KEY: 'test-only-placeholder' }); // secrets:check-ignore：配置校验假凭据
+    expect(configured.ok).toBe(true);
+    expect(crossCheckWorkerEnv(configured.value!).some((issue) => issue.variable === 'ELORIAN_API_KEY')).toBe(false);
+    expect(formatEnvFailure('worker', crossCheckWorkerEnv(configured.value!))).not.toContain('test-only-placeholder');
+  });
+});
+
 describe('validateEnv（API）', () => {
   it('最小合法配置 → 通过（默认值：PORT=3001 / storage=local / llm=mock / tts=mock）', () => {
     const result = validateEnv(apiEnvSchema, validApiEnv);

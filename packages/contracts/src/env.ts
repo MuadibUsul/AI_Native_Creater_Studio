@@ -410,11 +410,11 @@ export const workerEnvSchema = z.object({
   ANCS_ASR_EXECUTABLE: nonEmpty('ANCS_ASR_EXECUTABLE').optional(),
   ANCS_ASR_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_ASR_ARGS_JSON 必须是字符串数组 JSON').optional(),
   /**
-   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini = 视觉模型逐帧写镜头说明（需对应密钥）。
+   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini / elorian = 视觉模型逐帧写镜头说明（需对应密钥）。
    * 缺省：配置了 ANCS_VISUAL_ANALYSIS_EXECUTABLE 则为 process，否则不装配（视觉分析任务明确失败"未配置"）。
    */
-  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini' }).optional(),
-  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest） */
+  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini', 'elorian'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini | elorian' }).optional(),
+  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest；elorian: elorian-1-agent） */
   ANCS_VISION_MODEL: nonEmpty('ANCS_VISION_MODEL').optional(),
   /** 视觉分析子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaVisualAnalysis JSON。 */
   ANCS_VISUAL_ANALYSIS_EXECUTABLE: nonEmpty('ANCS_VISUAL_ANALYSIS_EXECUTABLE').optional(),
@@ -425,10 +425,14 @@ export const workerEnvSchema = z.object({
   ANCS_DISABLE_RENDER: z.enum(['0', '1']).optional(),
   ANCS_WORKER_ONCE: z.enum(['0', '1']).optional(),
   /**
-   * 通用导演 Agent 的模型驱动（V6-1）：anthropic = 真实 Claude（需 ANTHROPIC_API_KEY）；gemini = Google Gemini（需 GEMINI_API_KEY）。
+   * 通用导演 Agent：anthropic / gemini / deepseek，分别要求对应的服务端密钥。
    * 未配置时不装配真实模型：AI 轮次明确失败（AGENT_MODEL_NOT_CONFIGURED），不回退 Mock。风格撰写（蒸馏器）用同一个模型。
    */
-  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini' }).optional(),
+  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini', 'deepseek'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini | deepseek' }).optional(),
+  /** DeepSeek 导演密钥，仅由 Worker 入口注入适配器。 */
+  DEEPSEEK_API_KEY: z.string().min(16, 'DEEPSEEK_API_KEY 过短').optional(),
+  /** Elorian 密钥（视觉理解 driver=elorian），仅由 Worker 入口注入适配器；不写日志、不下发客户端。 */
+  ELORIAN_API_KEY: z.string().min(16, 'ELORIAN_API_KEY 过短').optional(),
   /** Claude API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回、不下发客户端） */
   ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
   /**
@@ -441,7 +445,7 @@ export const workerEnvSchema = z.object({
    * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
    */
   GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
-  /** 导演模型 id（缺省 anthropic: claude-opus-5-5；gemini: gemini-flash-latest） */
+  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，含图像历史时用 deepseek-flash） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
@@ -569,6 +573,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
   }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'elorian' && value.ELORIAN_API_KEY === undefined) {
+    issues.push({ variable: 'ELORIAN_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=elorian 时必须配置 ELORIAN_API_KEY（fail-closed，不回退 Mock）' });
+  }
   if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'process' && value.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_VISUAL_ANALYSIS_EXECUTABLE', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=process 时必须配置 ANCS_VISUAL_ANALYSIS_EXECUTABLE' });
   }
@@ -588,6 +595,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_AGENT_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_AGENT_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_AGENT_DRIVER === 'deepseek' && value.DEEPSEEK_API_KEY === undefined) {
+    issues.push({ variable: 'DEEPSEEK_API_KEY', message: 'ANCS_AGENT_DRIVER=deepseek 时必须配置 DEEPSEEK_API_KEY（fail-closed，不回退 Mock）' });
   }
   if (value.ANCS_ASR_DRIVER === 'process' && value.ANCS_ASR_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_ASR_EXECUTABLE', message: 'ANCS_ASR_DRIVER=process 时必须配置 ANCS_ASR_EXECUTABLE' });

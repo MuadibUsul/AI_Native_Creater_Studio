@@ -31,6 +31,8 @@ const workspaceAliases: Record<string, string> = {
   '@ancs/providers-mock-provider': srcAlias('./packages/providers/mock-provider/src/index.ts'),
   '@ancs/providers-mock-llm': srcAlias('./packages/providers/mock-llm/src/index.ts'),
   '@ancs/providers-anthropic': srcAlias('./packages/providers/anthropic/src/index.ts'),
+  '@ancs/providers-deepseek': srcAlias('./packages/providers/deepseek/src/index.ts'),
+  '@ancs/providers-elorian': srcAlias('./packages/providers/elorian/src/index.ts'),
   '@ancs/providers-gemini': srcAlias('./packages/providers/gemini/src/index.ts'),
   '@ancs/providers-ark': srcAlias('./packages/providers/ark/src/index.ts'),
   '@ancs/providers-runway': srcAlias('./packages/providers/runway/src/index.ts'),
