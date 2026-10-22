@@ -24,6 +24,7 @@ import {
 } from '@ancs/contracts';
 import { agentTurns, assets, assetVersions, autonomousRuns, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { assertAiSpendAvailable } from './ai-spend.js';
 import { createAgentSession, createAutonomousTurn, getAgentTurn, runAgentTurnLoop, type AgentTurnPorts } from './agent-runtime.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolContext } from './agent-tools.js';
 import { draftPace } from './agent-edit-points.js';
@@ -145,6 +146,8 @@ export async function startAutonomousRun(deps: DomainDeps, input: {
   if (policy.signature === null || policy.budgetMicros === null) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'sign the autonomous production authorization first', 409, { reason: AUTONOMY_ERROR_REASONS.NOT_SIGNED });
   }
+  // 工作区本月 AI 费用已达上限：不开始（用户在场，当场说明；进行中的一轮由导演循环在模型调用前停下）
+  await assertAiSpendAvailable(deps, { workspaceId: input.workspaceId });
   const spent = await autonomousSpentMicros(deps, { projectId: input.projectId, policyVersion: policy.signature.version });
   const decision = autonomySpendDecision(policy, { kind: 'MODEL', estimateMicros: MIN_AUTONOMOUS_RUN_MICROS, spentMicros: spent });
   if (!decision.allowed) {
@@ -510,6 +513,7 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   if (view.clips.length > 0 && originalSeconds === 0 && state.project.article === null) unmet.push({ code: 'NO_FOOTAGE_USED', detail: '' });
   const turnError = JSON.stringify(turn?.error ?? {});
   if (turnError.includes(AGENT_ERROR_REASONS.BUDGET_EXCEEDED)) unmet.push({ code: 'BUDGET_REACHED', detail: secText((row.modelCapMicros ?? 0) / 1_000_000) });
+  if (turnError.includes(AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED)) unmet.push({ code: 'MONTHLY_AI_LIMIT', detail: '' });
   if (turnError.includes(AGENT_ERROR_REASONS.ITERATION_LIMIT)) unmet.push({ code: 'ITERATION_LIMIT', detail: '' });
   const unpriced = turn === null ? 0 : (await deps.db.select({ unpriced: agentTurns.unpricedCalls }).from(agentTurns).where(eq(agentTurns.id, turn.id)).limit(1))[0]?.unpriced ?? 0;
   if (unpriced > 0) unmet.push({ code: 'UNPRICED_MODEL', detail: String(unpriced) });

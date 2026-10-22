@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
+  AGENT_ERROR_REASONS,
   AUTONOMOUS_RUN_ERROR_REASONS,
   AUTONOMY_ERROR_REASONS,
   MAX_AUTONOMY_BUDGET_MICROS,
@@ -69,6 +70,7 @@ export function autonomyStartErrorKey(error: unknown): StartErrorKey {
   const reason = describeError(error).details['reason'];
   if (reason === AUTONOMY_ERROR_REASONS.NOT_SIGNED) return 'NOT_SIGNED';
   if (reason === AUTONOMY_ERROR_REASONS.BUDGET_EXHAUSTED) return 'BUDGET_EXHAUSTED';
+  if (reason === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED) return 'MONTHLY_AI_LIMIT';
   if (reason === AUTONOMOUS_RUN_ERROR_REASONS.RUN_IN_PROGRESS) return 'RUN_IN_PROGRESS';
   return 'GENERIC';
 }

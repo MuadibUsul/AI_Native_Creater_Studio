@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckEmailEnv, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckAiSpendEnv, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -124,6 +124,7 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, // secrets:check-ignore：测试专用假密钥（非真实凭据）
     // 生产必须显式配置存储签名密钥（V5-M3：不得从会话密钥派生）
     ANCS_STORAGE_SECRET: 'S'.repeat(32), // secrets:check-ignore：测试专用假密钥（非真实凭据）
+    ANCS_AI_MONTHLY_CAP_USD: '20',
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -169,11 +170,11 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
   const secret = 'S'.repeat(32); // secrets:check-ignore：测试专用假密钥（非真实凭据）
 
   it('生产 API/Worker 未显式配置存储签名密钥 → 启动失败；配置后通过', () => {
-    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, ANCS_AI_MONTHLY_CAP_USD: '20' });
     expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_SECRET']);
-    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production' });
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_AI_MONTHLY_CAP_USD: 'unlimited' });
     expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_CREDENTIAL_KEYS', 'ANCS_STORAGE_SECRET']);
-    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, ANCS_AI_MONTHLY_CAP_USD: '20' });
     expect(crossCheckWorkerEnv(fixed.value!)).toEqual([]);
   });
 
@@ -391,6 +392,23 @@ describe('D-04 账号自助：注册方式与发信', () => {
     expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0]).map((issue) => issue.variable)).toEqual(['ANCS_PUBLIC_WEB_URL']);
     expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://api.internal', ANCS_PUBLIC_WEB_URL: 'https://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0])).toEqual([]);
     expect(crossCheckEmailEnv({ NODE_ENV: 'development', ANCS_EMAIL_DRIVER: 'log' })).toEqual([]);
+  });
+
+  it('AI 月度上限：金额换算成微美元，unlimited / 未配置 = 不设；格式非法启动失败；生产 API 与 Worker 都必须显式配置', () => {
+    expect(resolveAiMonthlyCapMicros('20')).toBe(20_000_000);
+    expect(resolveAiMonthlyCapMicros('12.5')).toBe(12_500_000);
+    expect(resolveAiMonthlyCapMicros('0.05')).toBe(50_000);
+    expect(resolveAiMonthlyCapMicros('0')).toBe(0);
+    expect(resolveAiMonthlyCapMicros('unlimited')).toBeNull();
+    expect(resolveAiMonthlyCapMicros(undefined)).toBeNull();
+    for (const bad of ['-1', '$20', '20.123', 'none', '1e3']) {
+      expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_AI_MONTHLY_CAP_USD: bad }).issues.map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+    }
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'production' }).map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'production', ANCS_AI_MONTHLY_CAP_USD: 'unlimited' })).toEqual([]);
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'development' })).toEqual([]);
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: 'S'.repeat(32), ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` }); // secrets:check-ignore：测试专用假密钥
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
   });
 
   it('邀请 CLI 只需要数据库连接；发信可选', () => {

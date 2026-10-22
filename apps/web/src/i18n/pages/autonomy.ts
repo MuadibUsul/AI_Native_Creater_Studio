@@ -6,9 +6,9 @@
 type Tier = 'ASK_EACH' | 'AUTO_SAFE';
 type RunStatus = 'WAITING_FOR_FOOTAGE' | 'DIRECTING' | 'CHECKING' | 'DELIVERED' | 'NEEDS_REVIEW' | 'FAILED' | 'CANCELLED';
 type NotAdopted = 'APPROVAL_ASK_EACH' | 'REVIEW_GATE' | 'AUTHORIZATION_CHANGED' | 'PROJECT_CHANGED' | 'NO_CHANGES' | 'TURN_FAILED';
-type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL';
+type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'MONTHLY_AI_LIMIT' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL';
 type FailReason = 'FOOTAGE_TIMEOUT' | 'NO_FOOTAGE' | 'SESSION_BUSY' | 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MODEL' | 'GENERIC';
-type StartError = 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'RUN_IN_PROGRESS' | 'GENERIC';
+type StartError = 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MONTHLY_AI_LIMIT' | 'RUN_IN_PROGRESS' | 'GENERIC';
 
 const zhCN = {
   setup: {
@@ -36,6 +36,7 @@ const zhCN = {
     startErrors: {
       NOT_SIGNED: '授权没有签上，请再试一次。',
       BUDGET_EXHAUSTED: '这份授权的费用已经用完，请提高上限再开始。',
+      MONTHLY_AI_LIMIT: '这个工作区本月的 AI 额度已用完，下个月恢复后再开始。',
       RUN_IN_PROGRESS: 'AI 已经在剪这条视频了。',
       GENERIC: '没能交给 AI，请再试一次。',
     } satisfies Record<StartError, string>,
@@ -114,6 +115,7 @@ const zhCN = {
       },
       NO_FOOTAGE_USED: () => '成片里没有用到你的素材',
       BUDGET_REACHED: () => '费用到了上限，AI 提前停下',
+      MONTHLY_AI_LIMIT: () => '工作区本月的 AI 额度用完，AI 提前停下',
       ITERATION_LIMIT: () => '步骤用完，AI 提前停下',
       UNPRICED_MODEL: () => '导演模型没有价格表，花费无法核算',
     } satisfies Record<Unmet, (detail: string) => string>,
@@ -149,6 +151,7 @@ const en: typeof zhCN = {
     startErrors: {
       NOT_SIGNED: 'The authorization was not recorded. Please try again.',
       BUDGET_EXHAUSTED: 'This authorization has no budget left. Raise the cap to start.',
+      MONTHLY_AI_LIMIT: "This workspace has used this month's AI allowance. You can start again when it resets next month.",
       RUN_IN_PROGRESS: 'AI is already editing this video.',
       GENERIC: 'Could not hand it to AI. Please try again.',
     },
@@ -225,6 +228,7 @@ const en: typeof zhCN = {
       },
       NO_FOOTAGE_USED: () => 'None of your footage is in the cut',
       BUDGET_REACHED: () => 'Spending reached the cap, so AI stopped early',
+      MONTHLY_AI_LIMIT: () => "The workspace used this month's AI allowance, so AI stopped early",
       ITERATION_LIMIT: () => 'AI ran out of steps and stopped early',
       UNPRICED_MODEL: () => 'The director model has no price table, so spending cannot be counted',
     },

@@ -302,6 +302,28 @@ export const projectAgentCostSchema = z.object({
 }).strict();
 export type ProjectAgentCost = z.infer<typeof projectAgentCostSchema>;
 
+/**
+ * 工作区本月 AI 模型费用与上限（UTC 自然月）：导演对话、审片执行、自主制作、风格撰写的模型调用合计。
+ * 上限来自套餐（`aiSpendMicrosPerMonth`）；套餐不设时取部署缺省（`ANCS_AI_MONTHLY_CAP_USD`）；都没有 = 不设上限。
+ * 达到上限后不再开始新的一轮，进行中的一轮在下一次模型调用前停下（已完成的修改保留为提案）；
+ * 因此实际花费最多超出上限"一次模型调用"的费用。未定价的调用不计入金额，另计次数。
+ */
+export const AI_SPEND_CAP_SOURCES = ['PLAN', 'DEPLOYMENT'] as const;
+export const aiSpendSchema = z.object({
+  /** UTC 月份（YYYY-MM） */
+  period: z.string().regex(/^\d{4}-\d{2}$/),
+  /** 本月上限（微美元）；null = 不设上限 */
+  capMicros: z.number().int().nonnegative().nullable(),
+  capSource: z.enum(AI_SPEND_CAP_SOURCES).nullable(),
+  spentMicros: z.number().int().nonnegative(),
+  unpricedCalls: z.number().int().nonnegative(),
+  /** 已达到上限（新的一轮会被拒绝） */
+  reached: z.boolean(),
+  /** 下一个月开始（上限重新计算）的时刻 */
+  resetsAt: isoDateTimeSchema,
+}).strict();
+export type AiSpend = z.infer<typeof aiSpendSchema>;
+
 export const AGENT_ERROR_REASONS = {
   SESSION_NOT_FOUND: 'AGENT_SESSION_NOT_FOUND',
   TURN_IN_PROGRESS: 'AGENT_TURN_IN_PROGRESS',
@@ -310,4 +332,6 @@ export const AGENT_ERROR_REASONS = {
   MODEL_REFUSED: 'AGENT_MODEL_REFUSED',
   BUDGET_EXCEEDED: 'AGENT_BUDGET_EXCEEDED',
   ITERATION_LIMIT: 'AGENT_ITERATION_LIMIT',
+  /** 工作区本月 AI 费用已达上限（见 aiSpendSchema） */
+  MONTHLY_CAP_REACHED: 'AI_MONTHLY_CAP_REACHED',
 } as const;

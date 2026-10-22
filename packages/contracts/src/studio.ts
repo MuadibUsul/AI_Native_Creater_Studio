@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
+import { agentLocaleSchema, agentSessionSchema, aiSpendSchema, projectAgentCostSchema } from './agent.js';
 import { MAX_ARTICLE_CHARS, projectArticleSchema } from './narration.js';
 import { generationBudgetSchema, generationSchema } from './paid-generation.js';
 import { DEFAULT_AUTONOMY_POLICY, autonomyPolicySchema } from './autonomy.js';
@@ -131,6 +131,8 @@ export const studioStateSchema = z.object({
   /** 工作区生成预算（确认生成前展示；未设置时确认会被拒绝） */
   generationBudget: generationBudgetSchema,
   cost: projectAgentCostSchema,
+  /** 工作区本月 AI 费用与上限（达到上限时界面说明原因与恢复时间） */
+  aiSpend: aiSpendSchema,
   /** 最近一次自主制作（裁决 0020；没有为 null）：界面据此显示进度与交付报告 */
   autonomousRun: autonomousRunSchema.nullable().default(null),
 }).strict();

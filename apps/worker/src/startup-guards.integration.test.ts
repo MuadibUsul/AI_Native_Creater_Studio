@@ -67,6 +67,7 @@ describe('V5-M3 入口装配守卫', () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('ANCS_STORAGE_SECRET');
     expect(result.stderr).toContain('ANCS_CREDENTIAL_KEYS');
+    expect(result.stderr).toContain('ANCS_AI_MONTHLY_CAP_USD');
   });
 
   const productionApiEnv = (): Record<string, string> => ({
@@ -75,6 +76,7 @@ describe('V5-M3 入口装配守卫', () => {
     ANCS_OPS_ENVIRONMENT: 'PRODUCTION',
     ANCS_CREDENTIAL_KEYS: `v1:${Buffer.alloc(32, 7).toString('base64')}`, // secrets:check-ignore：测试专用假值
     ANCS_STORAGE_SECRET: 'startup-guard-storage-secret-0123', // secrets:check-ignore：测试专用假值
+    ANCS_AI_MONTHLY_CAP_USD: '20',
   });
 
   it('API：生产进程装配 Mock 驱动且未显式许可 → 启动失败并列出 Mock 驱动', async () => {

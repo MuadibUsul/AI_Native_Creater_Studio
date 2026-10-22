@@ -19,7 +19,7 @@ import type { AuthDeps } from '../plugins/auth.js';
 
 const projectParams = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
 const runParams = projectParams.extend({ runId: opaqueIdSchema });
-const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
+const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 402: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
 
 export function registerAutonomyRoutes(app: FastifyInstance, deps: AuthDeps): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();

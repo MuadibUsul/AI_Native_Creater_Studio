@@ -1284,6 +1284,9 @@ export {
   signupInviteCliEnvSchema,
   emailEnvShape,
   crossCheckEmailEnv,
+  aiSpendEnvShape,
+  crossCheckAiSpendEnv,
+  resolveAiMonthlyCapMicros,
   s3StorageEnvShape,
   crossCheckStorageEnv,
 } from './env.js';
@@ -2767,6 +2770,8 @@ export {
   agentTurnStatusSchema,
   createAgentSessionRequestSchema,
   projectAgentCostSchema,
+  AI_SPEND_CAP_SOURCES,
+  aiSpendSchema,
   startAgentTurnRequestSchema,
 } from './agent.js';
 export type {
@@ -2794,6 +2799,7 @@ export type {
   AgentTurnStatus,
   CreateAgentSessionRequest,
   ProjectAgentCost,
+  AiSpend,
   StartAgentTurnRequest,
 } from './agent.js';
 export {

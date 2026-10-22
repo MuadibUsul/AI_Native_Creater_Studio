@@ -202,6 +202,8 @@ const zhCN = {
     aiCost: (amount: string) => `AI 用量 ${amount}`,
     aiCostUnpriced: 'AI 用量含未定价调用',
     aiCostHint: '这条视频累计的 AI 模型费用（按公开单价估算）',
+    /** 工作区本月 AI 费用与额度（有上限时显示在费用提示里） */
+    aiMonthHint: (spent: string, cap: string) => `本工作区本月 AI 费用 ${spent} / 额度 ${cap}`,
     exportButton: '导出',
     loading: '正在打开作品…',
     notFound: '找不到这个作品',
@@ -443,6 +445,8 @@ const zhCN = {
       errors: {
         modelNotConfigured: 'AI 导演还没配置好：服务端尚未接入模型凭据。',
         budget: '达到这一轮的用量上限。',
+        /** 工作区本月 AI 额度用完（resets 为 ISO 时刻，按 UTC 日期显示） */
+        monthlyCap: (cap: string, resets: string) => `这个工作区本月的 AI 额度（${cap}）已用完，${new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(resets))}恢复。`,
         refused: '模型拒绝了这个请求，换个说法试试。',
         busy: '上一句还在处理，等它完成或先停止。',
         generic: '请稍后重试。',
@@ -892,6 +896,7 @@ const en: Messages = {
     aiCost: (amount: string) => `AI cost ${amount}`,
     aiCostUnpriced: 'AI cost includes unpriced calls',
     aiCostHint: 'Total AI model cost for this video (estimated from public prices)',
+    aiMonthHint: (spent: string, cap: string) => `This workspace this month: ${spent} of ${cap} AI allowance`,
     exportButton: 'Export',
     loading: 'Opening the project…',
     notFound: 'Project not found',
@@ -1133,6 +1138,7 @@ const en: Messages = {
       errors: {
         modelNotConfigured: "The AI director isn't set up yet: the server has no model credentials.",
         budget: "Reached this turn's usage limit.",
+        monthlyCap: (cap: string, resets: string) => `This workspace has used its AI allowance for this month (${cap}). It resets on ${new Intl.DateTimeFormat('en', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(resets))}.`,
         refused: 'The model declined this request. Try phrasing it differently.',
         busy: 'The previous request is still running. Wait for it or stop it first.',
         generic: 'Please try again later.',

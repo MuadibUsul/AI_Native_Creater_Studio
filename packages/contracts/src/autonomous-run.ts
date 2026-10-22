@@ -39,7 +39,7 @@ const secondsPairSchema = z.tuple([z.string().max(20), z.string().max(20)]);
  * TARGET_DURATION 成片时长与目标相差超过 20%（detail "目标秒数/实际秒数"）；NO_FOOTAGE_USED 成片里没有用到原片；
  * BUDGET_REACHED 模型花费到了本次上限；ITERATION_LIMIT 步骤用完；UNPRICED_MODEL 导演模型没有价格表、花费无法核算。
  */
-export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'ITERATION_LIMIT', 'UNPRICED_MODEL'] as const;
+export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'MONTHLY_AI_LIMIT', 'ITERATION_LIMIT', 'UNPRICED_MODEL'] as const;
 
 export const autonomousReportSchema = z.object({
   /** ADOPTED 已采用为作品当前版本；TRIAL 保留为试改等你看；NO_CHANGES 没有改动；FAILED 没能完成 */

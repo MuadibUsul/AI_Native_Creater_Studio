@@ -6,7 +6,7 @@ import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -89,7 +89,7 @@ const leaseSeconds = config.ANCS_WORKER_LEASE_SECONDS;
 const heartbeatIntervalMs = config.ANCS_WORKER_HEARTBEAT_MS ?? Math.max(1000, (leaseSeconds * 1000) / 3);
 
 // 部署策略一次性注入领域层（领域层不读 process.env）
-configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
+configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN, aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) });
 const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const deps = createDomainDeps(handle, config);
 const ffmpegPaths = {

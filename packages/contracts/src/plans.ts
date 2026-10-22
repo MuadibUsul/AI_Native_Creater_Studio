@@ -43,6 +43,11 @@ export const planEntitlementsSchema = z.object({
   customMotionPerMonth: z.number().int().nonnegative().nullable().default(0),
   /** Provider 高端特性白名单（如 'voice_clone_pro'；空 = 无） */
   providerPremiumFeatures: z.array(z.string().min(1).max(80)).default([]),
+  /**
+   * 每月 AI 模型费用上限（微美元；导演对话、审片执行、自主制作、风格撰写合计；0 = 不可用 AI）。
+   * **null = 套餐不设**，按部署缺省 ANCS_AI_MONTHLY_CAP_USD（与其他维度"null = 不限"不同：防止忘记配置时无上限）。
+   */
+  aiSpendMicrosPerMonth: z.number().int().nonnegative().nullable().default(null),
 });
 
 export type PlanEntitlements = z.infer<typeof planEntitlementsSchema>;

@@ -37,7 +37,7 @@ import type { AuthDeps } from '../plugins/auth.js';
 const workspaceParams = z.object({ id: opaqueIdSchema });
 const projectParams = workspaceParams.extend({ projectId: opaqueIdSchema });
 const noteParams = workspaceParams.extend({ noteId: opaqueIdSchema });
-const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
+const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 402: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
 
 export function registerReviewRoutes(app: FastifyInstance, deps: AuthDeps): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();

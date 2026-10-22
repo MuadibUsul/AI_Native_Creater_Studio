@@ -65,6 +65,8 @@ export interface ConversationProps {
   greeting?: string | null;
   /** 这一轮进行中：最近一步在做什么（来自真实的工具记录） */
   liveStep?: string | null;
+  /** 工作区本月 AI 额度已用完：说明原因与恢复时间，发送按钮不可用（服务端同样拒绝） */
+  limit?: string | null;
 }
 
 export function StudioConversation(props: ConversationProps) {
@@ -79,7 +81,8 @@ export function StudioConversation(props: ConversationProps) {
   const latest = props.turns[0];
   const earlier = props.turns.slice(1, 21);
   const running = latest?.status === 'RUNNING';
-  const canSend = props.canEdit && !running && !props.sending && draft.trim().length > 0;
+  const limited = props.limit !== undefined && props.limit !== null;
+  const canSend = props.canEdit && !limited && !running && !props.sending && draft.trim().length > 0;
 
   // 新的一轮、AI 回复或状态变化时，对话记录滚到最新
   const tail = `${latest?.id ?? ''}:${latest?.status ?? ''}:${latest?.reply ?? ''}:${props.notice ?? ''}:${props.error ?? ''}:${props.proposal?.status ?? ''}`;
@@ -194,6 +197,7 @@ export function StudioConversation(props: ConversationProps) {
         {props.generationCards ?? null}
       </div>
       <div className={styles['composerArea']}>
+        {limited ? <div className={styles['alert']} role="status" data-ai-limit>{props.limit}</div> : null}
         {props.rules !== undefined || props.strategies.length > 0 ? (
           <div className={styles['chatSettings']} role="group" aria-label={t.settingsLabel}>
             {props.rules ?? null}

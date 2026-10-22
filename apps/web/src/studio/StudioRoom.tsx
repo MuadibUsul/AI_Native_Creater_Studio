@@ -64,6 +64,9 @@ function mutationErrorText(error: unknown, t: Messages['studio']): string {
   if (described.kind === 'forbidden') return t.readOnly;
   const reason = described.details['reason'];
   if (reason === AGENT_ERROR_REASONS.TURN_IN_PROGRESS) return t.chat.errors.busy;
+  if (reason === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED) {
+    return t.chat.errors.monthlyCap(formatUsdMicros(Number(described.details['capMicros'] ?? 0)), String(described.details['resetsAt'] ?? new Date().toISOString()));
+  }
   if (reason === PROPOSAL_ERROR_REASONS.STALE_BASE || reason === PROPOSAL_ERROR_REASONS.HASH_MISMATCH) return t.chat.stale;
   return described.code === null ? t.chat.errors.generic : `${t.chat.errors.generic} (${described.code})`;
 }
@@ -606,6 +609,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : article !== null ? 'article' : 'empty';
   const running = latest?.status === 'RUNNING';
   const cost = state.cost;
+  const aiSpend = state.aiSpend;
   const activeTasks = taskRows.filter((row) => row.status === 'running').length;
   const failedTasks = taskRows.filter((row) => row.status === 'failed').length;
 
@@ -747,7 +751,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         </div>
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
-          {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
+          {cost.turns > 0 ? <span className={styles['meta']} title={aiSpend.capMicros === null ? t.aiCostHint : `${t.aiCostHint}\n${t.aiMonthHint(formatUsdMicros(aiSpend.spentMicros), formatUsdMicros(aiSpend.capMicros))}`}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button ref={tasksButtonRef} type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />
@@ -765,6 +769,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         canUndoChange={canUndoChange}
         notice={notice === null ? null : t.chat[notice]}
         error={actionError}
+        limit={aiSpend.reached ? t.chat.errors.monthlyCap(formatUsdMicros(aiSpend.capMicros ?? 0), aiSpend.resetsAt) : null}
         pointerLabel={pointerLabel}
         canEdit={canEdit}
         sending={actions.send.isPending}

@@ -102,6 +102,7 @@ function client(overrides: { createVoiceSession?: ReturnType<typeof vi.fn>; star
       cost: { projectId: 'prj_1', turns: 0, usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 0, unpricedCalls: 0 },
       generations: [],
       generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
+      aiSpend: { period: '2026-10', capMicros: null, capSource: null, spentMicros: 0, unpricedCalls: 0, reached: false, resetsAt: '2026-11-01T00:00:00.000Z' },
     }) },
     projects: {
       state: vi.fn().mockResolvedValue({ document: { projectRevision: 5, composition: {

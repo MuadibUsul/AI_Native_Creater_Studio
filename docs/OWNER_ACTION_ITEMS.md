@@ -34,6 +34,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | D-13 | Fetching reference videos from platform links | P3 | `ANCS_REFERENCE_FETCH_CMD` |
 | D-14 | Fate of the retired V4 script/storyboard pipeline | P3 | Rebuilding it with real providers, or removing it |
 | D-15 | When to let GitHub Actions run again | P2 | CI evidence for recent commits |
+| D-16 | Monthly AI spending cap per workspace | P1 | Production start-up (`ANCS_AI_MONTHLY_CAP_USD` is required); how much each beta workspace may spend |
 | I-01 | Cloud, region and machines | P0 | Any deployment |
 | I-02 | Domain, TLS and reverse proxy | P0 | Any deployment |
 | I-03 | Managed PostgreSQL 16 | P0 | Any deployment |
@@ -199,6 +200,14 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Where:** `.github/workflows/ci.yml`; GitHub Actions tab.
 - **Priority:** P2
 - **Blocks:** CI evidence for recent work.
+
+### D-16 Monthly AI spending cap per workspace
+- **What:** The most each workspace may spend on AI model calls per calendar month (UTC): AI director conversations, review fixes, "let AI finish the edit" runs and style learning from reference videos. Paid generation (voice-over, avatars, generated shots) is not included; it already has its own workspace budget.
+- **Why:** During the invite-only beta, every model call is paid by you. Without a cap, one invited user could run the AI director all month at your cost. The cap is now built and enforced on the server: when a workspace reaches it, the current turn stops before its next model call (changes so far are kept), new turns are refused, and the studio explains the limit and the reset date in English or Chinese.
+- **Do / provide:** A dollar amount per workspace per month. The production example uses `20`. One director turn is capped at $1.50, so $20 allows at least 13 turns a month; shorter turns cost less. Write `unlimited` only if you really want no cap. Later, when plans are priced (D-03), each plan can carry its own allowance (`aiSpendMicrosPerMonth` in the plan entitlements), which then overrides this default for that plan.
+- **Where:** `infra/production.env.example` → `ANCS_AI_MONTHLY_CAP_USD=20` (API and worker must read the same value; production refuses to start without it). Runbook §10.5.
+- **Priority:** P1
+- **Blocks:** Production start-up needs a value; the default in the example is a reasonable starting point.
 
 ---
 
@@ -694,7 +703,8 @@ Also on your side: the running cost of every provider, cloud resources and the e
 | Email sign-up, email verification, password reset, email sending port | **Built and verified** (invite-only at launch; real-browser check with real SMTP to a local mail server). Real provider delivery pending | B-03 (SMTP settings) |
 | Stripe adapter (Checkout, customer portal, webhooks, de-duplication, reconciliation) | Not started; `ANCS_PAYMENTS_DRIVER=stripe` fails at start-up on purpose | B-01 (test keys), D-03 |
 | WeChat Pay / Alipay adapters | Not planned (D-01: no mainland China) | — |
-| Metering AI usage into the billing ledger (director model, recognition, visual understanding, narration) and free-quota enforcement | Not started; these costs are recorded but do not deduct credits. Only paid generation deducts credits today | D-03 |
+| Metering AI usage into the billing ledger (director model, recognition, visual understanding, narration) and free-quota enforcement | Not started; these costs are recorded but do not deduct credits. Only paid generation deducts credits today. **A monthly AI spending cap per workspace is built** (director, review fixes, autonomous runs, style learning; D-16); it limits spending but does not charge anyone | D-03 |
+| Counting the visual-understanding model calls made after upload towards the monthly AI cap | Not built: the worker's vision adapter does not report usage yet, so these calls are neither shown nor capped (at most about 10 calls per uploaded video) | Nothing; next step |
 | Content moderation port (after upload, before and after generation, before export) | Not started | D-05 |
 | Error reporting port | Not started | D-07 |
 | Scheduler sample for retention cleanup and event delivery | Not started (the commands exist) | Nothing; can be done on request |

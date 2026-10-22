@@ -10,9 +10,11 @@ import type { PlanKey } from '@ancs/contracts';
 export interface DeploymentPolicy {
   /** 未订阅 workspace 的默认套餐（ANCS_DEFAULT_PLAN） */
   defaultPlan: PlanKey;
+  /** 每个工作区每月 AI 模型费用的缺省上限（微美元；ANCS_AI_MONTHLY_CAP_USD；套餐设了上限时以套餐为准；null = 不设） */
+  aiMonthlyCapMicros: number | null;
 }
 
-const DEFAULT_POLICY: DeploymentPolicy = { defaultPlan: 'ENTERPRISE' };
+const DEFAULT_POLICY: DeploymentPolicy = { defaultPlan: 'ENTERPRISE', aiMonthlyCapMicros: null };
 
 let current: DeploymentPolicy = DEFAULT_POLICY;
 

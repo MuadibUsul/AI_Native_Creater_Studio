@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, originOf, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, originOf, resolveAiMonthlyCapMicros, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
 import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
@@ -43,7 +43,7 @@ if (envIssues.length > 0) {
 }
 const config = envResult.value;
 // 部署策略一次性注入领域层（领域层不读 process.env；非法值已在上面 fail-closed）
-configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
+configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN, aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) });
 const port = config.PORT;
 const secret = config.BETTER_AUTH_SECRET;
 const databaseUrl = config.DATABASE_URL;

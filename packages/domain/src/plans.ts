@@ -240,23 +240,21 @@ async function loadUsage(deps: DomainDeps, workspaceId: string): Promise<Entitle
   });
 }
 
-/** 解析 workspace 当前权益（订阅 → 固定版本；无订阅 → 默认 FREE 版本）+ 实时用量。 */
-export async function getWorkspaceEntitlement(deps: DomainDeps, input: { workspaceId: string }): Promise<WorkspaceEntitlement> {
+/** 解析 workspace 当前套餐版本（订阅 → 固定版本；无订阅 → 部署默认套餐的最新版本），不含用量。 */
+export async function getWorkspacePlan(deps: DomainDeps, input: { workspaceId: string }): Promise<{ plan: Plan; source: 'SUBSCRIPTION' | 'DEFAULT_FREE' }> {
   // 目录惰性播种（幂等；内部/测试环境无需显式 boot 播种）
   await ensureDefaultPlans(deps);
   const subscription = await getWorkspaceSubscription(deps, input);
-  let plan: Plan;
-  let source: 'SUBSCRIPTION' | 'DEFAULT_FREE';
-  if (subscription === null) {
-    plan = await getActivePlanVersion(deps, defaultPlanKeyForUnsubscribed());
-    source = 'DEFAULT_FREE';
-  } else {
-    const rows = await deps.db.select().from(plans).where(eq(plans.id, subscription.planId)).limit(1);
-    const row = rows[0];
-    if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, `订阅引用缺失的 Plan 版本：${subscription.planId}`, 500);
-    plan = toPlanDto(row);
-    source = 'SUBSCRIPTION';
-  }
+  if (subscription === null) return { plan: await getActivePlanVersion(deps, defaultPlanKeyForUnsubscribed()), source: 'DEFAULT_FREE' };
+  const rows = await deps.db.select().from(plans).where(eq(plans.id, subscription.planId)).limit(1);
+  const row = rows[0];
+  if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, `订阅引用缺失的 Plan 版本：${subscription.planId}`, 500);
+  return { plan: toPlanDto(row), source: 'SUBSCRIPTION' };
+}
+
+/** 解析 workspace 当前权益（订阅 → 固定版本；无订阅 → 默认 FREE 版本）+ 实时用量。 */
+export async function getWorkspaceEntitlement(deps: DomainDeps, input: { workspaceId: string }): Promise<WorkspaceEntitlement> {
+  const { plan, source } = await getWorkspacePlan(deps, input);
   const usage = await loadUsage(deps, input.workspaceId);
   const privacyRows = await deps.db.select({ privacyTier: workspaces.privacyTier }).from(workspaces).where(eq(workspaces.id, input.workspaceId)).limit(1);
   const privacyTier = privacyRows[0]?.privacyTier ?? 'STANDARD';

@@ -25,6 +25,7 @@ import {
 } from '@ancs/contracts';
 import { agentSessions, assets, assetVersions, mediaIndexRuns, mediaTranscriptRuns, projectSequences, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { workspaceAiSpend } from './ai-spend.js';
 import { createAgentSession, getAgentSession, projectAgentCost } from './agent-runtime.js';
 import { createChannel, listChannels } from './channels.js';
 import { createSequence, createTrack } from './composition.js';
@@ -187,6 +188,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     generations: await listProjectGenerations(deps, { workspaceId: input.workspaceId, projectId: input.projectId, limit: 20 }),
     generationBudget: await generationBudget(deps, { workspaceId: input.workspaceId }),
     cost: await projectAgentCost(deps, input),
+    aiSpend: await workspaceAiSpend(deps, { workspaceId: input.workspaceId }),
     autonomousRun: (await listAutonomousRuns(deps, { ...input, limit: 1 }))[0] ?? null,
   });
 }

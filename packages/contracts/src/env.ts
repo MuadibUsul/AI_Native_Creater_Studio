@@ -162,6 +162,30 @@ export function crossCheckEmailEnv(value: {
   return issues;
 }
 
+/**
+ * 每个工作区每月 AI 模型费用的部署缺省上限（美元）：套餐设了 aiSpendMicrosPerMonth 时以套餐为准。
+ * API（新的一轮开始前）与 Worker（每次模型调用前）都要读到同一个值。
+ * 生产必须显式配置：写金额（如 20 或 12.50）；确实不设上限写 unlimited。
+ */
+export const aiSpendEnvShape = {
+  ANCS_AI_MONTHLY_CAP_USD: z.string().trim()
+    .regex(/^(unlimited|\d{1,7}(\.\d{1,2})?)$/, 'ANCS_AI_MONTHLY_CAP_USD 必须是美元金额（如 20 或 12.50）或 unlimited').optional(),
+} satisfies z.ZodRawShape;
+
+/** 已校验的 ANCS_AI_MONTHLY_CAP_USD → 微美元；未配置或 unlimited → null（不设部署缺省上限）。 */
+export function resolveAiMonthlyCapMicros(value: string | undefined): number | null {
+  if (value === undefined || value === 'unlimited') return null;
+  const [whole = '0', cents = ''] = value.split('.');
+  return Number(whole) * 1_000_000 + Number(cents.padEnd(2, '0')) * 10_000;
+}
+
+export function crossCheckAiSpendEnv(value: { NODE_ENV?: 'development' | 'test' | 'production' | undefined; ANCS_AI_MONTHLY_CAP_USD?: string | undefined }): EnvIssue[] {
+  if (value.NODE_ENV === 'production' && value.ANCS_AI_MONTHLY_CAP_USD === undefined) {
+    return [{ variable: 'ANCS_AI_MONTHLY_CAP_USD', message: '生产环境必须显式配置每个工作区每月 AI 费用上限（美元，如 20）；确实不设上限写 unlimited' }];
+  }
+  return [];
+}
+
 const storageDriverSchema = z.enum(['local', 's3'], { message: 'ANCS_STORAGE_DRIVER 只能是 local 或 s3' }).default('local');
 
 export type S3StorageEnv = { [K in keyof typeof s3StorageEnvShape]?: string | undefined };
@@ -231,6 +255,7 @@ export const apiEnvSchema = z.object({
   ANCS_OPS_REAUTH_SECONDS: z.coerce.number().int().min(30).max(1800).default(300),
   /** 未订阅 workspace 的默认套餐（P09-01；预上线默认 ENTERPRISE；**SaaS 上线门（P09-06）要求 FREE**） */
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  ...aiSpendEnvShape,
   /** 收款驱动（P09-02）：mock=脚本化（仅开发/测试，警告）；stripe 需凭据（未实现→启动失败）；缺省=未配置（收款端点 501 fail-closed） */
   ANCS_PAYMENTS_DRIVER: z.enum(['mock', 'stripe'], { message: 'ANCS_PAYMENTS_DRIVER 仅支持 mock | stripe' }).optional(),
   /** Mock 收款签名密钥（ANCS_PAYMENTS_DRIVER=mock 时必填；≥16） */
@@ -276,7 +301,7 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckEmailEnv(value)];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckEmailEnv(value), ...crossCheckAiSpendEnv(value)];
   if (value.ANCS_SIGNUP_MODE !== 'closed' && value.ANCS_EMAIL_DRIVER === undefined) {
     issues.push({ variable: 'ANCS_SIGNUP_MODE', message: `ANCS_SIGNUP_MODE=${value.ANCS_SIGNUP_MODE} 需要发信（注册要发验证邮件）：请配置 ANCS_EMAIL_DRIVER` });
   }
@@ -341,6 +366,7 @@ export const workerEnvSchema = z.object({
   /** 存储签名 URL 的公开基址回退（与 API 同一规则：ANCS_STORAGE_PUBLIC_BASE_URL → BETTER_AUTH_URL → localhost） */
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  ...aiSpendEnvShape,
   ANCS_WORKER_ID: nonEmpty('ANCS_WORKER_ID').optional(),
   ANCS_WORKER_TICK_MS: z.coerce.number().int().min(50, 'ANCS_WORKER_TICK_MS ≥ 50').max(60_000, 'ANCS_WORKER_TICK_MS ≤ 60000').default(1000),
   ANCS_WORKER_LEASE_SECONDS: z.coerce.number().int().min(5, 'ANCS_WORKER_LEASE_SECONDS ≥ 5').max(3600, 'ANCS_WORKER_LEASE_SECONDS ≤ 3600').default(60),
@@ -524,7 +550,7 @@ export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 
 /** 跨字段规则（schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [...crossCheckStorageEnv(value)];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckAiSpendEnv(value)];
   if (value.ANCS_QUEUE_DRIVER === 'bullmq' && value.REDIS_URL === undefined) {
     issues.push({ variable: 'REDIS_URL', message: 'ANCS_QUEUE_DRIVER=bullmq 时必须配置 REDIS_URL' });
   }

@@ -126,6 +126,7 @@ export {
   verifyPaymentWebhook,
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
+export { aiSpendWindow, assertAiSpendAvailable, workspaceAiSpend } from './ai-spend.js';
 export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
 export { buildRenderOutputEnhancements } from './output-enhancements.js';
 export { searchWorkspace } from './search.js';
@@ -231,6 +232,7 @@ export {
   ensureDefaultPlans,
   getActivePlanVersion,
   getWorkspaceEntitlement,
+  getWorkspacePlan,
   getWorkspaceSubscription,
   listPlans as listPlanVersions,
   resolveRenderPriority,

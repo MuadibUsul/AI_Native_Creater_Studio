@@ -332,3 +332,12 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
 
 - 工作区邀请（团队成员）同样会寄邮件；被邀请的邮箱在 invite 模式下也能注册，注册后在首页"你有新的邀请"里接受。
 - 验证：`scripts/account-browser-check.mjs`（真实 SMTP 驱动 → 本机收信服务 → 浏览器打开邮件里的链接；证据 `docs/verification/artifacts/accounts/`）。真实服务商投递待你开通账号后实测。
+
+### 10.5 每个工作区每月的 AI 费用上限
+
+- `ANCS_AI_MONTHLY_CAP_USD`（美元，最多两位小数；`unlimited` = 不设上限）。**生产必须配置**，API 与 Worker 读同一个值（都从 `production.env` 读），缺了启动失败。示例值 `20`。
+- 计入：UTC 自然月内开始的 AI 导演轮次（对话、审片讨论与执行、交给 AI 剪完）和"从参考视频学风格"的模型费用；付费生成（配音、数字人、生成镜头）不在这里，它们走工作区生成预算。
+- 达到上限：进行中的一轮在下一次模型调用前停下，已完成的修改保留为提案；新的一轮返回 402 `AI_MONTHLY_CAP_REACHED`；共看片室在输入框上方说明额度与恢复日期（UTC 下个月 1 日）。学风格改用规则撰写。实际花费最多超出上限一次模型调用。
+- 套餐权益 `aiSpendMicrosPerMonth`（微美元）非空时以套餐为准（可以高于这里的缺省；`0` = 该套餐不能用 AI）；默认套餐种子都不设，金额待定价（D-03）。
+- 改金额：改 `production.env` 后重启 API 与 Worker；本月已花的照常计算。
+- 验证：`scripts/ai-spend-browser-check.mjs`（证据 `docs/verification/artifacts/ai-spend/`）。

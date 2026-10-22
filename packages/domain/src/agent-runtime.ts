@@ -47,6 +47,8 @@ import { compactPlanView, getLatestProductionPlan } from './production-plan.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
+import { assertAiSpendAvailable, workspaceAiSpend } from './ai-spend.js';
+import { formatMicros } from './paid-generation-quote.js';
 
 /**
  * 通用导演 Agent 的运行时（V6 §6.3、§8）：一轮 = 用户的一句话 + AI 的一次完整处理。
@@ -255,6 +257,8 @@ export async function startAgentTurn(deps: DomainDeps, input: {
     if (running[0] !== undefined) {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'another turn is still running in this session', 409, { reason: AGENT_ERROR_REASONS.TURN_IN_PROGRESS, turnId: running[0].id });
     }
+    // 工作区本月 AI 费用已达上限 → 不开始新的一轮（幂等重放已在上面返回原轮次）
+    await assertAiSpendAvailable(deps, { workspaceId: input.workspaceId });
     const project = await tx.select({ revision: projects.revision }).from(projects)
       .where(and(eq(projects.id, session.projectId), eq(projects.workspaceId, input.workspaceId), isNull(projects.deletedAt))).limit(1);
     if (project[0] === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'project not found', 404);
@@ -495,6 +499,10 @@ const addUsage = (left: AgentModelUsage, right: AgentModelUsage): AgentModelUsag
 const LIMIT_REPLIES = {
   budget: { 'zh-CN': '这一轮已达到成本上限，目前的修改已保留为提案，可以先看看效果。', en: 'This turn reached its cost limit. The changes so far are kept as a proposal for you to preview.' },
   iterations: { 'zh-CN': '这一轮的步骤太多，先停在这里；目前的修改已保留为提案。', en: 'This turn ran long, so I stopped here. The changes so far are kept as a proposal.' },
+  monthly: {
+    'zh-CN': (cap: string, resets: string) => `这个工作区本月的 AI 额度（${cap}）已用完，我先停在这里；目前的修改已保留为提案。额度在 ${resets}（UTC）恢复。`,
+    en: (cap: string, resets: string) => `This workspace has used its AI allowance for this month (${cap}), so I stopped here. The changes so far are kept as a proposal. The allowance resets on ${resets} (UTC).`,
+  },
 } as const;
 
 export async function runAgentTurnLoop(
@@ -558,6 +566,11 @@ export async function runAgentTurnLoop(
     if (last.role === 'user') {
       const iterations = log.filter((message) => message.role === 'assistant').length;
       if (iterations >= limits.maxIterations) return finishTurn(deps, turn, draft, LIMIT_REPLIES.iterations[locale], { reason: AGENT_ERROR_REASONS.ITERATION_LIMIT });
+      // 工作区本月额度先于单轮上限：两者都到时，用户需要知道的是"本月不能再用"
+      const spend = await workspaceAiSpend(deps, { workspaceId: turn.workspaceId });
+      if (spend.reached) {
+        return finishTurn(deps, turn, draft, LIMIT_REPLIES.monthly[locale](formatMicros(spend.capMicros ?? 0), spend.resetsAt.slice(0, 10)), { reason: AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED });
+      }
       if (turn.costMicros >= limits.maxCostMicros) return finishTurn(deps, turn, draft, LIMIT_REPLIES.budget[locale], { reason: AGENT_ERROR_REASONS.BUDGET_EXCEEDED });
       const messages: AgentModelMessage[] = log.map((message) => ({ role: message.role, content: message.content }));
       const response = await ports.model.respond({ system: AGENT_SYSTEM_PROMPT, tools, messages, maxOutputTokens: limits.maxOutputTokens, effort: limits.effort });

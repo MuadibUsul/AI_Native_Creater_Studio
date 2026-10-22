@@ -50,6 +50,7 @@ const studioState = (overrides: Record<string, unknown> = {}) => ({
   narration: [],
   generations: [],
   generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
+  aiSpend: { period: '2026-10', capMicros: null, capSource: null, spentMicros: 0, unpricedCalls: 0, reached: false, resetsAt: '2026-11-01T00:00:00.000Z' },
   cost: { projectId: 'prj_1', turns: 1, usage: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 120_000, unpricedCalls: 0 },
   ...overrides,
 });
@@ -611,6 +612,27 @@ describe('V6-1c 共看片室', () => {
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, running.sdk);
     await userEvent.click(await screen.findByRole('button', { name: '停止' }));
     await waitFor(() => expect(cancelTurn).toHaveBeenCalled());
+  });
+
+  it('工作区本月 AI 额度用完：输入框上方说明额度与恢复日期、发送不可用；读面未刷新时服务端 402 也说明同一原因；英文同样', async () => {
+    const reached = { period: '2026-10', capMicros: 20_000_000, capSource: 'DEPLOYMENT', spentMicros: 20_400_000, unpricedCalls: 0, reached: true, resetsAt: '2026-11-01T00:00:00.000Z' };
+    const limited = client({ state: studioState({ aiSpend: reached }) });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, limited.sdk);
+    const notice = await screen.findByText('这个工作区本月的 AI 额度（$20.00）已用完，11月1日恢复。');
+    expect(notice.getAttribute('role')).toBe('status');
+    await userEvent.type(screen.getByRole('textbox', { name: '告诉 AI 怎么改' }), '剪一版');
+    expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(limited.startTurn).not.toHaveBeenCalled();
+    expect(MESSAGES.en.studio.chat.errors.monthlyCap('$20.00', reached.resetsAt)).toBe('This workspace has used its AI allowance for this month ($20.00). It resets on November 1.');
+  });
+
+  it('额度在两次刷新之间用完：发送被服务端 402 拒绝，说明额度与恢复日期', async () => {
+    const stale = client();
+    stale.startTurn.mockRejectedValueOnce(apiError(402, 'BUDGET_EXCEEDED', 'this workspace has used its AI allowance for this month', { reason: 'AI_MONTHLY_CAP_REACHED', capMicros: 5_000_000, spentMicros: 5_100_000, resetsAt: '2026-11-01T00:00:00.000Z' }));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, stale.sdk);
+    await userEvent.type(await screen.findByRole('textbox', { name: '告诉 AI 怎么改' }), '剪一版');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText('这个工作区本月的 AI 额度（$5.00）已用完，11月1日恢复。')).toBeTruthy();
   });
 
   const quote = (overrides: Record<string, unknown> = {}) => ({
