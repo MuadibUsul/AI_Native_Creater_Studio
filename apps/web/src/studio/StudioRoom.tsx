@@ -163,6 +163,12 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   useEffect(() => {
     if (planRevision !== undefined) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
   }, [planRevision, queryClient, workspaceId, projectId]);
+  // 版本变了（含交给 AI 剪完时 AI 按授权自己采用了这次试改）→ 重读试改提案：否则缓存里仍是"未采用"，
+  // 画面会一直停在已经不存在的试改上，并为已采用的提案请求预览（服务端拒绝 → "预览失败"）
+  const trialProposalId = trialTurn?.proposalId ?? null;
+  useEffect(() => {
+    if (planRevision !== undefined && trialProposalId !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.proposal(workspaceId, trialProposalId) });
+  }, [planRevision, trialProposalId, queryClient, workspaceId]);
 
   const hasClips = (timeline?.clips.length ?? 0) > 0;
   const revision = state?.project.revision;

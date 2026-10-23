@@ -279,6 +279,34 @@ describe('V6-1c 共看片室', () => {
     await waitFor(() => expect(cancelRun).toHaveBeenCalledWith('ws_1', 'prj_1', 'aut_1', { idempotencyKey: 'autonomy-cancel-aut_1' }));
   });
 
+  it('V6-9 交给 AI 剪完：看到试改后 AI 按授权自己采用 → 版本变化时重读提案，画面换成当前版本（不再为已采用的提案请求预览）', async () => {
+    const run = {
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
+      progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    const checking = studioState({ autonomousRun: run });
+    const adopted = studioState({ project: { ...studioState().project, revision: 6 }, autonomousRun: { ...run, status: 'DELIVERED', adoptedRevision: 6, completedAt: '2026-10-21T00:01:30.000Z' } });
+    const { sdk } = client({ turns: [turn()], state: checking });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('试改预览 · 还没采用')).toBeTruthy();
+    expect(sdk.previews.request).toHaveBeenCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: 'prp_1' });
+    // AI 自检通过、按"自检通过就直接用"采用：服务端的提案已提交、工程到了第 6 版；之后再为这个提案请求预览会被拒绝
+    vi.mocked(sdk.studio.state).mockResolvedValue(adopted as never);
+    const adoptedDocument = projectState([{ id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sequenceRange: range(0, 90) }]);
+    vi.mocked(sdk.projects.state).mockResolvedValue({ document: { ...adoptedDocument.document, projectRevision: 6 } } as never);
+    vi.mocked(sdk.projects.proposal).mockResolvedValue({ ...proposal, status: 'COMMITTED', committedRevision: 6 } as never);
+    vi.mocked(sdk.previews.request).mockImplementation((_ws, _project, _sequence, input) => (input.proposalId === null
+      ? Promise.resolve(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 6, proposalId: null }) as never)
+      : Promise.reject(apiError(409, 'CONFLICT', 'proposal is not open'))));
+    vi.mocked(sdk.previews.get).mockResolvedValue(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 6, proposalId: null }) as never);
+    expect(await screen.findByText('当前版本', undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(sdk.previews.request).toHaveBeenLastCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: null });
+    expect(screen.queryByText('试改预览 · 还没采用')).toBeNull();
+    expect(screen.queryByText('预览失败')).toBeNull();
+  }, 10_000);
+
   it('试改：就地播放试改预览，时间带显示试改的片段；"就这样"按看过的哈希采用', async () => {
     const { sdk, adoptProposal } = client({ turns: [turn()] });
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);

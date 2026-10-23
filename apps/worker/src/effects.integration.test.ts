@@ -311,4 +311,30 @@ describe('V6-3 代码生成特效（真实渲染子进程 + FFmpeg，脚本导�
       validation: { verdict: 'APPROVED', stages: ['STATIC_ANALYSIS', 'TYPE_CHECK', 'SANDBOX_EVALUATION', 'FRAME_SAMPLES'] },
     });
   });
+
+  it('只指着时间带上的一段说"这里加个冲击波"（没有时间段、没给 at）：特效放在那一段的起点，不是 0 秒', { timeout: 300_000 }, async () => {
+    const f = await fixture();
+    await updateProjectProductionPolicy(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, actorId: null, changes: { allowProceduralGraphics: true } });
+    const before = await listProjectComposition(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    // 第二段素材盖在 2 秒处（60 帧起），指着它说话
+    await processEdits(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, actor: { type: 'USER', id: null },
+      request: {
+        baseProjectRevision: await f.revision(), expectedSceneRevisions: {}, idempotencyKey: `idem_${randomUUID()}`,
+        operations: [{ op: 'insert_clip', sequenceId: f.sequenceId, trackId: before.clips[0]!.trackId, assetVersionId: f.footageId, nestedSequenceId: null, sourceStreamId: null, sourceRange: range(0, 30), mode: 'OVERWRITE', sequenceStart: ft(60), linkAudio: false, audioTrackId: null }],
+      },
+    });
+    const pointed = (await listProjectComposition(deps(), { workspaceId: f.workspaceId, projectId: f.projectId })).clips.find((clip) => clip.sequenceRange.start.ticks === '60')!;
+    const turn = await runTurn(f, new ScriptedModel([
+      () => reply([{ type: 'tool_use', id: 'p1', name: 'add_effect', input: { template: 'shockwave', seconds: '0.5' } }], 'tool_use'),
+      (request) => {
+        const result = toolResults(request)[0]!;
+        expect(result.isError).toBe(false);
+        expect(JSON.parse(result.content)).toMatchObject({ effect: { template: 'shockwave', at: ['2.000', '2.500'] } });
+        return reply([{ type: 'text', text: '加好了。' }], 'end_turn');
+      },
+    ]), '这里加个冲击波', { timeRange: null, clipIds: [pointed.id], frameRegion: null });
+    expect(turn, JSON.stringify(turn.error)).toMatchObject({ status: 'COMPLETED' });
+    expect(turn.proposalId).not.toBeNull();
+  });
 });
