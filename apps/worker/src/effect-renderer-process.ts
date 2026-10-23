@@ -32,6 +32,23 @@ export function resolveDefaultEffectRenderCommand(override?: string): string[] {
   return [process.execPath, '--no-warnings', path.join(repoRoot, 'apps', 'render-worker', 'src', 'run-effect.ts')];
 }
 
+/**
+ * 子进程失败时交回的一行错误：子进程自己捕获的错误是一行 JSON（只含错误消息，不含环境信息），取其 message；
+ * 未被捕获的异常（如 Remotion 在没配浏览器时去联网下载失败）由 Node 打印堆栈、最后一行是 "Node.js vX"，
+ * 这时取抛出的那一行 "XxxError: …"，否则才是最后一行。
+ */
+export function effectChildError(stderr: string): string {
+  const lines = stderr.split('\n').map((line) => line.trim()).filter((line) => line !== '').reverse();
+  for (const line of lines) {
+    if (!line.startsWith('{')) continue;
+    try {
+      const message = (JSON.parse(line) as { message?: unknown }).message;
+      if (message !== undefined) return String(message);
+    } catch { /* 不是 JSON */ }
+  }
+  return lines.find((line) => /^[A-Za-z]*Error\b[^:]*:/.test(line)) ?? lines[0] ?? '';
+}
+
 export function createProcessEffectRenderer(options: ProcessEffectRendererOptions): AgentEffectRenderer {
   const timeoutMs = options.timeoutMs ?? DEFAULT_EFFECT_RENDER_TIMEOUT_MS;
   return {
@@ -70,10 +87,7 @@ export function createProcessEffectRenderer(options: ProcessEffectRendererOption
           });
         });
         if (exit.code !== 0) {
-          // 子进程以一行 JSON 报错（只含错误消息，不含环境信息）；取最后一行
-          const last = exit.stderr.trim().split('\n').at(-1) ?? '';
-          let message = last;
-          try { message = String((JSON.parse(last) as { message?: unknown }).message ?? last); } catch { /* 非 JSON 行原样 */ }
+          const message = effectChildError(exit.stderr);
           throw new Error(`特效渲染失败：${message.slice(0, 500) || `code=${String(exit.code)} signal=${String(exit.signal)}`}`);
         }
         const file = path.join(workDir, 'out', 'layer.mov');
