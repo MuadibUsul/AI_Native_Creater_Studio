@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { BRAND_NAME } from '@/brand/brand';
 
 /**
  * V6-4：手机网页审片可以"添加到主屏幕"（PWA）。只提供安装信息，不做离线缓存——
@@ -6,9 +7,9 @@ import type { MetadataRoute } from 'next';
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'ANCS Creator Studio',
-    short_name: 'ANCS',
-    description: 'AI-native video studio: review, mark and fix your videos with AI.',
+    name: BRAND_NAME,
+    short_name: BRAND_NAME,
+    description: 'The video editor that listens: talk to it, point at the picture, and it cuts.',
     start_url: '/',
     scope: '/',
     display: 'standalone',

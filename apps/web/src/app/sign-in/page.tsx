@@ -7,6 +7,7 @@ import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { useCapabilities } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
+import { BRAND_NAME, BrandTile } from '@/brand/brand';
 import { errorReason } from '@/ui/AccountCard';
 import { deviceAppearance, saveDeviceAppearance } from '@/lib/appearance';
 import styles from '@/components/quiet-frame/legacy.module.css';
@@ -54,6 +55,7 @@ function SignIn() {
   return (
     <main id="main" className={`page ${styles['surface']}`}>
       <section className="panel pad" style={{ maxWidth: 480, margin: 'min(8vh, 64px) auto 0' }}>
+      <div className="row gap8 mb24"><BrandTile size={32} /><span className="logotext">{BRAND_NAME}</span></div>
       <div className="eyebrow mb16">ACCOUNT / SIGN IN</div>
       <h1>{t.title}</h1>
       <p className="small muted mt8">{totpChallenge ? t.totpIntro : t.intro}</p>

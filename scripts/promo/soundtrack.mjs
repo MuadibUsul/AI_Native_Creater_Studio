@@ -206,6 +206,21 @@ function impact(t, gain = 1) {
   for (let k = 0; k < SR * 0.6 && start + k < N; k += 1) duck[start + k] = Math.min(duck[start + k], 0.15 + 0.85 * Math.min(1, k / (SR * 0.6)));
 }
 
+/** 甩镜呼啸：带通噪声从低扫到高再落下，峰值落在 at（画面甩镜转场的那一刻）。 */
+function whoosh(at, length = 0.42, gain = 0.5) {
+  const start = at - length * 0.7;
+  const s0 = Math.max(0, Math.round(start * SR));
+  const bp = biquad('bp');
+  for (let k = 0; k < length * SR && s0 + k < N; k += 1) {
+    const p = k / (length * SR);
+    if (k % 64 === 0) bp.set(300 * 20 ** Math.sin(Math.PI * Math.min(1, p * 1.2)), 1.3);
+    const env = Math.sin(Math.PI * p) ** 2;
+    const v = bp.run(noise()) * env * gain;
+    const pan = p * 2 - 1;
+    add(s0 + k, v * (1 - pan * 0.6), v * (1 + pan * 0.6), 0.25);
+  }
+}
+
 function typing(from, to) {
   // 打字：随机的细小高频点击（跟画面里一句话打出来的节奏一致，约每 70 ms 一个字）
   for (let t = from; t < to; t += 0.055 + rand() * 0.04) {
@@ -246,9 +261,10 @@ typing(0.6, 3.4);
 riser(1.0, 4.0, 0.55);
 for (let b = 4; b < 8; b += 1) hat(b * BEAT, false, 0.35 + b * 0.05);
 
-// 4 s：标志落下
+// 4 s：标志落下（标志描出时一串高音钟声）
 impact(4.0, 1.0);
 kick(4.0, 1.1);
+[77, 80, 84, 89, 92].forEach((note, i) => pluck(note, 4.18 + i * 0.09, 0.07, i % 2 === 0 ? -0.3 : 0.3));
 // 4–8 s（第 2–3 小节）：铺底 + 渐起的滤波鼓组
 for (let bar = 2; bar < 4; bar += 1) {
   supersaw(chordAt(bar).pad, barTime(bar), BAR, { gain: 0.05, sweep: bar === 2 ? [400, 1200] : [1200, 3600], attack: 0.3, send: 0.45 });
@@ -280,6 +296,8 @@ const groove = (bar, { energy = 1, arp = false, stabs = true, filter = 5200 } = 
 };
 
 impact(8.0, 0.9);
+// 8–11 s：四个大字之间的甩镜转场
+for (const at of [9.0, 10.0, 11.0, 12.0]) whoosh(at, 0.42, 0.45);
 for (let bar = 4; bar < 8; bar += 1) groove(bar, { energy: 1, stabs: true });        // 8–16 s  SAY IT / POINT / CUT / KEEP
 for (let bar = 8; bar < 12; bar += 1) groove(bar, { energy: 0.85, arp: true, filter: 3000 }); // 16–24 s 对话与指点
 impact(24.0, 0.7);

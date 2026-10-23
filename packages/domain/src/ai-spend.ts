@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { AGENT_ERROR_REASONS, ApiFailure, ERROR_CODES, REFERENCE_DISTILL_WORKFLOW, agentModelCostMicros, aiSpendSchema, type AgentModelUsage, type AiSpend } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, ApiFailure, ERROR_CODES, REFERENCE_DISTILL_WORKFLOW, agentModelCostMicros, aiSpendSchema, resolveModelPrice, type AgentModelUsage, type AiSpend } from '@ancs/contracts';
 import { agentTurns, aiUsageRecords, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { deploymentPolicy } from './deployment-policy.js';
@@ -26,7 +26,7 @@ export function modelCostMicros(model: string, usage: AgentModelUsage): number |
 
 /** 这个模型有没有单价（内置或运维补充）。 */
 export function modelIsPriced(model: string): boolean {
-  return deploymentPolicy().modelPrices[model] !== undefined;
+  return resolveModelPrice(model, deploymentPolicy().modelPrices) !== undefined;
 }
 
 export function aiSpendWindow(now: Date): { period: string; start: Date; resetsAt: Date } {

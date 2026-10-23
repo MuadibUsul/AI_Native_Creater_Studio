@@ -132,7 +132,7 @@ export const emailEnvShape = {
   /** 邮件里链接指向的网站地址（缺省 BETTER_AUTH_URL；网站与 API 不同域时配置） */
   ANCS_PUBLIC_WEB_URL: z.string().url('ANCS_PUBLIC_WEB_URL 必须是完整 URL').optional(),
   /** 邮件里显示的产品名（品牌未定前为 ANCS） */
-  ANCS_PRODUCT_NAME: z.string().trim().min(1).max(60).default('ANCS'),
+  ANCS_PRODUCT_NAME: z.string().trim().min(1).max(60).default('Kinora'),
 } satisfies z.ZodRawShape;
 
 /** 发信配置的跨字段规则（API 与邀请 CLI 共用）。 */

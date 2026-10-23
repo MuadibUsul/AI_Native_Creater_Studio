@@ -62,7 +62,7 @@ export async function startStudioEnv(options) {
   const proxyPort = await new Promise((done, fail) => { proxy.once('error', fail); proxy.listen(0, '127.0.0.1', () => done(proxy.address().port)); });
   const baseUrl = `http://127.0.0.1:${String(proxyPort)}`;
   // accounts（D-04）：注册方式 + 账号邮件驱动（如真实 SMTP 驱动连本机收信服务）；邮件链接指向本代理（同时承载网站与 API）
-  const accountEmail = options.accounts === undefined ? undefined : { sender: options.accounts.sender, webBaseUrl: baseUrl, productName: 'ANCS' };
+  const accountEmail = options.accounts === undefined ? undefined : { sender: options.accounts.sender, webBaseUrl: baseUrl, productName: 'Kinora' };
   const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl, ...(accountEmail === undefined ? {} : { email: accountEmail }) });
   // ANCS_STUDIO_S3_ENDPOINT：同一套验收改跑在 S3 兼容存储上（浏览器预签名直传直下、Worker 物化 / 写回都走对象存储；
   // 桶需已存在，每次运行用独立前缀）。缺省是本地磁盘。

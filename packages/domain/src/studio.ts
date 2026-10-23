@@ -151,11 +151,12 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
   const footage: StudioFootage[] = footageRows.map(({ asset, version }) => {
     const mime = version?.mimeType ?? String((asset.metadata as { mimeType?: unknown } | null)?.mimeType ?? '');
     const filename = (asset.metadata as { filename?: unknown } | null)?.filename;
-    // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线
+    // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线；图片等不需要探测（NOT_REQUIRED）的确认后即就绪
     const probe = (version?.mediaProbe ?? null) as { status?: unknown } | null;
+    const awaitingProbe = probe === null && version?.probeStatus !== 'NOT_REQUIRED';
     const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED' || (probe !== null && probe.status !== 'READY')
       ? 'FAILED'
-      : asset.status === 'READY' && version?.status === 'READY' ? (probe === null ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
+      : asset.status === 'READY' && version?.status === 'READY' ? (awaitingProbe ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
     return {
       assetId: asset.id,
       footageId: status === 'READY' && version !== null ? version.id : null,

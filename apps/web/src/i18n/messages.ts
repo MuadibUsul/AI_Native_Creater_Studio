@@ -34,7 +34,7 @@ const zhCN = {
     studioAction: '进入共看片室',
   },
   shell: {
-    brandAria: 'Creator Studio 创作台',
+    brandAria: 'Kinora 创作台',
     mainNav: '主导航',
     openNav: '打开导航',
     closeNav: '关闭导航',
@@ -734,7 +734,7 @@ const en: Messages = {
     studioAction: 'Open the studio',
   },
   shell: {
-    brandAria: 'Creator Studio home',
+    brandAria: 'Kinora home',
     mainNav: 'Main navigation',
     openNav: 'Open navigation',
     closeNav: 'Close navigation',

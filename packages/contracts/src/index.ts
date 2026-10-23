@@ -2749,6 +2749,7 @@ export {
   AGENT_MODEL_FAILURE_KINDS,
   AGENT_MODEL_PRICES,
   mergeModelPrices,
+  resolveModelPrice,
   modelPriceOverrideSchema,
   modelPriceOverridesSchema,
   AGENT_STOP_REASONS,

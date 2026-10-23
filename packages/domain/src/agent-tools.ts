@@ -283,10 +283,12 @@ export async function listProjectFootage(context: Pick<AgentToolContext, 'deps' 
 
 /** 已上传但还没处理完（未就绪或未探测）的素材数量：AI 据此告诉用户"还有几段在处理"。 */
 async function countProcessingFootage(context: Pick<AgentToolContext, 'deps' | 'workspaceId' | 'projectId'>): Promise<number> {
-  const rows = await context.deps.db.select({ assetStatus: assets.status, versionStatus: assetVersions.status, probe: assetVersions.mediaProbe }).from(assets)
+  const rows = await context.deps.db.select({ assetStatus: assets.status, versionStatus: assetVersions.status, probe: assetVersions.mediaProbe, probeStatus: assetVersions.probeStatus }).from(assets)
     .leftJoin(assetVersions, eq(assetVersions.id, assets.currentVersionId))
     .where(and(eq(assets.workspaceId, context.workspaceId), eq(assets.projectId, context.projectId), isNull(assets.deletedAt), inArray(assets.origin, ['USER_UPLOAD'])));
-  return rows.filter((row) => row.assetStatus === 'UPLOADING' || row.assetStatus === 'PROCESSING' || row.versionStatus !== 'READY' || row.probe === null).length;
+  // 图片等不需要媒体探测的素材（probeStatus = NOT_REQUIRED）上传确认后就处理完了，不能永远算作"还在处理"
+  return rows.filter((row) => row.assetStatus === 'UPLOADING' || row.assetStatus === 'PROCESSING' || row.versionStatus !== 'READY'
+    || (row.probe === null && row.probeStatus !== 'NOT_REQUIRED')).length;
 }
 
 const INSPECT_KINDS = [

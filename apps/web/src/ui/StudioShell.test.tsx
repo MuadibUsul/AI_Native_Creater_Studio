@@ -238,7 +238,7 @@ describe('Quiet Frame 工作台外壳', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '切换工作区' }).textContent).toContain('第一工作区'));
     await userEvent.click(screen.getByRole('button', { name: '切换工作区' }));
     await userEvent.click(screen.getByRole('button', { name: '第二工作区' }));
-    expect(screen.getByRole('link', { name: 'Creator Studio 创作台' }).getAttribute('href')).toBe('/?workspaceId=ws_2');
+    expect(screen.getByRole('link', { name: 'Kinora 创作台' }).getAttribute('href')).toBe('/?workspaceId=ws_2');
     expect(screen.getByRole('link', { name: '创作台' }).getAttribute('aria-current')).toBe('page');
     expect(window.location.search).toBe('?workspaceId=ws_2');
   });

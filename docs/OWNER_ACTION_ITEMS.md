@@ -20,7 +20,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | ID | Item | Priority | Blocks |
 |---|---|---|---|
 | D-01 | Target markets and data residency | P0 | **Markets decided: global, not mainland China.** Still open: where data is stored (region) |
-| D-02 | Brand: product name, logo, domain | P1 | Domain/TLS, email sending domain, legal documents |
+| D-02 | Brand: product name, logo, domain | P1 | **Kinora proposed** (wired in for review, `docs/brand/`). Still open: confirm name, trademark/domain check, domain/TLS, email sending domain, legal documents |
 | D-03 | Plans, prices and free quota | P1 | Stripe products, usage billing, free-quota enforcement, `ANCS_DEFAULT_PLAN` |
 | D-04 | Sign-up policy and login methods | Decided | Invite-only at launch (built). Still open: other login methods (Google, Apple) |
 | D-05 | Content moderation vendor and policy | P1 | Moderation port, launch gate |
@@ -92,8 +92,9 @@ Everything that is waiting on you, the project owner, across the whole project: 
 
 ### D-02 Brand: product name, logo, domain
 - **What:** The final product name, logo files and the production domain.
-- **Why:** The web app is still titled "Creator Studio · ANCS". The domain is needed for TLS, `BETTER_AUTH_URL`, the email sending domain and legal documents.
-- **Do / provide:** Name, logo (SVG plus 192 px and 512 px PNG icons) and domain, e.g. `studio.example.com`.
+- **Why:** The domain is needed for TLS, `BETTER_AUTH_URL`, the email sending domain and legal documents.
+- **Proposed (2026-10-23):** **Kinora**, with a new logo and app icons, already wired into the web app, the launch trailer and the default email product name on this branch. See `docs/brand/README.md` for the shortlist (Kinora, Sayframe, Earshot), why Hark and others were ruled out, and the logo files. Tagline kept: "The editor that listens."
+- **Do / provide:** Accept Kinora or pick another name; run the trademark and domain checks; choose the domain, e.g. `studio.example.com`.
 - **Where:** Send the files to me; the icons go in `apps/web/public/icons/`, the title in `apps/web/src/app/layout.tsx`, and the domain into I-02 and I-08.
 - **Priority:** P1
 - **Blocks:** I-02, B-03, L-01 (the policies name the product).

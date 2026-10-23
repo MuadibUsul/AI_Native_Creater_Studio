@@ -2,12 +2,12 @@ import * as React from 'react';
 import { AbsoluteFill, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { AuroraScene, CoastScene, FilmFinish, RoadScene, WaterfallScene } from './landscapes';
 import {
-  BEAT, BigWord, Caption, Chip, CodePanel, COLORS, DISPLAY, Effect, Flash, focus, FULL, LogoMark, PointerDrag, ramp, shake, UiShot, VoiceBars,
-  Backdrop, easeInOut, type Box, type Cam, type Capture,
+  BEAT, BigWord, Caption, Chip, CodePanel, COLORS, DISPLAY, Effect, Flash, focus, FULL, LensStreak, LogoMark, PointerDrag, ramp, shake, UiShot, VoiceBars,
+  Backdrop, easeInOut, Wordmark, type Box, type Cam, type Capture,
 } from './trailer-kit';
 
 /**
- * ANCS 发布预告片（约 50 秒，1920×1080 / 30fps，120 BPM：每拍 15 帧）。与 scripts/promo/soundtrack.mjs 同一节拍网格。
+ * Kinora 发布预告片（约 50 秒，1920×1080 / 30fps，120 BPM：每拍 15 帧）。与 scripts/promo/soundtrack.mjs 同一节拍网格。
  *   S1   0–4 s   一句话：首页输入框里逐字打出需求（真实界面连拍）
  *   S2   4–8 s   标志落下（产品特效模板：冲击波 / 爆炸 / 漏光）
  *   S3   8–16 s  主段落：SAY IT · POINT AT IT · WATCH IT CUT · KEEP IT + 风光快剪
@@ -51,6 +51,9 @@ export const LaunchTrailer: React.FC<LaunchTrailerProps> = ({ templates, capture
       <Flash at={960} length={6} peak={0.4} />
       <Flash at={1200} length={8} />
       <Flash at={1380} length={10} />
+      <LensStreak at={120} y={540} length={30} />
+      <LensStreak at={1200} y={540} length={22} color={COLORS.violet} />
+      <LensStreak at={1380} y={470} length={30} />
       <FilmFinish grain={0.05} vignette={0.5} />
     </AbsoluteFill>
   );
@@ -93,9 +96,9 @@ const S1Prompt: React.FC<Ctx> = ({ img, box }) => {
 // ---------------------------------------------------------------- S2 标志（4–8 s）
 const S2Logo: React.FC<Ctx> = ({ templates }) => {
   const frame = useCurrentFrame();
-  const logoIn = ramp(frame, 0, 14, 0, 1);
-  const scale = interpolate(logoIn, [0, 1], [2.4, 1]) * ramp(frame, 20, 120, 1, 1.08, easeInOut);
-  const blur = ramp(frame, 0, 8, 26, 0);
+  const logoIn = ramp(frame, 0, 10, 0, 1);
+  const scale = interpolate(logoIn, [0, 1], [1.8, 1]) * ramp(frame, 20, 120, 1, 1.07, easeInOut);
+  const blur = ramp(frame, 0, 8, 20, 0);
   const sky = ramp(frame, 0, 40, 0, 0.55);
   const out = ramp(frame, 108, 120, 0, 1);
   return (
@@ -103,18 +106,28 @@ const S2Logo: React.FC<Ctx> = ({ templates }) => {
       <AbsoluteFill style={{ opacity: sky, filter: 'blur(3px) saturate(1.2)', transform: `scale(${String(1.15 - frame * 0.0008)})` }}><AuroraScene /></AbsoluteFill>
       <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(5,6,12,0.2) 0%, rgba(5,6,12,0.85) 70%)' }} />
       <Effect code={templates['light-leak']} params={{ color: '#8f6bff', intensity: 0.8, direction: 'left' }} from={2} duration={50} seed="logo-leak" />
-      <Effect code={templates['burst']} params={{ color: COLORS.violet, color2: COLORS.cyan, size: 0.9, intensity: 0.55 }} from={0} duration={34} x={460} y={40} width={1000} height={1000} seed="logo-burst" />
+      <Effect code={templates['burst']} params={{ color: COLORS.violet, color2: COLORS.cyan, size: 0.9, intensity: 0.5 }} from={0} duration={34} x={460} y={40} width={1000} height={1000} seed="logo-burst" />
       <Effect code={templates['shockwave']} params={{ color: '#a99bff', rings: 3, thickness: 1.4 }} from={0} duration={44} x={360} y={-60} width={1200} height={1200} seed="logo-ring" />
       <Effect code={templates['sparkles']} params={{ color: '#ffffff', count: 40, size: 1.1 }} from={40} duration={80} seed="logo-sparkles" />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 44, transform: `scale(${String(scale)})`, filter: `blur(${String(blur)}px)`, opacity: logoIn }}>
-          <LogoMark size={190} draw={ramp(frame, 0, 22, 0.2, 1)} glow={1 + Math.sin(frame / 8) * 0.15} />
-          <div style={{ fontFamily: DISPLAY, fontWeight: 900, fontSize: 230, letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, textShadow: `0 0 60px ${COLORS.violet}aa` }}>ANCS</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 50, transform: `scale(${String(scale)})`, filter: `blur(${String(blur)}px)`, opacity: logoIn }}>
+          <LogoMark size={200} draw={ramp(frame, 0, 26, 0, 1)} glow={1 + Math.sin(frame / 8) * 0.15} id="km-s2" />
+          <Wordmark size={210} at={6} />
         </div>
       </AbsoluteFill>
-      <BigWord text="AI-NATIVE CREATOR STUDIO" mode="track" at={20} size={40} weight={600} y="66%" color="#c9cdf5" letterSpacing="0.3em" />
+      <BigWord text="AI-NATIVE VIDEO STUDIO" mode="track" at={24} size={40} weight={600} y="68%" color="#c9cdf5" letterSpacing="0.3em" />
     </AbsoluteFill>
   );
+};
+
+/** 甩镜转场：从一侧带着横向模糊滑入、结尾甩出（本段 Sequence 的本地帧） */
+const Whip: React.FC<{ length: number; dir?: 1 | -1; children: React.ReactNode }> = ({ length, dir = 1, children }) => {
+  const frame = useCurrentFrame();
+  const enter = ramp(frame, 0, 6, 1, 0);
+  const exit = ramp(frame, length - 5, length, 0, 1, (t) => t * t);
+  const x = dir * 240 * enter - dir * 260 * exit;
+  const blur = (enter + exit) * 26;
+  return <AbsoluteFill style={{ transform: `translateX(${String(x)}px)`, filter: blur > 0.5 ? `blur(${String(blur)}px)` : undefined }}>{children}</AbsoluteFill>;
 };
 
 // ---------------------------------------------------------------- S3 主段落（8–16 s）
@@ -139,7 +152,9 @@ const S3Drop: React.FC<Ctx> = ({ img, box, frameBox, templates }) => {
       <Backdrop hue="cyan" />
       {!montage && block < 4 ? (
         <Sequence from={block * B(2)} durationInFrames={B(2)} key={block}>
-          <UiShot src={words[block]!.shot} from={words[block]!.cam[0]} to={words[block]!.cam[1]} duration={B(2)} width={1780} tilt={[block % 2 === 0 ? 8 : -6, 0, block % 2 === 0 ? -8 : 8, 0]} dim={0.45} sequenceRate={words[block]!.sequenceRate} />
+          <Whip length={B(2)} dir={block % 2 === 0 ? 1 : -1}>
+            <UiShot src={words[block]!.shot} from={words[block]!.cam[0]} to={words[block]!.cam[1]} duration={B(2)} width={1780} tilt={[block % 2 === 0 ? 8 : -6, 0, block % 2 === 0 ? -8 : 8, 0]} dim={0.45} sequenceRate={words[block]!.sequenceRate} sweepAt={8} />
+          </Whip>
           <BigWord text={words[block]!.text} at={0} out={B(2)} size={block === 2 ? 190 : 230} gradient={block % 2 === 1} />
         </Sequence>
       ) : null}
@@ -184,7 +199,7 @@ const S4TalkPoint: React.FC<Ctx> = ({ img, box }) => {
     <AbsoluteFill>
       <Backdrop hue="violet" />
       <Sequence durationInFrames={120}>
-        <UiShot src={frame < 40 ? pick(img('voice-partial')) : (Array.isArray(voiceRun) ? voiceRun : pick(img('voice-partial')))} from={{ ...talkCam, zoom: talkCam.zoom * 1.08 }} to={talkCam} duration={120} delay={0} width={1100} x={80} tilt={[6, 2, 14, 6]} sequenceRate={Array.isArray(voiceRun) ? voiceRun.length / 120 : undefined} />
+        <UiShot src={frame < 40 ? pick(img('voice-partial')) : (Array.isArray(voiceRun) ? voiceRun : pick(img('voice-partial')))} from={{ ...talkCam, zoom: talkCam.zoom * 1.08 }} to={talkCam} duration={120} delay={0} width={1100} x={80} tilt={[6, 2, 14, 6]} sequenceRate={Array.isArray(voiceRun) ? voiceRun.length / 120 : undefined} callouts={[{ box: caption, label: 'Live caption · “here” = this clip', at: 24, until: 112 }]} />
         <VoiceBars x={300} y={890} width={660} height={90} at={6} out={118} />
         <BigWord text="Talk to it." mode="slam" at={6} out={120} size={150} x={1260} y="40%" align="left" />
         <Caption text="Speak naturally — in English or Chinese." at={26} out={120} x={1264} y="52%" align="left" size={40} maxWidth={600} />
@@ -266,7 +281,7 @@ const S6Delegate: React.FC<Ctx> = ({ img, box }) => {
       </div>
       <Sequence from={160} durationInFrames={80}>
         <AbsoluteFill style={{ transform: `scale(${String(1 + out * 0.25)})`, filter: `blur(${String(out * 10)}px)` }}>
-          <UiShot src={pick(img('board-done'))} from={focus(card, 0.8)} to={{ ...FULL, zoom: 1.0 }} duration={50} width={1640} />
+          <UiShot src={pick(img('board-done'))} from={focus(card, 0.8)} to={{ ...FULL, zoom: 1.0 }} duration={50} width={1640} callouts={[{ box: card, label: 'Delivered with a report', at: 6, until: 76 }]} />
         </AbsoluteFill>
         <BigWord text="You stay in charge." mode="rise" at={8} out={80} size={96} y="88%" gradient />
       </Sequence>
@@ -320,21 +335,25 @@ const S7Montage: React.FC<Ctx> = ({ img, box, templates }) => {
 const S8End: React.FC<Ctx> = ({ templates }) => {
   const frame = useCurrentFrame();
   const fadeOut = ramp(frame, 100, 120, 0, 1);
-  const logoIn = ramp(frame, 0, 16, 0, 1);
+  const logoIn = ramp(frame, 0, 12, 0, 1);
+  const chip = ramp(frame, 34, 46, 0, 1);
   return (
     <AbsoluteFill style={{ transform: shake(frame, 0, 20, 12) }}>
       <AbsoluteFill style={{ opacity: 0.35, filter: 'blur(4px)' }}><AuroraScene /></AbsoluteFill>
       <AbsoluteFill style={{ background: 'radial-gradient(ellipse at center, rgba(5,6,12,0.35) 0%, rgba(5,6,12,0.92) 75%)' }} />
-      <Effect code={templates['shockwave']} params={{ color: '#a99bff', rings: 3, thickness: 1.2 }} from={0} duration={40} x={460} y={40} width={1000} height={1000} seed="end-ring" />
+      <Effect code={templates['shockwave']} params={{ color: '#a99bff', rings: 3, thickness: 1.2 }} from={0} duration={40} x={460} y={-30} width={1000} height={1000} seed="end-ring" />
       <Effect code={templates['sparkles']} params={{ color: '#ffffff', count: 30, size: 0.9 }} from={10} duration={110} seed="end-sparkles" />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', transform: 'translateY(-70px)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 34, opacity: logoIn, transform: `scale(${String(interpolate(logoIn, [0, 1], [1.5, 1]) * ramp(frame, 16, 120, 1, 1.05))})` }}>
-          <LogoMark size={140} draw={ramp(frame, 0, 20, 0.3, 1)} />
-          <div style={{ fontFamily: DISPLAY, fontWeight: 900, fontSize: 170, letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, textShadow: `0 0 50px ${COLORS.violet}99` }}>ANCS</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 40, opacity: logoIn, transform: `scale(${String(interpolate(logoIn, [0, 1], [1.4, 1]) * ramp(frame, 16, 120, 1, 1.05))})` }}>
+          <LogoMark size={150} draw={ramp(frame, 0, 22, 0.15, 1)} id="km-s8" />
+          <Wordmark size={160} at={4} />
         </div>
       </AbsoluteFill>
-      <BigWord text="The editor that listens." mode="rise" at={14} size={78} y="63%" gradient weight={800} />
-      <Caption text="AI-native Creator Studio  ·  Invite-only beta" at={30} y="72%" size={32} color="#c9cdf5" />
+      <BigWord text="The editor that listens." mode="rise" at={14} size={78} y="62%" gradient weight={800} />
+      <div style={{ position: 'absolute', left: '50%', top: '71%', transform: `translate(-50%, ${String((1 - chip) * 16)}px)`, opacity: chip, display: 'flex', gap: 16, alignItems: 'center' }}>
+        <Chip text="Invite-only beta" active size={26} />
+        <span style={{ fontFamily: DISPLAY, fontSize: 26, color: '#c9cdf5', fontWeight: 500 }}>AI-native video studio</span>
+      </div>
       <Caption text="Pre-release build. In this preview the AI’s replies and speech recognition are scripted; the footage is generated by code." at={40} y="92%" size={22} color="rgba(255,255,255,0.5)" weight={400} />
       <AbsoluteFill style={{ background: '#000', opacity: fadeOut }} />
     </AbsoluteFill>

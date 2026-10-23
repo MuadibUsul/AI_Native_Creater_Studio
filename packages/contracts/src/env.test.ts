@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices } from './agent.js';
+import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices, resolveModelPrice } from './agent.js';
 import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
@@ -393,7 +393,7 @@ describe('D-04 账号自助：注册方式与发信', () => {
 
   it('缺省 closed、不发信；产品名缺省 ANCS', () => {
     const parsed = validateEnv(apiEnvSchema, validApiEnv);
-    expect(parsed.value).toMatchObject({ ANCS_SIGNUP_MODE: 'closed', ANCS_PRODUCT_NAME: 'ANCS' });
+    expect(parsed.value).toMatchObject({ ANCS_SIGNUP_MODE: 'closed', ANCS_PRODUCT_NAME: 'Kinora' });
     expect(parsed.value?.ANCS_EMAIL_DRIVER).toBeUndefined();
     expect(check({})).toEqual([]);
   });
@@ -449,6 +449,19 @@ describe('D-04 账号自助：注册方式与发信', () => {
       expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: bad }).issues.map((issue) => issue.variable)).toEqual(['ANCS_MODEL_PRICES_JSON']);
     }
     expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: '{"m":{"input":1,"output":2}}' }).ok).toBe(true);
+  });
+
+  it('供应商回带日期 / latest 快照名（如 vendor-pro-2026-09-01）按同名模型计价；同前缀的另一个模型（vendor-pro-max）仍算未定价', () => {
+    const prices = mergeModelPrices(parseModelPriceOverrides('{"vendor-pro":{"input":0.5,"output":2}}'));
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+    for (const snapshot of ['vendor-pro', 'vendor-pro-2026-09-01', 'vendor-pro-20260901', 'vendor-pro@20260901', 'vendor-pro-latest']) {
+      expect(resolveModelPrice(snapshot, prices), snapshot).toBe(prices['vendor-pro']);
+      expect(agentModelCostMicros(snapshot, usage, prices), snapshot).toBe(500_000);
+    }
+    for (const other of ['vendor-pro-max', 'vendor-pro-mini-2026-09-01', 'vendor-pro2', 'vendor', 'other-2026-09-01']) {
+      expect(resolveModelPrice(other, prices), other).toBeUndefined();
+      expect(agentModelCostMicros(other, usage, prices), other).toBeNull();
+    }
   });
 
   it('邀请 CLI 只需要数据库连接；发信可选', () => {

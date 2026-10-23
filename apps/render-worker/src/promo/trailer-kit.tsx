@@ -45,9 +45,17 @@ export const Backdrop: React.FC<{ hue?: 'violet' | 'cyan' | 'warm'; intensity?: 
     const size = 1 + random(`pz${String(i)}`) * 2.4;
     return <div key={i} style={{ position: 'absolute', left: x, top: y, width: size, height: size, borderRadius: '50%', background: i % 3 === 0 ? b : '#ffffff', opacity: (0.15 + random(`po${String(i)}`) * 0.5) * intensity }} />;
   });
+  // 景深光斑：几颗大而虚的光点缓慢漂移
+  const bokeh = Array.from({ length: 9 }, (_, i) => {
+    const size = 120 + random(`bk${String(i)}`) * 260;
+    const x = (random(`bx${String(i)}`) * 1.2 - 0.1) * width + Math.sin(frame / (70 + i * 9) + i) * 60;
+    const y = (random(`by${String(i)}`) * 1.1 - 0.05) * height + Math.cos(frame / (90 + i * 7) + i) * 40;
+    return <div key={`b${String(i)}`} style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: '50%', background: `radial-gradient(circle, ${i % 2 === 0 ? a : b}55 0%, transparent 70%)`, opacity: (0.35 + random(`bo${String(i)}`) * 0.4) * intensity, filter: 'blur(6px)' }} />;
+  });
   return (
     <AbsoluteFill style={{ background: COLORS.ink, overflow: 'hidden' }}>
       <AbsoluteFill style={{ background: `radial-gradient(40% 50% at ${String(x1)}% ${String(y1)}%, ${a}55 0%, transparent 70%), radial-gradient(45% 55% at ${String(x2)}% ${String(y2)}%, ${b}44 0%, transparent 70%)`, opacity: intensity }} />
+      {bokeh}
       <AbsoluteFill style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.10) 1.2px, transparent 1.4px)', backgroundSize: '32px 32px', backgroundPosition: `${String(-frame * 0.3)}px ${String(-frame * 0.5)}px`, opacity: 0.6 * intensity, maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 80%)' }} />
       {particles}
     </AbsoluteFill>
@@ -79,7 +87,11 @@ export const UiShot: React.FC<{
   tilt?: [number, number, number, number]; // rotX 起止、rotY 起止
   sequenceRate?: number; // 连拍：每帧画面前进几张
   chrome?: boolean; dim?: number; easing?: (t: number) => number;
-}> = ({ src, from = FULL, to = FULL, duration, delay = 0, width = 1660, x, y, tilt = [0, 0, 0, 0], sequenceRate, chrome = true, dim = 0, easing = easeInOut }) => {
+  /** 镜面高光扫过屏幕的起点（相对本镜头的帧）；null 不扫 */
+  sweepAt?: number | null;
+  /** 标注：在截图坐标里圈出界面元素（圈线粗细不随推拉变化） */
+  callouts?: Callout[];
+}> = ({ src, from = FULL, to = FULL, duration, delay = 0, width = 1660, x, y, tilt = [0, 0, 0, 0], sequenceRate, chrome = true, dim = 0, easing = easeInOut, sweepAt = 4, callouts = [] }) => {
   const frame = useCurrentFrame();
   const { width: W, height: H } = useVideoConfig();
   const t = interpolate(frame - delay, [0, duration], [0, 1], { ...clamp, easing });
@@ -100,8 +112,17 @@ export const UiShot: React.FC<{
   const halfH = VIEW.height / (2 * cam.zoom);
   const cx = Math.min(VIEW.width - halfW, Math.max(halfW, cam.cx));
   const cy = Math.min(VIEW.height - halfH, Math.max(halfH, cam.cy));
+  const scale = s0 * cam.zoom;
+  const local = frame - delay;
+  const sweep = sweepAt === null || !chrome ? null : interpolate(local, [sweepAt, sweepAt + 22], [-0.5, 1.5], { ...clamp, easing: Easing.inOut(Easing.cubic) });
   return (
     <AbsoluteFill style={{ perspective: 2400, perspectiveOrigin: '50% 40%' }}>
+      {chrome && file !== undefined ? (
+        // 屏幕的光溢出到背景（同一画面的大幅模糊放大），让窗口有"发光的屏幕"的深度
+        <div style={{ position: 'absolute', left: left - width * 0.06, top: top - height * 0.06, width: width * 1.12, height: height * 1.12, opacity: 0.42, filter: 'blur(70px) saturate(1.4)', transform: `rotateX(${String(rotX)}deg) rotateY(${String(rotY)}deg)` }}>
+          <Img src={staticFile(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      ) : null}
       <div style={{
         position: 'absolute', left, top, width, height, borderRadius: chrome ? 18 : 0, overflow: 'hidden',
         transform: `rotateX(${String(rotX)}deg) rotateY(${String(rotY)}deg)`, transformStyle: 'preserve-3d',
@@ -112,10 +133,52 @@ export const UiShot: React.FC<{
           {file === undefined
             ? <div style={{ width: VIEW.width, height: VIEW.height, background: 'linear-gradient(135deg,#12131c,#1b1d2b)' }} />
             : <Img src={staticFile(file)} style={{ width: VIEW.width, height: VIEW.height, display: 'block' }} />}
+          {callouts.map((callout) => <CalloutRing key={`${callout.label ?? ''}${String(callout.at)}`} callout={callout} local={local} scale={scale} />)}
         </div>
+        {sweep !== null && sweep > -0.5 && sweep < 1.5 ? (
+          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(105deg, rgba(255,255,255,0) ${String((sweep - 0.18) * 100)}%, rgba(255,255,255,0.16) ${String(sweep * 100)}%, rgba(255,255,255,0) ${String((sweep + 0.18) * 100)}%)`, mixBlendMode: 'screen', pointerEvents: 'none' }} />
+        ) : null}
         {chrome ? <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(120deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 35%)', pointerEvents: 'none' }} /> : null}
         {dim > 0 ? <div style={{ position: 'absolute', inset: 0, background: `rgba(5,6,12,${String(dim)})` }} /> : null}
       </div>
+    </AbsoluteFill>
+  );
+};
+
+export interface Callout { box: Box | undefined; label?: string; at: number; until?: number; pad?: number }
+
+/** 界面标注：圆角圈线从中心展开 + 发光，旁边一个小标签。坐标是截图里的 CSS 像素，圈线粗细按镜头缩放反算成恒定屏幕像素。 */
+const CalloutRing: React.FC<{ callout: Callout; local: number; scale: number }> = ({ callout, local, scale }) => {
+  const { box } = callout;
+  if (box === undefined || local < callout.at || (callout.until !== undefined && local > callout.until)) return null;
+  const p = interpolate(local - callout.at, [0, 10], [0, 1], { ...clamp, easing: ease });
+  const fade = callout.until === undefined ? 1 : interpolate(local, [callout.until - 6, callout.until], [1, 0], clamp);
+  const pad = (callout.pad ?? 10) / scale;
+  const stroke = 3 / scale;
+  const w = box.width + pad * 2;
+  const h = box.height + pad * 2;
+  return (
+    <div style={{ position: 'absolute', left: box.x - pad + (w * (1 - p)) / 2, top: box.y - pad + (h * (1 - p)) / 2, width: w * p, height: h * p, opacity: fade }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 14 / scale, border: `${String(stroke)}px solid ${COLORS.cyan}`, boxShadow: `0 0 ${String(24 / scale)}px ${COLORS.cyan}, inset 0 0 ${String(18 / scale)}px ${COLORS.violet}88` }} />
+      {callout.label !== undefined && p > 0.6 ? (
+        <div style={{ position: 'absolute', left: 0, top: -(46 / scale), transformOrigin: '0 0', transform: `scale(${String(1 / scale)})`, whiteSpace: 'nowrap', padding: '7px 14px', borderRadius: 999, fontFamily: DISPLAY, fontWeight: 600, fontSize: 22, color: '#fff', background: `linear-gradient(100deg, ${COLORS.violet}, ${COLORS.cyan})`, boxShadow: `0 6px 24px ${COLORS.violet}88`, opacity: interpolate(p, [0.6, 1], [0, 1]) }}>{callout.label}</div>
+      ) : null}
+    </div>
+  );
+};
+
+/** 变形镜头光条：冲击时一道横向光条展开、渐隐（加一团柔光）。 */
+export const LensStreak: React.FC<{ at: number; y?: number; length?: number; color?: string }> = ({ at, y = 540, length = 26, color = COLORS.cyan }) => {
+  const frame = useCurrentFrame();
+  const local = frame - at;
+  if (local < 0 || local > length) return null;
+  const p = local / length;
+  const widthPx = interpolate(p, [0, 0.35, 1], [200, 2200, 2600]);
+  const opacity = interpolate(p, [0, 0.12, 1], [0, 1, 0]);
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none', mixBlendMode: 'screen' }}>
+      <div style={{ position: 'absolute', left: 960 - widthPx / 2, top: y - 3, width: widthPx, height: 6, borderRadius: 6, background: `linear-gradient(90deg, transparent, ${color} 30%, #ffffff 50%, ${color} 70%, transparent)`, opacity, filter: 'blur(1.5px)' }} />
+      <div style={{ position: 'absolute', left: 960 - widthPx / 3, top: y - 40, width: (widthPx * 2) / 3, height: 80, borderRadius: '50%', background: `radial-gradient(ellipse, ${color}66 0%, transparent 70%)`, opacity: opacity * 0.8, filter: 'blur(10px)' }} />
     </AbsoluteFill>
   );
 };
@@ -208,16 +271,38 @@ export function shake(frame: number, at: number, strength = 18, length = 12): st
   return `translate(${String((random(`sx${String(frame)}`) - 0.5) * strength * decay)}px, ${String((random(`sy${String(frame)}`) - 0.5) * strength * decay)}px)`;
 }
 
-/** 标志：圆角画框 + 中间的四角星（"画面" + "AI"）。 */
-export const LogoMark: React.FC<{ size: number; glow?: number; draw?: number }> = ({ size, glow = 1, draw = 1 }) => (
-  <svg width={size} height={size} viewBox="0 0 120 120" style={{ overflow: 'visible', filter: `drop-shadow(0 0 ${String(24 * glow)}px ${COLORS.violet}) drop-shadow(0 0 ${String(50 * glow)}px ${COLORS.cyan}66)` }}>
-    <defs>
-      <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#b9a8ff" /><stop offset="0.55" stopColor={COLORS.violet} /><stop offset="1" stopColor={COLORS.cyan} /></linearGradient>
-    </defs>
-    <rect x="8" y="8" width="104" height="104" rx="30" fill="none" stroke="url(#logo-g)" strokeWidth="9" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - draw} />
-    <path d="M60 30 C63 50 70 57 90 60 C70 63 63 70 60 90 C57 70 50 63 30 60 C50 57 57 50 60 30 Z" fill="url(#logo-g)" opacity={Math.min(1, draw * 1.4)} transform={`rotate(${String((1 - draw) * 90)} 60 60)`} />
-  </svg>
-);
+/**
+ * Kinora 标志（与 apps/web/src/brand/brand.tsx、docs/brand/ 同一图形）：竖笔是时间线播放头，两臂张开成"K"，臂间一道声波。
+ * draw 0→1：竖笔从下往上长出 → 两臂描出 → 声波弹出；glow 控制外发光。
+ */
+export const LogoMark: React.FC<{ size: number; glow?: number; draw?: number; id?: string }> = ({ size, glow = 1, draw = 1, id = 'km' }) => {
+  const stem = interpolate(draw, [0, 0.35], [0, 1], clamp);
+  const arms = interpolate(draw, [0.2, 0.75], [0, 1], { ...clamp, easing: ease });
+  const wave = interpolate(draw, [0.65, 1], [0, 1], { ...clamp, easing: Easing.out(Easing.back(2)) });
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ overflow: 'visible', filter: `drop-shadow(0 0 ${String(18 * glow)}px ${COLORS.violet}) drop-shadow(0 0 ${String(40 * glow)}px ${COLORS.cyan}55)` }}>
+      <defs>
+        <linearGradient id={id} x1="20" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse"><stop stopColor="#B9A6FF" /><stop offset="0.5" stopColor="#7C5CFF" /><stop offset="1" stopColor="#4FD8FF" /></linearGradient>
+      </defs>
+      <rect x="11" y="7" width="7" height="50" rx="3.5" fill="#fff" style={{ transformOrigin: '14.5px 57px', transform: `scaleY(${String(stem)})` }} />
+      <path d="M48 9 23.5 33 49 57" stroke={`url(#${id})`} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - arms} opacity={arms > 0 ? 1 : 0} />
+      <path d="M40.5 23.5a19 19 0 0 1 0 19" stroke={`url(#${id})`} strokeWidth="4.5" strokeLinecap="round" style={{ transformOrigin: '23.5px 33px', transform: `scale(${String(wave)})` }} opacity={wave > 0 ? 1 : 0} />
+    </svg>
+  );
+};
+
+/** 字标 "kinora"：逐字从模糊里落定。 */
+export const Wordmark: React.FC<{ text?: string; size: number; at: number; stagger?: number }> = ({ text = 'kinora', size, at, stagger = 2 }) => {
+  const frame = useCurrentFrame();
+  return (
+    <div style={{ display: 'flex', fontFamily: DISPLAY, fontWeight: 700, fontSize: size, letterSpacing: '-0.05em', lineHeight: 1, color: '#fff', textShadow: `0 0 50px ${COLORS.violet}99` }}>
+      {[...text].map((char, i) => {
+        const p = interpolate(frame - at - i * stagger, [0, 10], [0, 1], { ...clamp, easing: ease });
+        return <span key={`${char}${String(i)}`} style={{ display: 'inline-block', opacity: p, transform: `translateY(${String((1 - p) * 40)}px)`, filter: `blur(${String((1 - p) * 14)}px)` }}>{char}</span>;
+      })}
+    </div>
+  );
+};
 
 /** 产品特效模板（真实代码）放在一块区域里运行：区域内的 useVideoConfig 尺寸 = 区域尺寸，时长 = 本段时长。 */
 export const Effect: React.FC<{ code: string | undefined; params?: Record<string, unknown>; from: number; duration: number; x?: number; y?: number; width?: number; height?: number; seed?: string; blend?: React.CSSProperties['mixBlendMode'] }> = ({ code, params = {}, from, duration, x = 0, y = 0, width = 1920, height = 1080, seed = 'promo', blend = 'screen' }) => {

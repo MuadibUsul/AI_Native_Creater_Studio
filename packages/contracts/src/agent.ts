@@ -217,8 +217,23 @@ export function mergeModelPrices(overrides: ModelPriceOverrides): Record<string,
  * 一次模型调用的成本（微美元，向上取整）。未知模型返回 null（不臆造价格；计量面显示"未定价"）。
  * `prices` 缺省为内置表；部署补充的单价由领域层（`modelCostMicros`）传入。
  */
+/** 供应商回带的快照后缀：日期（`-2026-09-01`、`-20260901`、Vertex 的 `@20260901`）或 `-latest`。 */
+const MODEL_SNAPSHOT_SUFFIX = /(?:-\d{4}-\d{2}-\d{2}|-\d{8}|@\d{8}|-latest)$/;
+
+/**
+ * 模型单价：先精确匹配；没有时，如果供应商回带的是某个已定价模型的日期 / latest 快照（响应里的模型名常带这种后缀），
+ * 按该模型计价——否则配好单价的模型会被当成"未定价"，设了月度上限时 AI 剪辑师调一次就停。
+ * 不认同前缀的另一个模型（如 `x-mini`）：那是不同的价格。
+ */
+export function resolveModelPrice(model: string, prices: Readonly<Record<string, AgentModelPrice>> = AGENT_MODEL_PRICES): AgentModelPrice | undefined {
+  const exact = prices[model];
+  if (exact !== undefined) return exact;
+  const base = model.replace(MODEL_SNAPSHOT_SUFFIX, '');
+  return base === model ? undefined : prices[base];
+}
+
 export function agentModelCostMicros(model: string, usage: AgentModelUsage, prices: Readonly<Record<string, AgentModelPrice>> = AGENT_MODEL_PRICES): number | null {
-  const price = prices[model];
+  const price = resolveModelPrice(model, prices);
   if (price === undefined) return null;
   const total = BigInt(usage.inputTokens) * BigInt(price.inputMicrosPerMTok)
     + BigInt(usage.outputTokens) * BigInt(price.outputMicrosPerMTok)

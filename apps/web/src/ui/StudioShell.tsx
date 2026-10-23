@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BRAND_NAME, BrandTile } from '@/brand/brand';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,8 +45,8 @@ function projectHref(base: string, project: { id: string; mode?: string }): stri
 
 function Brand({ href = '/', label }: { href?: string; label: string }) {
   return <Link href={href} className="logo" aria-label={label}>
-    <span className="logomark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" /><path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none" /></svg></span>
-    <span className="logotext">Creator Studio</span>
+    <span className="logomark" style={{ background: 'none' }}><BrandTile size={32} /></span>
+    <span className="logotext">{BRAND_NAME}</span>
   </Link>;
 }
 
