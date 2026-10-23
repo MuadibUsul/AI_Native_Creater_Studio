@@ -340,5 +340,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
 - 画面理解达到上限时暂停（素材面板显示"AI 额度已用完"），额度恢复后成员点"再理解一次画面"；额度仍用完时服务端直接拒绝（402），不会排一个注定停下的任务。
 - 达到上限：进行中的一轮在下一次模型调用前停下，已完成的修改保留为提案；新的一轮返回 402 `AI_MONTHLY_CAP_REACHED`；共看片室在输入框上方说明额度与恢复日期（UTC 下个月 1 日）。学风格改用规则撰写。实际花费最多超出上限一次模型调用。
 - 套餐权益 `aiSpendMicrosPerMonth`（微美元）非空时以套餐为准（可以高于这里的缺省；`0` = 该套餐不能用 AI）；默认套餐种子都不设，金额待定价（D-03）。
-- 改金额：改 `production.env` 后重启 API 与 Worker；本月已花的照常计算。
+- **模型单价**：上限按美元计算，内置单价只有 Claude。DeepSeek（`deepseek-v4-pro`，带图片时 `deepseek-flash`）、Elorian（`elorian-1-agent`）、Gemini 等要在 Worker 的 `ANCS_MODEL_PRICES_JSON` 里按供应商价格页填写（美元 / 百万 token，`cacheRead` / `cacheWrite` 可选、缺省按输入价）。
+  设了上限而模型没有单价时，Worker 启动日志会列出缺单价的模型，这些模型**不会被调用**：AI 导演在对话里说明缺哪个模型的单价，画面理解显示"未配置"，学风格改用规则撰写；渲染、转写等其他任务照常。确实不想设上限就写 `ANCS_AI_MONTHLY_CAP_USD=unlimited`。
+- 改金额或单价：改 `production.env` 后重启 API 与 Worker；本月已花的照常计算（已记录的费用不会按新单价重算）。
 - 验证：`scripts/ai-spend-browser-check.mjs`（证据 `docs/verification/artifacts/ai-spend/`）。

@@ -104,6 +104,8 @@ export const MEDIA_VISUAL_ANALYSIS_STOPPED = 'VISUAL_ANALYSIS_STOPPED_BEFORE_MOD
 /** Worker I/O seam. Implementations return candidates and evidence only; they never assign real-world identity. */
 export interface MediaVisualAnalysisAdapter {
   readonly kind: string;
+  /** 模型适配器按哪个模型计费（用于开始前确认它有单价）；外部程序适配器没有 */
+  readonly model?: string;
   analyze(input: {
     sourcePath: string;
     /** 每次模型调用前询问：false = 不再调用，适配器以 MEDIA_VISUAL_ANALYSIS_STOPPED 失败 */

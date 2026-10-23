@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckAiSpendEnv, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
+import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices } from './agent.js';
+import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -433,6 +434,21 @@ describe('D-04 账号自助：注册方式与发信', () => {
     expect(crossCheckAiSpendEnv({ NODE_ENV: 'development' })).toEqual([]);
     const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: 'S'.repeat(32), ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` }); // secrets:check-ignore：测试专用假密钥
     expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+  });
+
+  it('模型单价补充（ANCS_MODEL_PRICES_JSON）：美元/百万 token 换算成微美元并覆盖内置表；缓存单价缺省按输入价；格式不对启动失败', () => {
+    const prices = mergeModelPrices(parseModelPriceOverrides('{"vendor-pro":{"input":0.5,"output":2},"vendor-flash":{"input":0.1,"output":0.4,"cacheRead":0.01}}'));
+    expect(prices['vendor-pro']).toEqual({ inputMicrosPerMTok: 500_000, outputMicrosPerMTok: 2_000_000, cacheReadMicrosPerMTok: 500_000, cacheWriteMicrosPerMTok: 500_000 });
+    expect(prices['vendor-flash']!.cacheReadMicrosPerMTok).toBe(10_000);
+    expect(Object.keys(prices)).toEqual(expect.arrayContaining(Object.keys(AGENT_MODEL_PRICES)));
+    // 100 万输入 + 50 万输出 + 20 万缓存读：0.5 + 1.0 + 0.1 = $1.60
+    expect(agentModelCostMicros('vendor-pro', { inputTokens: 1_000_000, outputTokens: 500_000, cacheReadInputTokens: 200_000, cacheCreationInputTokens: 0 }, prices)).toBe(1_600_000);
+    expect(agentModelCostMicros('vendor-pro', { inputTokens: 1, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 })).toBeNull();
+    expect(parseModelPriceOverrides(undefined)).toEqual({});
+    for (const bad of ['not json', '{"m":{"input":0,"output":1}}', '{"m":{"input":"<美元>","output":1}}', '{"m":{"input":-1,"output":1}}', '{"m":{"input":1}}', '{"m":{"input":1,"output":1,"extra":1}}', '[]']) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: bad }).issues.map((issue) => issue.variable)).toEqual(['ANCS_MODEL_PRICES_JSON']);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: '{"m":{"input":1,"output":2}}' }).ok).toBe(true);
   });
 
   it('邀请 CLI 只需要数据库连接；发信可选', () => {

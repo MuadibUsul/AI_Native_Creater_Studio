@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { narrationVoiceSchema } from './narration.js';
 import { generationOfferSchema } from './paid-generation.js';
+import { modelPriceOverridesSchema, type ModelPriceOverrides } from './agent.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -177,6 +178,28 @@ export function resolveAiMonthlyCapMicros(value: string | undefined): number | n
   if (value === undefined || value === 'unlimited') return null;
   const [whole = '0', cents = ''] = value.split('.');
   return Number(whole) * 1_000_000 + Number(cents.padEnd(2, '0')) * 10_000;
+}
+
+/**
+ * 运维补充的模型单价（Worker；美元 / 百万 token，JSON，见 modelPriceOverridesSchema）。设了月度上限时，
+ * 内置表里没有的模型（如 DeepSeek、Elorian、Gemini）必须在这里给出单价，否则 AI 不调用这些模型（无法按额度控制费用）。
+ */
+export const modelPricesEnvShape = {
+  ANCS_MODEL_PRICES_JSON: z.string().trim().optional().superRefine((value, context) => {
+    if (value === undefined) return;
+    let parsed: unknown;
+    try { parsed = JSON.parse(value); } catch {
+      context.addIssue({ code: 'custom', message: 'ANCS_MODEL_PRICES_JSON 不是合法 JSON（例：{"模型名":{"input":0.5,"output":2}}，单位美元/百万 token）' });
+      return;
+    }
+    const result = modelPriceOverridesSchema.safeParse(parsed);
+    if (!result.success) context.addIssue({ code: 'custom', message: `ANCS_MODEL_PRICES_JSON 格式不对：${result.error.issues.map((issue) => `${issue.path.join('.')} ${issue.message}`).join('；').slice(0, 300)}` });
+  }),
+} satisfies z.ZodRawShape;
+
+/** 已校验的 ANCS_MODEL_PRICES_JSON → 运维补充的单价（未配置 = 空）。 */
+export function parseModelPriceOverrides(value: string | undefined): ModelPriceOverrides {
+  return value === undefined ? {} : modelPriceOverridesSchema.parse(JSON.parse(value));
 }
 
 export function crossCheckAiSpendEnv(value: { NODE_ENV?: 'development' | 'test' | 'production' | undefined; ANCS_AI_MONTHLY_CAP_USD?: string | undefined }): EnvIssue[] {
@@ -367,6 +390,7 @@ export const workerEnvSchema = z.object({
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
   ...aiSpendEnvShape,
+  ...modelPricesEnvShape,
   ANCS_WORKER_ID: nonEmpty('ANCS_WORKER_ID').optional(),
   ANCS_WORKER_TICK_MS: z.coerce.number().int().min(50, 'ANCS_WORKER_TICK_MS ≥ 50').max(60_000, 'ANCS_WORKER_TICK_MS ≤ 60000').default(1000),
   ANCS_WORKER_LEASE_SECONDS: z.coerce.number().int().min(5, 'ANCS_WORKER_LEASE_SECONDS ≥ 5').max(3600, 'ANCS_WORKER_LEASE_SECONDS ≤ 3600').default(60),

@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
-import { AGENT_MODEL_PRICES } from '../packages/contracts/dist/index.js';
+import { AGENT_MODEL_PRICES, mergeModelPrices } from '../packages/contracts/dist/index.js';
 import { configureDeploymentPolicy } from '../packages/domain/dist/index.js';
 import { createModelVisualAnalysisAdapter } from '../apps/worker/dist/model-visual-analysis.js';
 import { startStudioEnv } from './lib/studio-env.mjs';
@@ -189,6 +189,32 @@ try {
   await page.getByRole('complementary', { name: 'Footage' }).getByText('Understood').first().waitFor({ timeout: 10_000 });
   await shot('07-footage-understood-en');
   pass('提高上限后再理解一次', `重新排队 → 4 次调用完成，"画面 已理解"；本月 $2.40（$0.80 + $1.60）`);
+
+  // 6. 设了上限而导演模型没有单价：不调用，说明缺哪个模型的单价；运维补上单价后照常（按单价计费）
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Switch the interface to Chinese' }).click();
+  configureDeploymentPolicy({ aiMonthlyCapMicros: 5_000_000 });
+  director.model = 'vendor-director';
+  const callsBefore = director.calls;
+  const third = await client.workspaces.create({ name: '未定价模型' });
+  await page.goto(`${env.baseUrl}/w/${third.id}/studio/new`, { waitUntil: 'networkidle' });
+  await page.getByLabel('作品名称').fill('未定价');
+  await page.getByRole('button', { name: '开始' }).click();
+  await page.waitForURL(/\/studio\/prj_/, { timeout: 30_000 });
+  await page.getByLabel('告诉 AI 怎么改').fill('看看有什么素材');
+  await page.getByRole('button', { name: '发送' }).click();
+  await page.getByText('AI 导演使用的模型（vendor-director）还没有单价').waitFor({ timeout: 60_000 });
+  if (director.calls !== callsBefore) throw new Error('an unpriced model was called under a cap');
+  await shot('08-unpriced-director-zh');
+  configureDeploymentPolicy({ aiMonthlyCapMicros: 5_000_000, modelPrices: mergeModelPrices({ 'vendor-director': { input: 1, output: 4 } }) });
+  await page.getByLabel('告诉 AI 怎么改').fill('再看看');
+  await page.getByRole('button', { name: '发送' }).click();
+  await page.getByText('看完了。').waitFor({ timeout: 60_000 });
+  // 3 次调用 × 20 万输入 token × $1/MTok = $0.60
+  await page.getByText('AI 用量 $0.60').waitFor({ timeout: 30_000 });
+  if (director.calls !== callsBefore + 3) throw new Error(`expected 3 priced calls, saw ${String(director.calls - callsBefore)}`);
+  await shot('09-priced-after-config-zh');
+  pass('模型没有单价时不调用', `上限 $5、导演模型 vendor-director 无单价：不调用，对话里说明缺哪个模型的单价与 ANCS_MODEL_PRICES_JSON；补上单价（$1/$4 每百万 token）后 3 次调用计 $0.60`);
 
   if (pageErrors.length > 0) throw new Error(`page errors:\n${pageErrors.join('\n')}`);
   console.log(`\nAI spend cap browser check passed (${String(results.length)} checks). Evidence: ${relative(process.cwd(), evidenceDir)}/`);

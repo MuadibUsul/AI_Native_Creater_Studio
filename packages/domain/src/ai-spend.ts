@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { AGENT_ERROR_REASONS, ApiFailure, ERROR_CODES, REFERENCE_DISTILL_WORKFLOW, aiSpendSchema, type AiSpend } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, ApiFailure, ERROR_CODES, REFERENCE_DISTILL_WORKFLOW, agentModelCostMicros, aiSpendSchema, type AgentModelUsage, type AiSpend } from '@ancs/contracts';
 import { agentTurns, aiUsageRecords, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { deploymentPolicy } from './deployment-policy.js';
@@ -15,8 +15,19 @@ import { getWorkspacePlan } from './plans.js';
  * - 上限：套餐的 `aiSpendMicrosPerMonth`；套餐不设（null）时取部署缺省 `ANCS_AI_MONTHLY_CAP_USD`；都没有 = 不设上限；
  * - 执行：新的一轮在开始前检查（402 AI_MONTHLY_CAP_REACHED）；进行中的一轮在每次模型调用前检查，达到即停下并保留已完成的修改。
  *   所以实际花费最多超出上限"一次模型调用"（同一工作区并发的几轮各一次）；
- * - 未定价的模型调用不计入金额（不填零），另计次数供界面提示。
+ * - 未定价的模型调用不计入金额（不填零），另计次数供界面提示；设了上限时不调用没有单价的模型（无法按额度控制费用），
+ *   内置表之外的模型由运维在 ANCS_MODEL_PRICES_JSON 补上单价（见 `modelCostMicros` / `modelIsPriced`）。
  */
+
+/** 一次模型调用的成本：按内置 + 运维补充的单价（未知模型 null，不臆造价格）。 */
+export function modelCostMicros(model: string, usage: AgentModelUsage): number | null {
+  return agentModelCostMicros(model, usage, deploymentPolicy().modelPrices);
+}
+
+/** 这个模型有没有单价（内置或运维补充）。 */
+export function modelIsPriced(model: string): boolean {
+  return deploymentPolicy().modelPrices[model] !== undefined;
+}
 
 export function aiSpendWindow(now: Date): { period: string; start: Date; resetsAt: Date } {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

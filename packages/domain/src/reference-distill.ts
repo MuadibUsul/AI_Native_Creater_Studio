@@ -30,7 +30,7 @@ import {
 } from '@ancs/contracts';
 import { assets, assetVersions, strategyPacks, workflowRuns } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
-import { workspaceAiSpend } from './ai-spend.js';
+import { modelIsPriced, workspaceAiSpend } from './ai-spend.js';
 import { distillStats, editingDnaFromStats } from './distill-dna.js';
 import { composeStrategyFromStats, composeStrategyWithModel, type ComposedPack, type DistillSource } from './distill-compose.js';
 import { getStrategyPack, saveStrategyPack } from './strategies.js';
@@ -294,10 +294,10 @@ export function referenceDistillWorkflow(ports: ReferenceDistillPorts): Workflow
           const dna = editingDnaFromStats(stats);
           const base = composeStrategyFromStats({ stats, dna, sources, name });
           if (ports.model === undefined) return { kind: 'DONE', output: { composer: 'RULES', pack: base, stats } };
-          // 工作区本月 AI 费用已达上限：改用规则撰写（不调用模型，结果照常可用）
-          if ((await workspaceAiSpend(context.deps, { workspaceId: context.run.workspaceId })).reached) {
-            return { kind: 'DONE', output: { composer: 'RULES', pack: base, stats, reason: AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED } };
-          }
+          // 工作区本月 AI 费用已达上限，或设了上限而模型没有单价：改用规则撰写（不调用模型，结果照常可用）
+          const spend = await workspaceAiSpend(context.deps, { workspaceId: context.run.workspaceId });
+          if (spend.reached) return { kind: 'DONE', output: { composer: 'RULES', pack: base, stats, reason: AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED } };
+          if (spend.capMicros !== null && !modelIsPriced(ports.model.model)) return { kind: 'DONE', output: { composer: 'RULES', pack: base, stats, reason: AGENT_ERROR_REASONS.MODEL_UNPRICED } };
           const images: AgentImage[] = [];
           if (ports.frames !== undefined) {
             for (const { reference, times } of frameTimes(references, measurements)) {

@@ -70,6 +70,23 @@ describe('V5-M3 入口装配守卫', () => {
     expect(result.stderr).toContain('ANCS_AI_MONTHLY_CAP_USD');
   });
 
+  it('Worker：设了月度 AI 上限而导演 / 视觉模型没有单价 → 启动时列出缺单价的模型；补上 ANCS_MODEL_PRICES_JSON 后不再提示（不连数据库，不认领任务）', async () => {
+    const env = {
+      ...baseEnv(),
+      // 不可达的数据库：启动日志之后第一轮就退出，不会用假密钥去执行测试库里遗留的任务
+      DATABASE_URL: 'postgres://nobody:nothing@127.0.0.1:9/none',
+      ANCS_DISABLE_RENDER: '1', ANCS_WORKER_ONCE: '1', ANCS_AI_MONTHLY_CAP_USD: '20',
+      ANCS_AGENT_DRIVER: 'deepseek', DEEPSEEK_API_KEY: 'ds-fake-key-startup-guard-0123', // secrets:check-ignore：测试专用假值
+      ANCS_VISUAL_ANALYSIS_DRIVER: 'elorian', ELORIAN_API_KEY: 'el-fake-key-startup-guard-0123', // secrets:check-ignore：测试专用假值
+    };
+    const missing = await run(workerEntry, env);
+    expect(missing.stderr).toContain('没有单价：deepseek-v4-pro、deepseek-flash、elorian-1-agent');
+    expect(`${missing.stdout}${missing.stderr}`).not.toContain('fake-key-startup-guard');
+    const priced = await run(workerEntry, { ...env, ANCS_MODEL_PRICES_JSON: JSON.stringify({ 'deepseek-v4-pro': { input: 1, output: 2 }, 'deepseek-flash': { input: 1, output: 2 }, 'elorian-1-agent': { input: 1, output: 2 } }) });
+    expect(priced.stderr).not.toContain('没有单价');
+    expect(priced.stdout).toContain('agent_model=deepseek:REAL');
+  });
+
   const productionApiEnv = (): Record<string, string> => ({
     ...baseEnv(),
     NODE_ENV: 'production',

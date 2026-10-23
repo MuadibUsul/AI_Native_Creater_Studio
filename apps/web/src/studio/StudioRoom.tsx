@@ -765,7 +765,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         </div>
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
-          {cost.turns > 0 ? <span className={styles['meta']} title={aiSpend.capMicros === null ? t.aiCostHint : `${t.aiCostHint}\n${t.aiMonthHint(formatUsdMicros(aiSpend.spentMicros), formatUsdMicros(aiSpend.capMicros))}`}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
+          {cost.turns > 0 ? <span className={styles['meta']} title={aiSpend.capMicros === null ? t.aiCostHint : `${t.aiCostHint}\n${t.aiMonthHint(formatUsdMicros(aiSpend.spentMicros), formatUsdMicros(aiSpend.capMicros), aiSpend.unpricedCalls)}`}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button ref={tasksButtonRef} type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />

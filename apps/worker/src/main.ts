@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
-import { DeepSeekAgentModel } from '@ancs/providers-deepseek';
+import { DEEPSEEK_IMAGE_MODEL, DeepSeekAgentModel } from '@ancs/providers-deepseek';
 import { ElorianAgentModel } from '@ancs/providers-elorian';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -91,7 +91,11 @@ const leaseSeconds = config.ANCS_WORKER_LEASE_SECONDS;
 const heartbeatIntervalMs = config.ANCS_WORKER_HEARTBEAT_MS ?? Math.max(1000, (leaseSeconds * 1000) / 3);
 
 // 部署策略一次性注入领域层（领域层不读 process.env）
-configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN, aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) });
+configureDeploymentPolicy({
+  defaultPlan: config.ANCS_DEFAULT_PLAN,
+  aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD),
+  modelPrices: mergeModelPrices(parseModelPriceOverrides(config.ANCS_MODEL_PRICES_JSON)),
+});
 const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const deps = createDomainDeps(handle, config);
 const ffmpegPaths = {
@@ -258,6 +262,19 @@ const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHRO
       args: config.ANCS_VISUAL_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_VISUAL_ANALYSIS_ARGS_JSON) as string[],
     })
     : undefined;
+/**
+ * 设了月度 AI 上限时，Worker 会调用的模型都要有单价（内置或 ANCS_MODEL_PRICES_JSON）：没有单价的模型不调用（AI 导演说明原因、
+ * 画面理解标为"未配置"、学风格改用规则撰写），其他任务照常。启动时把缺单价的模型列出来，运维一眼能看到。
+ */
+const billedModels = [
+  ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [agentModel.model]),
+  ...(config.ANCS_AGENT_DRIVER === 'deepseek' ? [DEEPSEEK_IMAGE_MODEL] : []),
+  ...(mediaVisualAnalysisAdapter?.model === undefined ? [] : [mediaVisualAnalysisAdapter.model]),
+];
+const unpricedModels = [...new Set(billedModels)].filter((model) => !modelIsPriced(model));
+if (resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) !== null && unpricedModels.length > 0) {
+  console.error(`[worker] 设了 ANCS_AI_MONTHLY_CAP_USD，但这些模型没有单价：${unpricedModels.join('、')}。在补上单价前不会调用它们（AI 导演与画面理解不可用，其他任务照常）。请在 ANCS_MODEL_PRICES_JSON 按供应商价格页填写，例：{"${unpricedModels[0] ?? 'model'}":{"input":<美元/百万输入token>,"output":<美元/百万输出token>}}`);
+}
 const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === undefined ? undefined : createProcessMediaAudioAnalysisAdapter({
   executable: config.ANCS_AUDIO_ANALYSIS_EXECUTABLE,
   args: config.ANCS_AUDIO_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_AUDIO_ANALYSIS_ARGS_JSON) as string[],

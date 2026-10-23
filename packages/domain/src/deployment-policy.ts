@@ -1,4 +1,4 @@
-import type { PlanKey } from '@ancs/contracts';
+import { AGENT_MODEL_PRICES, type AgentModelPrice, type PlanKey } from '@ancs/contracts';
 
 /**
  * 部署策略（V5-M3）：由进程入口在启动时**一次性**从已校验的环境配置注入（API、Worker、CLI 各自调用），
@@ -12,9 +12,11 @@ export interface DeploymentPolicy {
   defaultPlan: PlanKey;
   /** 每个工作区每月 AI 模型费用的缺省上限（微美元；ANCS_AI_MONTHLY_CAP_USD；套餐设了上限时以套餐为准；null = 不设） */
   aiMonthlyCapMicros: number | null;
+  /** 模型单价表：内置 + 运维补充（ANCS_MODEL_PRICES_JSON，Worker 注入） */
+  modelPrices: Readonly<Record<string, AgentModelPrice>>;
 }
 
-const DEFAULT_POLICY: DeploymentPolicy = { defaultPlan: 'ENTERPRISE', aiMonthlyCapMicros: null };
+const DEFAULT_POLICY: DeploymentPolicy = { defaultPlan: 'ENTERPRISE', aiMonthlyCapMicros: null, modelPrices: AGENT_MODEL_PRICES };
 
 let current: DeploymentPolicy = DEFAULT_POLICY;
 

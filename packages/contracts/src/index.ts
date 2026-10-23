@@ -1289,6 +1289,8 @@ export {
   aiSpendEnvShape,
   crossCheckAiSpendEnv,
   resolveAiMonthlyCapMicros,
+  modelPricesEnvShape,
+  parseModelPriceOverrides,
   s3StorageEnvShape,
   crossCheckStorageEnv,
 } from './env.js';
@@ -2746,6 +2748,9 @@ export {
   AGENT_LOCALES,
   AGENT_MODEL_FAILURE_KINDS,
   AGENT_MODEL_PRICES,
+  mergeModelPrices,
+  modelPriceOverrideSchema,
+  modelPriceOverridesSchema,
   AGENT_STOP_REASONS,
   AGENT_TOOL_EFFECTS,
   AGENT_TOOL_PERMISSIONS,
@@ -2802,6 +2807,7 @@ export type {
   CreateAgentSessionRequest,
   ProjectAgentCost,
   AiSpend,
+  ModelPriceOverrides,
   StartAgentTurnRequest,
 } from './agent.js';
 export {

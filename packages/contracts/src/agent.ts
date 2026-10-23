@@ -185,10 +185,40 @@ export const AGENT_MODEL_PRICES: Readonly<Record<string, AgentModelPrice>> = {
 };
 
 /**
- * 一次模型调用的成本（微美元，向上取整）。未知模型返回 null（不臆造价格；计量面显示"未定价"）。
+ * 运维补充的模型单价（美元 / 百万 token），按供应商价格页填写；内置表里没有的模型（如 DeepSeek、Elorian、Gemini）靠它计价。
+ * JSON：`{"模型名": {"input": 0.5, "output": 2, "cacheRead": 0.05, "cacheWrite": 0.5}}`；cacheRead / cacheWrite 缺省按 input（宁可多算，不少算）。
  */
-export function agentModelCostMicros(model: string, usage: AgentModelUsage): number | null {
-  const price = AGENT_MODEL_PRICES[model];
+const usdPerMTokSchema = z.number().nonnegative().max(1000);
+export const modelPriceOverrideSchema = z.object({
+  // 输入、输出价必须大于 0：填 0 等于不计费，月度上限永远不会触发
+  input: usdPerMTokSchema.positive(),
+  output: usdPerMTokSchema.positive(),
+  cacheRead: usdPerMTokSchema.optional(),
+  cacheWrite: usdPerMTokSchema.optional(),
+}).strict();
+export const modelPriceOverridesSchema = z.record(z.string().trim().min(1).max(120), modelPriceOverrideSchema);
+export type ModelPriceOverrides = z.infer<typeof modelPriceOverridesSchema>;
+
+/** 内置单价 + 运维补充（同名时以运维为准）。 */
+export function mergeModelPrices(overrides: ModelPriceOverrides): Record<string, AgentModelPrice> {
+  const micros = (usd: number): number => Math.round(usd * 1_000_000);
+  return {
+    ...AGENT_MODEL_PRICES,
+    ...Object.fromEntries(Object.entries(overrides).map(([model, price]) => [model, {
+      inputMicrosPerMTok: micros(price.input),
+      outputMicrosPerMTok: micros(price.output),
+      cacheReadMicrosPerMTok: micros(price.cacheRead ?? price.input),
+      cacheWriteMicrosPerMTok: micros(price.cacheWrite ?? price.input),
+    }])),
+  };
+}
+
+/**
+ * 一次模型调用的成本（微美元，向上取整）。未知模型返回 null（不臆造价格；计量面显示"未定价"）。
+ * `prices` 缺省为内置表；部署补充的单价由领域层（`modelCostMicros`）传入。
+ */
+export function agentModelCostMicros(model: string, usage: AgentModelUsage, prices: Readonly<Record<string, AgentModelPrice>> = AGENT_MODEL_PRICES): number | null {
+  const price = prices[model];
   if (price === undefined) return null;
   const total = BigInt(usage.inputTokens) * BigInt(price.inputMicrosPerMTok)
     + BigInt(usage.outputTokens) * BigInt(price.outputMicrosPerMTok)
@@ -334,4 +364,6 @@ export const AGENT_ERROR_REASONS = {
   ITERATION_LIMIT: 'AGENT_ITERATION_LIMIT',
   /** 工作区本月 AI 费用已达上限（见 aiSpendSchema） */
   MONTHLY_CAP_REACHED: 'AI_MONTHLY_CAP_REACHED',
+  /** 设了月度上限，但所用模型没有单价（无法按额度控制费用）：先不调用，等运维在 ANCS_MODEL_PRICES_JSON 补上单价 */
+  MODEL_UNPRICED: 'AI_MODEL_UNPRICED',
 } as const;

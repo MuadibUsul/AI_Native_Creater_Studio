@@ -10,7 +10,6 @@ import {
   PROPOSAL_ERROR_REASONS,
   REVIEW_ERROR_REASONS,
   agentContentBlockSchema,
-  agentModelCostMicros,
   agentPointerSchema,
   agentSessionSchema,
   agentTurnSchema,
@@ -47,7 +46,7 @@ import { compactPlanView, getLatestProductionPlan } from './production-plan.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
 import { defaultStrategyGuidance, getStrategyPack, resolveStrategyKnobs } from './strategies.js';
 import { defaultWorkflowErrorClass, startWorkflow, type WorkflowDefinition } from './workflow.js';
-import { assertAiSpendAvailable, workspaceAiSpend } from './ai-spend.js';
+import { assertAiSpendAvailable, modelCostMicros, modelIsPriced, workspaceAiSpend } from './ai-spend.js';
 import { formatMicros } from './paid-generation-quote.js';
 
 /**
@@ -499,11 +498,23 @@ const addUsage = (left: AgentModelUsage, right: AgentModelUsage): AgentModelUsag
 const LIMIT_REPLIES = {
   budget: { 'zh-CN': '这一轮已达到成本上限，目前的修改已保留为提案，可以先看看效果。', en: 'This turn reached its cost limit. The changes so far are kept as a proposal for you to preview.' },
   iterations: { 'zh-CN': '这一轮的步骤太多，先停在这里；目前的修改已保留为提案。', en: 'This turn ran long, so I stopped here. The changes so far are kept as a proposal.' },
+  unpriced: {
+    'zh-CN': (model: string) => `AI 导演使用的模型（${model}）还没有单价，无法按本月 AI 额度控制费用，所以我先不调用它；目前的修改已保留为提案。请管理员在 ANCS_MODEL_PRICES_JSON 里补上它的单价。`,
+    en: (model: string) => `The AI director's model (${model}) has no price yet, so its spending can't be kept within the monthly AI allowance and I didn't call it. The changes so far are kept as a proposal. An administrator needs to add its price in ANCS_MODEL_PRICES_JSON.`,
+  },
   monthly: {
     'zh-CN': (cap: string, resets: string) => `这个工作区本月的 AI 额度（${cap}）已用完，我先停在这里；目前的修改已保留为提案。额度在 ${resets}（UTC）恢复。`,
     en: (cap: string, resets: string) => `This workspace has used its AI allowance for this month (${cap}), so I stopped here. The changes so far are kept as a proposal. The allowance resets on ${resets} (UTC).`,
   },
 } as const;
+
+/** 这一轮最近一次没有单价的模型调用用的模型名（说明给用户与运维）。 */
+async function lastUnpricedModel(deps: DomainDeps, turnId: string): Promise<string | null> {
+  const rows = await deps.db.select({ model: agentTurnMessages.model }).from(agentTurnMessages)
+    .where(and(eq(agentTurnMessages.turnId, turnId), eq(agentTurnMessages.role, 'assistant'), isNull(agentTurnMessages.costMicros)))
+    .orderBy(desc(agentTurnMessages.seq)).limit(1);
+  return rows[0]?.model ?? null;
+}
 
 export async function runAgentTurnLoop(
   deps: DomainDeps,
@@ -571,10 +582,15 @@ export async function runAgentTurnLoop(
       if (spend.reached) {
         return finishTurn(deps, turn, draft, LIMIT_REPLIES.monthly[locale](formatMicros(spend.capMicros ?? 0), spend.resetsAt.slice(0, 10)), { reason: AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED });
       }
+      // 设了上限却没有单价：花多少无法核算，不调用（这一轮已出现未定价的调用——如按图片改用另一个模型——也停下）
+      if (spend.capMicros !== null && (!modelIsPriced(ports.model.model) || turn.unpricedCalls > 0)) {
+        const unpriced = modelIsPriced(ports.model.model) ? await lastUnpricedModel(deps, turn.id) ?? ports.model.model : ports.model.model;
+        return finishTurn(deps, turn, draft, LIMIT_REPLIES.unpriced[locale](unpriced), { reason: AGENT_ERROR_REASONS.MODEL_UNPRICED, model: unpriced });
+      }
       if (turn.costMicros >= limits.maxCostMicros) return finishTurn(deps, turn, draft, LIMIT_REPLIES.budget[locale], { reason: AGENT_ERROR_REASONS.BUDGET_EXCEEDED });
       const messages: AgentModelMessage[] = log.map((message) => ({ role: message.role, content: message.content }));
       const response = await ports.model.respond({ system: AGENT_SYSTEM_PROMPT, tools, messages, maxOutputTokens: limits.maxOutputTokens, effort: limits.effort });
-      const cost = agentModelCostMicros(response.model, response.usage);
+      const cost = modelCostMicros(response.model, response.usage);
       const content = response.content.length > 0 ? response.content : [{ type: 'text' as const, text: '' }];
       const seq = last.seq + 1;
       const current = turn;

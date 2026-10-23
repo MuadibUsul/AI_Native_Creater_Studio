@@ -93,7 +93,8 @@ const analysisState = (run: { status: string; errorCode: string | null } | undef
     case 'PARTIAL': return 'READY';
     case 'EMPTY': return 'EMPTY';
     default:
-      if (run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED) return 'NOT_CONFIGURED';
+      // 视觉模型没有单价（设了上限时不调用）也是部署配置问题
+      if (run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED || run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.AI_MODEL_UNPRICED) return 'NOT_CONFIGURED';
       return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED ? 'LIMIT_REACHED' : 'FAILED';
   }
 };

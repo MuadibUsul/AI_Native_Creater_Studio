@@ -34,6 +34,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | D-13 | Fetching reference videos from platform links | P3 | `ANCS_REFERENCE_FETCH_CMD` |
 | D-14 | Fate of the retired V4 script/storyboard pipeline | P3 | Rebuilding it with real providers, or removing it |
 | D-15 | When to let GitHub Actions run again | P2 | CI evidence for recent commits |
+| D-17 | Prices for the AI models you use (DeepSeek, Elorian) | P0 | AI editor and footage descriptions on darely.xyz after the next deploy (`ANCS_MODEL_PRICES_JSON`) |
 | D-16 | Monthly AI spending cap per workspace | P1 | Production start-up (`ANCS_AI_MONTHLY_CAP_USD` is required); how much each beta workspace may spend |
 | I-01 | Cloud, region and machines | P0 | Any deployment |
 | I-02 | Domain, TLS and reverse proxy | P0 | Any deployment |
@@ -200,6 +201,16 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Where:** `.github/workflows/ci.yml`; GitHub Actions tab.
 - **Priority:** P2
 - **Blocks:** CI evidence for recent work.
+
+### D-17 Prices for the AI models you use (DeepSeek, Elorian)
+- **What:** The per-million-token prices of the models your production worker calls: `deepseek-v4-pro` (AI editor), `deepseek-flash` (used automatically when the conversation contains images) and `elorian-1-agent` (footage descriptions).
+- **Why:** The monthly AI cap (D-16) is counted in dollars, and the code only ships Claude prices. Until now, DeepSeek and Elorian calls were recorded as "unpriced", so the $20 cap on darely.xyz could never trigger. With this change, when a cap is set, models without a price are **not called**: the AI editor explains which model needs a price, footage descriptions show "Not set up", and style learning falls back to rule-based writing. Rendering, uploads and transcripts keep working. The worker log lists the missing prices at start-up.
+- **Do / provide:** Look up the prices on your DeepSeek and Elorian account pages and add one line to the server's `production.env` (US dollars per million tokens; `cacheRead` / `cacheWrite` optional; values must be above zero):
+  `ANCS_MODEL_PRICES_JSON={"deepseek-v4-pro":{"input":…,"output":…,"cacheRead":…},"deepseek-flash":{"input":…,"output":…},"elorian-1-agent":{"input":…,"output":…}}`
+  Then restart the worker. If you would rather run without a dollar cap, set `ANCS_AI_MONTHLY_CAP_USD=unlimited` instead.
+- **Where:** `~/ancs/production.env` on the server (worker reads it); runbook §10.5.
+- **Priority:** P0 (needed before or with the next deploy of this branch to darely.xyz).
+- **Blocks:** The AI editor and footage descriptions on darely.xyz after the next deploy.
 
 ### D-16 Monthly AI spending cap per workspace
 - **What:** The most each workspace may spend on AI model calls per calendar month (UTC): AI director conversations, review fixes, "let AI finish the edit" runs, style learning from reference videos, and the AI description of uploaded footage. Paid generation (voice-over, avatars, generated shots) is not included; it already has its own workspace budget.

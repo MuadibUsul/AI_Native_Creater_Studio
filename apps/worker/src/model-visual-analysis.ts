@@ -2,13 +2,13 @@ import { spawn } from 'node:child_process';
 import {
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
   MEDIA_VISUAL_ANALYSIS_STOPPED,
-  agentModelCostMicros,
   generatedMediaVisualAnalysisSchema,
   type AgentContentBlock,
   type AgentModelAdapter,
   type GeneratedMediaVisualAnalysis,
   type MediaVisualAnalysisAdapter,
 } from '@ancs/contracts';
+import { modelCostMicros } from '@ancs/domain';
 import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
 import { extractJpegFrame } from './frame-sampler-process.js';
 
@@ -85,6 +85,7 @@ export function createModelVisualAnalysisAdapter(options: ModelVisualAnalysisOpt
   const frameWidth = options.frameWidth ?? 384;
   return {
     kind: `model:${options.model.providerId}`,
+    model: options.model.model,
     async analyze({ sourcePath, beforeModelCall, onUsage }): Promise<GeneratedMediaVisualAnalysis> {
       const durationMs = await probeDurationMs(options.ffprobePath ?? 'ffprobe', sourcePath);
       if (durationMs <= 0) throw new Error('source has no duration');
@@ -108,7 +109,7 @@ export function createModelVisualAnalysisAdapter(options: ModelVisualAnalysisOpt
           if (beforeModelCall !== undefined && !(await beforeModelCall())) throw new Error(MEDIA_VISUAL_ANALYSIS_STOPPED);
           const response = await options.model.respond({ system: VISUAL_DESCRIPTION_PROMPT, tools: [], messages: [{ role: 'user', content }], maxOutputTokens: 4000, effort: 'low' });
           modelVersion = response.model;
-          const cost = agentModelCostMicros(response.model, response.usage);
+          const cost = modelCostMicros(response.model, response.usage);
           usage.calls += 1;
           usage.model = response.model;
           if (cost === null) usage.unpricedCalls += 1; else usage.costMicros += cost;

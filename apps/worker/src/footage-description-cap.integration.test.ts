@@ -12,6 +12,7 @@ import {
   MEDIA_PROBE_JOB_TYPE,
   MEDIA_VISUAL_ANALYSIS_JOB_TYPE,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  mergeModelPrices,
   type AgentModelAdapter,
   type AgentModelRequest,
 } from '@ancs/contracts';
@@ -52,16 +53,16 @@ afterAll(async () => {
   await rm(storageRoot, { recursive: true, force: true });
 });
 
-/** 每次调用 10 万输入 token（$0.40），按请求里的帧数回逐帧说明 */
-function pricedVision(): AgentModelAdapter & { requests: AgentModelRequest[] } {
+/** 每次调用 10 万输入 token（缺省按 $4/MTok 计 $0.40），按请求里的帧数回逐帧说明 */
+function pricedVision(model = PRICED): AgentModelAdapter & { requests: AgentModelRequest[] } {
   const requests: AgentModelRequest[] = [];
   return {
-    providerId: 'scripted', implementation: 'SCRIPTED', model: PRICED, requests,
+    providerId: 'scripted', implementation: 'SCRIPTED', model, requests,
     respond: (request) => {
       requests.push(request);
       const frames = request.messages[0]!.content.filter((block) => block.type === 'image').length;
       return Promise.resolve({
-        model: PRICED, stopReason: 'end_turn', usage: { inputTokens: 100_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        model, stopReason: 'end_turn', usage: { inputTokens: 100_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
         content: [{ type: 'text', text: JSON.stringify(Array.from({ length: frames }, (_, frame) => ({ frame, description: 'test pattern' }))) }],
       });
     },
@@ -129,6 +130,21 @@ describe('画面理解计入工作区 AI 月度上限', () => {
     expect(model.requests).toHaveLength(0);
     expect(await runOf(footage.versionId)).toMatchObject({ status: 'FAILED', errorCode: MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED });
     expect(await ledger(footage.workspaceId)).toEqual([]);
+  });
+
+  it('设了上限而视觉模型没有单价：不调用、标为未配置原因；补上单价后照常理解并按单价入账', { timeout: 120_000 }, async () => {
+    configureDeploymentPolicy({ aiMonthlyCapMicros: 5_000_000 });
+    const footage = await uploadAndProbe();
+    const unpriced = pricedVision('vendor-vision');
+    expect(await describeFootage(footage.workspaceId, unpriced)).toBe('failed');
+    expect(unpriced.requests).toHaveLength(0);
+    expect(await runOf(footage.versionId)).toMatchObject({ status: 'FAILED', errorCode: MEDIA_ANALYSIS_ERROR_CODES.AI_MODEL_UNPRICED, errorSummary: expect.stringContaining('vendor-vision') });
+
+    configureDeploymentPolicy({ aiMonthlyCapMicros: 5_000_000, modelPrices: mergeModelPrices({ 'vendor-vision': { input: 1, output: 4 } }) });
+    expect(await retryFootageDescription(deps(), { workspaceId: footage.workspaceId, assetId: footage.assetId })).toEqual({ status: 'QUEUED' });
+    expect(await describeFootage(footage.workspaceId, pricedVision('vendor-vision'))).toBe('succeeded');
+    // 4 次 × 10 万 token × $1/MTok = $0.40
+    expect(await ledger(footage.workspaceId)).toEqual([expect.objectContaining({ model: 'vendor-vision', calls: 4, costMicros: 400_000, unpricedCalls: 0 })]);
   });
 
   it('不设上限：照常理解并入账（入账只记录，不拦）', { timeout: 120_000 }, async () => {

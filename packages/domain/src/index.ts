@@ -126,7 +126,7 @@ export {
   verifyPaymentWebhook,
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
-export { aiSpendWindow, assertAiSpendAvailable, recordAiUsage, workspaceAiSpend } from './ai-spend.js';
+export { aiSpendWindow, assertAiSpendAvailable, modelCostMicros, modelIsPriced, recordAiUsage, workspaceAiSpend } from './ai-spend.js';
 export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
 export { buildRenderOutputEnhancements } from './output-enhancements.js';
 export { searchWorkspace } from './search.js';

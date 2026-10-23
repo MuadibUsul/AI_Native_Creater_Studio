@@ -203,7 +203,7 @@ const zhCN = {
     aiCostUnpriced: 'AI 用量含未定价调用',
     aiCostHint: '这条视频累计的 AI 模型费用（按公开单价估算）',
     /** 工作区本月 AI 费用与额度（有上限时显示在费用提示里） */
-    aiMonthHint: (spent: string, cap: string) => `本工作区本月 AI 费用 ${spent} / 额度 ${cap}`,
+    aiMonthHint: (spent: string, cap: string, unpriced: number) => `本工作区本月 AI 费用 ${spent} / 额度 ${cap}${unpriced > 0 ? `（另有 ${String(unpriced)} 次未定价的调用没有计入）` : ''}`,
     exportButton: '导出',
     loading: '正在打开作品…',
     notFound: '找不到这个作品',
@@ -902,7 +902,7 @@ const en: Messages = {
     aiCost: (amount: string) => `AI cost ${amount}`,
     aiCostUnpriced: 'AI cost includes unpriced calls',
     aiCostHint: 'Total AI model cost for this video (estimated from public prices)',
-    aiMonthHint: (spent: string, cap: string) => `This workspace this month: ${spent} of ${cap} AI allowance`,
+    aiMonthHint: (spent: string, cap: string, unpriced: number) => `This workspace this month: ${spent} of ${cap} AI allowance${unpriced > 0 ? ` (${String(unpriced)} unpriced call${unpriced === 1 ? '' : 's'} not counted)` : ''}`,
     exportButton: 'Export',
     loading: 'Opening the project…',
     notFound: 'Project not found',

@@ -7,6 +7,7 @@ import {
   ApiFailure,
   REFERENCE_DISTILL_WORKFLOW,
   legacyMillisecondsToMediaTime,
+  mergeModelPrices,
   planEntitlementsSchema,
   type AgentContentBlock,
   type AgentModelAdapter,
@@ -160,6 +161,48 @@ describe('工作区 AI 月度费用上限', () => {
     expect(await drive(model, f.workspaceId, turn.workflowRunId!, 1_500_000)).toBe('SUCCEEDED');
     expect(model.requests).toHaveLength(2);
     expect((await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id })).error).toEqual({ reason: AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED });
+  });
+
+  it('设了上限而导演模型没有单价：不调用，说明缺哪个模型的单价；运维补上单价（ANCS_MODEL_PRICES_JSON）后照常计费并受上限约束；不设上限时照旧放行', async () => {
+    configureDeploymentPolicy({ aiMonthlyCapMicros: 1_000_000 });
+    const f = await fixture();
+    const unpriced = (steps: (() => AgentModelResponse)[]) => Object.assign(new ScriptedModel(steps), { model: 'vendor-pro' });
+    const reply = (text: string): AgentModelResponse => ({ model: 'vendor-pro', content: [{ type: 'text', text }], stopReason: 'end_turn', usage: { inputTokens: 200_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } });
+    const blocked = unpriced([() => reply('不该走到这里')]);
+    const first = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看素材' } });
+    expect(await drive(blocked, f.workspaceId, first.workflowRunId!)).toBe('SUCCEEDED');
+    expect(blocked.requests).toHaveLength(0);
+    const stopped = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: first.id });
+    expect(stopped.error).toEqual({ reason: AGENT_ERROR_REASONS.MODEL_UNPRICED, model: 'vendor-pro' });
+    expect(stopped.reply).toContain('（vendor-pro）还没有单价');
+
+    // 运维补上单价（$5/MTok 输入）：20 万 token = $1.00，计入并触发上限
+    configureDeploymentPolicy({ aiMonthlyCapMicros: 1_000_000, modelPrices: mergeModelPrices({ 'vendor-pro': { input: 5, output: 20 } }) });
+    const priced = unpriced([() => reply('看完了。')]);
+    const second = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '再看看' } });
+    expect(await drive(priced, f.workspaceId, second.workflowRunId!)).toBe('SUCCEEDED');
+    expect(await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: second.id })).toMatchObject({ reply: '看完了。', costMicros: 1_000_000, error: null });
+    expect(await workspaceAiSpend(deps(), { workspaceId: f.workspaceId })).toMatchObject({ spentMicros: 1_000_000, reached: true });
+
+    // 不设上限：没有单价也照旧调用（只计次数）
+    configureDeploymentPolicy({});
+    const free = unpriced([() => reply('好的。')]);
+    const third = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '还有吗' } });
+    expect(await drive(free, f.workspaceId, third.workflowRunId!)).toBe('SUCCEEDED');
+    expect(await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: third.id })).toMatchObject({ reply: '好的。', costMicros: null });
+  });
+
+  it('适配器声明的模型有单价、实际计费的模型没有（如带图改用另一个模型）：这次调用之后停下，说明是哪个模型', async () => {
+    configureDeploymentPolicy({ aiMonthlyCapMicros: 5_000_000 });
+    const f = await fixture();
+    const model = new ScriptedModel([
+      () => ({ model: 'vendor-image-model', content: [{ type: 'tool_use', id: 'a', name: 'list_footage', input: {} }], stopReason: 'tool_use', usage: { inputTokens: 1_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } }),
+      () => call([{ type: 'text', text: 'unreachable' }], 'end_turn'),
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看画面' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+    expect(model.requests).toHaveLength(1);
+    expect((await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id })).error).toEqual({ reason: AGENT_ERROR_REASONS.MODEL_UNPRICED, model: 'vendor-image-model' });
   });
 
   it('套餐设了额度时以套餐为准：高于部署缺省可以继续；套餐额度为 0 = 不能开始；未设任何上限 = 不限', async () => {

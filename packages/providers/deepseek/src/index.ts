@@ -12,6 +12,9 @@ type ChatMessage = {
 const imagePart = (image: AgentImage) => ({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } });
 
 /** Preserves parallel tool ids, tool-result images and the assistant's reasoning on replay. */
+/** 请求里带图片时改用的模型（Pro 只收文字）；部署计价时它也要有单价 */
+export const DEEPSEEK_IMAGE_MODEL = 'deepseek-flash';
+
 export function toDeepSeekMessages(messages: readonly AgentModelMessage[]): ChatMessage[] {
   return messages.flatMap((message): ChatMessage[] => {
     const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
@@ -61,7 +64,7 @@ export class DeepSeekAgentModel implements AgentModelAdapter {
     try {
       const hasImages = request.messages.some((message) => message.content.some((block) => block.type === 'image' || (block.type === 'tool_result' && (block.images?.length ?? 0) > 0)));
       // Pro is text-only; Flash supports images. Actual response.model is metered.
-      const model = hasImages ? 'deepseek-flash' : this.model;
+      const model = hasImages ? DEEPSEEK_IMAGE_MODEL : this.model;
       const timeout = AbortSignal.timeout(120_000);
       const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal as AbortSignal]);
       const response = await this.request('https://api.deepseek.com/chat/completions', {

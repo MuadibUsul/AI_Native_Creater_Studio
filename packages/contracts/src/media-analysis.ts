@@ -7,6 +7,8 @@ export const MEDIA_ANALYSIS_ERROR_CODES = {
   CAPABILITY_NOT_CONFIGURED: 'CAPABILITY_NOT_CONFIGURED',
   /** 工作区本月 AI 额度用完：画面理解暂停，额度恢复后可重试 */
   AI_MONTHLY_CAP_REACHED: 'AI_MONTHLY_CAP_REACHED',
+  /** 设了月度上限，但视觉模型没有单价：不调用（属于部署配置问题，界面显示"未配置"） */
+  AI_MODEL_UNPRICED: 'AI_MODEL_UNPRICED',
 } as const;
 
 export const MEDIA_ANALYSIS_STAGES = ['PROBE', 'PROXY', 'WAVEFORM', 'ASR', 'SHOT', 'SAMPLING', 'VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'] as const;

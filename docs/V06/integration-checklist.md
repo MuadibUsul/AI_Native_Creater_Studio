@@ -17,10 +17,11 @@ Worker 配置 `ANCS_AGENT_DRIVER=deepseek`、`DEEPSEEK_API_KEY`；可选 `ANCS_A
 密钥只放服务端环境或未跟踪的 `.env`，不发给浏览器。缺密钥启动失败，不回退 Mock。
 工具调用、提案、预算、工作流重试与用量账本沿用现有导演链路；没有内置价格，界面明确显示未定价调用。
 真实工具往返、浏览器导演轮次和 Flash 看帧验证见 `docs/V06/milestones/deepseek-provider.md`。
+**计价**：DeepSeek 不在内置单价表里。设了 `ANCS_AI_MONTHLY_CAP_USD` 时必须在 `ANCS_MODEL_PRICES_JSON` 给出 `deepseek-v4-pro` 与 `deepseek-flash` 的单价（按账户价格页），否则导演不调用它（手册 §10.5）。
 
 ### Elorian 视频/画面理解（2026-10-17 接入；真实推理待余额）
 
-Worker 配置 `ANCS_VISUAL_ANALYSIS_DRIVER=elorian`、`ELORIAN_API_KEY`；可选 `ANCS_VISION_MODEL`，缺省 `elorian-1-agent`。
+Worker 配置 `ANCS_VISUAL_ANALYSIS_DRIVER=elorian`、`ELORIAN_API_KEY`；可选 `ANCS_VISION_MODEL`，缺省 `elorian-1-agent`。设了月度 AI 上限时同样需要在 `ANCS_MODEL_PRICES_JSON` 给出 `elorian-1-agent` 的单价。
 OpenAI 兼容 Chat Completions（`https://api.elorian.ai/v1/chat/completions`）；模型支持 text/image/video（`/v1/models` 实测），图片以 data URL 放在 user 消息里，工具返回图片按调用 id 关联。
 适配器不自动重试；余额不足返回 429 + `insufficient_quota` 时归为**不可重试**的 AUTH，避免把计费问题当限流反复重试。密钥只放服务端环境或未跟踪的 `.env`；缺密钥启动失败，不回退 Mock。
 **验证状态**：代码、单测、typecheck、build、arch:check 通过；`GET /v1/models` 鉴权成功；**真实推理尚未验证——账户余额 $0.00（HTTP 429 `insufficient_quota`）**。真实素材链路已实测：对 650MB 素材重建 SAMPLING/VISION 阶段，Worker 抽帧后调用 Elorian 并返回 `Elorian request failed (HTTP 429, insufficient quota)`，`attempts=1`、`FAILED_FINAL`（不重试），说明链路已通、只差余额。充值后按表格里的"怎么验证"跑一次并记录模型、用量、耗时与费用。

@@ -516,7 +516,8 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   if (turnError.includes(AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED)) unmet.push({ code: 'MONTHLY_AI_LIMIT', detail: '' });
   if (turnError.includes(AGENT_ERROR_REASONS.ITERATION_LIMIT)) unmet.push({ code: 'ITERATION_LIMIT', detail: '' });
   const unpriced = turn === null ? 0 : (await deps.db.select({ unpriced: agentTurns.unpricedCalls }).from(agentTurns).where(eq(agentTurns.id, turn.id)).limit(1))[0]?.unpriced ?? 0;
-  if (unpriced > 0) unmet.push({ code: 'UNPRICED_MODEL', detail: String(unpriced) });
+  // 有未定价的调用，或因模型没有单价而没有开始（设了月度上限时）
+  if (unpriced > 0 || turnError.includes(AGENT_ERROR_REASONS.MODEL_UNPRICED)) unmet.push({ code: 'UNPRICED_MODEL', detail: String(unpriced) });
 
   return autonomousReportSchema.parse({
     outcome: input.outcome,
