@@ -1,6 +1,6 @@
 # darely.xyz 生产部署（2026-10-23）
 
-状态：**已部署并完成真实浏览器登录验证**。部署提交 `c5c979e`（DeepSeek/Elorian provider 接入后的分支头）。
+状态：**已部署并完成真实浏览器登录验证**。当前线上提交 `520a60d`（Kinora 品牌与 AI 计价版本；首次部署为 `c5c979e`）。
 
 ## 目标与环境
 
@@ -53,6 +53,18 @@ Caddy 接入文件 `~/ancs/compose.caddy.yaml` 把 `web` 和 `realtime` 加入�
 - 未配置定时数据库备份；正式对外前需补 `pg_dump` 与异地副本。
 - 共享 VPS 内存紧张（可用约 1.7 GiB，swap 已用 2.9 GiB）；Worker 渲染高峰需观察 OOM 与 swap，必要时先停 worker 或扩容。
 - 实时语音 TTS 未配置（`ANCS_REALTIME_TTS_DRIVER` 空），使用浏览器朗读；识别为 Deepgram。
+
+## 二次部署：Kinora 品牌与 AI 计价（2026-10-23 晚）
+
+分支新增 `7c749f9`…`520a60d` 后重新构建并部署，线上提交为 `520a60d`。
+
+- 品牌：Web 标题与界面显示 **Kinora**；`ANCS_PRODUCT_NAME=Kinora`。旧配置备份 `~/ancs/production.env.before-20261023b`。
+- AI 计价（新代码在设了月度上限时拒绝调用无单价模型）：
+  - `ANCS_MODEL_PRICES_JSON` 补入 DeepSeek **峰值**价（美元/百万 token，宁可多算）：`deepseek-v4-pro` 输入 1.32 / 输出 3.96 / 缓存命中 0.044；`deepseek-flash` 输入 0.30 / 输出 1.20 / 缓存命中 0.006。来源：DeepSeek 官方价格页（2026-10-23 核对）。
+  - `elorian-1-agent` 没有可核对的公开单价，**保持未定价**：Worker 启动时会列出它并停用画面理解（该账户余额本来也是 $0）。AI 导演不受影响。
+- 验证：`https://darely.xyz/sign-in` 200、`/api/v1/ready` 200；五个容器 Up（api/web/db healthy）；Worker 日志确认三项真实驱动，且未定价清单只剩 `elorian-1-agent`；真实浏览器登录后首页显示 Kinora，截图 `docs/verification/artifacts/vps-darely/03-kinora-home.png`。
+- 浏览器控制台唯一错误是 `GET /api/v1/ops/session` 404（非运营账号的预期探测），无其他报错。
+- 本次没有新数据库迁移。
 
 ## 回滚
 
