@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
+import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PREVIEW_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
@@ -177,6 +177,16 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       : hasClips ? { revision, proposalId: null } : null), [revision, trial, hasClips]);
   const preview = useStudioPreview(workspaceId, projectId, state?.sequenceId, previewTarget);
   const targetPreview = previewTarget === null ? null : preview.preview.data ?? null;
+  // 试改预览被拒、理由是这份提案已不再待定（AI 按授权刚采用了它，或它已被放弃/取代）：不是预览失败，
+  // 是这边还没读到新版本。马上重读工作台与提案，画面换到当前版本（否则先闪"预览失败"，还留着已采用试改的"保留 / 放弃"）
+  const requestError = preview.request.isError ? describeError(preview.request.error).details : null;
+  const trialMovedOn = previewTarget?.proposalId != null && requestError !== null
+    && requestError['reason'] === PREVIEW_ERROR_REASONS.PROPOSAL_STALE && requestError['status'] !== undefined && requestError['status'] !== 'OPEN';
+  useEffect(() => {
+    if (!trialMovedOn || trialProposalId === null) return;
+    void queryClient.invalidateQueries({ queryKey: studioKeys.proposal(workspaceId, trialProposalId) });
+    void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+  }, [trialMovedOn, trialProposalId, queryClient, workspaceId, projectId]);
 
   // 正在显示的预览：目标预览就绪才切换（渲染新预览时继续显示上一个画面）
   const [shown, setShown] = useState<SequencePreview | null>(null);
@@ -858,7 +868,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           videoRef={videoRef}
           shown={shown}
           target={targetPreview}
-          targetFailed={targetPreview?.status === 'FAILED' || preview.request.isError}
+          targetFailed={targetPreview?.status === 'FAILED' || (preview.request.isError && !trialMovedOn)}
           trial={trial !== null && shown?.proposalId === trial.proposalId}
           seconds={displaySeconds(playhead)}
           uploads={uploads}

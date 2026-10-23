@@ -304,8 +304,38 @@ describe('V6-1c 共看片室', () => {
     expect(await screen.findByText('当前版本', undefined, { timeout: 6_000 })).toBeTruthy();
     expect(sdk.previews.request).toHaveBeenLastCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: null });
     expect(screen.queryByText('试改预览 · 还没采用')).toBeNull();
-    expect(screen.queryByText('预览失败')).toBeNull();
+    expect(screen.queryByText('预览生成失败')).toBeNull();
   }, 10_000);
+
+  it('V6-9 交给 AI 剪完：试改刚出来 AI 就按授权采用了（这边还没轮询到新版本）→ 试改预览被拒不算失败，马上重读提案与工作台', async () => {
+    const run = {
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
+      progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    // 工作台轮询还停在采用前（同一版本号），所以"版本变了就重读"这条路不会触发
+    const { sdk } = client({ turns: [turn()], state: studioState({ autonomousRun: run }) });
+    // 第一次读到的提案还是待定；服务端随后已提交，再为它请求预览会被拒（理由：提案已不再待定）
+    vi.mocked(sdk.projects.proposal).mockResolvedValueOnce(proposal as never).mockResolvedValue({ ...proposal, status: 'COMMITTED', committedRevision: 6 } as never);
+    vi.mocked(sdk.previews.request).mockImplementation((_ws, _project, _sequence, input) => (input.proposalId === null
+      ? Promise.resolve(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 5, proposalId: null }) as never)
+      : Promise.reject(apiError(409, 'PRECONDITION_FAILED', 'only open proposals can be previewed', { reason: 'PREVIEW_PROPOSAL_STALE', status: 'COMMITTED' }))));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    await waitFor(() => expect(sdk.previews.request).toHaveBeenCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: 'prp_1' }));
+    await waitFor(() => expect(sdk.projects.proposal).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('试改预览 · 还没采用')).toBeNull());
+    expect(screen.queryByText('预览生成失败')).toBeNull();
+    expect(screen.queryByRole('button', { name: /就这样/ })).toBeNull();
+  }, 10_000);
+
+  it('试改预览被拒、但提案仍待定（工程在它之后变了）：照常显示预览失败与重试', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    vi.mocked(sdk.previews.request).mockRejectedValue(apiError(409, 'PRECONDITION_FAILED', 'the project changed after this proposal was made', { reason: 'PREVIEW_PROPOSAL_STALE' }));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('预览生成失败')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
+  });
 
   it('试改：就地播放试改预览，时间带显示试改的片段；"就这样"按看过的哈希采用', async () => {
     const { sdk, adoptProposal } = client({ turns: [turn()] });
