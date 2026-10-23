@@ -98,3 +98,29 @@ export const agentTurnMessages = pgTable(
     check('agent_turn_messages_seq_ck', sql`${table.seq} >= 0`),
   ],
 );
+
+/**
+ * 不属于导演轮次的 AI 模型用量（工作区 AI 月度上限的计数来源之一；轮次自身的费用仍记在 agent_turns）。
+ * 当前只有上传后的画面理解（FOOTAGE_DESCRIPTION）：每次分析尝试一行，按尝试发生的时刻计入当月。只追加，不修改。
+ */
+export const aiUsageRecords = pgTable(
+  'ai_usage_records',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    /** 产生用量的对象（如 media_index_runs.id） */
+    subjectRef: text('subject_ref').notNull(),
+    model: text('model'),
+    calls: integer('calls').notNull(),
+    /** 已定价调用的费用（微美元）；未定价的调用只计次数 */
+    costMicros: bigint('cost_micros', { mode: 'number' }).notNull(),
+    unpricedCalls: integer('unpriced_calls').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ai_usage_records_workspace_created_idx').on(table.workspaceId, table.createdAt),
+    check('ai_usage_records_kind_ck', sql`${table.kind} in ('FOOTAGE_DESCRIPTION')`),
+    check('ai_usage_records_amounts_ck', sql`${table.calls} >= 0 and ${table.costMicros} >= 0 and ${table.unpricedCalls} >= 0`),
+  ],
+);

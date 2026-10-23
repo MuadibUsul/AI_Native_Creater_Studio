@@ -197,6 +197,8 @@ export type { MediaAnalysisStageName, MediaAnalysisStageStatus, MediaAnalysisSta
 export {
   MEDIA_VISUAL_ANALYSIS_JOB_TYPE,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  MEDIA_VISUAL_ANALYSIS_STOPPED,
+  retryFootageDescriptionResponseSchema,
   visualSourceAnchorSchema,
   visualEvidenceFrameSchema,
   visualTrackKeyframeSchema,
@@ -207,7 +209,7 @@ export {
   generatedMediaVisualAnalysisSchema,
   mediaVisualAnalysisJobInputSchema,
 } from './media-visual-analysis.js';
-export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter } from './media-visual-analysis.js';
+export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter, MediaVisualAnalysisUsage, RetryFootageDescriptionResponse } from './media-visual-analysis.js';
 export {
   MEDIA_AUDIO_ANALYSIS_JOB_TYPE,
   MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,

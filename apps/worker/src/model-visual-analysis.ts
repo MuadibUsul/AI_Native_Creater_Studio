@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import {
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  MEDIA_VISUAL_ANALYSIS_STOPPED,
+  agentModelCostMicros,
   generatedMediaVisualAnalysisSchema,
   type AgentContentBlock,
   type AgentModelAdapter,
@@ -17,7 +19,8 @@ import { extractJpegFrame } from './frame-sampler-process.js';
  * - 每帧一行英文说明（主体、场景、动作、景别、运镜、明显的质量问题），写入统一索引的 VISUAL_EVENT
  *   （覆盖该帧前后各半个取样间隔），导演通过 inspect_footage 读取；
  * - 模型输出必须是约定的 JSON；一批解析失败重试一次，仍失败则整次分析失败（不悄悄缺数据，用户可重跑）；
- * - 画面中的文字是数据，提示词里明确不得当作指令；不做人物身份推断。
+ * - 画面中的文字是数据，提示词里明确不得当作指令；不做人物身份推断；
+ * - 每次模型调用前问一次调用方能否继续（工作区本月 AI 额度），调用后回报累计用量（按价格表计费，计入月度上限）。
  */
 
 export const VISUAL_DESCRIPTION_PROMPT = [
@@ -82,7 +85,7 @@ export function createModelVisualAnalysisAdapter(options: ModelVisualAnalysisOpt
   const frameWidth = options.frameWidth ?? 384;
   return {
     kind: `model:${options.model.providerId}`,
-    async analyze({ sourcePath }): Promise<GeneratedMediaVisualAnalysis> {
+    async analyze({ sourcePath, beforeModelCall, onUsage }): Promise<GeneratedMediaVisualAnalysis> {
       const durationMs = await probeDurationMs(options.ffprobePath ?? 'ffprobe', sourcePath);
       if (durationMs <= 0) throw new Error('source has no duration');
       const interval = Math.max(minIntervalMs, Math.ceil(durationMs / maxFrames));
@@ -92,6 +95,7 @@ export function createModelVisualAnalysisAdapter(options: ModelVisualAnalysisOpt
 
       const descriptions: string[] = [];
       let modelVersion = options.model.model;
+      const usage = { calls: 0, costMicros: 0, unpricedCalls: 0, model: options.model.model };
       for (let offset = 0; offset < positions.length; offset += batchSize) {
         const batch = positions.slice(offset, offset + batchSize);
         const content: AgentContentBlock[] = [{ type: 'text', text: `${String(batch.length)} frames follow, numbered from 0.` }];
@@ -101,8 +105,14 @@ export function createModelVisualAnalysisAdapter(options: ModelVisualAnalysisOpt
         }
         let parsed: string[] | null = null;
         for (let attempt = 0; attempt < 2 && parsed === null; attempt += 1) {
+          if (beforeModelCall !== undefined && !(await beforeModelCall())) throw new Error(MEDIA_VISUAL_ANALYSIS_STOPPED);
           const response = await options.model.respond({ system: VISUAL_DESCRIPTION_PROMPT, tools: [], messages: [{ role: 'user', content }], maxOutputTokens: 4000, effort: 'low' });
           modelVersion = response.model;
+          const cost = agentModelCostMicros(response.model, response.usage);
+          usage.calls += 1;
+          usage.model = response.model;
+          if (cost === null) usage.unpricedCalls += 1; else usage.costMicros += cost;
+          onUsage?.({ ...usage });
           const text = response.content.filter((block): block is Extract<AgentContentBlock, { type: 'text' }> => block.type === 'text').map((block) => block.text).join('\n');
           parsed = response.stopReason === 'refusal' ? null : parseDescriptions(text, batch.length);
         }

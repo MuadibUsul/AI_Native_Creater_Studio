@@ -126,6 +126,20 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     mutationFn: (runId: string) => client.autonomy.cancelRun(workspaceId, projectId, runId, { idempotencyKey: `autonomy-cancel-${runId}` }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
   });
+  // 画面理解失败或因本月 AI 额度暂停 → 再理解一次（额度仍用完时服务端 402，说明额度与恢复日期）
+  const [visualRetryError, setVisualRetryError] = useState<{ assetId: string; message: string } | null>(null);
+  const retryVisual = useMutation({
+    mutationFn: (assetId: string) => client.assets.retryVisualAnalysis(workspaceId, assetId),
+    onMutate: () => setVisualRetryError(null),
+    onError: (error, assetId) => {
+      const described = describeError(error);
+      const message = described.details['reason'] === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED
+        ? t.chat.errors.monthlyCap(formatUsdMicros(Number(described.details['capMicros'] ?? 0)), String(described.details['resetsAt'] ?? new Date().toISOString()))
+        : t.footage.retryFailed;
+      setVisualRetryError({ assetId, message });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
   // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）与制作计划
   const latestDone = latest !== undefined && latest.status !== 'RUNNING' ? latest.id : null;
   useEffect(() => {
@@ -934,7 +948,19 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         onOpen={() => { taskNotice.dismiss(); setDistillOpen(false); setFootageOpen(false); setTasksOpen(true); }}
       />
       {tasksOpen ? <StudioTasks rows={taskRows} loadFailed={exportsQuery.isError} onClose={() => setTasksOpen(false)} /> : null}
-      {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
+      {footageOpen ? (
+        <StudioFootageDrawer
+          footage={state.footage}
+          uploads={uploads}
+          canEdit={canEdit}
+          identityHref={`/w/${workspaceId}/studio/identity`}
+          onAdd={() => fileInput.current?.click()}
+          onClose={() => setFootageOpen(false)}
+          onRetryVisual={(assetId) => retryVisual.mutate(assetId)}
+          retryingAssetId={retryVisual.isPending ? retryVisual.variables : null}
+          retryError={visualRetryError}
+        />
+      ) : null}
       {autonomyOpen ? (
         <StudioAutonomyDialog
           workspaceId={workspaceId}

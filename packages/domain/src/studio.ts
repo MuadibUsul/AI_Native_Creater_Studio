@@ -92,7 +92,9 @@ const analysisState = (run: { status: string; errorCode: string | null } | undef
     case 'READY':
     case 'PARTIAL': return 'READY';
     case 'EMPTY': return 'EMPTY';
-    default: return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED ? 'NOT_CONFIGURED' : 'FAILED';
+    default:
+      if (run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED) return 'NOT_CONFIGURED';
+      return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED ? 'LIMIT_REACHED' : 'FAILED';
   }
 };
 

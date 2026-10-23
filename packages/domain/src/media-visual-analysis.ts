@@ -13,6 +13,7 @@ import {
 } from '@ancs/contracts';
 import { assets, assetVersions, mediaIndexEntries, mediaIndexRuns } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { assertAiSpendAvailable } from './ai-spend.js';
 import { createJobInTx } from './jobs.js';
 
 type DomainTx = Parameters<Parameters<DomainDeps['db']['transaction']>[0]>[0];
@@ -155,4 +156,13 @@ export async function retryMediaVisualAnalysis(deps: DomainDeps, input: { worksp
     await tx.update(mediaIndexEntries).set({ lifecycleState: 'STALE' }).where(and(eq(mediaIndexEntries.workspaceId, input.workspaceId), eq(mediaIndexEntries.runId, run.id), inArray(mediaIndexEntries.kind, [...VISUAL_KINDS])));
     await createJobInTx(tx, { workspaceId: input.workspaceId, projectId: row.asset.projectId, type: MEDIA_VISUAL_ANALYSIS_JOB_TYPE, input: jobInput, maxAttempts: 1, createdBy: row.asset.createdBy, classification: 'SYSTEM' });
   });
+}
+
+/**
+ * 共看片室"再试一次"：重新理解一条素材的画面。工作区本月 AI 额度仍然用完时直接 402（不排一个注定停下的任务）。
+ */
+export async function retryFootageDescription(deps: DomainDeps, input: { workspaceId: string; assetId: string }): Promise<{ status: 'QUEUED' }> {
+  await assertAiSpendAvailable(deps, { workspaceId: input.workspaceId });
+  await retryMediaVisualAnalysis(deps, input);
+  return { status: 'QUEUED' };
 }

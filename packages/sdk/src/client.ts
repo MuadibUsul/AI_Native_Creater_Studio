@@ -200,6 +200,7 @@ import {
   mediaSegmentSearchResponseSchema,
   createMediaRangeTagRequestSchema,
   mediaTranscriptSchema,
+  retryFootageDescriptionResponseSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
   uploadPartTargetResponseSchema,
@@ -392,6 +393,7 @@ import {
   type MediaSegmentSearchResponse,
   type CreateMediaRangeTagRequest,
   type MediaTranscript,
+  type RetryFootageDescriptionResponse,
   type CorrectTranscriptSegmentRequest,
   type UpdateTranscriptTerminologyRequest,
   type BillingStatus,
@@ -1141,6 +1143,8 @@ export interface AncsClient {
     /** 读取机器转写及当前不可变校正版本。 */
     transcript(workspaceId: string, assetId: string): Promise<MediaTranscript>;
     retryTranscript(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaTranscript>;
+    /** 重新理解素材画面（失败后，或本月 AI 额度恢复后）；额度仍用完时 402 AI_MONTHLY_CAP_REACHED */
+    retryVisualAnalysis(workspaceId: string, assetId: string, options?: MutationOptions): Promise<RetryFootageDescriptionResponse>;
     correctTranscriptSegment(workspaceId: string, assetId: string, input: CorrectTranscriptSegmentRequest, options?: MutationOptions): Promise<MediaTranscript>;
     updateTranscriptTerminology(workspaceId: string, assetId: string, input: UpdateTranscriptTerminologyRequest, options?: MutationOptions): Promise<MediaTranscript>;
     /**
@@ -2704,6 +2708,7 @@ export function createClient(options: ClientOptions): AncsClient {
       deleteRangeTag: (workspaceId, assetId, tagId, mutation) => request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags/${tagId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
       transcript: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript`, mediaTranscriptSchema),
       retryTranscript: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/retry`, mediaTranscriptSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      retryVisualAnalysis: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/visual-analysis/retry`, retryFootageDescriptionResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
       correctTranscriptSegment: (workspaceId, assetId, input, mutation) => request('PATCH', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/segments`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
       updateTranscriptTerminology: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/terminology`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
       upload: async (workspaceId, input, mutation) =>

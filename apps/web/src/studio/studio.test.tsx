@@ -5,6 +5,7 @@ import { apiError, mockClient, renderWithClient } from '@/test-utils';
 import { MESSAGES } from '@/i18n/messages';
 import { StudioRoom } from './StudioRoom';
 import { exportSize } from './StudioExport';
+import { studioTaskRows } from './StudioTasks';
 import { formatClock, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 
 /**
@@ -624,6 +625,29 @@ describe('V6-1c 共看片室', () => {
     expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
     expect(limited.startTurn).not.toHaveBeenCalled();
     expect(MESSAGES.en.studio.chat.errors.monthlyCap('$20.00', reached.resetsAt)).toBe('This workspace has used its AI allowance for this month ($20.00). It resets on November 1.');
+  });
+
+  it('画面理解因本月 AI 额度暂停：素材面板标出"AI 额度已用完"，可再理解一次；额度仍用完时说明原因；任务中心列出暂停', async () => {
+    const paused = { ...footage('glacier.mp4', 'av_g'), understanding: { index: 'READY', transcript: 'READY', visual: 'LIMIT_REACHED' } };
+    const retryVisualAnalysis = vi.fn()
+      .mockRejectedValueOnce(apiError(402, 'BUDGET_EXCEEDED', 'this workspace has used its AI allowance for this month', { reason: 'AI_MONTHLY_CAP_REACHED', capMicros: 20_000_000, spentMicros: 20_100_000, resetsAt: '2026-11-01T00:00:00.000Z' }))
+      .mockResolvedValueOnce({ status: 'QUEUED' });
+    const { sdk } = client({ state: studioState({ footage: [paused] }) });
+    (sdk.assets as unknown as { retryVisualAnalysis: typeof retryVisualAnalysis }).retryVisualAnalysis = retryVisualAnalysis;
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const rail = await screen.findByRole('toolbar', { name: '画布工具' });
+    await userEvent.click(within(rail).getByRole('button', { name: '素材 1' }));
+    const drawer = screen.getByRole('complementary', { name: '素材' });
+    expect(within(drawer).getByText('AI 额度已用完')).toBeTruthy();
+    const retry = within(drawer).getByRole('button', { name: '重新理解「glacier.mp4」的画面' });
+    await userEvent.click(retry);
+    expect(await within(drawer).findByText('这个工作区本月的 AI 额度（$20.00）已用完，11月1日恢复。')).toBeTruthy();
+    await userEvent.click(retry);
+    await waitFor(() => expect(retryVisualAnalysis).toHaveBeenCalledTimes(2));
+    expect(retryVisualAnalysis).toHaveBeenLastCalledWith('ws_1', 'ast_glacier.mp4');
+    await waitFor(() => expect(within(drawer).queryByRole('alert')).toBeNull());
+    const rows = studioTaskRows({ footage: [paused] as never, generations: [], exports: [], turn: undefined, t: MESSAGES['zh-CN'].studio, formatTime: (iso) => iso });
+    expect(rows.find((row) => row.key === 'f-ast_glacier.mp4')).toMatchObject({ status: 'failed', detail: MESSAGES['zh-CN'].studio.tasks.understandingPaused });
   });
 
   it('额度在两次刷新之间用完：发送被服务端 402 拒绝，说明额度与恢复日期', async () => {

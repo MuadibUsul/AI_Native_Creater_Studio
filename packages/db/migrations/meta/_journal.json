@@ -701,6 +701,13 @@
       "when": 1792737683184,
       "tag": "0100_agent_turns_workspace_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792824083184,
+      "tag": "0101_ai_usage_records",
+      "breakpoints": true
     }
   ]
 }

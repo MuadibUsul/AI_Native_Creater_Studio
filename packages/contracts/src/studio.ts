@@ -57,7 +57,8 @@ export const studioProjectRefSchema = z.object({
 export type StudioProjectRef = z.infer<typeof studioProjectRefSchema>;
 
 /** NONE = 没排队；WORKING = 排队或进行中；READY / EMPTY（分析完但没有内容）/ NOT_CONFIGURED（驱动未配置，不是分析失败）/ FAILED。 */
-export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'NOT_CONFIGURED', 'FAILED'] as const;
+/** LIMIT_REACHED：工作区本月 AI 额度用完，这一项（画面理解）暂停，额度恢复后可重试 */
+export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'NOT_CONFIGURED', 'LIMIT_REACHED', 'FAILED'] as const;
 export const studioAnalysisStateSchema = z.enum(STUDIO_ANALYSIS_STATES);
 export type StudioAnalysisState = z.infer<typeof studioAnalysisStateSchema>;
 

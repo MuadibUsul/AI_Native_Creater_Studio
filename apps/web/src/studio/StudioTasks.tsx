@@ -31,6 +31,7 @@ export function studioTaskRows(input: { footage: StudioState['footage']; generat
     if (item.status === 'UPLOADING' || item.status === 'PROCESSING') rows.push({ key: `f-${item.assetId}`, group: 'footage', title: item.name, status: 'running', detail: t.tasks.footageProcessing });
     else if (item.status === 'FAILED') rows.push({ key: `f-${item.assetId}`, group: 'footage', title: item.name, status: 'failed', detail: t.tasks.footageFailed });
     else if (understanding.some(([, value]) => value === 'WORKING')) rows.push({ key: `f-${item.assetId}`, group: 'footage', title: item.name, status: 'running', detail: t.tasks.understanding });
+    else if (item.understanding.visual === 'LIMIT_REACHED') rows.push({ key: `f-${item.assetId}`, group: 'footage', title: item.name, status: 'failed', detail: t.tasks.understandingPaused });
   }
   const readyFootage = input.footage.filter((item) => item.status === 'READY').length;
   if (readyFootage > 0) rows.push({ key: 'f-ready', group: 'footage', title: t.tasks.footageReady(readyFootage), status: 'done', detail: null });

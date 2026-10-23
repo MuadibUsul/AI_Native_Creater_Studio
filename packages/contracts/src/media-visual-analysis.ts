@@ -85,8 +85,30 @@ export const mediaVisualAnalysisJobInputSchema = z.object({
 export type GeneratedMediaVisualAnalysis = z.infer<typeof generatedMediaVisualAnalysisSchema>;
 export type MediaVisualAnalysisJobInput = z.infer<typeof mediaVisualAnalysisJobInputSchema>;
 
+/** 一次分析里模型调用的累计用量（只有模型适配器能回报；外部程序适配器不知道自己花了多少） */
+export interface MediaVisualAnalysisUsage {
+  calls: number;
+  /** 已定价调用的费用（微美元） */
+  costMicros: number;
+  unpricedCalls: number;
+  model: string;
+}
+
+/** 重新理解一条素材的画面（失败后、或本月 AI 额度恢复后）：重新排队 */
+export const retryFootageDescriptionResponseSchema = z.object({ status: z.literal('QUEUED') }).strict();
+export type RetryFootageDescriptionResponse = z.infer<typeof retryFootageDescriptionResponseSchema>;
+
+/** 模型调用前的检查返回 false（如工作区本月 AI 额度用完）时，适配器以此信息失败 */
+export const MEDIA_VISUAL_ANALYSIS_STOPPED = 'VISUAL_ANALYSIS_STOPPED_BEFORE_MODEL_CALL';
+
 /** Worker I/O seam. Implementations return candidates and evidence only; they never assign real-world identity. */
 export interface MediaVisualAnalysisAdapter {
   readonly kind: string;
-  analyze(input: { sourcePath: string }): Promise<GeneratedMediaVisualAnalysis>;
+  analyze(input: {
+    sourcePath: string;
+    /** 每次模型调用前询问：false = 不再调用，适配器以 MEDIA_VISUAL_ANALYSIS_STOPPED 失败 */
+    beforeModelCall?: () => Promise<boolean>;
+    /** 每次模型调用后回报累计用量（失败时也已回报到最后一次调用） */
+    onUsage?: (usage: MediaVisualAnalysisUsage) => void;
+  }): Promise<GeneratedMediaVisualAnalysis>;
 }

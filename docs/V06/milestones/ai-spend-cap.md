@@ -12,7 +12,8 @@
 
 ## 口径与规则
 
-- **计入：** UTC 自然月内开始的导演轮次（对话、审片讨论、审片执行、自主制作）的模型费用（`agent_turns.cost_micros`），加上风格撰写（参考视频蒸馏 compose 步骤记录的 `costMicros`）。
+- **计入：** UTC 自然月内开始的导演轮次（对话、审片讨论、审片执行、自主制作）的模型费用（`agent_turns.cost_micros`），加上风格撰写（参考视频蒸馏 compose 步骤记录的 `costMicros`），
+  再加上 `ai_usage_records` 里不属于轮次的用量——上传后的画面理解（第二步，见下方"画面理解计入额度"）。
 - **不计入：** 付费生成（配音、数字人、生成镜头）——它们另有工作区生成预算（报价 → 确认 → 预留 → 结算），不重复计算。未定价的调用不计金额（不填零），另计次数。
 - **上限来源：** 套餐 `aiSpendMicrosPerMonth`（非 null 时）→ 否则部署缺省 `ANCS_AI_MONTHLY_CAP_USD` → 都没有 = 不设上限。套餐里的 `null` 表示"套餐不设"，与其他权益维度"null = 不限"不同，目的是忘记配置时仍有部署缺省兜底；套餐设 `0` = 不能用 AI。默认套餐种子都不设（金额待 D-03）。
 - **执行点：** `startAgentTurn`（覆盖对话、审片讨论 / 执行）在建轮次前检查，幂等键重放已有轮次不受影响；`startAutonomousRun` 开始前检查；导演循环在每次模型调用前检查（覆盖自主制作中途达到上限）；风格撰写达到上限时改用规则撰写（不调用模型，结果照常可用）。
@@ -53,9 +54,25 @@
 - 英文："This workspace has used its AI allowance for this month ($1.00). It resets on November 1."（`02-cap-reached-en.png`）；深色（`03-cap-reached-dark.png`）；390 px 无横向溢出（`04-cap-reached-mobile.png`）。
 - 浏览器实测发现并修正：最初单轮上限（$1.50）先于月度上限检查，两者同时到达时只说"这一轮达到成本上限"，而用户真正需要知道的是本月已不能再用——改为先查月度，并加集成测试。
 
+## 第二步：画面理解计入额度（2026-10-23）
+
+- **起因：** 第一步留下的缺口——上传后的画面理解（每条素材最多 120 帧、约 10 次视觉模型调用）既不计入月度上限也不显示。
+- **contracts**：视觉适配器 `analyze` 增加 `beforeModelCall`（每次调用前问能否继续）与 `onUsage`（累计用量）；`MEDIA_VISUAL_ANALYSIS_STOPPED`；`MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED`；
+  素材理解状态 `LIMIT_REACHED`；`retryFootageDescriptionResponseSchema`。
+- **migration**：`0101_ai_usage_records`（不属于导演轮次的模型用量账：每次分析尝试一行，只追加；按 `(workspace_id, created_at)` 汇总）。
+- **domain**：`recordAiUsage`；`workspaceAiSpend` 汇总时加上这本账；`retryFootageDescription`（额度仍用完 → 402，不排注定停下的任务）；共看片室把 `AI_MONTHLY_CAP_REACHED` 映射为 `LIMIT_REACHED`。
+- **worker**：模型视觉适配器每次调用前检查、调用后按价格表累计（未定价只计次数）；任务处理器开始前检查一次（不白白取回源文件），
+  逐次检查时把本次分析在途的花费一并算上（否则一条长素材只读已入账的花费，永远停不下来——写测试时发现并修正）；成功或失败都把已发生的调用入账。
+- **API / SDK**：`POST /workspaces/:id/assets/:assetId/visual-analysis/retry`（`asset:manage`）/ `assets.retryVisualAnalysis`。
+- **Web**：素材面板"画面 AI 额度已用完"+"再理解一次画面"（失败或额度暂停时，编辑者可用）；额度仍用完时说明额度与恢复日期；任务中心列出"画面理解暂停"。中英双语。
+- **验证**：Worker 集成测试 3 个（真实 PostgreSQL + 真实 FFmpeg 抽帧 + 真实视觉适配器，脚本视觉模型按价格表计费：上限 $0.70 时第 2 次调用后停下并入账 $0.80、重试 402、提高上限后重试完成并入账；开始前已达上限不调用模型；不设上限照常入账）；
+  适配器测试补充未定价计数与调用前叫停；组件测试（标签、按钮、402 说明、任务中心）；真实浏览器 6/6（第 5、6 项为本步，截图 `05-footage-paused-zh.png`、`06-tasks-paused-zh.png`、`07-footage-understood-en.png`）。
+- **门禁与全量**：typecheck / lint / arch / spec / secrets / capabilities 通过；单元 879、组件 347、全量集成 147 个文件 / 683 个测试通过。
+- **边界**：外部程序视觉适配器（`process` 驱动）不知道自己花了多少，只在开始前检查额度，不入账；处理器在模型调用之后、入账之前崩溃时，这几次调用不入账。
+
 ## 已知边界与交接
 
-- **画面理解（上传后的视觉描述）的模型费用尚未计量**：Worker 的模型视觉分析适配器丢弃了用量，既不计入月度上限也不显示；每条素材最多 120 帧（约 10 次调用），总量受存储额度约束。要计入需要适配器回报用量并落库——列为下一步。
+- 外部程序视觉适配器的费用无法计量（见上）。
 - 实际花费最多超出上限一次模型调用（见上）；需要严格不超时，改为"调用前按最大输出预留"——当前不做，代价是每轮更早停下。
 - 月份按 UTC 计算；界面显示的恢复日期也是 UTC 日期。
 - 金额（生产示例 $20）与按套餐区分额度是商业决定（D-03 / D-16），由所有者定；改金额只需改环境变量并重启 API 与 Worker。

@@ -1,9 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MEDIA_ANALYSIS_ERROR_CODES, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, mediaVisualAnalysisJobInputSchema, type MediaVisualAnalysisAdapter } from '@ancs/contracts';
-import { beginMediaVisualAnalysis, completeMediaVisualAnalysis, failMediaVisualAnalysis } from '@ancs/domain';
+import { MEDIA_ANALYSIS_ERROR_CODES, MEDIA_VISUAL_ANALYSIS_JOB_TYPE, mediaVisualAnalysisJobInputSchema, type MediaVisualAnalysisAdapter, type MediaVisualAnalysisUsage } from '@ancs/contracts';
+import { beginMediaVisualAnalysis, completeMediaVisualAnalysis, failMediaVisualAnalysis, recordAiUsage, workspaceAiSpend } from '@ancs/domain';
 import type { JobHandler } from './handlers.js';
+
+const LIMIT_MESSAGE = '工作区本月的 AI 额度已用完，画面理解暂停；额度恢复后可重试。原视频与基础索引未受影响。';
 
 export function createMediaVisualAnalysisHandler(options: { adapter?: MediaVisualAnalysisAdapter }): JobHandler {
   return {
@@ -17,6 +19,19 @@ export function createMediaVisualAnalysisHandler(options: { adapter?: MediaVisua
         await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '视觉分析检测器尚未配置；原视频与基础索引未受影响。', code: MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED });
         throw new Error('VISUAL_ANALYSIS_CAPABILITY_UNAVAILABLE');
       }
+      // 工作区本月 AI 额度：开始前查一次（不白白取回源文件），模型调用前再逐次查——本次分析已花的还没入账，要一并算上
+      let limitReached = false;
+      let usage: MediaVisualAnalysisUsage | null = null;
+      const canSpend = async (): Promise<boolean> => {
+        const spend = await workspaceAiSpend(deps, { workspaceId: context.workspaceId });
+        const inFlight = usage?.costMicros ?? 0;
+        limitReached = spend.capMicros !== null && spend.spentMicros + inFlight >= spend.capMicros;
+        return !limitReached;
+      };
+      if (!(await canSpend())) {
+        await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: LIMIT_MESSAGE, code: MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED });
+        throw new Error('VISUAL_ANALYSIS_AI_MONTHLY_CAP_REACHED');
+      }
       const storage = deps.storage;
       if (storage?.materializeObject === undefined) {
         await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: '当前对象存储不支持视觉分析源文件读取。' });
@@ -24,13 +39,23 @@ export function createMediaVisualAnalysisHandler(options: { adapter?: MediaVisua
       }
       const workDir = await mkdtemp(join(tmpdir(), 'ancs-media-visual-'));
       const sourcePath = join(workDir, 'source');
+      const record = (): Promise<void> => (usage === null ? Promise.resolve() : recordAiUsage(deps, { workspaceId: context.workspaceId, kind: 'FOOTAGE_DESCRIPTION', subjectRef: jobInput.runId, usage }));
       try {
         await storage.materializeObject({ key: jobInput.sourceStorageKey, destinationPath: sourcePath });
-        const result = await options.adapter.analyze({ sourcePath });
+        const result = await options.adapter.analyze({ sourcePath, beforeModelCall: canSpend, onUsage: (value) => { usage = value; } });
         await context.heartbeat();
+        // 先记用量再落结果：调用已经发生，结果落库失败也照样计费
+        await record();
+        usage = null;
         return { ...(await completeMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, result })), adapter: result.adapter, modelVersion: result.modelVersion };
       } catch (error) {
-        await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: error instanceof Error && error.message === 'VISUAL_ANALYSIS_CAPABILITY_UNAVAILABLE' ? '视觉分析检测器尚未配置，等待管理员配置后重试。' : '视觉分析失败；原视频与基础索引未受影响。' });
+        // 失败前已完成的调用照样计入（尽力记录，不掩盖原来的错误）
+        await record().catch(() => undefined);
+        if (limitReached) {
+          await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: LIMIT_MESSAGE, code: MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED });
+        } else {
+          await failMediaVisualAnalysis(deps, { workspaceId: context.workspaceId, jobInput, message: error instanceof Error && error.message === 'VISUAL_ANALYSIS_CAPABILITY_UNAVAILABLE' ? '视觉分析检测器尚未配置，等待管理员配置后重试。' : '视觉分析失败；原视频与基础索引未受影响。' });
+        }
         throw error;
       } finally {
         await rm(workDir, { recursive: true, force: true });

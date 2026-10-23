@@ -41,7 +41,7 @@ export { projectSequences, sequenceTracks, sequenceClips } from './composition.j
 export { projectObjectLocks } from './object-locks.js';
 export { projectOpLog, referenceEdges } from './op-log.js';
 export { workflowRuns, workflowSteps } from './workflow.js';
-export { agentSessions, agentTurns, agentTurnMessages } from './agent.js';
+export { agentSessions, agentTurns, agentTurnMessages, aiUsageRecords } from './agent.js';
 export { previewSegments, sequencePreviews } from './previews.js';
 export { projectCompositionMigrations, projectVersionCompositionProjections } from './composition-migration.js';
 export {

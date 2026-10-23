@@ -33,6 +33,7 @@ import {
   mediaSegmentSearchQuerySchema,
   mediaSegmentSearchResponseSchema,
   mediaTranscriptSchema,
+  retryFootageDescriptionResponseSchema,
   createMediaRangeTagRequestSchema,
   correctTranscriptSegmentRequestSchema,
   updateTranscriptTerminologyRequestSchema,
@@ -73,6 +74,7 @@ import {
   rebuildMediaIndex,
   getMediaTranscript,
   retryMediaTranscript,
+  retryFootageDescription,
   correctTranscriptSegment,
   updateTranscriptTerminology,
   softDeleteAsset,
@@ -209,6 +211,17 @@ export function registerAssetRoutes(app: FastifyInstance, deps: AuthDeps, storag
     async (request) => {
       await app.requireWorkspace(request, request.params.id, 'asset:manage');
       return retryMediaTranscript(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
+    },
+  );
+
+  typed.post(
+    '/workspaces/:id/assets/:assetId/visual-analysis/retry',
+    {
+      schema: { tags: ['assets'], summary: '重新理解素材画面（失败后，或本月 AI 额度恢复后）；额度仍用完时 402', params: assetParamsSchema, response: { 200: retryFootageDescriptionResponseSchema, 402: errorEnvelopeSchema, 409: errorEnvelopeSchema, ...ERROR_RESPONSES } },
+    },
+    async (request) => {
+      await app.requireWorkspace(request, request.params.id, 'asset:manage');
+      return retryFootageDescription(domain, { workspaceId: request.params.id, assetId: request.params.assetId });
     },
   );
 
