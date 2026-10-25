@@ -2,7 +2,7 @@
 
 Everything that is waiting on you, the project owner, across the whole project: decisions, accounts, keys, configuration values, external setup, legal work, cost approvals and content only you can provide. The last section lists work that is still not built and what each piece is waiting for.
 
-- **As of:** 2026-10-22, repository HEAD `731c3a3` (branch `codex/v04-foundation`). Updated the same day with your D-01 answer: **global market, not mainland China**. Items that only applied to mainland China are marked "Not needed" below.
+- **As of:** 2026-10-25, branch `codex/v04-foundation` (first written 2026-10-22 at `731c3a3`). Includes your D-01 answer (**global market, not mainland China**; mainland-only items are marked "Not needed"), the proposed brand (D-02), the scheduler (I-10) and the operator bootstrap command (I-13).
 - **Sources consolidated here:** `docs/V06/production-readiness-checklist.md`, `docs/V06/integration-checklist.md`, `docs/ops/launch-gate.md`, `docs/ops/deployment-runbook.md`, `docs/V06/milestones/*.md`, `infra/production.env.example` and the configuration schemas in `packages/contracts/src/env.ts`. Those files keep the full technical detail. This document is the to-do list.
 - **Secrets rule:** keys and passwords go only into your secrets manager or the server's `infra/production.env`, which is git-ignored. Never put them in the repository, an issue, a commit or a chat log.
 

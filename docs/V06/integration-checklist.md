@@ -65,7 +65,7 @@ OpenAI 兼容 Chat Completions（`https://api.elorian.ai/v1/chat/completions`）
 | 数据库 | API、Worker | `DATABASE_URL` | PostgreSQL 16；部署前执行迁移（命令见 `docs/ops/deployment-runbook.md`） |
 | 会话签名 | API、Worker | `BETTER_AUTH_SECRET`（≥16 字符）、`BETTER_AUTH_URL` | |
 | 凭据加密 | API | `ANCS_CREDENTIAL_KEYS`（`v1:<base64 32 字节>`） | **生产必填**，不得与会话密钥共用 |
-| 存储签名 | API、Worker | `ANCS_STORAGE_SECRET`（两者同一把）、`ANCS_STORAGE_PUBLIC_BASE_URL` | 当前只有本地磁盘驱动；S3/R2 适配器属后续 |
+| 存储 | API、Worker、调度器 | 本地磁盘：`ANCS_STORAGE_SECRET`（同一把）、`ANCS_STORAGE_PUBLIC_BASE_URL`；S3 兼容：`ANCS_STORAGE_DRIVER=s3` + `ANCS_S3_*` | 本地磁盘只能单机；多机用 S3 兼容驱动（AWS S3 / R2 / OSS / SeaweedFS，部署手册 §10.3） |
 | 队列 | Worker | `ANCS_QUEUE_DRIVER=bullmq` + `REDIS_URL` | 缺省为数据库轮询 |
 | 特效渲染（V6-3） | Worker | 无需凭据；需要 Chromium 无头浏览器（`REMOTION_BROWSER_EXECUTABLE`）与 FFmpeg；可选 `ANCS_EFFECT_RENDER_CMD` | 在仓库根启动 Worker 时自动装配；`ANCS_DISABLE_RENDER=1` 时不装配（特效工具明确报不可用）。素材作品缺省不允许程序化特效，由用户在共看片室顶栏开启 |
 | 参考视频测量（V6-6） | Worker | 无需凭据；需要 FFmpeg（镜头、黑场、色彩、响度、节拍全部本地测量） | 缺 FFmpeg 时学风格明确失败"这个部署还没有装好分析工具"。参考视频存为工作区素材库里的草稿资产（30 天保留类，许可证"未知"并记录来源链接） |
