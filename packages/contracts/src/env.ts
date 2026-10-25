@@ -696,6 +696,19 @@ export const retentionCliEnvSchema = z.object({
 export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
 
 /**
+ * 维护调度器（I-10；apps/api/dist/cli/scheduler.js）：按时间表运行已有的两个命令——
+ * 通知派发（event-dispatch，间隔秒数）与保留清理（retention-sweep，每天固定的 UTC 时刻）。
+ * 两个命令各自校验自己的配置（数据库、存储），调度器只校验时间表。
+ */
+export const schedulerEnvSchema = z.object({
+  /** 通知派发间隔（秒） */
+  ANCS_SCHEDULE_DISPATCH_SECONDS: z.coerce.number().int().min(10, 'ANCS_SCHEDULE_DISPATCH_SECONDS ≥ 10').max(3600, 'ANCS_SCHEDULE_DISPATCH_SECONDS ≤ 3600').default(60),
+  /** 保留清理每天运行的 UTC 时刻（HH:MM） */
+  ANCS_SCHEDULE_RETENTION_UTC: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'ANCS_SCHEDULE_RETENTION_UTC 必须是 HH:MM（UTC，24 小时制）').default('03:30'),
+});
+export type SchedulerEnv = z.infer<typeof schedulerEnvSchema>;
+
+/**
  * V6-2 Realtime Gateway（apps/realtime）：流式语音识别与指代绑定的独立进程。
  * 只校验语音会话的短期凭证（与 API 同一把 ANCS_VOICE_SESSION_SECRET），不读写工程。
  */

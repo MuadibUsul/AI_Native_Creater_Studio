@@ -65,7 +65,7 @@
 | 数据库连接池 | 🔧 | 连接池写死每进程 5 个，改为配置项 | ✅ `ANCS_DB_POOL_MAX` / `ANCS_DB_CONNECT_TIMEOUT_MS` / `ANCS_DB_STATEMENT_TIMEOUT_MS`（API、Worker、实时网关、清理命令共用；缺省不变）；对真实 PostgreSQL 验证语句超时与连接超时生效 |
 | 前端错误边界与 404 | 🔧 | Web 没有 `error.tsx` / `not-found.tsx` | ✅ 中英找不到页面（真实 404 状态）、页面出错（重试 + 错误编号，不显示详情）、根布局出错兜底页（中英并列）；浏览器实测桌面 / 深色 / 手机（`docs/verification/artifacts/system-pages/`） |
 | 错误上报端口 | 🔧 / 👤 | 🔧 留出可选的错误上报（配置了地址才启用）；👤 选 Sentry 或国内同类服务并给出地址 | 待做 |
-| 定时任务 | 🔧 / 👤 | 保留期清理目前只有命令行，没有调度；🔧 给出调度样例；👤 在平台上启用 | 待做 |
+| 定时任务 | 🔧 / 👤 | 保留期清理目前只有命令行，没有调度；🔧 给出调度样例；👤 在平台上启用 | 🔧 ✅ 生产编排加了 `scheduler` 服务（`apps/api/dist/cli/scheduler.js`）：每 60 秒派发通知、每天 03:30 UTC 保留清理（`ANCS_SCHEDULE_*` 可调），同一命令不重叠、失败照常下一次、SIGTERM 退出 0；对真实 PostgreSQL 演练通过（手册 §10.6）。👤 用 compose 部署时无需操作；其他平台按手册 §10.6 的 crontab / Kubernetes CronJob 样例启用 |
 | 备份与恢复 | 👤 | 托管数据库的时间点恢复（PITR）、对象存储版本化；恢复演练脚本已有（`pnpm recovery:rehearsal`） | 需你 |
 | 监控告警与值班 | 👤 | 告警渠道、值班人 | 需你 |
 | 数据驻留 | 👤 | 中国与美国是否分区部署（影响供应商选择与备案） | 所有者 2026-10-22 决定：面向全球市场、不服务中国大陆用户（不需要分区部署与国内备案）；数据存放区域待定（见 `docs/OWNER_ACTION_ITEMS.md` D-01） |

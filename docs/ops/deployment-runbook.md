@@ -344,3 +344,53 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
   设了上限而模型没有单价时，Worker 启动日志会列出缺单价的模型，这些模型**不会被调用**：AI 导演在对话里说明缺哪个模型的单价，画面理解显示"未配置"，学风格改用规则撰写；渲染、转写等其他任务照常。确实不想设上限就写 `ANCS_AI_MONTHLY_CAP_USD=unlimited`。
 - 改金额或单价：改 `production.env` 后重启 API 与 Worker；本月已花的照常计算（已记录的费用不会按新单价重算）。
 - 验证：`scripts/ai-spend-browser-check.mjs`（证据 `docs/verification/artifacts/ai-spend/`）。
+
+### 10.6 定时维护：通知派发与保留清理（I-10）
+
+两个维护命令以前只能手动跑：`event-dispatch`（把 Outbox 事件变成站内通知）与 `retention-sweep`（回收站到期硬删、保留期到期清理、过期上传意图、幂等键）。
+不跑它们，回收站和过期文件不会被删除（违背保留期承诺，存储费用只增不减），通知也只在有人开着页面时才推进。
+
+- **Compose（单机样例）**：`scheduler` 服务（`node apps/api/dist/cli/scheduler.js`）随编排启动，不需要另配 cron：
+  - 通知派发：每 `ANCS_SCHEDULE_DISPATCH_SECONDS` 秒（缺省 60，范围 10–3600），启动时先跑一次；
+  - 保留清理：每天 `ANCS_SCHEDULE_RETENTION_UTC`（缺省 `03:30`，UTC，HH:MM）；
+  - 每次起一个子进程跑原命令（配置校验与逻辑都沿用命令本身，读同一个 `production.env`）；同一命令不重叠，上一轮没完就跳过这一轮；失败只记日志，下一次照常；
+  - 本地存储驱动时挂与 API 同一个卷（清理要删文件）；`docker stop` 时停止排程、等正在跑的一轮结束后退出 0；
+  - 日志是一行一个 JSON（`{"scheduler":{...}}`），失败与跳过写到 stderr，便于告警。
+- **其他平台**：不跑 `scheduler` 服务，直接用平台调度器按同样的时间表跑原命令（同一镜像、同一套环境变量）。两个命令都可重入，偶尔重叠也安全。
+
+  crontab（每分钟派发、每天 03:30 UTC 清理；主机时区为 UTC 时）：
+
+  ```cron
+  * * * * *  docker compose -f /srv/ancs/infra/docker-compose.prod.yml --env-file /srv/ancs/infra/production.env run --rm --no-deps api node apps/api/dist/cli/event-dispatch.js
+  30 3 * * * docker compose -f /srv/ancs/infra/docker-compose.prod.yml --env-file /srv/ancs/infra/production.env run --rm --no-deps api node apps/api/dist/cli/retention-sweep.js
+  ```
+
+  Kubernetes CronJob（保留清理；通知派发同样写法，`schedule: "* * * * *"`、命令换成 `event-dispatch.js`）：
+
+  ```yaml
+  apiVersion: batch/v1
+  kind: CronJob
+  metadata: { name: ancs-retention-sweep }
+  spec:
+    schedule: "30 3 * * *"
+    timeZone: "Etc/UTC"
+    concurrencyPolicy: Forbid
+    jobTemplate:
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: retention-sweep
+                image: registry.example.com/ancs:runtime
+                command: ["node", "apps/api/dist/cli/retention-sweep.js"]
+                envFrom: [{ secretRef: { name: ancs-production-env } }]
+  ```
+
+- 可选：`ANCS_TRASH_RETENTION_DAYS`（缺省 30）、`ANCS_IDEMPOTENCY_TTL_HOURS`（缺省 24）。
+- 演练记录（2026-10-25，本容器，真实 PostgreSQL，`node apps/api/dist/cli/scheduler.js`，派发间隔 10 秒、清理时刻设为下一分钟）：
+  - 数据库停着时启动：派发两次失败（各记一条 `failed`），数据库恢复后不用重启调度器，下一轮起成功；积压的 1235 条未投递事件按每轮 100 条消化到 35 条；
+  - 清理在设定的那一分钟 `05:26:00` 准时开始，2.9 秒完成（删除 219 个过期幂等键），随即排到次日同一时刻；缺 `BETTER_AUTH_SECRET` 时清理命令拒绝启动，调度器记 `failed`，不吞掉错误；
+  - SIGTERM：记 `stopping` / `stopped`，退出码 0；
+  - `docker compose config` 解析通过（含 `scheduler` 服务）；镜像内运行未在本次演练（镜像未重建），代码与上面直接运行的是同一份构建产物。

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 生产镜像部署演练（可重复）：在 docker compose 起好的整套服务上（db / migrate / api / worker / realtime / web，
+// 生产镜像部署演练（可重复）：在 docker compose 起好的整套服务上（db / migrate / api / worker / realtime / scheduler / web，
 // 全部来自 Dockerfile 构建的 ancs:runtime 与 ancs:worker 镜像），用真实浏览器走一遍：建首个账号（user:create 命令，
 // 在 api 容器里跑）→ 登录 → 建工作区 → 新建视频 → 上传素材 → 容器里的 Worker（FFmpeg）探测 / 代理 / 索引完成 → 画布显示素材画框；
 // 再验证生产不装配任何 Mock（不设 ANCS_ALLOW_MOCK_PROVIDERS 也能启动；旧 V4 流水线 off，旧页面引导到共看片室）、
@@ -41,11 +41,11 @@ try {
   workDir = await mkdtemp(join(tmpdir(), 'ancs-compose-'));
   const status = JSON.parse(`[${docker(['ps', '-a', '--format', 'json']).trim().split('\n').join(',')}]`);
   const state = Object.fromEntries(status.map((item) => [item.Service, `${item.State}${item.Health ? `/${item.Health}` : ''}${item.ExitCode !== undefined && item.State === 'exited' ? `:${String(item.ExitCode)}` : ''}`]));
-  for (const service of ['db', 'api', 'web', 'worker', 'realtime']) if (!String(state[service]).startsWith('running')) throw new Error(`${service} is not running: ${String(state[service])}`);
+  for (const service of ['db', 'api', 'web', 'worker', 'realtime', 'scheduler']) if (!String(state[service]).startsWith('running')) throw new Error(`${service} is not running: ${String(state[service])}`);
   if (state['migrate'] !== 'exited:0') throw new Error(`migrate did not exit 0: ${String(state['migrate'])}`);
   const ready = await (await fetch(`${baseUrl}/api/v1/ready`)).json();
   if (ready.status !== 'ready' || ready.checks.database !== 'ok') throw new Error(`not ready: ${JSON.stringify(ready)}`);
-  pass('整套服务由镜像启动', `migrate 退出 0 后 api / worker / realtime / web 启动；经 Web 转发的 /api/v1/ready = ready（database ok）；${JSON.stringify(state)}`);
+  pass('整套服务由镜像启动', `migrate 退出 0 后 api / worker / realtime / scheduler / web 启动；经 Web 转发的 /api/v1/ready = ready（database ok）；${JSON.stringify(state)}`);
 
   // 1. 建首个账号（在 api 容器里跑 user:create；密码只经环境变量）
   const email = `owner-${randomUUID().slice(0, 8)}@example.com`;

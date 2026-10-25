@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices, resolveModelPrice } from './agent.js';
-import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, schedulerEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -467,5 +467,22 @@ describe('D-04 账号自助：注册方式与发信', () => {
   it('邀请 CLI 只需要数据库连接；发信可选', () => {
     expect(validateEnv(signupInviteCliEnvSchema, { DATABASE_URL: 'postgres://x' }).ok).toBe(true);
     expect(validateEnv(signupInviteCliEnvSchema, {}).issues.map((issue) => issue.variable)).toEqual(['DATABASE_URL']);
+  });
+});
+
+describe('I-10 维护调度器配置', () => {
+  it('缺省：每 60 秒派发通知，每天 03:30 UTC 清理', () => {
+    const result = validateEnv(schedulerEnvSchema, {});
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual({ ANCS_SCHEDULE_DISPATCH_SECONDS: 60, ANCS_SCHEDULE_RETENTION_UTC: '03:30' });
+    expect(validateEnv(schedulerEnvSchema, { ANCS_SCHEDULE_DISPATCH_SECONDS: '300', ANCS_SCHEDULE_RETENTION_UTC: '23:05' }).value).toEqual({ ANCS_SCHEDULE_DISPATCH_SECONDS: 300, ANCS_SCHEDULE_RETENTION_UTC: '23:05' });
+  });
+
+  it('非法值在启动时失败并指出变量', () => {
+    for (const env of [{ ANCS_SCHEDULE_DISPATCH_SECONDS: '5' }, { ANCS_SCHEDULE_DISPATCH_SECONDS: 'often' }, { ANCS_SCHEDULE_RETENTION_UTC: '3:30' }, { ANCS_SCHEDULE_RETENTION_UTC: '24:00' }]) {
+      const result = validateEnv(schedulerEnvSchema, env);
+      expect(result.ok).toBe(false);
+      expect(result.issues.map((issue) => issue.variable)).toEqual(Object.keys(env));
+    }
   });
 });

@@ -66,6 +66,18 @@ services:
       migrate: { condition: service_completed_successfully }
     stop_grace_period: 60s
 
+  # 维护调度（I-10）：每 60 秒派发通知，每天 03:30 UTC 保留清理（ANCS_SCHEDULE_* 可调，手册 §10.6）。
+  # 清理会删除过期文件：本地存储驱动时挂与 API 同一个卷。
+  scheduler:
+    <<: *app-env
+    image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}
+    command: ["node", "apps/api/dist/cli/scheduler.js"]
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 60s
+
   realtime:
     <<: *app-env
     image: ${ANCS_RUNTIME_IMAGE:-ancs:runtime}

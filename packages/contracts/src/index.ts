@@ -1281,6 +1281,7 @@ export {
   resolveAllowedOrigins,
   resolveLegacyPipeline,
   retentionCliEnvSchema,
+  schedulerEnvSchema,
   migrateCliEnvSchema,
   createUserCliEnvSchema,
   signupInviteCliEnvSchema,
@@ -1294,7 +1295,7 @@ export {
   s3StorageEnvShape,
   crossCheckStorageEnv,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv, S3StorageEnv, SignupInviteCliEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv, S3StorageEnv, SchedulerEnv, SignupInviteCliEnv } from './env.js';
 export {
   COMPOSITION_FINAL_RENDER_ERROR_REASONS,
   COMPOSITION_FINAL_RENDER_STEPS,

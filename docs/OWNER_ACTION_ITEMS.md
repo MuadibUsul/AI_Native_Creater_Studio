@@ -45,7 +45,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | I-07 | Production secrets | P0 | Any deployment |
 | I-08 | Core production environment values | P0 | Any deployment |
 | I-09 | Migrations and first account | P0 | Any deployment |
-| I-10 | Scheduled jobs | P1 | Data retention cleanup, event delivery |
+| I-10 | Scheduled jobs | P1 | **Built:** the compose `scheduler` service runs both jobs. Only needed if you deploy without the compose sample |
 | I-11 | Backups and restore drill | P1 | Recoverability |
 | I-12 | Network egress allowlist | P2 | Each external provider |
 | I-13 | Operations console administrator | P1 | Admin console in production |
@@ -377,15 +377,14 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Blocks:** Any use of the deployment.
 
 ### I-10 Scheduled jobs
-- **What:** Run the retention cleanup and event delivery on a schedule.
-- **Why:** These exist only as commands today. Without them, expired drafts and trash are never removed and outbound events are not retried.
+- **What:** Run the retention cleanup (daily) and notification delivery (every minute) on a schedule.
+- **Why:** Without them, expired drafts and trash are never removed and notifications only move while someone has the app open.
+- **Status (2026-10-25):** built. The production compose file now has a `scheduler` service that runs both commands on their timetable: delivery every 60 s, cleanup daily at 03:30 UTC. Runs never overlap, failures are logged and retried at the next slot, and it stops cleanly. It was tested against a real database (runbook §10.6).
 - **Do / provide:**
-  - Daily: `node apps/api/dist/cli/retention-sweep.js`, with the same storage settings as the API.
-  - Every minute: `node apps/api/dist/cli/event-dispatch.js`.
-
-  Optional tuning: `ANCS_TRASH_RETENTION_DAYS`, `ANCS_IDEMPOTENCY_TTL_HOURS`.
-- **Where:** Your platform's scheduler (cron, Kubernetes CronJob, cloud scheduler). I can add a sample on request.
-- **Priority:** P1
+  - **Compose deployment:** nothing. The `scheduler` service starts with the rest. Optionally change the times with `ANCS_SCHEDULE_DISPATCH_SECONDS` and `ANCS_SCHEDULE_RETENTION_UTC`, and the retention periods with `ANCS_TRASH_RETENTION_DAYS` (default 30) and `ANCS_IDEMPOTENCY_TTL_HOURS` (default 24).
+  - **Other platforms** (Kubernetes, a cloud scheduler): schedule `node apps/api/dist/cli/retention-sweep.js` daily and `node apps/api/dist/cli/event-dispatch.js` every minute, with the same environment as the API. Ready-to-copy crontab and Kubernetes CronJob samples are in runbook §10.6.
+- **Where:** `infra/docker-compose.prod.yml` (`scheduler`), `docs/ops/deployment-runbook.md` §10.6.
+- **Priority:** P1 (only if you don't use the compose sample)
 - **Blocks:** Data retention promises (LG-14), storage cost control.
 
 ### I-11 Backups and restore drill
@@ -718,7 +717,7 @@ Also on your side: the running cost of every provider, cloud resources and the e
 | Metering AI usage into the billing ledger (director model, recognition, visual understanding, narration) and free-quota enforcement | Not started; these costs are recorded but do not deduct credits. Only paid generation deducts credits today. **A monthly AI spending cap per workspace is built** (director, review fixes, autonomous runs, style learning, and describing uploaded footage; D-16); it limits spending but does not charge anyone | D-03 |
 | Content moderation port (after upload, before and after generation, before export) | Not started | D-05 |
 | Error reporting port | Not started | D-07 |
-| Scheduler sample for retention cleanup and event delivery | Not started (the commands exist) | Nothing; can be done on request |
+| Scheduler for retention cleanup and notification delivery | **Built** (compose `scheduler` service; crontab and Kubernetes samples in runbook §10.6) | Nothing |
 | Production bootstrap command for operations-console admins | Not built (only test helpers create operators) | I-13 |
 | Export without the visible AI label on user request (agreement clause and 6-month logs) | Not built | D-11 |
 | C2PA content credentials; integrity hashes in `AIGC` `ReservedCode1/2`; XMP metadata | Not built; the `AIGC` field and the visible badge (English "AI-generated" by default, Chinese "AI生成" for a Chinese interface) are built and verified | L-04 |
