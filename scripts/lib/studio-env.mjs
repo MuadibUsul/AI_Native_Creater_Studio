@@ -8,10 +8,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
-import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
+import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, DEFAULT_OPS_SESSION_POLICY } from '../../packages/auth/dist/index.js';
 import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
+import { createAdminDeps } from '../../apps/api/dist/plugins/admin.js';
 import { createDefaultRegistry } from '../../apps/worker/dist/handlers.js';
 import { executeJob } from '../../apps/worker/dist/runner.js';
 import { createFfmpegSourceMediaProbe } from '../../apps/worker/dist/source-media-probe-process.js';
@@ -35,7 +36,8 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
  *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite', synthesizer?: (probe: object) => object },
  *   generation?: { provider?: object, behavior?: () => string }, articleFetcher?: object,
- *   accounts?: { signupMode: 'closed' | 'invite' | 'open', sender: object } }} options
+ *   accounts?: { signupMode: 'closed' | 'invite' | 'open', sender: object }, ops?: { environment: 'DEVELOPMENT' | 'TEST' } }} options
+ *   ops：开启运营后台（/admin；与 API 入口同样装配）。经 http 验收只能用不带 Secure cookie 的 DEVELOPMENT / TEST 环境。
  *   articleFetcher：从链接导入文章用的网页抓取器（真实抓取器会拦下本机地址，验收脚本注入脚本化抓取器）。
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
@@ -78,7 +80,7 @@ export async function startStudioEnv(options) {
       keyPrefix: `studio-${randomUUID()}`,
     });
   const voiceSecret = randomBytes(32).toString('hex');
-  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }), ...(options.accounts === undefined ? {} : { accounts: { signupMode: options.accounts.signupMode, email: accountEmail } }) });
+  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }), ...(options.accounts === undefined ? {} : { accounts: { signupMode: options.accounts.signupMode, email: accountEmail } }), ...(options.ops === undefined ? {} : { admin: createAdminDeps({ db: db.db, environment: options.ops.environment, fingerprintKey: randomBytes(32).toString('hex'), policy: DEFAULT_OPS_SESSION_POLICY }) }) });
 
   // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
   let realtime = null;

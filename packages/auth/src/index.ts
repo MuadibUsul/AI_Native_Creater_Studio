@@ -27,6 +27,7 @@ export type { AuthContext, RequestAuthHeaders, SessionDeps } from './session.js'
 export { DEFAULT_OPS_SESSION_POLICY, eligibleOpsPrincipal, activateOpsSession, resolveOpsSession, revokeOwnOpsSession, assertOpsReauthAllowed, recordOpsReauthFailure, markOpsReauthenticated } from './ops.js';
 export type { OpsSessionPolicy, OpsAuthDeps } from './ops.js';
 export { OPS_PERMISSION_POLICY_VERSION, OPS_PERMISSION_POLICY_HASH, OPS_PERMISSION_RULES, publishedOpsPolicyMatches, decideOpsPermission } from './ops-permissions.js';
+export { grantOpsAccess, OpsGrantError, type OpsGrantInput, type OpsGrantResult } from './ops-bootstrap.js';
 export { assessEmergencyGrant } from './ops-emergency.js';
 export {
   authorizeWorkspace,

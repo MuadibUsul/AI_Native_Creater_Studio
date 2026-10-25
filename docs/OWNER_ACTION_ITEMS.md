@@ -48,7 +48,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 | I-10 | Scheduled jobs | P1 | **Built:** the compose `scheduler` service runs both jobs. Only needed if you deploy without the compose sample |
 | I-11 | Backups and restore drill | P1 | Recoverability |
 | I-12 | Network egress allowlist | P2 | Each external provider |
-| I-13 | Operations console administrator | P1 | Admin console in production |
+| I-13 | Operations console administrator | P1 | **Command built** (`ops:grant`). Still open: who gets access, and with which roles |
 | L-01 | Launch gate legal and business items LG-01 to LG-14 | P1 | `ANCS_SAAS_MODE=live` |
 | L-02 | AI-content producer code `ANCS_AIGC_PRODUCER_CODE` | Not needed | (China-only requirement) |
 | L-03 | China filings: algorithm, generative AI service, ICP | Not needed | (You do not serve mainland China) |
@@ -421,9 +421,18 @@ Everything that is waiting on you, the project owner, across the whole project: 
 
 ### I-13 Operations console administrator
 - **What:** Who may sign in to the operations console (`/admin`) in production, and with which role.
-- **Why:** Operator identities are stored as admin principals with role grants. The old `ANCS_PLATFORM_ADMINS` setting no longer grants anything. A production bootstrap command does not exist yet; only test helpers create operators today.
-- **Do / provide:** The operator email addresses and roles you want, and confirm `ANCS_OPS_ENVIRONMENT=PRODUCTION` on the API. Ask me to build the bootstrap command (see "Not built yet").
-- **Where:** Reply to me; then a one-off command against the production database.
+- **Why:** Operator identities are stored as admin principals with role grants. The old `ANCS_PLATFORM_ADMINS` setting no longer grants anything.
+- **Status (2026-10-25):** the bootstrap command is built: `ops:grant`, runbook §10.7.
+  - It gives an existing account operator access with the roles you choose, for the API's `ANCS_OPS_ENVIRONMENT`.
+  - It publishes the matching permission policy and records an audit entry.
+  - It can be re-run safely.
+  - It was tested in a real browser: grant, set up the authenticator, sign in with the code, and the console shows the environment and roles.
+- **Do / provide:**
+  1. Decide who gets access and which roles. The default is `PRODUCTION_OPERATOR`. There is no all-powerful admin role; see the role notes in runbook §10.7.
+  2. Run `user:create` for each person if needed, then `ops:grant` (commands in runbook §10.7).
+  3. Each person signs in, opens `/admin` and sets up an authenticator app on first use.
+- **Know:** in `PRODUCTION`, the console currently shows the signed-in operator session and "Production diagnostics are not open yet". That is an existing, deliberate restriction until safe per-action views are finished. Staging and other environments show workspace diagnostics.
+- **Where:** `docs/ops/deployment-runbook.md` §10.7.
 - **Priority:** P1
 - **Blocks:** Using the operations console in production.
 
@@ -718,7 +727,7 @@ Also on your side: the running cost of every provider, cloud resources and the e
 | Content moderation port (after upload, before and after generation, before export) | Not started | D-05 |
 | Error reporting port | Not started | D-07 |
 | Scheduler for retention cleanup and notification delivery | **Built** (compose `scheduler` service; crontab and Kubernetes samples in runbook §10.6) | Nothing |
-| Production bootstrap command for operations-console admins | Not built (only test helpers create operators) | I-13 |
+| Production bootstrap command for operations-console admins | **Built** (`ops:grant`, runbook §10.7) | I-13: who gets access |
 | Export without the visible AI label on user request (agreement clause and 6-month logs) | Not built | D-11 |
 | C2PA content credentials; integrity hashes in `AIGC` `ReservedCode1/2`; XMP metadata | Not built; the `AIGC` field and the visible badge (English "AI-generated" by default, Chinese "AI生成" for a Chinese interface) are built and verified | L-04 |
 | Mainland China real-time voice provider (region routing) | Not planned (D-01: no mainland China) | — |

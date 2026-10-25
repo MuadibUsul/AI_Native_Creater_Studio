@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { narrationVoiceSchema } from './narration.js';
 import { generationOfferSchema } from './paid-generation.js';
 import { modelPriceOverridesSchema, type ModelPriceOverrides } from './agent.js';
+import { OPS_ROLES } from './ops-auth.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -679,6 +680,35 @@ export type SignupInviteCliEnv = z.infer<typeof signupInviteCliEnvSchema>;
 export const migrateCliEnvSchema = z.object({
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
 });
+
+const commaList = (value: string | undefined): string[] => (value ?? '').split(',').map((item) => item.trim()).filter((item) => item !== '');
+/** 能登录运营后台的角色（机器身份 SERVICE_ACCOUNT 不能） */
+export const OPS_GRANTABLE_ROLES = OPS_ROLES.filter((role): role is Exclude<typeof role, 'SERVICE_ACCOUNT'> => role !== 'SERVICE_ACCOUNT');
+
+/**
+ * 运营后台授权（I-13；apps/api/dist/cli/ops-grant.js）：给已有账号开通运营后台（/admin）的角色。
+ * 角色逗号分隔（缺省 PRODUCTION_OPERATOR；SERVICE_ACCOUNT 不能登录后台，不在可选范围）；
+ * 工作区逗号分隔（可选）：按工作区生效的操作只对列出的工作区开放，平台级操作总是开放。
+ */
+export const opsGrantCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  /** 与 API 相同：运营会话属于哪个环境 */
+  ANCS_OPS_ENVIRONMENT: z.enum(['DEVELOPMENT', 'TEST', 'STAGING', 'PRODUCTION'], { message: 'ANCS_OPS_ENVIRONMENT 必须与 API 相同（生产为 PRODUCTION）' }),
+  ANCS_OPS_GRANT_EMAIL: z.string().trim().toLowerCase().pipe(z.string().email('ANCS_OPS_GRANT_EMAIL 必须是已注册账号的邮箱')),
+  ANCS_OPS_GRANT_ROLES: z.string().optional().transform(commaList).pipe(z.array(z.enum(OPS_GRANTABLE_ROLES as [Exclude<(typeof OPS_ROLES)[number], 'SERVICE_ACCOUNT'>, ...Exclude<(typeof OPS_ROLES)[number], 'SERVICE_ACCOUNT'>[]], { message: `ANCS_OPS_GRANT_ROLES 只能是：${OPS_GRANTABLE_ROLES.join(', ')}` })))
+    .transform((roles) => (roles.length === 0 ? ['PRODUCTION_OPERATOR' as const] : [...new Set(roles)])),
+  ANCS_OPS_GRANT_WORKSPACES: z.string().optional().transform(commaList).pipe(z.array(z.string().regex(/^ws_[A-Za-z0-9_-]+$/, 'ANCS_OPS_GRANT_WORKSPACES 是逗号分隔的工作区 ID（ws_…）')))
+    .transform((ids) => [...new Set(ids)]),
+}).superRefine((value, context) => {
+  if (value.NODE_ENV === 'production' && value.ANCS_OPS_ENVIRONMENT !== 'PRODUCTION') {
+    context.addIssue({ code: 'custom', path: ['ANCS_OPS_ENVIRONMENT'], message: '生产进程必须显式配置 PRODUCTION 运营环境' });
+  }
+  if (value.NODE_ENV !== 'production' && value.ANCS_OPS_ENVIRONMENT === 'PRODUCTION') {
+    context.addIssue({ code: 'custom', path: ['ANCS_OPS_ENVIRONMENT'], message: '非生产进程不得授权 PRODUCTION 运营环境（请设 NODE_ENV=production）' });
+  }
+});
+export type OpsGrantCliEnv = z.infer<typeof opsGrantCliEnvSchema>;
 
 export const retentionCliEnvSchema = z.object({
   ...baseEnvShape,

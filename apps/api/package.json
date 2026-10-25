@@ -14,7 +14,8 @@
     "db:migrate": "node dist/cli/migrate.js",
     "user:create": "node dist/cli/create-user.js",
     "invite:signup": "node dist/cli/signup-invite.js",
-    "scheduler": "node dist/cli/scheduler.js"
+    "scheduler": "node dist/cli/scheduler.js",
+    "ops:grant": "node dist/cli/ops-grant.js"
   },
   "dependencies": {
     "@ancs/auth": "workspace:*",

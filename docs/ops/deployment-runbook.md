@@ -394,3 +394,27 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env 
   - 清理在设定的那一分钟 `05:26:00` 准时开始，2.9 秒完成（删除 219 个过期幂等键），随即排到次日同一时刻；缺 `BETTER_AUTH_SECRET` 时清理命令拒绝启动，调度器记 `failed`，不吞掉错误；
   - SIGTERM：记 `stopping` / `stopped`，退出码 0；
   - `docker compose config` 解析通过（含 `scheduler` 服务）；镜像内运行未在本次演练（镜像未重建），代码与上面直接运行的是同一份构建产物。
+
+### 10.7 运营后台的首个运营者（I-13）
+
+运营后台（`/admin`）不认工作区角色，只认**运营身份**：某个环境下的运营者 + 角色 + 范围，外加该环境已发布、与代码一致的权限策略。以前只有测试夹具能建这些；现在用 `ops:grant`。
+
+```bash
+# 1) 先建账号（已有账号跳过）
+ANCS_NEW_USER_PASSWORD='…' docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env \
+  run --rm --no-deps -e ANCS_NEW_USER_EMAIL=ops@example.com -e ANCS_NEW_USER_PASSWORD api node apps/api/dist/cli/create-user.js
+# 2) 开通运营后台（与 API 同一个 ANCS_OPS_ENVIRONMENT；production.env 里生产为 PRODUCTION）
+docker compose -f infra/docker-compose.prod.yml --env-file infra/production.env \
+  run --rm --no-deps -e ANCS_OPS_GRANT_EMAIL=ops@example.com api node apps/api/dist/cli/ops-grant.js
+#    可选：-e ANCS_OPS_GRANT_ROLES=PRODUCTION_OPERATOR,AUDITOR   -e ANCS_OPS_GRANT_WORKSPACES=ws_…,ws_…
+```
+
+3) 这个账号登录后打开 `/admin` → "已获运营授权，首次配置验证器" → 输入密码 → 把 otpauth URI 导入验证器 App、保存恢复码 → 输入 6 位码确认 → 重新登录（这次要输入验证码）→ 进入运营后台。命令本身不跳过 MFA、不打印任何密钥。
+
+- **角色**（缺省 `PRODUCTION_OPERATOR`）：没有"全能管理员"。每个操作只对列出的角色开放，例如 `PRODUCTION_OPERATOR` 看概览、指标、供应商状态与工作区的作品 / 任务 / 存储；`AUDITOR` 看指标（审计日志查询还在等安全投影，暂时拒绝）；`PLATFORM_OWNER` 只看概览。完整矩阵见 `packages/auth/src/ops-permissions.ts`。机器身份 `SERVICE_ACCOUNT` 不能登录后台，命令不接受。
+- **范围**：每个角色都带平台范围（平台级操作）；按工作区生效的操作只对 `ANCS_OPS_GRANT_WORKSPACES` 列出的工作区开放（最小权限，没有"所有工作区"）。
+- **可重复执行**：已有的身份、角色、范围不重复写；有改动时数据库提升会话版本，已登录的运营会话需重新登录。被停用的运营身份不会被这条命令重新启用。
+- **权限策略**：该环境还没有生效的策略就发布代码里的当前版本；生效的是旧版本就退役旧的、发布当前的。已发布的版本不可改写、不可删除、退役后不可复活（数据库触发器保证）。
+- **审计**：每次执行写一条 `audit_log`（`ops.principal.bootstrap`，记运营身份、角色、范围与策略结果，不记邮箱）。
+- **生产环境的现状**：`PRODUCTION` 下登录成功后，后台显示运营会话与"生产运营诊断暂未开放"——这是既有的有意限制，等逐动作授权的安全投影完成后才开放生产数据查询；`STAGING` / 非生产环境显示工作区诊断。
+- 验证：`scripts/ops-grant-browser-check.mjs`（TEST 环境：未授权被拦 → 真实命令授权、重复执行不重复写 → 绑定验证器 → 二次验证登录 → 后台显示环境与角色；中英、深浅，证据 `docs/verification/artifacts/ops-grant/`，截图里的密钥与恢复码已模糊）；`packages/auth/src/ops-bootstrap.integration.test.ts`（真实 PostgreSQL，全部在回滚的事务里，不留不可删的策略行）。

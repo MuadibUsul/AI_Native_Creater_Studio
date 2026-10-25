@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices, resolveModelPrice } from './agent.js';
-import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, retentionCliEnvSchema, schedulerEnvSchema, validateEnv, workerEnvSchema } from './env.js';
+import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, opsGrantCliEnvSchema, retentionCliEnvSchema, schedulerEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -484,5 +484,26 @@ describe('I-10 维护调度器配置', () => {
       expect(result.ok).toBe(false);
       expect(result.issues.map((issue) => issue.variable)).toEqual(Object.keys(env));
     }
+  });
+});
+
+describe('I-13 运营后台授权配置', () => {
+  const base = { DATABASE_URL: 'postgres://x', ANCS_OPS_ENVIRONMENT: 'DEVELOPMENT', ANCS_OPS_GRANT_EMAIL: ' Owner@Example.com ' };
+
+  it('缺省角色 PRODUCTION_OPERATOR、没有工作区；邮箱规范化；逗号列表去空去重', () => {
+    expect(validateEnv(opsGrantCliEnvSchema, base).value).toMatchObject({ ANCS_OPS_GRANT_EMAIL: 'owner@example.com', ANCS_OPS_GRANT_ROLES: ['PRODUCTION_OPERATOR'], ANCS_OPS_GRANT_WORKSPACES: [] });
+    expect(validateEnv(opsGrantCliEnvSchema, { ...base, ANCS_OPS_GRANT_ROLES: 'AUDITOR, PRODUCTION_OPERATOR,,AUDITOR', ANCS_OPS_GRANT_WORKSPACES: 'ws_a, ws_b,ws_a' }).value)
+      .toMatchObject({ ANCS_OPS_GRANT_ROLES: ['AUDITOR', 'PRODUCTION_OPERATOR'], ANCS_OPS_GRANT_WORKSPACES: ['ws_a', 'ws_b'] });
+  });
+
+  it('拒绝：机器身份角色、未知角色、不像工作区 ID、缺邮箱；生产进程必须是 PRODUCTION，非生产不得授权 PRODUCTION', () => {
+    const variables = (env: Record<string, string>) => validateEnv(opsGrantCliEnvSchema, env).issues.map((issue) => issue.variable);
+    expect(variables({ ...base, ANCS_OPS_GRANT_ROLES: 'SERVICE_ACCOUNT' })[0]).toMatch(/^ANCS_OPS_GRANT_ROLES/);
+    expect(variables({ ...base, ANCS_OPS_GRANT_ROLES: 'ROOT' })[0]).toMatch(/^ANCS_OPS_GRANT_ROLES/);
+    expect(variables({ ...base, ANCS_OPS_GRANT_WORKSPACES: 'prj_1' })[0]).toMatch(/^ANCS_OPS_GRANT_WORKSPACES/);
+    expect(variables({ DATABASE_URL: 'postgres://x', ANCS_OPS_ENVIRONMENT: 'DEVELOPMENT' })).toEqual(['ANCS_OPS_GRANT_EMAIL']);
+    expect(variables({ ...base, NODE_ENV: 'production' })).toEqual(['ANCS_OPS_ENVIRONMENT']);
+    expect(variables({ ...base, ANCS_OPS_ENVIRONMENT: 'PRODUCTION' })).toEqual(['ANCS_OPS_ENVIRONMENT']);
+    expect(validateEnv(opsGrantCliEnvSchema, { ...base, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION' }).ok).toBe(true);
   });
 });
