@@ -25,7 +25,7 @@ import {
 import { agentTurns, assets, assetVersions, autonomousRuns, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { assertAiSpendAvailable } from './ai-spend.js';
-import { createAgentSession, createAutonomousTurn, getAgentTurn, runAgentTurnLoop, type AgentTurnPorts } from './agent-runtime.js';
+import { createAgentSession, createAutonomousTurn, getAgentTurn, legacyAgentRuntime, type AgentTurnPorts } from './agent-runtime.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentToolContext } from './agent-tools.js';
 import { draftPace } from './agent-edit-points.js';
 import { autonomyMayAdopt, autonomySpendDecision } from './autonomy.js';
@@ -329,7 +329,7 @@ export function autonomousProductionWorkflow(ports: AutonomousProductionPorts): 
             await deps.db.update(autonomousRuns).set({ turnId, sessionId: session.id, modelCapMicros: cap, updatedAt: new Date() }).where(eq(autonomousRuns.id, row.id));
           }
           const capRow = await loadRow(deps, { workspaceId: run.workspaceId, runId: row.id });
-          const result = await runAgentTurnLoop(deps, ports, {
+          const result = await (ports.runtime ?? legacyAgentRuntime).runTurn(deps, ports, {
             turnId,
             workflowRunId: run.id,
             limits: { maxIterations: ports.maxIterations ?? 60, maxCostMicros: capRow.modelCapMicros ?? MIN_AUTONOMOUS_RUN_MICROS },

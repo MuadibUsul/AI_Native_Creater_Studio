@@ -668,6 +668,8 @@ export {
   listAgentTurns,
   projectAgentCost,
   runAgentTurnLoop,
+  legacyAgentRuntime,
+  resolveAgentRuntime,
   agentTurnIdFor,
   startAgentTurn,
   startGenerationTurn,
@@ -675,7 +677,7 @@ export {
   failGenerationTurn,
   unconfiguredAgentModel,
 } from './agent-runtime.js';
-export type { AgentRuntimeLimits, AgentTurnPorts } from './agent-runtime.js';
+export type { AgentRuntime, AgentRuntimeLimits, AgentTurnPorts } from './agent-runtime.js';
 export { AgentToolCatalog, buildAgentTimelineView, defaultAgentToolCatalog, simulateAgentDraft } from './agent-tools.js';
 export type { AgentDraft, AgentDraftSimulation, AgentTimelineView, AgentToolContext, AgentToolDefinition, AgentToolOutcome } from './agent-tools.js';
 export { agentEditOperationSchema, agentSecondsToTime, sequenceContentEnd, translateAgentEdit } from './agent-operations.js';

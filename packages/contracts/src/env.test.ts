@@ -248,6 +248,16 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_ASR_DRIVER: 'whisper' }).ok).toBe(false);
   });
 
+  it('V7 Agent 运行时（裁决 0021）：缺省不配置（Worker 按 legacy）；只认 legacy / dsh_shadow / dsh_active', () => {
+    expect(validateEnv(workerEnvSchema, validApiEnv).value?.ANCS_AGENT_RUNTIME).toBeUndefined();
+    for (const kind of ['legacy', 'dsh_shadow', 'dsh_active']) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_RUNTIME: kind }).value?.ANCS_AGENT_RUNTIME).toBe(kind);
+    }
+    const unknown = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_RUNTIME: 'dsh' });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.issues.map((issue) => issue.variable)).toContain('ANCS_AGENT_RUNTIME');
+  });
+
   it('V6 导演模型驱动显式选择：anthropic 缺密钥 → 启动失败；未知驱动拒绝；不配置则不装配（不回退 Mock）', () => {
     const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'anthropic' });
     expect(crossCheckWorkerEnv(missing.value!).map((issue) => issue.variable)).toEqual(['ANTHROPIC_API_KEY']);

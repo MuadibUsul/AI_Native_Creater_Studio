@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { narrationVoiceSchema } from './narration.js';
 import { generationOfferSchema } from './paid-generation.js';
-import { modelPriceOverridesSchema, type ModelPriceOverrides } from './agent.js';
+import { AGENT_RUNTIME_KINDS, modelPriceOverridesSchema, type ModelPriceOverrides } from './agent.js';
 import { OPS_ROLES } from './ops-auth.js';
 
 /**
@@ -472,6 +472,11 @@ export const workerEnvSchema = z.object({
   GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
   /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，含图像历史时用 deepseek-flash） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
+  /**
+   * V7（裁决 0021）：Agent 运行时，缺省 legacy（现有循环）。dsh_shadow / dsh_active 在 P2 接入前选择会让 Worker 启动失败，
+   * 不会静默退回 legacy。
+   */
+  ANCS_AGENT_RUNTIME: z.enum(AGENT_RUNTIME_KINDS, { message: 'ANCS_AGENT_RUNTIME 仅支持 legacy | dsh_shadow | dsh_active' }).optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
    */
