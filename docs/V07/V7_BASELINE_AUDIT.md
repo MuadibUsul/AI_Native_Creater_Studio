@@ -82,7 +82,7 @@ DSH 锁定点与主干的 `engines`、`packageManager` 相同：都要求 Node �
 
 | 文件 | 全量运行 | 复跑 | 分类 |
 |---|---|---|---|
-| `apps/worker/src/render-execution.integration.test.ts` | 2 项失败：`beforeEach` 钩子 10 秒超时 | **单独运行 2/2 通过** | **原有缺陷：测试隔离。** 这个旧 V4 测试在 `beforeEach` 里删除共享测试库的**全部**工作区；仓库里有 68 个测试文件用同样写法。并行跑其它文件时，这次删除最可能是在等锁。不影响产品代码；P1 加一项"测试只清理自己建的数据" |
+| `apps/worker/src/render-execution.integration.test.ts` | 2 项失败：`beforeEach` 钩子 10 秒超时 | **单独运行 2/2 通过** | **原有缺陷：测试隔离。** 这个旧 V4 测试在 `beforeEach` 里删除共享测试库的**全部**工作区；仓库里有 68 个测试文件用同样写法。~~并行跑其它文件时，这次删除最可能是在等锁~~ **更正（P1）**：集成测试按文件串行（`fileParallelism: false`），不存在并行等锁；根因调查见 `docs/V07/milestones/P1.md`。不影响产品代码 |
 | `packages/providers/queue-bullmq/src/queue-e2e.integration.test.ts` | 钩子超时（默认连 `127.0.0.1:56379`） | 设 `ANCS_TEST_REDIS_URL` 后通过 | 环境：本机 Redis 在 6379 |
 | `packages/providers/ratelimit-redis/src/redis-rate-limit.integration.test.ts` | 连不上 `127.0.0.1:56379` | 同上，两个文件共 6/6 通过 | 环境 |
 | `packages/providers/storage-s3/src/s3-storage.integration.test.ts` | 8 项跳过：`127.0.0.1:58333` 没有 S3 服务 | 未复跑：本机没装 SeaweedFS | `ENV_MISSING`：按部署手册 §10.3 起 SeaweedFS 后可测 |

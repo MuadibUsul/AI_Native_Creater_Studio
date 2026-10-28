@@ -384,7 +384,7 @@
         "file": "apps/worker/src/render-execution.integration.test.ts",
         "fullRun": "2 failed (beforeEach hook timed out at 10 s)",
         "alone": "2/2 passed",
-        "classification": "pre-existing test isolation defect: beforeEach deletes every workspace in the shared test database; 68 test files use this pattern; under parallel files the delete can wait on locks"
+        "classification": "pre-existing test isolation defect: beforeEach deletes every workspace in the shared test database (68 files use this pattern). Correction in P1: integration files run serially (fileParallelism: false), so parallel lock waits are ruled out; root cause under investigation (docs/V07/milestones/P1.md)"
       },
       {
         "file": "packages/providers/queue-bullmq/src/queue-e2e.integration.test.ts",
