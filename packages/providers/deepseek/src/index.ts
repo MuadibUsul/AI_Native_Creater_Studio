@@ -1,22 +1,31 @@
 import { AgentModelFailure, type AgentContentBlock, type AgentImage, type AgentModelAdapter, type AgentModelMessage, type AgentModelRequest, type AgentModelResponse } from '@ancs/contracts';
 import { z } from 'zod';
 
+type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: unknown;
+  content: string | null | ContentPart[];
   reasoning_content?: string;
   tool_call_id?: string;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
 };
 
-const imagePart = (image: AgentImage) => ({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } });
+const imagePart = (image: AgentImage): ContentPart => ({ type: 'image_url', image_url: { url: `data:${image.mediaType};base64,${image.data}` } });
 
-/** Preserves parallel tool ids, tool-result images and the assistant's reasoning on replay. */
 /** 请求里带图片时改用的模型（Pro 只收文字）；部署计价时它也要有单价 */
 export const DEEPSEEK_IMAGE_MODEL = 'deepseek-flash';
 
+/**
+ * Preserves parallel tool ids, tool-result images and the assistant's reasoning on replay.
+ * Images are sent only from the messages after the latest assistant reply; the model has
+ * already responded to older ones, which become a short note (V7 B1, ADR 0022). The request
+ * stays a pure function of the turn log, older messages project the same way at every later
+ * step, and a step without new images runs on the configured text model instead of Flash.
+ */
 export function toDeepSeekMessages(messages: readonly AgentModelMessage[]): ChatMessage[] {
-  return messages.flatMap((message): ChatMessage[] => {
+  const fresh = messages.findLastIndex((message) => message.role === 'assistant') + 1;
+  return messages.flatMap((message, index): ChatMessage[] => {
     const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
     if (message.role === 'assistant') {
       const calls = message.content.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, type: 'function' as const, function: { name: b.name, arguments: JSON.stringify(b.input) } }));
@@ -30,9 +39,16 @@ export function toDeepSeekMessages(messages: readonly AgentModelMessage[]): Chat
         result.push({ role: 'tool', tool_call_id: block.toolUseId, content: block.content });
       }
     }
+    if (index < fresh) {
+      const notes = message.content.flatMap((b) => b.type === 'image' ? ['[An image shown in an earlier step is omitted now.]']
+        : b.type === 'tool_result' && b.images?.length ? [`[Images from tool result ${b.toolUseId} (${String(b.images.length)}) were shown in an earlier step and are omitted now; call the tool again if you need to see them.]`] : []);
+      const body = [text, ...notes].filter((part) => part.length > 0).join('\n');
+      if (body) result.push({ role: 'user', content: body });
+      return result;
+    }
     // DeepSeek vision accepts images only in user messages. Finish all parallel
     // tool results first, then attach their images with their originating call id.
-    const images = message.content.flatMap((b) => b.type === 'image' ? [imagePart(b.image)]
+    const images = message.content.flatMap((b): ContentPart[] => b.type === 'image' ? [imagePart(b.image)]
       : b.type === 'tool_result' && b.images?.length ? [{ type: 'text', text: `Images from tool result ${b.toolUseId}:` }, ...b.images.map(imagePart)] : []);
     if (text || images.length) result.push({ role: 'user', content: images.length ? [{ type: 'text', text }, ...images] : text });
     return result;
@@ -62,8 +78,9 @@ export class DeepSeekAgentModel implements AgentModelAdapter {
 
   async respond(request: AgentModelRequest): Promise<AgentModelResponse> {
     try {
-      const hasImages = request.messages.some((message) => message.content.some((block) => block.type === 'image' || (block.type === 'tool_result' && (block.images?.length ?? 0) > 0)));
-      // Pro is text-only; Flash supports images. Actual response.model is metered.
+      const messages = toDeepSeekMessages(request.messages);
+      const hasImages = messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'));
+      // Pro is text-only; Flash supports images. Chosen by what is actually sent; response.model is metered.
       const model = hasImages ? DEEPSEEK_IMAGE_MODEL : this.model;
       const timeout = AbortSignal.timeout(120_000);
       const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal as AbortSignal]);
@@ -71,7 +88,7 @@ export class DeepSeekAgentModel implements AgentModelAdapter {
         method: 'POST', redirect: 'error', signal,
         headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model, messages: [{ role: 'system', content: request.system }, ...toDeepSeekMessages(request.messages)],
+          model, messages: [{ role: 'system', content: request.system }, ...messages],
           ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) } : {}),
           max_tokens: request.maxOutputTokens, stream: false, thinking: { type: 'enabled' },
           reasoning_effort: request.effort === 'low' ? 'low' : request.effort === 'max' ? 'max' : 'high',

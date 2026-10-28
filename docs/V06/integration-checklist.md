@@ -13,7 +13,7 @@
 ### DeepSeek 导演（2026-10-15 已真实验证）
 
 Worker 配置 `ANCS_AGENT_DRIVER=deepseek`、`DEEPSEEK_API_KEY`；可选 `ANCS_AGENT_MODEL`，缺省 `deepseek-v4-pro`。
-含图像的会话历史使用 `deepseek-flash`（Pro 为文本模型）；图像只作为 user 消息发送，工具返回图片按调用 id 关联。
+请求只带最新一条消息里的图（更早的图换成一句说明，V7 B1，`docs/V07/milestones/B1.md`）：这一步带新图时用 `deepseek-flash`（Pro 为文本模型），其余步骤用配置的模型。图像只作为 user 消息发送，工具返回图片按调用 id 关联。
 密钥只放服务端环境或未跟踪的 `.env`，不发给浏览器。缺密钥启动失败，不回退 Mock。
 工具调用、提案、预算、工作流重试与用量账本沿用现有导演链路；没有内置价格，界面明确显示未定价调用。
 真实工具往返、浏览器导演轮次和 Flash 看帧验证见 `docs/V06/milestones/deepseek-provider.md`。

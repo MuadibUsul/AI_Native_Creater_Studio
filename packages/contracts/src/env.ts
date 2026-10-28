@@ -470,7 +470,7 @@ export const workerEnvSchema = z.object({
    * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
    */
   GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
-  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，含图像历史时用 deepseek-flash） */
+  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，这一步带新图时用 deepseek-flash） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。

@@ -204,7 +204,7 @@ Everything that is waiting on you, the project owner, across the whole project: 
 - **Blocks:** CI evidence for recent work.
 
 ### D-17 Prices for the AI models you use (DeepSeek, Elorian)
-- **What:** The per-million-token prices of the models your production worker calls: `deepseek-v4-pro` (AI editor), `deepseek-flash` (used automatically when the conversation contains images) and `elorian-1-agent` (footage descriptions).
+- **What:** The per-million-token prices of the models your production worker calls: `deepseek-v4-pro` (AI editor), `deepseek-flash` (used automatically for the steps that send new images) and `elorian-1-agent` (footage descriptions).
 - **Why:** The monthly AI cap (D-16) is counted in dollars, and the code only ships Claude prices. Until now, DeepSeek and Elorian calls were recorded as "unpriced", so the $20 cap on darely.xyz could never trigger. With this change, when a cap is set, models without a price are **not called**: the AI editor explains which model needs a price, footage descriptions show "Not set up", and style learning falls back to rule-based writing. Rendering, uploads and transcripts keep working. The worker log lists the missing prices at start-up.
 - **Do / provide:** Look up the prices on your DeepSeek and Elorian account pages and add one line to the server's `production.env` (US dollars per million tokens; `cacheRead` / `cacheWrite` optional; values must be above zero):
   `ANCS_MODEL_PRICES_JSON={"deepseek-v4-pro":{"input":…,"output":…,"cacheRead":…},"deepseek-flash":{"input":…,"output":…},"elorian-1-agent":{"input":…,"output":…}}`
