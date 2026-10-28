@@ -1,0 +1,460 @@
+{
+  "schema": "ancs-v7-baseline-metrics/1",
+  "phase": "P0",
+  "recordedAt": "2026-10-28",
+  "snapshots": {
+    "ancs": {
+      "planLock": "8047b59a0d799f8e21bbc1df97961e95ff1167d8",
+      "branch": "codex/v04-foundation",
+      "head": "6867a69",
+      "commitsAheadOfLock": 36,
+      "filesChanged": 378,
+      "insertions": 19234,
+      "deletions": 407,
+      "mainAtLock": true
+    },
+    "dsh": {
+      "repo": "deepseek-ai/deepseek-harness",
+      "planLock": "22ddee3792402c3e70ec5f86a63c3e3e895a2f60",
+      "lockVersion": "0.2.1-rc.3",
+      "master": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
+      "masterVersion": "0.2.2-alpha.2",
+      "commitsAheadOfLock": 637,
+      "filesChanged": 2118,
+      "insertions": 136793,
+      "deletions": 9351,
+      "seamDrift": {
+        "packages/core": "24 files +129/-52",
+        "packages/sdk": "3 files +3/-3",
+        "packages/bundle": "7 files +6/-10",
+        "packages/session": "28 files +178/-26",
+        "packages/llm": "41 files +735/-73"
+      }
+    }
+  },
+  "environment": {
+    "os": "Linux 6.18 container",
+    "cpus": 4,
+    "memoryGb": 15,
+    "ancsNode": "22.22.0",
+    "ancsPnpm": "9.15.0",
+    "dshNode": "24.22.0 (separate prefix, SHASUMS256 verified)",
+    "dshPnpm": "11.28.5 (separate prefix)",
+    "postgres": "16.15",
+    "redis": "7.0.15",
+    "ffmpeg": "6.1.1",
+    "renderChromium": "141.0.7390.37",
+    "realProviders": "none configured"
+  },
+  "ancs": {
+    "steps": [
+      {
+        "step": "secrets:check",
+        "exitCode": 0,
+        "seconds": 38.4,
+        "status": "PASS"
+      },
+      {
+        "step": "spec:check",
+        "exitCode": 0,
+        "seconds": 1.0,
+        "status": "PASS"
+      },
+      {
+        "step": "lint",
+        "exitCode": 0,
+        "seconds": 51.9,
+        "status": "PASS"
+      },
+      {
+        "step": "typecheck",
+        "exitCode": 0,
+        "seconds": 254.9,
+        "status": "PASS"
+      },
+      {
+        "step": "build",
+        "exitCode": 0,
+        "seconds": 318.6,
+        "status": "PASS"
+      },
+      {
+        "step": "arch:check",
+        "exitCode": 0,
+        "seconds": 5.2,
+        "status": "PASS"
+      },
+      {
+        "step": "capabilities:check",
+        "exitCode": 0,
+        "seconds": 1.8,
+        "status": "PASS"
+      },
+      {
+        "step": "test:unit",
+        "exitCode": 0,
+        "seconds": 56.5,
+        "status": "PASS",
+        "testFiles": {
+          "total": 127,
+          "passed": 127
+        },
+        "tests": {
+          "total": 917,
+          "passed": 917
+        }
+      },
+      {
+        "step": "test:web",
+        "exitCode": 0,
+        "seconds": 67.7,
+        "status": "PASS",
+        "testFiles": {
+          "total": 56,
+          "passed": 56
+        },
+        "tests": {
+          "total": 350,
+          "passed": 350
+        }
+      },
+      {
+        "step": "test:motion",
+        "exitCode": 0,
+        "seconds": 16.4,
+        "status": "PASS",
+        "testFiles": {
+          "total": 4,
+          "passed": 4
+        },
+        "tests": {
+          "total": 38,
+          "passed": 38
+        }
+      },
+      {
+        "step": "test:contract",
+        "exitCode": 0,
+        "seconds": 1.2,
+        "status": "PLANNED"
+      },
+      {
+        "step": "test:integration",
+        "exitCode": 1,
+        "seconds": 995.2,
+        "status": "FAIL",
+        "testFiles": {
+          "total": 149,
+          "failed": 4,
+          "passed": 145
+        },
+        "tests": {
+          "total": 693,
+          "failed": 2,
+          "passed": 677,
+          "skipped": 14
+        },
+        "failedFiles": [
+          "apps/worker/src/render-execution.integration.test.ts",
+          "packages/providers/queue-bullmq/src/queue-e2e.integration.test.ts",
+          "packages/providers/ratelimit-redis/src/redis-rate-limit.integration.test.ts",
+          "packages/providers/storage-s3/src/s3-storage.integration.test.ts"
+        ]
+      },
+      {
+        "step": "test:e2e",
+        "exitCode": 0,
+        "seconds": 1.1,
+        "status": "PLANNED"
+      },
+      {
+        "step": "test:security",
+        "exitCode": 0,
+        "seconds": 30.8,
+        "status": "PASS",
+        "testFiles": {
+          "total": 5,
+          "passed": 5
+        },
+        "tests": {
+          "total": 24,
+          "passed": 24
+        }
+      },
+      {
+        "step": "test:render",
+        "exitCode": 0,
+        "seconds": 38.5,
+        "status": "PASS",
+        "testFiles": {
+          "total": 3,
+          "passed": 3
+        },
+        "tests": {
+          "total": 8,
+          "passed": 8
+        }
+      },
+      {
+        "step": "test:golden",
+        "exitCode": 0,
+        "seconds": 5.8,
+        "status": "PASS",
+        "testFiles": {
+          "total": 2,
+          "passed": 2
+        },
+        "tests": {
+          "total": 15,
+          "passed": 15
+        }
+      },
+      {
+        "step": "test:eval",
+        "exitCode": 0,
+        "seconds": 2.3,
+        "status": "PASS",
+        "testFiles": {
+          "total": 1,
+          "passed": 1
+        },
+        "tests": {
+          "total": 5,
+          "passed": 5
+        }
+      }
+    ],
+    "agentToolCatalog": {
+      "count": 22,
+      "byEffect": {
+        "READ": 13,
+        "DRAFT_EDIT": 7,
+        "PLAN": 1,
+        "GENERATE": 1
+      },
+      "metered": [
+        "quote_generation"
+      ],
+      "promptVersion": "director-v9"
+    },
+    "agentEntryPoints": [
+      "api turns (text + voice)",
+      "review DISCUSS_NOTE",
+      "AUTONOMOUS_PRODUCTION direct step",
+      "paid generation result turn (no model loop)"
+    ],
+    "coreSample": {
+      "harness": "node scripts/eval-first-cut.mjs --model scripted --export (evals/first-cut/smoke.json)",
+      "director": "SCRIPTED (test double; not a quality measurement)",
+      "runs": [
+        {
+          "runId": "2026-10-28T14-53-29-714Z",
+          "cases": [
+            {
+              "id": "three-clips-no-strategy",
+              "status": "OK",
+              "caseSeconds": 32.4,
+              "turnSeconds": 1.1,
+              "tools": [
+                "edit_timeline",
+                "review_draft"
+              ],
+              "costMicros": null,
+              "automaticScore": 1,
+              "proposal": {
+                "operations": 7,
+                "kinds": [
+                  "insert_clip",
+                  "set_sequence_duration"
+                ],
+                "baseRevision": 4,
+                "adoptedRevision": 5
+              },
+              "render": {
+                "planHash": "88d50e3d00ad101a00d8cd534c44a1ede136ab463cbc07bf34f761693cb28caf",
+                "sha256": "96a41678b859d43ad028a727a7ddd56da71c9242d7d471290acc0cfd0bf0c5b2",
+                "bytes": 2739543,
+                "seconds": 13.7
+              }
+            },
+            {
+              "id": "three-clips-beat-strategy",
+              "status": "OK",
+              "caseSeconds": 21,
+              "turnSeconds": 1.1,
+              "tools": [
+                "edit_timeline",
+                "review_draft"
+              ],
+              "costMicros": null,
+              "automaticScore": 1,
+              "proposal": {
+                "operations": 9,
+                "kinds": [
+                  "insert_clip",
+                  "set_sequence_duration"
+                ],
+                "baseRevision": 4,
+                "adoptedRevision": 5
+              },
+              "render": {
+                "planHash": "ce16ab13734bbbc0d332781b32450f02249b3a7941e9fa4b038b49ab52c258a2",
+                "sha256": "b5b2cccec0a1ebc50c68f71f61cc5468983602ffa4016a7952125591a4c4ac20",
+                "bytes": 1814210,
+                "seconds": 9.2
+              }
+            }
+          ]
+        },
+        {
+          "runId": "2026-10-28T14-54-46-087Z",
+          "cases": [
+            {
+              "id": "three-clips-no-strategy",
+              "status": "OK",
+              "caseSeconds": 33,
+              "turnSeconds": 1.1,
+              "tools": [
+                "edit_timeline",
+                "review_draft"
+              ],
+              "costMicros": null,
+              "automaticScore": 1,
+              "proposal": {
+                "operations": 7,
+                "kinds": [
+                  "insert_clip",
+                  "set_sequence_duration"
+                ],
+                "baseRevision": 4,
+                "adoptedRevision": 5
+              },
+              "render": {
+                "planHash": "783e1b9b396cd4995ac44b46727e50a00f5f24bc610eb79825d6857b77cacc6e",
+                "sha256": "96a41678b859d43ad028a727a7ddd56da71c9242d7d471290acc0cfd0bf0c5b2",
+                "bytes": 2739543,
+                "seconds": 13.8
+              }
+            },
+            {
+              "id": "three-clips-beat-strategy",
+              "status": "OK",
+              "caseSeconds": 20.9,
+              "turnSeconds": 2.1,
+              "tools": [
+                "edit_timeline",
+                "review_draft"
+              ],
+              "costMicros": null,
+              "automaticScore": 1,
+              "proposal": {
+                "operations": 9,
+                "kinds": [
+                  "insert_clip",
+                  "set_sequence_duration"
+                ],
+                "baseRevision": 4,
+                "adoptedRevision": 5
+              },
+              "render": {
+                "planHash": "c9ecc738410f0b4307542f7c353ae0582b254b95e3c04e48ebd7b231cbfb3350",
+                "sha256": "b5b2cccec0a1ebc50c68f71f61cc5468983602ffa4016a7952125591a4c4ac20",
+                "bytes": 1814210,
+                "seconds": 9.2
+              }
+            }
+          ]
+        }
+      ],
+      "findings": [
+        "export sha256 identical across the two runs for both cases (same inputs -> byte-identical output)",
+        "planHash differs across runs: it covers asset version ids, which are new in every run; cross-run comparison must use export sha256 or an id-normalized plan"
+      ]
+    },
+    "browser": {
+      "script": "scripts/studio-browser-check.mjs",
+      "checks": 15,
+      "passed": 15,
+      "seconds": 135,
+      "director": "SCRIPTED",
+      "exportBytes": 2739543
+    },
+    "integrationReruns": [
+      {
+        "file": "apps/worker/src/render-execution.integration.test.ts",
+        "fullRun": "2 failed (beforeEach hook timed out at 10 s)",
+        "alone": "2/2 passed",
+        "classification": "pre-existing test isolation defect: beforeEach deletes every workspace in the shared test database; 68 test files use this pattern; under parallel files the delete can wait on locks"
+      },
+      {
+        "file": "packages/providers/queue-bullmq/src/queue-e2e.integration.test.ts",
+        "fullRun": "hook timeout (Redis expected at 127.0.0.1:56379)",
+        "rerun": "passed with ANCS_TEST_REDIS_URL",
+        "classification": "environment"
+      },
+      {
+        "file": "packages/providers/ratelimit-redis/src/redis-rate-limit.integration.test.ts",
+        "fullRun": "cannot reach 127.0.0.1:56379",
+        "rerun": "passed with ANCS_TEST_REDIS_URL (both files: 6/6)",
+        "classification": "environment"
+      },
+      {
+        "file": "packages/providers/storage-s3/src/s3-storage.integration.test.ts",
+        "fullRun": "8 skipped: no S3 server at 127.0.0.1:58333",
+        "rerun": "not run (SeaweedFS not installed here)",
+        "classification": "ENV_MISSING"
+      }
+    ]
+  },
+  "dsh": {
+    "staticAudit": {
+      "license": "MIT",
+      "thirdPartyNoticesLines": 313,
+      "lockfileThirdPartyPackages": 1742,
+      "workspacePackageManifests": 365,
+      "engines": "node>=24.9.0",
+      "packageManager": "pnpm@11.28.5",
+      "sdkMethods": [
+        "initialize",
+        "session/prompt",
+        "session/resume",
+        "session/wait",
+        "session/working-directory/get",
+        "session/working-directory/set",
+        "shutdown"
+      ],
+      "hostDefinedTools": false,
+      "sessionPersistence": "JSONL files + native file lock (SessionPersistence seam for other backends)",
+      "sessionFormat": "v4",
+      "baseBundleRisky": [
+        "tool-bash",
+        "tool-pwsh",
+        "tool-fs (write/edit)",
+        "tool-fs-search",
+        "tool-web",
+        "ptc-runtime-node",
+        "subagent",
+        "skill-filesystem",
+        "plugin-manager/tools",
+        "config-editor",
+        "credentials-local",
+        "api-remote-access"
+      ],
+      "sdkMinimalShellPolicy": "danger-full-access"
+    },
+    "install": "NOT_RUN",
+    "build": "NOT_RUN",
+    "typecheck": "NOT_RUN",
+    "test": "NOT_RUN",
+    "dumpConfig": "NOT_RUN",
+    "notRunReason": "executing the external repository's install scripts/build/tests was refused by this container's automatic safety check; needs owner permission or the fork's own CI"
+  },
+  "notVerified": [
+    "real director model (any provider)",
+    "real speech recognition",
+    "real vision",
+    "real TTS",
+    "paid generation providers",
+    "DSH runtime behaviour"
+  ]
+}
