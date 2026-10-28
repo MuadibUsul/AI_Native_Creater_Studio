@@ -53,6 +53,7 @@ jobs:
     env:
       ANCS_TEST_DATABASE_URL: postgres://ancs:ancs@localhost:5432/ancs_test
       ANCS_TEST_REDIS_URL: redis://localhost:6379
+      ANCS_TEST_S3_ENDPOINT: http://127.0.0.1:58333
 
     steps:
       - uses: actions/checkout@v7
@@ -74,6 +75,14 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           ffmpeg -version | head -1
           ffprobe -version | head -1
+
+      - name: Start S3-compatible storage (SeaweedFS)
+        # S3 驱动的集成测试需要一个会校验 SigV4 签名（含预签名 URL）的真实 S3 兼容服务；服务容器无法传启动参数，故用 docker run
+        run: |
+          mkdir -p "$RUNNER_TEMP/seaweed"
+          echo '{"identities":[{"name":"ancs","credentials":[{"accessKey":"ancs-test","secretKey":"ancs-test-secret-0000"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > "$RUNNER_TEMP/seaweed/s3.json" # secrets:check-ignore：测试专用假密钥
+          docker run -d --name ancs-s3 -p 58333:8333 -v "$RUNNER_TEMP/seaweed:/etc/seaweed-cfg:ro" chrislusf/seaweedfs:4.48 server -s3 -s3.config=/etc/seaweed-cfg/s3.json -dir=/data
+          for i in $(seq 1 60); do [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:58333/)" != "000" ] && break; sleep 1; done
 
       - name: Install
         run: pnpm install --frozen-lockfile

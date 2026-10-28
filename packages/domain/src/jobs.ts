@@ -467,10 +467,14 @@ async function resolveDependentsInTransaction(
   }
 }
 
-/** 认领任务（原子：SKIP LOCKED；设置租约；attempts +1）。 */
+/**
+ * 认领任务（原子：SKIP LOCKED；设置租约；attempts +1）。
+ * `workspaceId` 只认领该工作区的任务：Worker 不传（跨工作区按优先级与先后认领）；
+ * 共享数据库的测试必须传，否则会认领到别的测试留在队列里的同类任务。
+ */
 export async function claimJob(
   deps: DomainDeps,
-  input: { workerId: string; leaseSeconds?: number; types?: string[]; now?: Date },
+  input: { workerId: string; leaseSeconds?: number; types?: string[]; workspaceId?: string; now?: Date },
 ): Promise<Job | null> {
   const leaseSeconds = input.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
   const now = input.now ?? new Date();
@@ -481,6 +485,7 @@ export async function claimJob(
       or(isNull(jobs.nextAttemptAt), lte(jobs.nextAttemptAt, now)),
     ];
     if (input.types !== undefined && input.types.length > 0) conditions.push(inArray(jobs.type, input.types));
+    if (input.workspaceId !== undefined) conditions.push(eq(jobs.workspaceId, input.workspaceId));
     const rows = await tx
       .select({ id: jobs.id })
       .from(jobs)

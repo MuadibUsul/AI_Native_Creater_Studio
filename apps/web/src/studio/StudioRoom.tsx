@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS, PREVIEW_ERROR_REASONS, PROPOSAL_ERROR_REASONS, mediaTimeSchema, stepFrames, type AgentPointer, type AgentTurn, type FrameRegion, type Generation, type MediaRange, type MediaTime, type Proposal, type SequencePreview } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
@@ -13,6 +13,9 @@ import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanvas';
 import { StudioConversation } from './StudioConversation';
+import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive } from './StudioAutonomy';
+import { ArticleBoardFrame, FootageBoardFrame, PlanBoardFrame } from './StudioBoardFrames';
+import { presenceOf, totalFootageSeconds } from './editor-presence';
 import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
 import { StudioExport } from './StudioExport';
 import { StudioFootageDrawer } from './StudioFootageDrawer';
@@ -61,6 +64,9 @@ function mutationErrorText(error: unknown, t: Messages['studio']): string {
   if (described.kind === 'forbidden') return t.readOnly;
   const reason = described.details['reason'];
   if (reason === AGENT_ERROR_REASONS.TURN_IN_PROGRESS) return t.chat.errors.busy;
+  if (reason === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED) {
+    return t.chat.errors.monthlyCap(formatUsdMicros(Number(described.details['capMicros'] ?? 0)), String(described.details['resetsAt'] ?? new Date().toISOString()));
+  }
   if (reason === PROPOSAL_ERROR_REASONS.STALE_BASE || reason === PROPOSAL_ERROR_REASONS.HASH_MISMATCH) return t.chat.stale;
   return described.code === null ? t.chat.errors.generic : `${t.chat.errors.generic} (${described.code})`;
 }
@@ -107,11 +113,62 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const proposal = proposalQuery.data ?? null;
   const trial = proposal?.status === 'OPEN' ? proposal : null;
   const actions = useStudioActions(workspaceId, projectId);
-  // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）
+  // V6-9 交给 AI 剪完：最近一次运行随工作台状态一起读；进度变化时刷新对话（自主的那一轮就在这个会话里）
+  const autonomousRun = state?.autonomousRun ?? null;
+  const autonomyActive = autonomousRunActive(autonomousRun);
+  const [autonomyOpen, setAutonomyOpen] = useState(false);
+  const sessionId = state?.session?.id ?? null;
+  const autonomyTick = autonomousRun === null ? null : `${autonomousRun.id}:${autonomousRun.status}:${autonomousRun.turnId ?? ''}:${String(autonomousRun.progress.steps)}`;
+  useEffect(() => {
+    if (autonomyTick !== null && sessionId !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.turns(workspaceId, sessionId) });
+  }, [autonomyTick, sessionId, queryClient, workspaceId]);
+  const cancelAutonomy = useMutation({
+    mutationFn: (runId: string) => client.autonomy.cancelRun(workspaceId, projectId, runId, { idempotencyKey: `autonomy-cancel-${runId}` }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
+  // 画面理解失败或因本月 AI 额度暂停 → 再理解一次（额度仍用完时服务端 402，说明额度与恢复日期）
+  const [visualRetryError, setVisualRetryError] = useState<{ assetId: string; message: string } | null>(null);
+  const retryVisual = useMutation({
+    mutationFn: (assetId: string) => client.assets.retryVisualAnalysis(workspaceId, assetId),
+    onMutate: () => setVisualRetryError(null),
+    onError: (error, assetId) => {
+      const described = describeError(error);
+      const message = described.details['reason'] === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED
+        ? t.chat.errors.monthlyCap(formatUsdMicros(Number(described.details['capMicros'] ?? 0)), String(described.details['resetsAt'] ?? new Date().toISOString()))
+        : t.footage.retryFailed;
+      setVisualRetryError({ assetId, message });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
+  // 一轮结束（完成/失败/取消）→ 刷新工作台状态（本条视频的 AI 成本随之更新）与制作计划
   const latestDone = latest !== undefined && latest.status !== 'RUNNING' ? latest.id : null;
   useEffect(() => {
-    if (latestDone !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+    if (latestDone === null) return;
+    void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+    void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
   }, [latestDone, queryClient, workspaceId, projectId]);
+  // 无限画布上的制作计划画框（AP-04）：AI 写过计划才显示；版本号变了就重读（标注计划是否过期）
+  const planQuery = useQuery({
+    queryKey: studioKeys.plan(workspaceId, projectId),
+    queryFn: () => client.autonomy.latestPlan(workspaceId, projectId),
+    enabled: state !== undefined,
+    retry: false,
+  });
+  // AI 这一轮里写了计划：马上重读，计划画框在画布上出现（剪辑师光标能走到它旁边）
+  const planWrites = latest?.status === 'RUNNING' ? latest.toolCalls.filter((call) => call.name === 'plan_production').length : 0;
+  useEffect(() => {
+    if (planWrites > 0) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
+  }, [planWrites, queryClient, workspaceId, projectId]);
+  const planRevision = state?.project.revision;
+  useEffect(() => {
+    if (planRevision !== undefined) void queryClient.invalidateQueries({ queryKey: studioKeys.plan(workspaceId, projectId) });
+  }, [planRevision, queryClient, workspaceId, projectId]);
+  // 版本变了（含交给 AI 剪完时 AI 按授权自己采用了这次试改）→ 重读试改提案：否则缓存里仍是"未采用"，
+  // 画面会一直停在已经不存在的试改上，并为已采用的提案请求预览（服务端拒绝 → "预览失败"）
+  const trialProposalId = trialTurn?.proposalId ?? null;
+  useEffect(() => {
+    if (planRevision !== undefined && trialProposalId !== null) void queryClient.invalidateQueries({ queryKey: studioKeys.proposal(workspaceId, trialProposalId) });
+  }, [planRevision, trialProposalId, queryClient, workspaceId]);
 
   const hasClips = (timeline?.clips.length ?? 0) > 0;
   const revision = state?.project.revision;
@@ -120,6 +177,16 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
       : hasClips ? { revision, proposalId: null } : null), [revision, trial, hasClips]);
   const preview = useStudioPreview(workspaceId, projectId, state?.sequenceId, previewTarget);
   const targetPreview = previewTarget === null ? null : preview.preview.data ?? null;
+  // 试改预览被拒、理由是这份提案已不再待定（AI 按授权刚采用了它，或它已被放弃/取代）：不是预览失败，
+  // 是这边还没读到新版本。马上重读工作台与提案，画面换到当前版本（否则先闪"预览失败"，还留着已采用试改的"保留 / 放弃"）
+  const requestError = preview.request.isError ? describeError(preview.request.error).details : null;
+  const trialMovedOn = previewTarget?.proposalId != null && requestError !== null
+    && requestError['reason'] === PREVIEW_ERROR_REASONS.PROPOSAL_STALE && requestError['status'] !== undefined && requestError['status'] !== 'OPEN';
+  useEffect(() => {
+    if (!trialMovedOn || trialProposalId === null) return;
+    void queryClient.invalidateQueries({ queryKey: studioKeys.proposal(workspaceId, trialProposalId) });
+    void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) });
+  }, [trialMovedOn, trialProposalId, queryClient, workspaceId, projectId]);
 
   // 正在显示的预览：目标预览就绪才切换（渲染新预览时继续显示上一个画面）
   const [shown, setShown] = useState<SequencePreview | null>(null);
@@ -391,6 +458,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     workspaceId, projectId, locale,
     onUtterance: ({ utteranceId, text, attention }) => setVoiceQueue((queue) => (queue.some((item) => item.id === utteranceId) ? queue : [...queue, { id: utteranceId, text, pointer: attention.pointer, failed: null }])),
     onSpeechStart: speech.stop,
+    busy: latest?.status === 'RUNNING' || actions.send.isPending || voiceQueue.some((item) => item.failed === null),
   });
   const turnRunning = latest?.status === 'RUNNING';
   const voiceHead = voiceQueue[0];
@@ -571,6 +639,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const mode: CanvasMode = hasClips || trial !== null ? 'video' : readyFootage ? 'noCut' : busyFootage ? 'processing' : article !== null ? 'article' : 'empty';
   const running = latest?.status === 'RUNNING';
   const cost = state.cost;
+  const aiSpend = state.aiSpend;
   const activeTasks = taskRows.filter((row) => row.status === 'running').length;
   const failedTasks = taskRows.filter((row) => row.status === 'failed').length;
 
@@ -639,6 +708,25 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
     />
   );
 
+  // 剪辑师在场：这一轮进行中时，最近一步在做什么、在画布哪一块（来自真实工具记录）；开场只说工程里的事实
+  const tp = t.presence;
+  const presence = running && latest !== undefined ? presenceOf(latest.toolCalls.at(-1)?.name ?? null) : null;
+  const presenceText = presence === null ? null : tp.activities[presence.activity];
+  const liveStep = presence === null || presenceText === null || latest === undefined || latest.toolCalls.length === 0 ? null : tp.step(latest.toolCalls.length, presenceText);
+  const readyCount = state.footage.filter((item) => item.status === 'READY').length;
+  const greeting = article != null ? tp.greetingArticle(article.title, article.paragraphs)
+    : state.footage.length === 0 ? null
+      : readyCount < state.footage.length ? tp.greetingProcessing(readyCount, state.footage.length)
+        : tp.greetingFootage(readyCount, totalFootageSeconds(state.footage.map((item) => item.duration)));
+  const voiceHero = phase === 'off' && canEdit ? (
+    <>
+      {voiceNotice !== null ? <p className={`${styles['voiceHeroNotice']} ui-glass`} role="status">{voiceNotice}</p> : null}
+      <button type="button" className={styles['voiceHero']} title={tp.voiceHeroHint} onClick={() => void voice.start()}>
+        <QuietIcon name="voice" />{tp.voiceHero}
+      </button>
+    </>
+  ) : null;
+
   const ruleGroup = (
     <StudioRuleGroup
       label={t.rulesLabel}
@@ -693,7 +781,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         </div>
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>
-          {cost.turns > 0 ? <span className={styles['meta']} title={t.aiCostHint}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
+          {cost.turns > 0 ? <span className={styles['meta']} title={aiSpend.capMicros === null ? t.aiCostHint : `${t.aiCostHint}\n${t.aiMonthHint(formatUsdMicros(aiSpend.spentMicros), formatUsdMicros(aiSpend.capMicros), aiSpend.unpricedCalls)}`}>{cost.costMicros === null ? t.aiCostUnpriced : t.aiCost(formatUsdMicros(cost.costMicros))}</span> : null}
           <Link className="btn small ghost" href={`/w/${workspaceId}/review/${projectId}`}><QuietIcon name="check" />{t.reviewButton}</Link>
           <button ref={tasksButtonRef} type="button" className="btn small ghost" aria-expanded={tasksOpen} aria-label={t.tasks.buttonAria(activeTasks, failedTasks)} onClick={() => { setDistillOpen(false); setFootageOpen(false); if (!tasksOpen) void exportsQuery.refetch(); taskNotice.dismiss(); setTasksOpen(!tasksOpen); }}><QuietIcon name="clock" />{t.tasks.button(activeTasks)}{failedTasks > 0 ? <span className={styles['tasksButtonDot']} aria-hidden="true" /> : null}</button>
           <span className={styles['divider']} aria-hidden="true" />
@@ -711,6 +799,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         canUndoChange={canUndoChange}
         notice={notice === null ? null : t.chat[notice]}
         error={actionError}
+        limit={aiSpend.reached ? t.chat.errors.monthlyCap(formatUsdMicros(aiSpend.capMicros ?? 0), aiSpend.resetsAt) : null}
         pointerLabel={pointerLabel}
         canEdit={canEdit}
         sending={actions.send.isPending}
@@ -728,6 +817,15 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         strategy={strategy}
         onStrategyChange={setStrategy}
         onLearnStrategy={() => { setFootageOpen(false); setTasksOpen(false); setDistillOpen(true); }}
+        autonomyCard={autonomousRun !== null && (autonomyActive || autonomousRun.completedAt === null || Date.now() - Date.parse(autonomousRun.completedAt) < 86_400_000) ? (
+          <StudioAutonomyCard
+            run={autonomousRun}
+            canEdit={canEdit}
+            stopping={cancelAutonomy.isPending}
+            error={cancelAutonomy.isError ? messages.autonomy.card.stopFailed : null}
+            onStop={() => cancelAutonomy.mutate(autonomousRun.id)}
+          />
+        ) : null}
         generationCards={(
           <StudioGenerationCards
             generations={visibleGenerations(state.generations)}
@@ -743,6 +841,8 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         rules={ruleGroup}
         onUpload={() => fileInput.current?.click()}
         initialDraft={brief}
+        greeting={greeting}
+        liveStep={liveStep}
         voiceToggle={<VoiceToggle state={voice.state} disabled={!canEdit} onStart={() => void voice.start()} onStop={voice.stop} />}
       />
 
@@ -768,12 +868,14 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           videoRef={videoRef}
           shown={shown}
           target={targetPreview}
-          targetFailed={targetPreview?.status === 'FAILED' || preview.request.isError}
+          targetFailed={targetPreview?.status === 'FAILED' || (preview.request.isError && !trialMovedOn)}
           trial={trial !== null && shown?.proposalId === trial.proposalId}
           seconds={displaySeconds(playhead)}
           uploads={uploads}
           canEdit={canEdit}
-          firstCutBusy={running || actions.send.isPending}
+          firstCutBusy={running || actions.send.isPending || autonomyActive}
+          onDelegate={autonomyActive || !canEdit ? null : () => setAutonomyOpen(true)}
+          delegateLabel={messages.autonomy.setup.open}
           onAddFootage={() => fileInput.current?.click()}
           onDropFiles={upload}
           onFirstCut={() => send(article !== null ? t.canvas.articleFirstCutPrompt : t.canvas.firstCutPrompt)}
@@ -787,6 +889,15 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
           drawing={drawing}
           onRegion={(region) => { setFramed({ region, at: playhead }); setDrawing(false); }}
           voiceDock={voiceDock}
+          voiceHero={voiceHero}
+          presence={presence === null || presenceText === null ? null : { target: presence.target, label: tp.cursor(presenceText) }}
+          boardFrames={state.footage.length === 0 && planQuery.data == null && article == null ? null : (
+            <>
+              {state.footage.length > 0 ? <FootageBoardFrame workspaceId={workspaceId} footage={state.footage} onOpenDetails={() => { setDistillOpen(false); setTasksOpen(false); setFootageOpen(true); }} /> : null}
+              {planQuery.data != null ? <PlanBoardFrame plan={planQuery.data} /> : null}
+              {article != null ? <ArticleBoardFrame article={article} locale={locale} /> : null}
+            </>
+          )}
         />
 
         <div className={`${styles['dock']} ui-glass`}>
@@ -853,7 +964,30 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         onOpen={() => { taskNotice.dismiss(); setDistillOpen(false); setFootageOpen(false); setTasksOpen(true); }}
       />
       {tasksOpen ? <StudioTasks rows={taskRows} loadFailed={exportsQuery.isError} onClose={() => setTasksOpen(false)} /> : null}
-      {footageOpen ? <StudioFootageDrawer footage={state.footage} uploads={uploads} canEdit={canEdit} identityHref={`/w/${workspaceId}/studio/identity`} onAdd={() => fileInput.current?.click()} onClose={() => setFootageOpen(false)} /> : null}
+      {footageOpen ? (
+        <StudioFootageDrawer
+          footage={state.footage}
+          uploads={uploads}
+          canEdit={canEdit}
+          identityHref={`/w/${workspaceId}/studio/identity`}
+          onAdd={() => fileInput.current?.click()}
+          onClose={() => setFootageOpen(false)}
+          onRetryVisual={(assetId) => retryVisual.mutate(assetId)}
+          retryingAssetId={retryVisual.isPending ? retryVisual.variables : null}
+          retryError={visualRetryError}
+        />
+      ) : null}
+      {autonomyOpen ? (
+        <StudioAutonomyDialog
+          workspaceId={workspaceId}
+          projectId={projectId}
+          policy={state.project.autonomy}
+          initialGoal={brief ?? ''}
+          strategy={strategy}
+          onClose={() => setAutonomyOpen(false)}
+          onStarted={() => { setAutonomyOpen(false); void queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }); }}
+        />
+      ) : null}
       <StudioShortcuts open={shortcutsOpen} held={shortcutsHeld} onClose={() => setShortcutsOpen(false)} />
       {exportOpen ? (
         <StudioExport

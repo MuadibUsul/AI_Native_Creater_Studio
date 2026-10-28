@@ -116,7 +116,7 @@ describe('AI 导演 HTTP 面（V6-1a）', () => {
     const owner = await signedIn();
     const f = await footageProject(owner);
     const tools = await owner.agent.tools(f.workspaceId);
-    expect(tools.map((tool) => `${tool.name}:${tool.effect}`)).toEqual(['get_timeline:READ', 'list_footage:READ', 'inspect_footage:READ', 'look_at_footage:READ', 'search_footage:READ', 'edit_timeline:DRAFT_EDIT', 'review_draft:READ', 'look_at_timeline:READ', 'list_effects:READ', 'add_effect:DRAFT_EDIT', 'update_effect:DRAFT_EDIT', 'list_voices:READ', 'add_narration:DRAFT_EDIT', 'remove_narration:DRAFT_EDIT', 'read_article:READ', 'list_generation_options:READ', 'quote_generation:GENERATE']);
+    expect(tools.map((tool) => `${tool.name}:${tool.effect}`)).toEqual(['get_timeline:READ', 'plan_production:PLAN', 'get_production_plan:READ', 'list_footage:READ', 'inspect_footage:READ', 'look_at_footage:READ', 'search_footage:READ', 'find_edit_points:READ', 'edit_timeline:DRAFT_EDIT', 'caption_speech:DRAFT_EDIT', 'review_draft:READ', 'measure_pace:READ', 'look_at_timeline:READ', 'list_effects:READ', 'add_effect:DRAFT_EDIT', 'update_effect:DRAFT_EDIT', 'list_voices:READ', 'add_narration:DRAFT_EDIT', 'remove_narration:DRAFT_EDIT', 'read_article:READ', 'list_generation_options:READ', 'quote_generation:GENERATE']);
     expect(tools.find((tool) => tool.name === 'edit_timeline')?.inputSchema).toHaveProperty('properties.operations');
 
     const session = await owner.agent.createSession(f.workspaceId, f.projectId, { sequenceId: f.sequenceId, locale: 'en' });

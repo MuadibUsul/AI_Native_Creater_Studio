@@ -45,6 +45,8 @@ export type MyInvitation = z.infer<typeof myInvitationSchema>;
 export const createInvitationRequestSchema = z.object({
   email: z.email(),
   role: workspaceRoleSchema,
+  /** 邀请邮件的语言（邀请人界面语言；缺省英文）。配置了发信才会寄出邀请邮件（D-04） */
+  locale: z.enum(['zh-CN', 'en']).optional(),
 });
 
 export type CreateInvitationRequest = z.infer<typeof createInvitationRequestSchema>;

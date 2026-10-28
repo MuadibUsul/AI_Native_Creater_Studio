@@ -14,7 +14,7 @@
 // 结果：.artifacts/eval/first-cut/<时间>/report.json、report.md、rating-sheet.md（以及 --export 的成片）
 import { execFileSync } from 'node:child_process';
 import { Blob } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -142,10 +142,14 @@ try {
       const strategy = testCase.strategy ? await getStrategyPack(env.deps, { workspaceId: workspace.id, packId: testCase.strategy.packId }) : null;
       entry.review = review;
       entry.scorecard = scoreFirstCut({ review, footageCount: state.footage.length, usedFootageCount: usedFootage.size, targetSeconds: testCase.targetSeconds ?? null, strategy });
+      // 运行器对照基线（V7 P0）：同一用例换导演运行时后逐项比较（ID 每次运行不同，只比较内容与数量）
+      entry.proposal = { operations: proposal.operations.length, kinds: [...new Set(proposal.operations.map((operation) => operation.op))].sort(), baseRevision: proposal.baseProjectRevision };
       if (values.export) {
         await client.projects.adoptProposal(workspace.id, ref.projectId, proposal.proposalId, { expectedOperationsHash: proposal.operationsHash, expectedSelectionFingerprint: proposal.selectionFingerprint, idempotencyKey: `eval-${randomUUID()}` });
         const fresh = await client.studio.state(workspace.id, ref.projectId);
+        entry.proposal.adoptedRevision = fresh.project.revision;
         const size = testCase.aspectRatio === '9:16' ? { width: 1080, height: 1920 } : testCase.aspectRatio === '1:1' ? { width: 1080, height: 1080 } : testCase.aspectRatio === '4:5' ? { width: 1080, height: 1350 } : { width: 1920, height: 1080 };
+        const renderStarted = Date.now();
         const run = await client.finalRenders.start(workspace.id, ref.projectId, ref.sequenceId, { profile: size, expectedRevision: fresh.project.revision }, { idempotencyKey: `eval-${randomUUID()}` });
         const finished = await waitFor(() => client.workflowRuns.get(workspace.id, run.id), (current) => current.status !== 'RUNNING', { timeoutMs: 30 * 60_000, intervalMs: 1500, label: 'final render' });
         const videoAsset = finished.outputs?.render?.outputs?.find((output) => output.kind === 'VIDEO')?.assetId;
@@ -153,6 +157,7 @@ try {
           const link = await client.assets.downloadUrl(workspace.id, videoAsset);
           const bytes = new Uint8Array(await (await fetch(link.url)).arrayBuffer());
           entry.exportFile = `${testCase.id}.mp4`;
+          entry.render = { planHash: finished.outputs?.freeze?.planHash ?? null, sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, seconds: Math.round((Date.now() - renderStarted) / 100) / 10 };
           await writeFile(join(outDir, entry.exportFile), bytes);
         } else {
           entry.exportError = finished.error;
@@ -192,7 +197,8 @@ function renderReport(data) {
       for (const indicator of entry.scorecard.indicators) lines.push(`| ${indicator.key} | ${indicator.value ?? '—'} | ${indicator.score ?? '无法评估'} | ${indicator.note} |`);
       lines.push('', `检查：${entry.review.findings.length === 0 ? '没有发现' : entry.review.findings.map((finding) => `${finding.kind}@${finding.at[0]}`).join('，')}；无法检查：${entry.review.notChecked.join('，') || '无'}`);
     }
-    if (entry.exportFile) lines.push(`- 成片：${entry.exportFile}`);
+    if (entry.proposal) lines.push(`- 提案：${String(entry.proposal.operations)} 个操作（${entry.proposal.kinds.join('、')}），基线版本 ${String(entry.proposal.baseRevision)}${entry.proposal.adoptedRevision === undefined ? '' : ` → 采用后 ${String(entry.proposal.adoptedRevision)}`}`);
+    if (entry.exportFile) lines.push(`- 成片：${entry.exportFile}${entry.render ? `（planHash ${entry.render.planHash?.slice(0, 12) ?? '—'}…，sha256 ${entry.render.sha256.slice(0, 12)}…，${String(entry.render.bytes)} 字节，渲染 ${String(entry.render.seconds)} s）` : ''}`);
     lines.push('');
   }
   lines.push('> 自动指标只抓机械问题；叙事、节奏与品味以人工评分为准（rating-sheet.md）。');

@@ -10,7 +10,12 @@
     "start": "node dist/index.js",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "retention:sweep": "node dist/cli/retention-sweep.js",
-    "events:dispatch": "node dist/cli/event-dispatch.js"
+    "events:dispatch": "node dist/cli/event-dispatch.js",
+    "db:migrate": "node dist/cli/migrate.js",
+    "user:create": "node dist/cli/create-user.js",
+    "invite:signup": "node dist/cli/signup-invite.js",
+    "scheduler": "node dist/cli/scheduler.js",
+    "ops:grant": "node dist/cli/ops-grant.js"
   },
   "dependencies": {
     "@ancs/auth": "workspace:*",
@@ -19,9 +24,12 @@
     "@ancs/domain": "workspace:*",
     "@ancs/extensions": "workspace:*",
     "@ancs/providers-credential-vault-local": "workspace:*",
+    "@ancs/providers-email-smtp": "workspace:*",
     "@ancs/providers-mock-llm": "workspace:*",
     "@ancs/providers-youtube": "workspace:*",
     "@ancs/providers-storage-local": "workspace:*",
+    "@ancs/providers-ratelimit-redis": "workspace:*",
+    "@ancs/providers-storage-s3": "workspace:*",
     "@fastify/swagger": "9.9.1",
     "drizzle-orm": "0.45.3",
     "fastify": "5.12.5",

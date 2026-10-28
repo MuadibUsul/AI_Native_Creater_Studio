@@ -120,6 +120,12 @@ export const rebaseProposalRequestSchema = z.object({
 }).strict();
 export type RebaseProposalRequest = z.infer<typeof rebaseProposalRequestSchema>;
 
+/**
+ * 一份提案的操作数上限：长视频的整轨原声字幕（10 分钟口播约 200 行）加剪辑操作要能放进一份提案（V6-9 自主制作）。
+ * 内核内存试改是纯函数重放，2048 条在毫秒级完成；更大的改动应拆成多次提案。
+ */
+export const MAX_PROPOSAL_OPERATIONS = 2048;
+
 export const createProposalRequestSchema = z.object({
   /** 候选基于的工程 revision（采用时必须仍然成立） */
   baseProjectRevision: revisionSchema,
@@ -127,7 +133,7 @@ export const createProposalRequestSchema = z.object({
   selectionAnchorId: opaqueIdSchema.nullable().default(null),
   /** 绑定的意图修订（语音/范围编辑入口产出；可为空） */
   intentRevisionId: opaqueIdSchema.nullable().default(null),
-  operations: z.array(editOperationSchema).min(1).max(256),
+  operations: z.array(editOperationSchema).min(1).max(MAX_PROPOSAL_OPERATIONS),
 }).strict();
 
 export type CreateProposalRequest = z.infer<typeof createProposalRequestSchema>;
@@ -143,7 +149,7 @@ export const proposalSchema = z.object({
   intentRevisionId: opaqueIdSchema.nullable().default(null),
   /** 操作集的规范哈希（采用时校验"用户看过的就是这一份"） */
   operationsHash: z.string().length(64),
-  operations: z.array(editOperationSchema).min(1).max(256),
+  operations: z.array(editOperationSchema).min(1).max(MAX_PROPOSAL_OPERATIONS),
   status: proposalStatusSchema,
   /** 采用后得到的工程 revision */
   committedRevision: revisionSchema.nullable().default(null),
@@ -307,7 +313,7 @@ export type CancelProposalRequest = z.infer<typeof cancelProposalRequestSchema>;
  */
 export const adoptProposalPartialRequestSchema = z.object({
   /** 用户勾选要采用的操作下标（非空、去重、在范围内） */
-  selectedOperationIndexes: z.array(z.number().int().min(0)).min(1).max(256),
+  selectedOperationIndexes: z.array(z.number().int().min(0)).min(1).max(MAX_PROPOSAL_OPERATIONS),
   expectedOperationsHash: z.string().length(64),
   expectedSelectionFingerprint: z.string().length(64).nullable().default(null),
   idempotencyKey: z.string().min(8).max(120),

@@ -76,7 +76,7 @@ const zhCN = {
   },
   /** 登录（app/sign-in）。 */
   signIn: {
-    title: '登录 Creator Studio',
+    title: '登录 Kinora',
     totpIntro: '输入验证器中的 6 位动态验证码。',
     intro: '登录后继续你的工作区与作品。',
     totpLabel: '动态验证码',
@@ -353,7 +353,7 @@ const en: EntryText = {
     footnote: 'Confirm the narrative before moving to the storyboard. Digital humans and generated shots are only placeholders at the draft stage.',
   },
   signIn: {
-    title: 'Sign in to Creator Studio',
+    title: 'Sign in to Kinora',
     totpIntro: 'Enter the 6-digit code from your authenticator app.',
     intro: 'Sign in to continue with your workspaces and projects.',
     totpLabel: 'Verification code',

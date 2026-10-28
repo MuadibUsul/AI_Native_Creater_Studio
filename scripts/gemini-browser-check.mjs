@@ -110,7 +110,7 @@ try {
   const first = await awaitTurn(null);
   if (first.status !== 'COMPLETED') throw new Error(`first cut turn ${first.status}: ${JSON.stringify(first.error ?? null)}`);
   await page.getByText('试改预览 · 还没采用').waitFor({ timeout: 180_000 });
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   await video.evaluate((element) => element.play());
   await page.waitForTimeout(1500);
   const playedTo = await video.evaluate((element) => element.currentTime);

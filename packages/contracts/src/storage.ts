@@ -43,7 +43,7 @@ export const objectProbeSchema = z.object({
 export type ObjectProbe = z.infer<typeof objectProbeSchema>;
 
 /**
- * 存储适配器（本地开发实现见 packages/providers/storage-local；S3/R2 实现在真实凭据阶段接入）。
+ * 存储适配器（本地磁盘见 packages/providers/storage-local；S3 兼容对象存储见 packages/providers/storage-s3）。
  * 服务层只依赖本接口（domain 不得依赖 providers/*，计划 §3.4）。
  */
 export interface ObjectStorageAdapter {

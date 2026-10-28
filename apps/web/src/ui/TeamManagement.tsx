@@ -66,7 +66,7 @@ export function TeamManagement({ workspaceId }: { workspaceId: string }): ReactE
   });
 
   const doInvite = useMutation({
-    mutationFn: () => client.workspaces.invitations.create(workspaceId, { email: inviteEmail, role: inviteRole }),
+    mutationFn: () => client.workspaces.invitations.create(workspaceId, { email: inviteEmail, role: inviteRole, locale }),
     onSuccess: async () => {
       setNotice(t.notices.invited(inviteEmail, inviteRole));
       setInviteEmail('');

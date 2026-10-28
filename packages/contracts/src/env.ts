@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { narrationVoiceSchema } from './narration.js';
 import { generationOfferSchema } from './paid-generation.js';
+import { modelPriceOverridesSchema, type ModelPriceOverrides } from './agent.js';
+import { OPS_ROLES } from './ops-auth.js';
 
 /**
  * 部署环境配置契约（P08-01 / 规范 §50；计划 §8 P08-01）。
@@ -77,11 +79,157 @@ export function originOf(value: string): string | null {
   return port === undefined || port === defaultPort ? `${scheme}://${host}` : `${scheme}://${host}:${port}`;
 }
 
+/** 数据库连接池（API、Worker、实时网关与命令行共用；缺省：5 个连接、不设超时）。 */
+export const dbPoolEnvShape = {
+  ANCS_DB_POOL_MAX: z.coerce.number().int().min(1, 'ANCS_DB_POOL_MAX ≥ 1').max(200, 'ANCS_DB_POOL_MAX ≤ 200').optional(),
+  ANCS_DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100, 'ANCS_DB_CONNECT_TIMEOUT_MS ≥ 100').max(120_000, 'ANCS_DB_CONNECT_TIMEOUT_MS ≤ 120000').optional(),
+  ANCS_DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1000, 'ANCS_DB_STATEMENT_TIMEOUT_MS ≥ 1000').max(3_600_000, 'ANCS_DB_STATEMENT_TIMEOUT_MS ≤ 3600000').optional(),
+} satisfies z.ZodRawShape;
+
 /** API 与 Worker 共用的基础连接配置。 */
 export const baseEnvShape = {
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  ...dbPoolEnvShape,
   BETTER_AUTH_SECRET: z.string().min(16, 'BETTER_AUTH_SECRET 未配置或过短（≥16 字符；经 KMS/Secrets 注入，禁止入库）'),
 } satisfies z.ZodRawShape;
+
+/**
+ * S3 兼容对象存储（`ANCS_STORAGE_DRIVER=s3`：AWS S3 / Cloudflare R2 / 阿里云 OSS / SeaweedFS 等）。
+ * API、Worker、清理 CLI 必须指向同一个桶；浏览器经预签名 URL 直传直下（桶需配置允许你域名 PUT/GET 的 CORS）。
+ * 访问密钥两项要么都配，要么都不配（都不配时用运行环境的凭据链，如云主机角色）。
+ */
+export const s3StorageEnvShape = {
+  ANCS_S3_BUCKET: nonEmpty('ANCS_S3_BUCKET').optional(),
+  /** 区域（AWS 如 us-east-1；R2 写 auto） */
+  ANCS_S3_REGION: nonEmpty('ANCS_S3_REGION').optional(),
+  /** 非 AWS 的服务端点（R2：https://<账号>.r2.cloudflarestorage.com；OSS：https://oss-cn-hangzhou.aliyuncs.com） */
+  ANCS_S3_ENDPOINT: z.string().url('ANCS_S3_ENDPOINT 必须是完整 URL').optional(),
+  /** 浏览器使用的端点（内网端点与公网地址不同时；缺省同 ANCS_S3_ENDPOINT） */
+  ANCS_S3_PUBLIC_ENDPOINT: z.string().url('ANCS_S3_PUBLIC_ENDPOINT 必须是完整 URL').optional(),
+  /** 路径风格寻址（自建 SeaweedFS 等通常需要 1） */
+  ANCS_S3_FORCE_PATH_STYLE: z.enum(['0', '1'], { message: 'ANCS_S3_FORCE_PATH_STYLE 仅支持 0 | 1' }).optional(),
+  ANCS_S3_ACCESS_KEY_ID: nonEmpty('ANCS_S3_ACCESS_KEY_ID').optional(),
+  ANCS_S3_SECRET_ACCESS_KEY: nonEmpty('ANCS_S3_SECRET_ACCESS_KEY').optional(),
+  /** 桶内前缀（多个环境共用一个桶时区分；如 prod/） */
+  ANCS_S3_KEY_PREFIX: z
+    .string()
+    .regex(/^[A-Za-z0-9._\-/]*$/, 'ANCS_S3_KEY_PREFIX 仅允许字母、数字、._-/')
+    .refine((value) => !value.startsWith('/') && !value.split('/').includes('..'), 'ANCS_S3_KEY_PREFIX 不得以 / 开头或包含 ..')
+    .optional(),
+} satisfies z.ZodRawShape;
+
+/**
+ * 发信（D-04：注册验证、找回密码、邀请邮件；API 与邀请 CLI 共用）。
+ * - `smtp`：真实投递（AWS SES、Postmark、Resend、SendGrid、Mailgun 等都提供 SMTP），生产用；
+ * - `log`：只在开发环境把邮件打到控制台（正文含一次性链接，生产禁用）；
+ * - 不配：不发信——不能注册（ANCS_SIGNUP_MODE 只能 closed），也不能找回密码。
+ */
+export const emailEnvShape = {
+  ANCS_EMAIL_DRIVER: z.enum(['log', 'smtp'], { message: 'ANCS_EMAIL_DRIVER 只能是 log 或 smtp' }).optional(),
+  /** smtp(s)://用户名:密码@主机:端口（含密码，属于 Secret；465 端口用 smtps://） */
+  ANCS_SMTP_URL: z.string().regex(/^smtps?:\/\/[^\s]+$/, 'ANCS_SMTP_URL 必须是 smtp:// 或 smtps:// 地址').optional(),
+  /** 发件人，如 "ANCS <no-reply@example.com>"（域名需在发信服务商处完成 SPF / DKIM 验证） */
+  ANCS_EMAIL_FROM: z.string().trim().min(3).max(200).refine((value) => /@[^\s@>]+\.[^\s@>]+/.test(value), 'ANCS_EMAIL_FROM 必须包含发件邮箱地址').optional(),
+  /** 邮件里链接指向的网站地址（缺省 BETTER_AUTH_URL；网站与 API 不同域时配置） */
+  ANCS_PUBLIC_WEB_URL: z.string().url('ANCS_PUBLIC_WEB_URL 必须是完整 URL').optional(),
+  /** 邮件里显示的产品名（品牌未定前为 ANCS） */
+  ANCS_PRODUCT_NAME: z.string().trim().min(1).max(60).default('Kinora'),
+} satisfies z.ZodRawShape;
+
+/** 发信配置的跨字段规则（API 与邀请 CLI 共用）。 */
+export function crossCheckEmailEnv(value: {
+  NODE_ENV?: 'development' | 'test' | 'production' | undefined;
+  BETTER_AUTH_URL?: string | undefined;
+  ANCS_EMAIL_DRIVER?: 'log' | 'smtp' | undefined;
+  ANCS_SMTP_URL?: string | undefined;
+  ANCS_EMAIL_FROM?: string | undefined;
+  ANCS_PUBLIC_WEB_URL?: string | undefined;
+}): EnvIssue[] {
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_EMAIL_DRIVER === 'smtp') {
+    if (value.ANCS_SMTP_URL === undefined) issues.push({ variable: 'ANCS_SMTP_URL', message: 'ANCS_EMAIL_DRIVER=smtp 时必须配置 SMTP 地址' });
+    if (value.ANCS_EMAIL_FROM === undefined) issues.push({ variable: 'ANCS_EMAIL_FROM', message: 'ANCS_EMAIL_DRIVER=smtp 时必须配置发件人' });
+  } else if (value.ANCS_SMTP_URL !== undefined) {
+    issues.push({ variable: 'ANCS_EMAIL_DRIVER', message: '配置了 ANCS_SMTP_URL 却没有设 ANCS_EMAIL_DRIVER=smtp——发信配置不会静默生效，请补上驱动' });
+  }
+  if (value.ANCS_EMAIL_DRIVER === 'log' && value.NODE_ENV === 'production') {
+    issues.push({ variable: 'ANCS_EMAIL_DRIVER', message: '生产环境不得使用 log 发信驱动（邮件里的一次性链接会进日志）；请用 smtp' });
+  }
+  if (value.ANCS_EMAIL_DRIVER !== undefined && value.NODE_ENV === 'production') {
+    const linkBase = value.ANCS_PUBLIC_WEB_URL ?? value.BETTER_AUTH_URL;
+    if (linkBase === undefined || !linkBase.startsWith('https://')) {
+      issues.push({ variable: 'ANCS_PUBLIC_WEB_URL', message: '生产环境邮件链接必须指向 https 网站（配置 ANCS_PUBLIC_WEB_URL，或 https 的 BETTER_AUTH_URL）' });
+    }
+  }
+  return issues;
+}
+
+/**
+ * 每个工作区每月 AI 模型费用的部署缺省上限（美元）：套餐设了 aiSpendMicrosPerMonth 时以套餐为准。
+ * API（新的一轮开始前）与 Worker（每次模型调用前）都要读到同一个值。
+ * 生产必须显式配置：写金额（如 20 或 12.50）；确实不设上限写 unlimited。
+ */
+export const aiSpendEnvShape = {
+  ANCS_AI_MONTHLY_CAP_USD: z.string().trim()
+    .regex(/^(unlimited|\d{1,7}(\.\d{1,2})?)$/, 'ANCS_AI_MONTHLY_CAP_USD 必须是美元金额（如 20 或 12.50）或 unlimited').optional(),
+} satisfies z.ZodRawShape;
+
+/** 已校验的 ANCS_AI_MONTHLY_CAP_USD → 微美元；未配置或 unlimited → null（不设部署缺省上限）。 */
+export function resolveAiMonthlyCapMicros(value: string | undefined): number | null {
+  if (value === undefined || value === 'unlimited') return null;
+  const [whole = '0', cents = ''] = value.split('.');
+  return Number(whole) * 1_000_000 + Number(cents.padEnd(2, '0')) * 10_000;
+}
+
+/**
+ * 运维补充的模型单价（Worker；美元 / 百万 token，JSON，见 modelPriceOverridesSchema）。设了月度上限时，
+ * 内置表里没有的模型（如 DeepSeek、Elorian、Gemini）必须在这里给出单价，否则 AI 不调用这些模型（无法按额度控制费用）。
+ */
+export const modelPricesEnvShape = {
+  ANCS_MODEL_PRICES_JSON: z.string().trim().optional().superRefine((value, context) => {
+    if (value === undefined) return;
+    let parsed: unknown;
+    try { parsed = JSON.parse(value); } catch {
+      context.addIssue({ code: 'custom', message: 'ANCS_MODEL_PRICES_JSON 不是合法 JSON（例：{"模型名":{"input":0.5,"output":2}}，单位美元/百万 token）' });
+      return;
+    }
+    const result = modelPriceOverridesSchema.safeParse(parsed);
+    if (!result.success) context.addIssue({ code: 'custom', message: `ANCS_MODEL_PRICES_JSON 格式不对：${result.error.issues.map((issue) => `${issue.path.join('.')} ${issue.message}`).join('；').slice(0, 300)}` });
+  }),
+} satisfies z.ZodRawShape;
+
+/** 已校验的 ANCS_MODEL_PRICES_JSON → 运维补充的单价（未配置 = 空）。 */
+export function parseModelPriceOverrides(value: string | undefined): ModelPriceOverrides {
+  return value === undefined ? {} : modelPriceOverridesSchema.parse(JSON.parse(value));
+}
+
+export function crossCheckAiSpendEnv(value: { NODE_ENV?: 'development' | 'test' | 'production' | undefined; ANCS_AI_MONTHLY_CAP_USD?: string | undefined }): EnvIssue[] {
+  if (value.NODE_ENV === 'production' && value.ANCS_AI_MONTHLY_CAP_USD === undefined) {
+    return [{ variable: 'ANCS_AI_MONTHLY_CAP_USD', message: '生产环境必须显式配置每个工作区每月 AI 费用上限（美元，如 20）；确实不设上限写 unlimited' }];
+  }
+  return [];
+}
+
+const storageDriverSchema = z.enum(['local', 's3'], { message: 'ANCS_STORAGE_DRIVER 只能是 local 或 s3' }).default('local');
+
+export type S3StorageEnv = { [K in keyof typeof s3StorageEnvShape]?: string | undefined };
+
+/** 存储驱动的跨字段规则（API、Worker、清理 CLI 共用）。 */
+export function crossCheckStorageEnv(value: { ANCS_STORAGE_DRIVER: 'local' | 's3' } & S3StorageEnv): EnvIssue[] {
+  if (value.ANCS_STORAGE_DRIVER !== 's3') return [];
+  const issues: EnvIssue[] = [];
+  if (value.ANCS_S3_BUCKET === undefined) issues.push({ variable: 'ANCS_S3_BUCKET', message: 'ANCS_STORAGE_DRIVER=s3 时必须配置桶名' });
+  if (value.ANCS_S3_REGION === undefined) issues.push({ variable: 'ANCS_S3_REGION', message: 'ANCS_STORAGE_DRIVER=s3 时必须配置区域（R2 写 auto）' });
+  if ((value.ANCS_S3_ACCESS_KEY_ID === undefined) !== (value.ANCS_S3_SECRET_ACCESS_KEY === undefined)) {
+    const pair = [['ANCS_S3_ACCESS_KEY_ID', value.ANCS_S3_ACCESS_KEY_ID], ['ANCS_S3_SECRET_ACCESS_KEY', value.ANCS_S3_SECRET_ACCESS_KEY]] as const;
+    const missingHalf = pair.find(([, configured]) => configured === undefined)![0];
+    issues.push({ variable: missingHalf, message: '访问密钥两项要么都配，要么都不配（都不配时用运行环境的凭据链）' });
+  }
+  if (value.ANCS_S3_PUBLIC_ENDPOINT !== undefined && value.ANCS_S3_ENDPOINT === undefined) {
+    issues.push({ variable: 'ANCS_S3_PUBLIC_ENDPOINT', message: '只有配置了 ANCS_S3_ENDPOINT 时才需要单独的浏览器端点' });
+  }
+  return issues;
+}
 
 /** API 服务环境（apps/api）。 */
 export const apiEnvSchema = z.object({
@@ -95,11 +243,17 @@ export const apiEnvSchema = z.object({
    */
   ANCS_CREDENTIAL_KEYS: z.string().min(1, 'ANCS_CREDENTIAL_KEYS 不能为空字符串（格式 v1:<base64 32B>）').optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL（如 https://api.example.com）').optional(),
-  /** 存储驱动：V1 仅 local（S3/R2 适配器未实现 → 明确失败，不静默降级） */
-  ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local（S3/R2 适配器属后续阶段）' }).default('local'),
+  /** 存储驱动：local（单机磁盘，经 API 端点转发字节）| s3（S3 兼容对象存储，浏览器预签名直传；见 s3StorageEnvShape） */
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
+  /**
+   * 旧 V4 流水线（脚本 / 分镜 / 旧编辑器的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）：
+   * mock = 装配测试替身（开发缺省）；off = 不装配，相关端点 501（**生产缺省**）。V6 共看片室、文章、自主制作不依赖它们。
+   */
+  ANCS_LEGACY_PIPELINE: z.enum(['mock', 'off'], { message: 'ANCS_LEGACY_PIPELINE 只能是 mock 或 off' }).optional(),
   /** LLM 驱动：V1 仅 mock（真实适配器需凭据 → 未实现驱动名明确失败） */
   ANCS_LLM_DRIVER: z.enum(['mock'], { message: 'ANCS_LLM_DRIVER 仅支持 mock（真实 LLM 适配器随凭据接入）' }).default('mock'),
   /** TTS 驱动：V1 仅 mock */
@@ -125,6 +279,7 @@ export const apiEnvSchema = z.object({
   ANCS_OPS_REAUTH_SECONDS: z.coerce.number().int().min(30).max(1800).default(300),
   /** 未订阅 workspace 的默认套餐（P09-01；预上线默认 ENTERPRISE；**SaaS 上线门（P09-06）要求 FREE**） */
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  ...aiSpendEnvShape,
   /** 收款驱动（P09-02）：mock=脚本化（仅开发/测试，警告）；stripe 需凭据（未实现→启动失败）；缺省=未配置（收款端点 501 fail-closed） */
   ANCS_PAYMENTS_DRIVER: z.enum(['mock', 'stripe'], { message: 'ANCS_PAYMENTS_DRIVER 仅支持 mock | stripe' }).optional(),
   /** Mock 收款签名密钥（ANCS_PAYMENTS_DRIVER=mock 时必填；≥16） */
@@ -148,15 +303,32 @@ export const apiEnvSchema = z.object({
   ).optional(),
   /** 前置可信代理跳数（0 = 不信任 X-Forwarded-For；按 IP 限流依赖它取得真实客户端地址） */
   ANCS_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5, 'ANCS_TRUST_PROXY_HOPS ≤ 5').default(0),
+  /**
+   * 优雅退出（生产部署）：收到 SIGTERM 后先标记"排空"（/ready 返回 503）并等待这么多秒让负载均衡摘掉实例，
+   * 再停止接新连接、等进行中的请求处理完；超过 ANCS_SHUTDOWN_TIMEOUT_SECONDS 强制退出。
+   */
+  ANCS_SHUTDOWN_DRAIN_SECONDS: z.coerce.number().int().min(0).max(120).default(0),
+  ANCS_SHUTDOWN_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(600).default(25),
   /** 限流开关（生产不得关闭） */
   ANCS_RATE_LIMIT: z.enum(['enforce', 'off'], { message: 'ANCS_RATE_LIMIT 仅支持 enforce | off' }).default('enforce'),
+  /** 共享限流（多台 API 共用额度）：Redis 地址；不配则每个 API 进程各自限流 */
+  ANCS_RATE_LIMIT_REDIS_URL: z.string().regex(/^rediss?:\/\//, 'ANCS_RATE_LIMIT_REDIS_URL 必须是 redis:// 或 rediss:// 地址').optional(),
+  /**
+   * 注册方式（D-04）：closed = 只能由运营建账号（缺省）；invite = 只有收到邀请（平台邀请或工作区邀请）的邮箱能注册；
+   * open = 任何人。invite / open 需要发信（ANCS_EMAIL_DRIVER）。所有者决定首轮内测上线用 invite。
+   */
+  ANCS_SIGNUP_MODE: z.enum(['closed', 'invite', 'open'], { message: 'ANCS_SIGNUP_MODE 只能是 closed、invite 或 open' }).default('closed'),
+  ...emailEnvShape,
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
 /** 跨字段规则（API；schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckEmailEnv(value), ...crossCheckAiSpendEnv(value)];
+  if (value.ANCS_SIGNUP_MODE !== 'closed' && value.ANCS_EMAIL_DRIVER === undefined) {
+    issues.push({ variable: 'ANCS_SIGNUP_MODE', message: `ANCS_SIGNUP_MODE=${value.ANCS_SIGNUP_MODE} 需要发信（注册要发验证邮件）：请配置 ANCS_EMAIL_DRIVER` });
+  }
   if (value.PLATFORM_PROVIDER_KEYS !== undefined && value.PLATFORM_PROVIDER_KEYS.trim() !== '') {
     issues.push({ variable: 'PLATFORM_PROVIDER_KEYS', message: '该变量名从未生效，已统一为 ANCS_PLATFORM_PROVIDER_KEYS（格式 供应商:密钥,…）——请改名后重启' });
   }
@@ -198,7 +370,7 @@ export function crossCheckApiEnv(value: ApiEnv): EnvIssue[] {
     if (value.ANCS_STORAGE_DRIVER === 'local') {
       issues.push({
         variable: 'ANCS_STORAGE_DRIVER',
-        message: 'live 模式不得使用 local 存储（需 S3/R2 等对象存储适配器——未实现前不得开启 SaaS）',
+        message: 'live 模式不得使用 local 存储（单机磁盘无法多机扩容；设 ANCS_STORAGE_DRIVER=s3）',
       });
     }
     if (value.BETTER_AUTH_URL === undefined || !value.BETTER_AUTH_URL.startsWith('https://')) {
@@ -218,6 +390,8 @@ export const workerEnvSchema = z.object({
   /** 存储签名 URL 的公开基址回退（与 API 同一规则：ANCS_STORAGE_PUBLIC_BASE_URL → BETTER_AUTH_URL → localhost） */
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
   ANCS_DEFAULT_PLAN: z.enum(['FREE', 'CREATOR', 'PRO', 'STUDIO', 'ENTERPRISE'], { message: 'ANCS_DEFAULT_PLAN 仅支持 FREE/CREATOR/PRO/STUDIO/ENTERPRISE' }).optional(),
+  ...aiSpendEnvShape,
+  ...modelPricesEnvShape,
   ANCS_WORKER_ID: nonEmpty('ANCS_WORKER_ID').optional(),
   ANCS_WORKER_TICK_MS: z.coerce.number().int().min(50, 'ANCS_WORKER_TICK_MS ≥ 50').max(60_000, 'ANCS_WORKER_TICK_MS ≤ 60000').default(1000),
   ANCS_WORKER_LEASE_SECONDS: z.coerce.number().int().min(5, 'ANCS_WORKER_LEASE_SECONDS ≥ 5').max(3600, 'ANCS_WORKER_LEASE_SECONDS ≤ 3600').default(60),
@@ -233,9 +407,17 @@ export const workerEnvSchema = z.object({
   /** 队列驱动：db（默认，权威状态轮询）| bullmq（需 REDIS_URL） */
   ANCS_QUEUE_DRIVER: z.enum(['db', 'bullmq'], { message: 'ANCS_QUEUE_DRIVER 仅支持 db | bullmq' }).default('db'),
   REDIS_URL: z.string().url('REDIS_URL 必须是完整 URL（如 redis://localhost:6379）').optional(),
+  /**
+   * AI 生成合成内容标识（GB 45438-2025 附录 E）：生成合成服务提供者编码，写进导出文件 AIGC 元数据的
+   * ContentProducer / ContentPropagator。面向中国境内公众提供服务时必须配置（运营方的统一社会信用代码等，见手册）。
+   */
+  ANCS_AIGC_PRODUCER_CODE: z.string().regex(/^[0-9A-Za-z_-]{1,64}$/, 'ANCS_AIGC_PRODUCER_CODE 只能是 1–64 位字母、数字、_ 或 -').optional(),
+  /** 与 API 相同的存储驱动与桶（同一份对象） */
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
   REMOTION_BROWSER_EXECUTABLE: nonEmpty('REMOTION_BROWSER_EXECUTABLE').optional(),
   ANCS_RENDER_EXECUTOR_CMD: nonEmpty('ANCS_RENDER_EXECUTOR_CMD').optional(),
   ANCS_MOTION_VALIDATOR_CMD: nonEmpty('ANCS_MOTION_VALIDATOR_CMD').optional(),
@@ -253,11 +435,11 @@ export const workerEnvSchema = z.object({
   ANCS_ASR_EXECUTABLE: nonEmpty('ANCS_ASR_EXECUTABLE').optional(),
   ANCS_ASR_ARGS_JSON: z.string().refine((value) => { try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'); } catch { return false; } }, 'ANCS_ASR_ARGS_JSON 必须是字符串数组 JSON').optional(),
   /**
-   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini = 视觉模型逐帧写镜头说明（需对应密钥）。
+   * 视觉分析驱动（V6-1b）：process = 运维配置的子进程；anthropic / gemini / elorian = 视觉模型逐帧写镜头说明（需对应密钥）。
    * 缺省：配置了 ANCS_VISUAL_ANALYSIS_EXECUTABLE 则为 process，否则不装配（视觉分析任务明确失败"未配置"）。
    */
-  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini' }).optional(),
-  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest） */
+  ANCS_VISUAL_ANALYSIS_DRIVER: z.enum(['process', 'anthropic', 'gemini', 'elorian'], { message: 'ANCS_VISUAL_ANALYSIS_DRIVER 仅支持 process | anthropic | gemini | elorian' }).optional(),
+  /** 视觉理解模型 id（缺省 anthropic: claude-haiku-5-5；gemini: gemini-flash-lite-latest；elorian: elorian-1-agent） */
   ANCS_VISION_MODEL: nonEmpty('ANCS_VISION_MODEL').optional(),
   /** 视觉分析子进程协议：最后一个参数为源文件路径，stdout 返回 GeneratedMediaVisualAnalysis JSON。 */
   ANCS_VISUAL_ANALYSIS_EXECUTABLE: nonEmpty('ANCS_VISUAL_ANALYSIS_EXECUTABLE').optional(),
@@ -268,10 +450,14 @@ export const workerEnvSchema = z.object({
   ANCS_DISABLE_RENDER: z.enum(['0', '1']).optional(),
   ANCS_WORKER_ONCE: z.enum(['0', '1']).optional(),
   /**
-   * 通用导演 Agent 的模型驱动（V6-1）：anthropic = 真实 Claude（需 ANTHROPIC_API_KEY）；gemini = Google Gemini（需 GEMINI_API_KEY）。
+   * 通用导演 Agent：anthropic / gemini / deepseek，分别要求对应的服务端密钥。
    * 未配置时不装配真实模型：AI 轮次明确失败（AGENT_MODEL_NOT_CONFIGURED），不回退 Mock。风格撰写（蒸馏器）用同一个模型。
    */
-  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini' }).optional(),
+  ANCS_AGENT_DRIVER: z.enum(['anthropic', 'gemini', 'deepseek'], { message: 'ANCS_AGENT_DRIVER 仅支持 anthropic | gemini | deepseek' }).optional(),
+  /** DeepSeek 导演密钥，仅由 Worker 入口注入适配器。 */
+  DEEPSEEK_API_KEY: z.string().min(16, 'DEEPSEEK_API_KEY 过短').optional(),
+  /** Elorian 密钥（视觉理解 driver=elorian），仅由 Worker 入口注入适配器；不写日志、不下发客户端。 */
+  ELORIAN_API_KEY: z.string().min(16, 'ELORIAN_API_KEY 过短').optional(),
   /** Claude API Key（只在 Worker 进程内存中使用；绝不写日志、不进错误返回、不下发客户端） */
   ANTHROPIC_API_KEY: z.string().min(16, 'ANTHROPIC_API_KEY 过短').optional(),
   /**
@@ -284,7 +470,7 @@ export const workerEnvSchema = z.object({
    * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
    */
   GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
-  /** 导演模型 id（缺省 anthropic: claude-opus-5-5；gemini: gemini-flash-latest） */
+  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，含图像历史时用 deepseek-flash） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
@@ -393,11 +579,11 @@ export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 
 /** 跨字段规则（schema 之外的可读校验；返回全部问题）。 */
 export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
-  const issues: EnvIssue[] = [];
+  const issues: EnvIssue[] = [...crossCheckStorageEnv(value), ...crossCheckAiSpendEnv(value)];
   if (value.ANCS_QUEUE_DRIVER === 'bullmq' && value.REDIS_URL === undefined) {
     issues.push({ variable: 'REDIS_URL', message: 'ANCS_QUEUE_DRIVER=bullmq 时必须配置 REDIS_URL' });
   }
-  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_SECRET === undefined) {
+  if (value.NODE_ENV === 'production' && value.ANCS_STORAGE_DRIVER === 'local' && value.ANCS_STORAGE_SECRET === undefined) {
     issues.push({
       variable: 'ANCS_STORAGE_SECRET',
       message: '生产环境必须显式配置 ANCS_STORAGE_SECRET（≥16）——与 API 同一把签名密钥，不得从 BETTER_AUTH_SECRET 派生',
@@ -411,6 +597,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'elorian' && value.ELORIAN_API_KEY === undefined) {
+    issues.push({ variable: 'ELORIAN_API_KEY', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=elorian 时必须配置 ELORIAN_API_KEY（fail-closed，不回退 Mock）' });
   }
   if (value.ANCS_VISUAL_ANALYSIS_DRIVER === 'process' && value.ANCS_VISUAL_ANALYSIS_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_VISUAL_ANALYSIS_EXECUTABLE', message: 'ANCS_VISUAL_ANALYSIS_DRIVER=process 时必须配置 ANCS_VISUAL_ANALYSIS_EXECUTABLE' });
@@ -431,6 +620,9 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_AGENT_DRIVER === 'anthropic' && value.ANTHROPIC_API_KEY === undefined) {
     issues.push({ variable: 'ANTHROPIC_API_KEY', message: 'ANCS_AGENT_DRIVER=anthropic 时必须配置 ANTHROPIC_API_KEY（fail-closed，不回退 Mock）' });
+  }
+  if (value.ANCS_AGENT_DRIVER === 'deepseek' && value.DEEPSEEK_API_KEY === undefined) {
+    issues.push({ variable: 'DEEPSEEK_API_KEY', message: 'ANCS_AGENT_DRIVER=deepseek 时必须配置 DEEPSEEK_API_KEY（fail-closed，不回退 Mock）' });
   }
   if (value.ANCS_ASR_DRIVER === 'process' && value.ANCS_ASR_EXECUTABLE === undefined) {
     issues.push({ variable: 'ANCS_ASR_EXECUTABLE', message: 'ANCS_ASR_DRIVER=process 时必须配置 ANCS_ASR_EXECUTABLE' });
@@ -466,14 +658,67 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
 }
 
 /** 保留清理 CLI 环境（apps/api retention:sweep）：与 API 同一存储签名规则。 */
+/** 建首个账号（部署后一次性运行；公开注册上线前的唯一建号方式）。密码只从环境变量读，不经命令行参数（会进 shell 历史与进程列表）。 */
+export const createUserCliEnvSchema = z.object({
+  ...baseEnvShape,
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ANCS_NEW_USER_EMAIL: z.string().email('ANCS_NEW_USER_EMAIL 必须是邮箱'),
+  ANCS_NEW_USER_NAME: z.string().trim().min(1).max(80).default('Owner'),
+  ANCS_NEW_USER_PASSWORD: z.string().min(12, 'ANCS_NEW_USER_PASSWORD 至少 12 位'),
+});
+
+/** 内测邀请（D-04 invite 模式）：运营给邮箱发注册邀请 / 列出 / 撤销。配了发信就同时寄出邀请邮件。 */
+export const signupInviteCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
+  ...emailEnvShape,
+});
+export type SignupInviteCliEnv = z.infer<typeof signupInviteCliEnvSchema>;
+
+/** 迁移任务（部署时一次性运行，只需要数据库连接）。 */
+export const migrateCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+});
+
+const commaList = (value: string | undefined): string[] => (value ?? '').split(',').map((item) => item.trim()).filter((item) => item !== '');
+/** 能登录运营后台的角色（机器身份 SERVICE_ACCOUNT 不能） */
+export const OPS_GRANTABLE_ROLES = OPS_ROLES.filter((role): role is Exclude<typeof role, 'SERVICE_ACCOUNT'> => role !== 'SERVICE_ACCOUNT');
+
+/**
+ * 运营后台授权（I-13；apps/api/dist/cli/ops-grant.js）：给已有账号开通运营后台（/admin）的角色。
+ * 角色逗号分隔（缺省 PRODUCTION_OPERATOR；SERVICE_ACCOUNT 不能登录后台，不在可选范围）；
+ * 工作区逗号分隔（可选）：按工作区生效的操作只对列出的工作区开放，平台级操作总是开放。
+ */
+export const opsGrantCliEnvSchema = z.object({
+  DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
+  /** 与 API 相同：运营会话属于哪个环境 */
+  ANCS_OPS_ENVIRONMENT: z.enum(['DEVELOPMENT', 'TEST', 'STAGING', 'PRODUCTION'], { message: 'ANCS_OPS_ENVIRONMENT 必须与 API 相同（生产为 PRODUCTION）' }),
+  ANCS_OPS_GRANT_EMAIL: z.string().trim().toLowerCase().pipe(z.string().email('ANCS_OPS_GRANT_EMAIL 必须是已注册账号的邮箱')),
+  ANCS_OPS_GRANT_ROLES: z.string().optional().transform(commaList).pipe(z.array(z.enum(OPS_GRANTABLE_ROLES as [Exclude<(typeof OPS_ROLES)[number], 'SERVICE_ACCOUNT'>, ...Exclude<(typeof OPS_ROLES)[number], 'SERVICE_ACCOUNT'>[]], { message: `ANCS_OPS_GRANT_ROLES 只能是：${OPS_GRANTABLE_ROLES.join(', ')}` })))
+    .transform((roles) => (roles.length === 0 ? ['PRODUCTION_OPERATOR' as const] : [...new Set(roles)])),
+  ANCS_OPS_GRANT_WORKSPACES: z.string().optional().transform(commaList).pipe(z.array(z.string().regex(/^ws_[A-Za-z0-9_-]+$/, 'ANCS_OPS_GRANT_WORKSPACES 是逗号分隔的工作区 ID（ws_…）')))
+    .transform((ids) => [...new Set(ids)]),
+}).superRefine((value, context) => {
+  if (value.NODE_ENV === 'production' && value.ANCS_OPS_ENVIRONMENT !== 'PRODUCTION') {
+    context.addIssue({ code: 'custom', path: ['ANCS_OPS_ENVIRONMENT'], message: '生产进程必须显式配置 PRODUCTION 运营环境' });
+  }
+  if (value.NODE_ENV !== 'production' && value.ANCS_OPS_ENVIRONMENT === 'PRODUCTION') {
+    context.addIssue({ code: 'custom', path: ['ANCS_OPS_ENVIRONMENT'], message: '非生产进程不得授权 PRODUCTION 运营环境（请设 NODE_ENV=production）' });
+  }
+});
+export type OpsGrantCliEnv = z.infer<typeof opsGrantCliEnvSchema>;
+
 export const retentionCliEnvSchema = z.object({
   ...baseEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   BETTER_AUTH_URL: z.string().url('BETTER_AUTH_URL 必须是完整 URL').optional(),
-  ANCS_STORAGE_DRIVER: z.enum(['local'], { message: 'ANCS_STORAGE_DRIVER 仅支持 local' }).default('local'),
+  ANCS_STORAGE_DRIVER: storageDriverSchema,
   ANCS_STORAGE_SECRET: z.string().min(16, 'ANCS_STORAGE_SECRET 过短（≥16 字符）').optional(),
   ANCS_STORAGE_LOCAL_DIR: nonEmpty('ANCS_STORAGE_LOCAL_DIR').optional(),
   ANCS_STORAGE_PUBLIC_BASE_URL: z.string().url('ANCS_STORAGE_PUBLIC_BASE_URL 必须是完整 URL').optional(),
+  ...s3StorageEnvShape,
   ANCS_TRASH_RETENTION_DAYS: z.coerce.number().int().min(1, 'ANCS_TRASH_RETENTION_DAYS ≥ 1').max(3650).optional(),
   ANCS_IDEMPOTENCY_TTL_HOURS: z.coerce.number().int().min(1, 'ANCS_IDEMPOTENCY_TTL_HOURS ≥ 1').max(24 * 365).optional(),
 });
@@ -481,11 +726,25 @@ export const retentionCliEnvSchema = z.object({
 export type RetentionCliEnv = z.infer<typeof retentionCliEnvSchema>;
 
 /**
+ * 维护调度器（I-10；apps/api/dist/cli/scheduler.js）：按时间表运行已有的两个命令——
+ * 通知派发（event-dispatch，间隔秒数）与保留清理（retention-sweep，每天固定的 UTC 时刻）。
+ * 两个命令各自校验自己的配置（数据库、存储），调度器只校验时间表。
+ */
+export const schedulerEnvSchema = z.object({
+  /** 通知派发间隔（秒） */
+  ANCS_SCHEDULE_DISPATCH_SECONDS: z.coerce.number().int().min(10, 'ANCS_SCHEDULE_DISPATCH_SECONDS ≥ 10').max(3600, 'ANCS_SCHEDULE_DISPATCH_SECONDS ≤ 3600').default(60),
+  /** 保留清理每天运行的 UTC 时刻（HH:MM） */
+  ANCS_SCHEDULE_RETENTION_UTC: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'ANCS_SCHEDULE_RETENTION_UTC 必须是 HH:MM（UTC，24 小时制）').default('03:30'),
+});
+export type SchedulerEnv = z.infer<typeof schedulerEnvSchema>;
+
+/**
  * V6-2 Realtime Gateway（apps/realtime）：流式语音识别与指代绑定的独立进程。
  * 只校验语音会话的短期凭证（与 API 同一把 ANCS_VOICE_SESSION_SECRET），不读写工程。
  */
 export const realtimeEnvSchema = z.object({
   DATABASE_URL: nonEmpty('DATABASE_URL（PostgreSQL 连接串）'),
+  ...dbPoolEnvShape,
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3002),
   /** 与 API 相同的语音会话签名密钥（网关用它校验浏览器带来的短期凭证） */
@@ -544,6 +803,11 @@ export function crossCheckRealtimeEnv(value: RealtimeEnv): EnvIssue[] {
     issues.push({ variable: 'ANCS_ALLOWED_ORIGINS', message: 'ANCS_ALLOWED_ORIGINS 必须是逗号分隔的完整 origin（如 https://app.example.com，不含路径）' });
   }
   return issues;
+}
+
+/** 旧 V4 流水线是否装配：显式配置优先；生产缺省 off（不装配测试替身，生产守卫不再需要 Mock 许可），其余缺省 mock */
+export function resolveLegacyPipeline(value: Pick<ApiEnv, 'ANCS_LEGACY_PIPELINE' | 'NODE_ENV'>): 'mock' | 'off' {
+  return value.ANCS_LEGACY_PIPELINE ?? (value.NODE_ENV === 'production' ? 'off' : 'mock');
 }
 
 /** Edge 允许的浏览器来源（V5-M4）：显式配置优先；否则 BETTER_AUTH_URL 的 origin，非生产另加本地 Web 开发端口。 */

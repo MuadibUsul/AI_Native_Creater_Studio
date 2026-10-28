@@ -214,7 +214,7 @@ try {
     await tab.getByRole('button', { name: '登录', exact: true }).click();
     await tab.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 20_000 });
     await tab.goto(`${env.baseUrl}/w/${workspace.id}/studio/${ref.projectId}`, { waitUntil: 'networkidle' });
-    await tab.locator('video').waitFor({ timeout: 120_000 });
+    await tab.locator('video[aria-label]').waitFor({ timeout: 120_000 });
     for (const [name, clip] of Object.entries(clips)) await tab.evaluate(([clipName, base64]) => globalThis.__mic.load(clipName, base64, 24_000), [name, clip.base64]);
     return tab;
   }

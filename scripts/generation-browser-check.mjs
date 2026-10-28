@@ -148,7 +148,7 @@ try {
   const avatarProposal = JSON.stringify(await client.projects.proposal(workspace.id, projectId, avatar.proposalId));
   if (!avatarProposal.includes('"AV1"') || !avatarProposal.includes('set_clip_transform')) throw new Error('avatar clip is not placed with its voice in the corner');
   await page.getByRole('button', { name: /^片段 数字人出镜，/ }).first().waitFor();
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   await video.evaluate((element) => new Promise((done) => { element.pause(); element.addEventListener('seeked', () => done(undefined), { once: true }); element.currentTime = 1; }));
   await page.waitForTimeout(400);
   await shot('05-avatar-trial');

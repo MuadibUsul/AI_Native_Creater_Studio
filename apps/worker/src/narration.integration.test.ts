@@ -245,10 +245,21 @@ describe('V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚
     expect(volume).toBeGreaterThan(-35);
     const duration = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString());
     expect(Math.abs(duration - Number(second.at[1]))).toBeLessThan(0.2);
-    // 1 秒处是标题卡：角落是卡片底色 #0f1720（终渲染画面来自图解卡，不是黑场）
+    // 1 秒处是标题卡：右下角是卡片底色 #0f1720（终渲染画面来自图解卡，不是黑场；左上角留给 AI 生成标识）
     const raw = execFileSync('ffmpeg', ['-nostdin', '-v', 'error', '-ss', '1', '-i', file, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
-    const corner = [...raw.subarray((5 * PROFILE.width + 5) * 3, (5 * PROFILE.width + 5) * 3 + 3)];
+    const pixel = (x: number, y: number): number[] => [...raw.subarray((y * PROFILE.width + x) * 3, (y * PROFILE.width + x) * 3 + 3)];
+    const corner = pixel(PROFILE.width - 6, PROFILE.height - 6);
     expect(Math.abs(corner[0]! - 0x0f) + Math.abs(corner[1]! - 0x17) + Math.abs(corner[2]! - 0x20)).toBeLessThan(24);
+    // 讲述是合成语音（GENERATED）：成片带 AI 生成标识——开头左上角有白色文字，文件元数据有 AIGC 字段（附录 E 键序）
+    let brightInBadge = 0;
+    for (let y = 5; y < 30; y += 1) for (let x = 5; x < 60; x += 1) if (Math.min(...pixel(x, y)) > 200) brightInBadge += 1;
+    expect(brightInBadge).toBeGreaterThan(5);
+    const tags = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', file]).toString()) as { format: { tags: Record<string, string> } };
+    expect(Object.keys(JSON.parse(tags.format.tags['AIGC']!) as Record<string, string>)).toEqual(['Label', 'ContentProducer', 'ProduceID', 'ReservedCode1', 'ContentPropagator', 'PropagateID', 'ReservedCode2']);
+    expect(JSON.parse(tags.format.tags['AIGC']!)).toMatchObject({ Label: '1', ProduceID: run.id, PropagateID: run.id });
+    // 未指定标识语言 → 英文（面向全球市场）；界面按当前语言传 labelLanguage
+    expect((finished.outputs['render'] as { contentLabel: { explicitText: string } | null }).contentLabel?.explicitText).toBe('AI-generated');
+    expect((finished.outputs['qa'] as { checks: { name: string; passed: boolean }[] }).checks.find((check) => check.name === 'aigc.metadata')?.passed).toBe(true);
   });
 
   it('进程驱动（部署方接入任意供应商）：按协议逐句调用参考实现，拼成一条音频，句界精确、可解码', { timeout: 120_000 }, async () => {

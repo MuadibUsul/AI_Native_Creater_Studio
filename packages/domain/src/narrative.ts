@@ -32,7 +32,7 @@ import type { DomainDeps } from './deps.js';
 
 function requireLlm(deps: DomainDeps): LlmAdapter {
   if (deps.llm === undefined) {
-    throw new ApiFailure(ERROR_CODES.INTERNAL, 'LLM 适配器未配置（DomainDeps.llm）', 500);
+    throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '本部署未装配叙事生成（旧 V4 流水线 off）：fail-closed', 501, { reason: NARRATIVE_ERROR_REASONS.GENERATOR_UNAVAILABLE });
   }
   return deps.llm;
 }

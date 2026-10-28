@@ -1,4 +1,4 @@
-export { account, session, user, verification, twoFactor } from './auth.js';
+export { account, session, signupInvitations, user, verification, twoFactor } from './auth.js';
 export { userAppearancePreferences } from './appearance.js';
 export { adminPrincipals, adminRoleGrants, adminRoleScopes, adminSessions } from './ops-auth.js';
 export { adminPermissionPolicyVersions, adminEmergencyGrants } from './ops-governance.js';
@@ -41,7 +41,7 @@ export { projectSequences, sequenceTracks, sequenceClips } from './composition.j
 export { projectObjectLocks } from './object-locks.js';
 export { projectOpLog, referenceEdges } from './op-log.js';
 export { workflowRuns, workflowSteps } from './workflow.js';
-export { agentSessions, agentTurns, agentTurnMessages } from './agent.js';
+export { agentSessions, agentTurns, agentTurnMessages, aiUsageRecords } from './agent.js';
 export { previewSegments, sequencePreviews } from './previews.js';
 export { projectCompositionMigrations, projectVersionCompositionProjections } from './composition-migration.js';
 export {
@@ -83,5 +83,7 @@ export { renderApprovals } from './render-approvals.js';
 export { plans, workspaceSubscriptions } from './plans.js';
 export { billingEvents, creditPacks, workspaceBillingStates } from './payments.js';
 export { strategyPacks } from './strategy.js';
+export { productionPlans } from './production-plans.js';
+export { autonomousRuns } from './autonomous-runs.js';
 export { reviewNotes, reviewRounds } from './review.js';
 export { generationRequests, identityConsentRecords, identityReferences } from './paid-generation.js';

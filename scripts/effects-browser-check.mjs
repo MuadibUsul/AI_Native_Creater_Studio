@@ -82,7 +82,7 @@ try {
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 20_000 });
   await page.goto(`${env.baseUrl}/w/${workspace.id}/studio/${ref.projectId}`, { waitUntil: 'networkidle' });
   await page.getByText('当前版本', { exact: true }).waitFor({ timeout: 120_000 });
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   const seekTo = async (seconds) => {
     await video.evaluate((element, at) => new Promise((done) => { element.pause(); element.addEventListener('seeked', () => done(undefined), { once: true }); element.currentTime = at; }), seconds);
     await page.waitForTimeout(300);

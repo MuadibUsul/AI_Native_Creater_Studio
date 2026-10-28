@@ -5,6 +5,7 @@ import { apiError, mockClient, renderWithClient } from '@/test-utils';
 import { MESSAGES } from '@/i18n/messages';
 import { StudioRoom } from './StudioRoom';
 import { exportSize } from './StudioExport';
+import { studioTaskRows } from './StudioTasks';
 import { formatClock, frameTimeAtSeconds, framesPerSecond, pointerSecondsText } from './studio-time';
 
 /**
@@ -50,6 +51,7 @@ const studioState = (overrides: Record<string, unknown> = {}) => ({
   narration: [],
   generations: [],
   generationBudget: { configured: false, period: null, limitMicros: null, spentMicros: 0, reservedMicros: 0 },
+  aiSpend: { period: '2026-10', capMicros: null, capSource: null, spentMicros: 0, unpricedCalls: 0, reached: false, resetsAt: '2026-11-01T00:00:00.000Z' },
   cost: { projectId: 'prj_1', turns: 1, usage: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }, costMicros: 120_000, unpricedCalls: 0 },
   ...overrides,
 });
@@ -199,6 +201,140 @@ describe('V6-1c 共看片室', () => {
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
     await userEvent.click(await screen.findByRole('button', { name: '让 AI 剪第一版' }));
     await waitFor(() => expect(startTurn).toHaveBeenCalledWith('ws_1', 'ses_1', { message: '用这些素材剪出第一版。', pointer: { timeRange: null, clipIds: [], frameRegion: null } }, expect.objectContaining({ idempotencyKey: expect.any(String) })));
+  });
+
+  it('无限画布：成片屏幕旁边并排素材与制作计划（场景、剪辑意图）画框；视图按钮切换看全部 / 只看成片；画框里打开素材面板', async () => {
+    const plan = {
+      id: 'ppl_1', projectId: 'prj_1', version: 2, baseRevision: 4, currentRevision: 5, changedSincePlan: true, turnId: 'agt_1', createdAt: '2026-10-21T00:00:00.000Z',
+      blueprint: { logline: '冰川在后退', audience: '', openingPromise: '', structure: '钩子 → 出发 → 冰川', emotionArc: '', pacing: '', styleNotes: '', targetDurationSeconds: 30, paceTarget: null, mustKeep: [], avoid: [] },
+      scenes: [{ id: 'scene_hook', title: '开场', goal: '先给最好看的画面', window: { start: '0', end: '4' }, sources: [{ footageId: 'av_g', from: '6', to: '9.5' }], needs: [], acceptance: [],
+        intents: [{ id: 'intent_hook', type: 'HOOK', targetFeeling: '一眼想看下去', reason: '冰川航拍最抓人', timeRange: null, evidence: [], rejectedAlternatives: [] }] }],
+    };
+    const { sdk } = client({ turns: [turn()], extra: { autonomy: { latestPlan: vi.fn().mockResolvedValue(plan) } } });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const canvas = await screen.findByRole('region', { name: '作品画面' });
+    const footageFrame = await within(canvas).findByRole('region', { name: '素材 2' });
+    expect(within(footageFrame).getByText('glacier.mp4')).toBeTruthy();
+    const planFrame = await within(canvas).findByRole('region', { name: '制作计划 · 第 2 版' });
+    expect(within(planFrame).getByText('冰川在后退')).toBeTruthy();
+    expect(within(planFrame).getByText('结构：钩子 → 出发 → 冰川 · 目标约 30 秒')).toBeTruthy();
+    expect(within(planFrame).getByText('计划之后作品又改过')).toBeTruthy();
+    expect(within(planFrame).getByText('钩子').closest('li')?.getAttribute('title')).toBe('冰川航拍最抓人');
+    const view = within(canvas).getByRole('toolbar', { name: '画布视图' });
+    expect(within(view).getByRole('button', { name: '看全部' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(within(view).getByRole('button', { name: '只看成片' }));
+    expect(within(view).getByRole('button', { name: '只看成片' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(within(view).getByRole('button', { name: '放大' }));
+    expect(within(view).getByRole('button', { name: '只看成片' }).getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(within(footageFrame).getByRole('button', { name: '素材面板' }));
+    expect(screen.getByRole('complementary', { name: '素材' })).toBeTruthy();
+  });
+
+  it('剪辑师在场：开场按工程事实打招呼；这一轮进行中显示"第 N 步 · 在做什么"，画布上的剪辑师光标移到对应画框；没开语音时画布上有"和剪辑师说话"', async () => {
+    const idle = client({ turns: [] });
+    const { unmount } = renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, idle.sdk);
+    expect(await screen.findByText('2 段素材已就绪，共约 12 秒。')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '和剪辑师说话' })).toBeTruthy();
+    expect(document.querySelector('[data-target]')).toBeNull();
+    unmount();
+
+    const working = turn({ id: 'agt_3', status: 'RUNNING', reply: null, proposalId: null, completedAt: null,
+      toolCalls: [{ name: 'look_at_footage', ok: true, summary: 'looked at glacier.mp4' }, { name: 'edit_timeline', ok: true, summary: '3 edits applied' }] });
+    const busy = client({ turns: [working] });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, busy.sdk);
+    expect(await screen.findByText('第 2 步 · 在剪')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('[data-target="monitor"]')?.textContent).toBe('剪辑师 · 在剪'));
+  });
+
+  it('V6-9 交给 AI 剪完：还没剪时画布给出入口，打开设置签署并开始；进行中时进度卡在对话里、可停下，画布不再给入口', async () => {
+    const policy = { approval: 'ASK_EACH', budgetMicros: null, perGenerationMicros: null, allowOwnLikeness: false, maxRetriesPerTask: 2, signature: null };
+    const active = {
+      id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', goal: '60 秒冰岛自驾', targetDurationSeconds: 60, strategyPackId: null, approval: 'ASK_EACH', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_9', workflowRunId: 'wfr_9', proposalId: null, adoptedRevision: null,
+      progress: { steps: 3, lastStep: '计划：4 场', lastTool: 'plan_production' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    const sign = vi.fn().mockResolvedValue({ ...policy, budgetMicros: 2_000_000, signature: { userId: 'usr_1', signedAt: '2026-10-21T00:00:00.000Z', version: 1 } });
+    const startRun = vi.fn().mockResolvedValue({ ...active, status: 'WAITING_FOR_FOOTAGE' });
+    const idle = client({ turns: [], state: studioState({ project: { ...studioState().project, autonomy: policy }, autonomousRun: null }), extra: { autonomy: { sign, startRun, revoke: vi.fn(), cancelRun: vi.fn() } } });
+    const { unmount } = renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, idle.sdk);
+    await userEvent.click(await screen.findByRole('button', { name: '交给 AI 剪完…' }));
+    const dialog = screen.getByRole('dialog', { name: '交给 AI 剪完' });
+    await userEvent.type(within(dialog).getByLabelText('你想要一条什么样的视频'), '60 秒冰岛自驾');
+    await userEvent.click(within(dialog).getByRole('button', { name: '交给 AI' }));
+    await waitFor(() => expect(startRun).toHaveBeenCalledWith('ws_1', 'prj_1', expect.objectContaining({ goal: '60 秒冰岛自驾', locale: 'zh-CN' }), expect.anything()));
+    expect(sign).toHaveBeenCalledWith('ws_1', 'prj_1', { approval: 'ASK_EACH', budgetMicros: 2_000_000 }, expect.anything());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    unmount();
+
+    const cancelRun = vi.fn().mockResolvedValue({ ...active, status: 'CANCELLED' });
+    const running = client({ turns: [], state: studioState({ project: { ...studioState().project, autonomy: policy }, autonomousRun: active }), extra: { autonomy: { cancelRun } } });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, running.sdk);
+    const chat = await screen.findByRole('region', { name: '和 AI 说' });
+    const card = await within(chat).findByRole('article', { name: 'AI 自己剪' });
+    expect(within(card).getByText('已做 3 步')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '交给 AI 剪完…' })).toBeNull();
+    expect((screen.getByRole('button', { name: '让 AI 剪第一版' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(within(card).getByRole('button', { name: '停下' }));
+    await waitFor(() => expect(cancelRun).toHaveBeenCalledWith('ws_1', 'prj_1', 'aut_1', { idempotencyKey: 'autonomy-cancel-aut_1' }));
+  });
+
+  it('V6-9 交给 AI 剪完：看到试改后 AI 按授权自己采用 → 版本变化时重读提案，画面换成当前版本（不再为已采用的提案请求预览）', async () => {
+    const run = {
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
+      progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    const checking = studioState({ autonomousRun: run });
+    const adopted = studioState({ project: { ...studioState().project, revision: 6 }, autonomousRun: { ...run, status: 'DELIVERED', adoptedRevision: 6, completedAt: '2026-10-21T00:01:30.000Z' } });
+    const { sdk } = client({ turns: [turn()], state: checking });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('试改预览 · 还没采用')).toBeTruthy();
+    expect(sdk.previews.request).toHaveBeenCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: 'prp_1' });
+    // AI 自检通过、按"自检通过就直接用"采用：服务端的提案已提交、工程到了第 6 版；之后再为这个提案请求预览会被拒绝
+    vi.mocked(sdk.studio.state).mockResolvedValue(adopted as never);
+    const adoptedDocument = projectState([{ id: 'clp_g', sequenceId: 'seq_1', trackId: 'trk_v', assetVersionId: 'av_g', sequenceRange: range(0, 90) }]);
+    vi.mocked(sdk.projects.state).mockResolvedValue({ document: { ...adoptedDocument.document, projectRevision: 6 } } as never);
+    vi.mocked(sdk.projects.proposal).mockResolvedValue({ ...proposal, status: 'COMMITTED', committedRevision: 6 } as never);
+    vi.mocked(sdk.previews.request).mockImplementation((_ws, _project, _sequence, input) => (input.proposalId === null
+      ? Promise.resolve(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 6, proposalId: null }) as never)
+      : Promise.reject(apiError(409, 'CONFLICT', 'proposal is not open'))));
+    vi.mocked(sdk.previews.get).mockResolvedValue(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 6, proposalId: null }) as never);
+    expect(await screen.findByText('当前版本', undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(sdk.previews.request).toHaveBeenLastCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: null });
+    expect(screen.queryByText('试改预览 · 还没采用')).toBeNull();
+    expect(screen.queryByText('预览生成失败')).toBeNull();
+  }, 10_000);
+
+  it('V6-9 交给 AI 剪完：试改刚出来 AI 就按授权采用了（这边还没轮询到新版本）→ 试改预览被拒不算失败，马上重读提案与工作台', async () => {
+    const run = {
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
+      progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
+      createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
+    };
+    // 工作台轮询还停在采用前（同一版本号），所以"版本变了就重读"这条路不会触发
+    const { sdk } = client({ turns: [turn()], state: studioState({ autonomousRun: run }) });
+    // 第一次读到的提案还是待定；服务端随后已提交，再为它请求预览会被拒（理由：提案已不再待定）
+    vi.mocked(sdk.projects.proposal).mockResolvedValueOnce(proposal as never).mockResolvedValue({ ...proposal, status: 'COMMITTED', committedRevision: 6 } as never);
+    vi.mocked(sdk.previews.request).mockImplementation((_ws, _project, _sequence, input) => (input.proposalId === null
+      ? Promise.resolve(preview({ id: 'pvw_2', source: 'CURRENT', projectRevision: 5, proposalId: null }) as never)
+      : Promise.reject(apiError(409, 'PRECONDITION_FAILED', 'only open proposals can be previewed', { reason: 'PREVIEW_PROPOSAL_STALE', status: 'COMMITTED' }))));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    await waitFor(() => expect(sdk.previews.request).toHaveBeenCalledWith('ws_1', 'prj_1', 'seq_1', { proposalId: 'prp_1' }));
+    await waitFor(() => expect(sdk.projects.proposal).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText('试改预览 · 还没采用')).toBeNull());
+    expect(screen.queryByText('预览生成失败')).toBeNull();
+    expect(screen.queryByRole('button', { name: /就这样/ })).toBeNull();
+  }, 10_000);
+
+  it('试改预览被拒、但提案仍待定（工程在它之后变了）：照常显示预览失败与重试', async () => {
+    const { sdk } = client({ turns: [turn()] });
+    vi.mocked(sdk.previews.request).mockRejectedValue(apiError(409, 'PRECONDITION_FAILED', 'the project changed after this proposal was made', { reason: 'PREVIEW_PROPOSAL_STALE' }));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    expect(await screen.findByText('预览生成失败')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy();
   });
 
   it('试改：就地播放试改预览，时间带显示试改的片段；"就这样"按看过的哈希采用', async () => {
@@ -535,6 +671,50 @@ describe('V6-1c 共看片室', () => {
     renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, running.sdk);
     await userEvent.click(await screen.findByRole('button', { name: '停止' }));
     await waitFor(() => expect(cancelTurn).toHaveBeenCalled());
+  });
+
+  it('工作区本月 AI 额度用完：输入框上方说明额度与恢复日期、发送不可用；读面未刷新时服务端 402 也说明同一原因；英文同样', async () => {
+    const reached = { period: '2026-10', capMicros: 20_000_000, capSource: 'DEPLOYMENT', spentMicros: 20_400_000, unpricedCalls: 0, reached: true, resetsAt: '2026-11-01T00:00:00.000Z' };
+    const limited = client({ state: studioState({ aiSpend: reached }) });
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, limited.sdk);
+    const notice = await screen.findByText('这个工作区本月的 AI 额度（$20.00）已用完，11月1日恢复。');
+    expect(notice.getAttribute('role')).toBe('status');
+    await userEvent.type(screen.getByRole('textbox', { name: '告诉 AI 怎么改' }), '剪一版');
+    expect((screen.getByRole('button', { name: '发送' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(limited.startTurn).not.toHaveBeenCalled();
+    expect(MESSAGES.en.studio.chat.errors.monthlyCap('$20.00', reached.resetsAt)).toBe('This workspace has used its AI allowance for this month ($20.00). It resets on November 1.');
+  });
+
+  it('画面理解因本月 AI 额度暂停：素材面板标出"AI 额度已用完"，可再理解一次；额度仍用完时说明原因；任务中心列出暂停', async () => {
+    const paused = { ...footage('glacier.mp4', 'av_g'), understanding: { index: 'READY', transcript: 'READY', visual: 'LIMIT_REACHED' } };
+    const retryVisualAnalysis = vi.fn()
+      .mockRejectedValueOnce(apiError(402, 'BUDGET_EXCEEDED', 'this workspace has used its AI allowance for this month', { reason: 'AI_MONTHLY_CAP_REACHED', capMicros: 20_000_000, spentMicros: 20_100_000, resetsAt: '2026-11-01T00:00:00.000Z' }))
+      .mockResolvedValueOnce({ status: 'QUEUED' });
+    const { sdk } = client({ state: studioState({ footage: [paused] }) });
+    (sdk.assets as unknown as { retryVisualAnalysis: typeof retryVisualAnalysis }).retryVisualAnalysis = retryVisualAnalysis;
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, sdk);
+    const rail = await screen.findByRole('toolbar', { name: '画布工具' });
+    await userEvent.click(within(rail).getByRole('button', { name: '素材 1' }));
+    const drawer = screen.getByRole('complementary', { name: '素材' });
+    expect(within(drawer).getByText('AI 额度已用完')).toBeTruthy();
+    const retry = within(drawer).getByRole('button', { name: '重新理解「glacier.mp4」的画面' });
+    await userEvent.click(retry);
+    expect(await within(drawer).findByText('这个工作区本月的 AI 额度（$20.00）已用完，11月1日恢复。')).toBeTruthy();
+    await userEvent.click(retry);
+    await waitFor(() => expect(retryVisualAnalysis).toHaveBeenCalledTimes(2));
+    expect(retryVisualAnalysis).toHaveBeenLastCalledWith('ws_1', 'ast_glacier.mp4');
+    await waitFor(() => expect(within(drawer).queryByRole('alert')).toBeNull());
+    const rows = studioTaskRows({ footage: [paused] as never, generations: [], exports: [], turn: undefined, t: MESSAGES['zh-CN'].studio, formatTime: (iso) => iso });
+    expect(rows.find((row) => row.key === 'f-ast_glacier.mp4')).toMatchObject({ status: 'failed', detail: MESSAGES['zh-CN'].studio.tasks.understandingPaused });
+  });
+
+  it('额度在两次刷新之间用完：发送被服务端 402 拒绝，说明额度与恢复日期', async () => {
+    const stale = client();
+    stale.startTurn.mockRejectedValueOnce(apiError(402, 'BUDGET_EXCEEDED', 'this workspace has used its AI allowance for this month', { reason: 'AI_MONTHLY_CAP_REACHED', capMicros: 5_000_000, spentMicros: 5_100_000, resetsAt: '2026-11-01T00:00:00.000Z' }));
+    renderWithClient(<StudioRoom workspaceId="ws_1" projectId="prj_1" />, stale.sdk);
+    await userEvent.type(await screen.findByRole('textbox', { name: '告诉 AI 怎么改' }), '剪一版');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText('这个工作区本月的 AI 额度（$5.00）已用完，11月1日恢复。')).toBeTruthy();
   });
 
   const quote = (overrides: Record<string, unknown> = {}) => ({

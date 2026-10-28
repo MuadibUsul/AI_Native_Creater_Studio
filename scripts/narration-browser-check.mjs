@@ -10,7 +10,7 @@
 //       （可选 ANCS_BROWSER_EXECUTABLE 指定支持 H.264 的 Chromium；REMOTION_BROWSER_EXECUTABLE 指定渲染用无头浏览器）
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ScriptedDirector } from './lib/scripted-director.mjs';
@@ -49,7 +49,11 @@ function pixel(file, seconds, x, y) {
 
 try {
   await mkdir(evidenceDir, { recursive: true });
-  env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v65-', effects: { codegen: 'disabled' }, narration: {} });
+  // 从链接导入：真实抓取器会拦下本机地址（SSRF 守卫），这里注入脚本化抓取器返回一篇文章网页
+  const articleUrl = 'https://news.example/fresh-water';
+  const articleHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Fresh water</title><script>tracking()</script></head><body><nav>Home</nav><article>${ARTICLE.split('\n\n').map((paragraph) => `<p>${paragraph}</p>`).join('')}</article></body></html>`;
+  const articleFetcher = { kind: 'scripted', fetch: async ({ url }) => { if (url !== articleUrl) throw new Error(`unexpected url ${url}`); return { finalUrl: url, contentType: 'text/html; charset=utf-8', bytes: new TextEncoder().encode(articleHtml) }; } };
+  env = await startStudioEnv({ director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v65-', effects: { codegen: 'disabled' }, narration: {}, articleFetcher });
   const { client, password } = await env.signedInClient(email);
   const workspace = await client.workspaces.create({ name: '文章转视频验收' });
 
@@ -65,11 +69,16 @@ try {
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 20_000 });
 
-  // 1. 新建：从文章开始
-  await page.goto(`${env.baseUrl}/w/${workspace.id}/studio/new`, { waitUntil: 'networkidle' });
-  await page.getByLabel('作品名称').fill('Fresh water');
-  await page.getByRole('radio', { name: /从文章开始/ }).click();
-  await page.getByLabel('文章或讲稿').fill(ARTICLE);
+  // 1. 首页"链接导入" → 新建页自动抓取正文（标题取网页标题；脚本、导航不进原文）→ 核对后开始
+  await page.goto(`${env.baseUrl}/?workspaceId=${workspace.id}`, { waitUntil: 'networkidle' });
+  await page.getByRole('radio', { name: '链接导入' }).click();
+  await page.getByRole('textbox', { name: '想做的视频' }).fill(articleUrl);
+  await page.getByRole('button', { name: '开始创作' }).click();
+  await page.getByText('已从 news.example 导入 3 段正文。请核对，AI 只会用这里的内容。').waitFor({ timeout: 30_000 });
+  if ((await page.getByLabel('文章或讲稿').inputValue()) !== ARTICLE) throw new Error(`imported text differs: ${await page.getByLabel('文章或讲稿').inputValue()}`);
+  if ((await page.getByLabel('作品名称').inputValue()) !== 'Fresh water') throw new Error('title should come from the page title');
+  if ((await page.getByRole('radio', { name: /从文章开始/ }).getAttribute('aria-checked')) !== 'true') throw new Error('article start should be chosen');
+  pass('首页链接导入 → 抓取正文给人核对', `${articleUrl}：3 段正文、标题取网页标题；网页脚本与导航不进原文`);
   const narrationChecked = await page.getByRole('checkbox', { name: 'AI 配音讲述' }).isChecked();
   if (!narrationChecked) throw new Error('voice-over should be chosen by default');
   await shot('01-new-from-article');
@@ -94,7 +103,7 @@ try {
   if ((await narrationClips.count()) !== 3) throw new Error(`expected 3 narration clips, found ${String(await narrationClips.count())}`);
   const cardClips = page.getByRole('button', { name: /^片段 特效 / });
   if ((await cardClips.count()) !== 3) throw new Error(`expected 3 diagram cards, found ${String(await cardClips.count())}`);
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   const seekTo = async (seconds) => {
     await video.evaluate((element, at) => new Promise((done) => { element.pause(); element.addEventListener('seeked', () => done(undefined), { once: true }); element.currentTime = at; }), seconds);
     await page.waitForTimeout(400);
@@ -132,11 +141,48 @@ try {
   await shot('05-adopted');
   pass('采用', `版本 ${String(created.project.revision)} → ${String(adopted.project.revision)}；讲述轨与图解卡留在时间带上`);
 
+  // 3b. 导出：讲述是合成语音、卡片是 AI 写的图层 → 成片带 AI 生成标识（导出面板如实告诉用户；文件里有 AIGC 元数据）
+  await page.getByRole('button', { name: '导出' }).click();
+  await page.getByRole('button', { name: '开始导出' }).click();
+  await page.getByText('导出完成').waitFor({ timeout: 300_000 });
+  await page.locator('[data-aigc-label]').waitFor({ timeout: 10_000 });
+  const zhLabel = await page.locator('[data-aigc-label]').getAttribute('data-aigc-label');
+  if (zhLabel !== 'AI生成') throw new Error(`Chinese interface export label should be "AI生成", got ${String(zhLabel)}`);
+  await shot('05b-export-ai-labelled');
+  const [exported] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载成片' }).click()]);
+  const downloaded = join(evidenceDir, '.tmp-export.mp4');
+  await exported.saveAs(downloaded);
+  const tags = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', downloaded]).toString()).format.tags ?? {};
+  const aigc = JSON.parse(tags.AIGC ?? 'null');
+  if (aigc?.Label !== '1' || typeof aigc.ProduceID !== 'string') throw new Error(`exported file has no AIGC metadata: ${JSON.stringify(tags)}`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', downloaded, '-frames:v', '1', join(evidenceDir, '05c-export-frame-1s.png')]);
+  await rm(downloaded, { force: true });
+  await page.getByRole('button', { name: '关闭' }).click();
+  pass('导出带 AI 生成标识', `导出面板说明已加标识；下载的成片 AIGC 元数据 Label=1、ProduceID=${String(aigc.ProduceID)}；1 秒处画面见 05c`);
+
   // 4. 英文 / 深色 / 手机宽度
   await page.getByRole('button', { name: '切换为英文界面' }).click();
   await page.getByRole('button', { name: /Voice-over: on/ }).waitFor();
   await page.getByText('Voice-over', { exact: true }).waitFor();
   await shot('06-english');
+
+  // 4b. 英文界面导出：开头角标随界面语言变成 "AI-generated"（面向全球市场）
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Start export' }).click();
+  await page.getByText('Export finished').waitFor({ timeout: 300_000 });
+  const enLabel = await page.locator('[data-aigc-label]').getAttribute('data-aigc-label');
+  if (enLabel !== 'AI-generated') throw new Error(`English interface export label should be "AI-generated", got ${String(enLabel)}`);
+  await shot('06b-export-english');
+  const [exportedEn] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download video' }).click()]);
+  const downloadedEn = join(evidenceDir, '.tmp-export-en.mp4');
+  await exportedEn.saveAs(downloadedEn);
+  const tagsEn = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format_tags', '-of', 'json', downloadedEn]).toString()).format.tags ?? {};
+  if (JSON.parse(tagsEn.AIGC ?? 'null')?.Label !== '1') throw new Error(`English export has no AIGC metadata: ${JSON.stringify(tagsEn)}`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-ss', '1', '-i', downloadedEn, '-frames:v', '1', join(evidenceDir, '06c-export-frame-1s-en.png')]);
+  await rm(downloadedEn, { force: true });
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  pass('英文界面导出', '导出面板与成片开头角标为 "AI-generated"；AIGC 元数据 Label=1；1 秒处画面见 06c');
+
   await page.getByRole('button', { name: 'Switch the interface to Chinese' }).click();
   await page.getByRole('button', { name: '切换浅深色' }).click();
   await page.waitForTimeout(300);

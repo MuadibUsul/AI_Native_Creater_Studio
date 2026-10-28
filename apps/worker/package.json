@@ -16,6 +16,8 @@
     "@ancs/db": "workspace:*",
     "@ancs/domain": "workspace:*",
     "@ancs/providers-anthropic": "workspace:*",
+    "@ancs/providers-deepseek": "workspace:*",
+    "@ancs/providers-elorian": "workspace:*",
     "@ancs/providers-ark": "workspace:*",
     "@ancs/providers-gemini": "workspace:*",
     "@ancs/providers-runway": "workspace:*",
@@ -23,6 +25,7 @@
     "@ancs/providers-mock-provider": "workspace:*",
     "@ancs/providers-queue-bullmq": "workspace:*",
     "@ancs/providers-storage-local": "workspace:*",
+    "@ancs/providers-storage-s3": "workspace:*",
     "drizzle-orm": "0.45.3"
   },
   "devDependencies": {

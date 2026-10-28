@@ -71,7 +71,8 @@ export const agentTurns = pgTable(
     uniqueIndex('agent_turns_one_running_uq').on(table.sessionId).where(sql`${table.status} = 'RUNNING'`),
     index('agent_turns_session_idx').on(table.sessionId, table.createdAt),
     index('agent_turns_review_note_idx').on(table.reviewNoteId, table.createdAt),
-    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW','GENERATE')`),
+    index('agent_turns_workspace_created_idx').on(table.workspaceId, table.createdAt),
+    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW','GENERATE','AUTONOMOUS')`),
     check('agent_turns_status_ck', sql`${table.status} in ('RUNNING','COMPLETED','FAILED','CANCELLED')`),
     check('agent_turns_cost_ck', sql`${table.costMicros} >= 0 and ${table.unpricedCalls} >= 0`),
   ],
@@ -95,5 +96,31 @@ export const agentTurnMessages = pgTable(
     uniqueIndex('agent_turn_messages_seq_uq').on(table.turnId, table.seq),
     check('agent_turn_messages_role_ck', sql`${table.role} in ('user','assistant')`),
     check('agent_turn_messages_seq_ck', sql`${table.seq} >= 0`),
+  ],
+);
+
+/**
+ * 不属于导演轮次的 AI 模型用量（工作区 AI 月度上限的计数来源之一；轮次自身的费用仍记在 agent_turns）。
+ * 当前只有上传后的画面理解（FOOTAGE_DESCRIPTION）：每次分析尝试一行，按尝试发生的时刻计入当月。只追加，不修改。
+ */
+export const aiUsageRecords = pgTable(
+  'ai_usage_records',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    /** 产生用量的对象（如 media_index_runs.id） */
+    subjectRef: text('subject_ref').notNull(),
+    model: text('model'),
+    calls: integer('calls').notNull(),
+    /** 已定价调用的费用（微美元）；未定价的调用只计次数 */
+    costMicros: bigint('cost_micros', { mode: 'number' }).notNull(),
+    unpricedCalls: integer('unpriced_calls').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ai_usage_records_workspace_created_idx').on(table.workspaceId, table.createdAt),
+    check('ai_usage_records_kind_ck', sql`${table.kind} in ('FOOTAGE_DESCRIPTION')`),
+    check('ai_usage_records_amounts_ck', sql`${table.calls} >= 0 and ${table.costMicros} >= 0 and ${table.unpricedCalls} >= 0`),
   ],
 );

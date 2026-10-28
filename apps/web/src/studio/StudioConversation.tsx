@@ -51,6 +51,8 @@ export interface ConversationProps {
   onLearnStrategy?: () => void;
   /** V6-7/V6-8：付费生成的报价卡（确认/放弃/进行中/结果） */
   generationCards?: ReactNode;
+  /** V6-9：交给 AI 剪完的进度与交付报告卡 */
+  autonomyCard?: ReactNode;
   /** V6-2 语音：麦克风开关（发送按钮旁）；语音条本身浮在画布底部（Issue #9） */
   voiceToggle?: ReactNode;
   /** 制作规则开关组（特效 / 配音 / 生成），放在输入框上方 */
@@ -59,6 +61,12 @@ export interface ConversationProps {
   onUpload?: () => void;
   /** 从首页带来的一句想法：预填到输入框（不自动发送） */
   initialDraft?: string | null;
+  /** 剪辑师开场：按工程真实状态说的一句（素材几段、处理到哪、文章几段）；没有可说的事实时为空 */
+  greeting?: string | null;
+  /** 这一轮进行中：最近一步在做什么（来自真实的工具记录） */
+  liveStep?: string | null;
+  /** 工作区本月 AI 额度已用完：说明原因与恢复时间，发送按钮不可用（服务端同样拒绝） */
+  limit?: string | null;
 }
 
 export function StudioConversation(props: ConversationProps) {
@@ -73,7 +81,8 @@ export function StudioConversation(props: ConversationProps) {
   const latest = props.turns[0];
   const earlier = props.turns.slice(1, 21);
   const running = latest?.status === 'RUNNING';
-  const canSend = props.canEdit && !running && !props.sending && draft.trim().length > 0;
+  const limited = props.limit !== undefined && props.limit !== null;
+  const canSend = props.canEdit && !limited && !running && !props.sending && draft.trim().length > 0;
 
   // 新的一轮、AI 回复或状态变化时，对话记录滚到最新
   const tail = `${latest?.id ?? ''}:${latest?.status ?? ''}:${latest?.reply ?? ''}:${props.notice ?? ''}:${props.error ?? ''}:${props.proposal?.status ?? ''}`;
@@ -103,7 +112,13 @@ export function StudioConversation(props: ConversationProps) {
       </div>
       <div ref={threadRef} className={styles['thread']} aria-live="polite">
         {latest === undefined ? (
-          <div className={styles['aiMessage']}><span className={styles['speaker']}>{t.ai}</span><p>{t.intro}</p></div>
+          <div className={styles['aiMessage']}>
+            <span className={styles['speaker']}>{t.ai}</span>
+            <div className={styles['lineBody']}>
+              {props.greeting ? <p className={styles['greeting']}>{props.greeting}</p> : null}
+              <p>{t.intro}</p>
+            </div>
+          </div>
         ) : null}
         {earlier.slice().reverse().map((turn) => (
           <div key={turn.id} className={styles['earlierTurn']}>
@@ -124,7 +139,9 @@ export function StudioConversation(props: ConversationProps) {
                       {props.cancelling ? t.stopping : t.stop}
                     </button>
                   </div>
-                ) : latest.status === 'CANCELLED' ? (
+                ) : null}
+                {running ? (props.liveStep ? <div className={styles['liveStep']} aria-live="polite">{props.liveStep}</div> : null)
+                  : latest.status === 'CANCELLED' ? (
                   <p>{t.stopped}</p>
                 ) : latest.status === 'FAILED' ? (
                   <div className={styles['alert']} role="alert"><strong>{t.failedTitle}</strong><div>{turnFailureText(latest, t)}</div></div>
@@ -176,9 +193,11 @@ export function StudioConversation(props: ConversationProps) {
         ) : null}
         {props.notice !== null ? <div className={styles['lineMeta']} role="status">{props.notice}</div> : null}
         {props.error !== null ? <div className={styles['alert']} role="alert">{props.error}</div> : null}
+        {props.autonomyCard ?? null}
         {props.generationCards ?? null}
       </div>
       <div className={styles['composerArea']}>
+        {limited ? <div className={styles['alert']} role="status" data-ai-limit>{props.limit}</div> : null}
         {props.rules !== undefined || props.strategies.length > 0 ? (
           <div className={styles['chatSettings']} role="group" aria-label={t.settingsLabel}>
             {props.rules ?? null}

@@ -78,6 +78,8 @@ import {
   strategyPackSchema,
   strategyPackSummarySchema,
   createStudioProjectRequestSchema,
+  fetchStudioArticleRequestSchema,
+  studioArticleDraftSchema,
   studioProjectRefSchema,
   studioStateSchema,
   applyReviewResponseSchema,
@@ -198,6 +200,7 @@ import {
   mediaSegmentSearchResponseSchema,
   createMediaRangeTagRequestSchema,
   mediaTranscriptSchema,
+  retryFootageDescriptionResponseSchema,
   uploadIntentResponseSchema,
   uploadIntentStatusSchema,
   uploadPartTargetResponseSchema,
@@ -211,6 +214,7 @@ import {
   createWorkspaceRequestSchema,
   creatorIdentitySchema,
   healthResponseSchema,
+  capabilitiesResponseSchema,
   nativeAuthorizeQuerySchema,
   pageResponseSchema,
   projectDetailSchema,
@@ -223,6 +227,13 @@ import {
   userAppearancePreferenceSchema,
   setUserAppearancePreferenceRequestSchema,
   signInRequestSchema,
+  signUpRequestSchema,
+  accountEmailSentResponseSchema,
+  emailOnlyRequestSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
   signInResponseSchema,
   verifyTotpRequestSchema,
   opsSessionSchema,
@@ -300,10 +311,18 @@ import {
   setPrivacyTierRequestSchema,
   type ClientType,
   type HealthResponse,
+  type CapabilitiesResponse,
   type SessionInfo,
   type UserAppearancePreference,
   type SetUserAppearancePreferenceRequest,
   type SignInResponse,
+  type SignUpRequest,
+  type AuthUser,
+  type AccountEmailSentResponse,
+  type AccountEmailLocale,
+  type EmailOnlyRequest,
+  type VerifyEmailRequest,
+  type ResetPasswordRequest,
   type SpeechProfile,
   type TokenResponse,
   type WorkspaceMember,
@@ -374,6 +393,7 @@ import {
   type MediaSegmentSearchResponse,
   type CreateMediaRangeTagRequest,
   type MediaTranscript,
+  type RetryFootageDescriptionResponse,
   type CorrectTranscriptSegmentRequest,
   type UpdateTranscriptTerminologyRequest,
   type BillingStatus,
@@ -395,6 +415,8 @@ import {
   type StrategyPack,
   type StrategyPackSummary,
   type CreateStudioProjectRequest,
+  type FetchStudioArticleRequest,
+  type StudioArticleDraft,
   type StudioProjectRef,
   type StudioState,
   type ApplyReviewRequest,
@@ -542,6 +564,16 @@ import {
   type UploadPartTargetResponse,
   productionPolicySchema,
   updateProductionPolicyRequestSchema,
+  autonomyPolicySchema,
+  signAutonomyRequestSchema,
+  productionPlanSchema,
+  autonomousRunSchema,
+  startAutonomousRunRequestSchema,
+  type AutonomousRun,
+  type StartAutonomousRunRequest,
+  type ProductionPlan,
+  type AutonomyPolicy,
+  type SignAutonomyRequest,
   type ProductionPolicy,
   type UpdateProductionPolicyRequest,
   distillRunSchema,
@@ -693,8 +725,17 @@ export async function generatePkcePair(): Promise<PkcePair> {
 
 export interface AncsClient {
   health(): Promise<HealthResponse>;
+  /** 本部署装配了哪些能力（公开、无凭据；含旧 V4 流水线是否可用） */
+  capabilities(): Promise<CapabilitiesResponse>;
   auth: {
-    signIn(input: { email: string; password: string }): Promise<SignInResponse>;
+    signIn(input: { email: string; password: string; locale?: AccountEmailLocale }): Promise<SignInResponse>;
+    /** 邮箱注册（D-04）：答复只说"请查收邮件"；注册方式不允许时 403（SIGNUP_CLOSED / SIGNUP_INVITE_REQUIRED） */
+    signUp(input: SignUpRequest): Promise<AccountEmailSentResponse>;
+    /** 点开验证邮件后确认邮箱（成功即登录；链接已用过时 user 为 null） */
+    verifyEmail(input: VerifyEmailRequest): Promise<{ status: 'VERIFIED'; user: AuthUser | null }>;
+    resendVerification(input: EmailOnlyRequest): Promise<AccountEmailSentResponse>;
+    requestPasswordReset(input: EmailOnlyRequest): Promise<AccountEmailSentResponse>;
+    resetPassword(input: ResetPasswordRequest): Promise<{ status: 'PASSWORD_RESET' }>;
     verifyTotp(input: { code: string }): Promise<SignInResponse>;
     signOut(): Promise<void>;
     session(): Promise<SessionInfo>;
@@ -770,7 +811,7 @@ export interface AncsClient {
     /** 邀请（P09-04；接受时邮箱匹配 + 权威席位检查） */
     invitations: {
       list(workspaceId: string): Promise<WorkspaceInvitation[]>;
-      create(workspaceId: string, input: { email: string; role: WorkspaceMember['role'] }, options?: MutationOptions): Promise<WorkspaceInvitation>;
+      create(workspaceId: string, input: { email: string; role: WorkspaceMember['role']; locale?: AccountEmailLocale }, options?: MutationOptions): Promise<WorkspaceInvitation>;
       revoke(workspaceId: string, invitationId: string, options?: MutationOptions): Promise<WorkspaceInvitation>;
     };
     /** 隐私档位（P09-04 / §20.4；非 STANDARD 需套餐权益 privacyMode） */
@@ -1102,6 +1143,8 @@ export interface AncsClient {
     /** 读取机器转写及当前不可变校正版本。 */
     transcript(workspaceId: string, assetId: string): Promise<MediaTranscript>;
     retryTranscript(workspaceId: string, assetId: string, options?: MutationOptions): Promise<MediaTranscript>;
+    /** 重新理解素材画面（失败后，或本月 AI 额度恢复后）；额度仍用完时 402 AI_MONTHLY_CAP_REACHED */
+    retryVisualAnalysis(workspaceId: string, assetId: string, options?: MutationOptions): Promise<RetryFootageDescriptionResponse>;
     correctTranscriptSegment(workspaceId: string, assetId: string, input: CorrectTranscriptSegmentRequest, options?: MutationOptions): Promise<MediaTranscript>;
     updateTranscriptTerminology(workspaceId: string, assetId: string, input: UpdateTranscriptTerminologyRequest, options?: MutationOptions): Promise<MediaTranscript>;
     /**
@@ -1480,6 +1523,23 @@ export interface AncsClient {
     undoChange(workspaceId: string, projectId: string, options?: MutationOptions): Promise<UndoChangeResponse>;
     /** 显式修改项目制作规则的"允许"开关（V6-3：例如素材工程开启程序化特效）；返回修改后的规则 */
     updateProductionPolicy(workspaceId: string, projectId: string, input: UpdateProductionPolicyRequest, options?: MutationOptions): Promise<ProductionPolicy>;
+    /** 从链接导入文章原文（服务端抓取并抽正文，不建工程；用户核对后随 create 的 article 提交） */
+    fetchArticle(workspaceId: string, input: FetchStudioArticleRequest): Promise<StudioArticleDraft>;
+  };
+  /** 裁决 0020 / V6-9：自主制作授权（审批档位 + 预算；总预算在任何档位都是硬上限） */
+  autonomy: {
+    get(workspaceId: string, projectId: string): Promise<AutonomyPolicy>;
+    /** 签署或重新签署（预算必填）；签署人与时间由服务端写入 */
+    sign(workspaceId: string, projectId: string, input: SignAutonomyRequest, options?: MutationOptions): Promise<AutonomyPolicy>;
+    /** 撤回：回到逐项审批、不授权任何花费 */
+    revoke(workspaceId: string, projectId: string, options?: MutationOptions): Promise<AutonomyPolicy>;
+    /** 最新一版制作计划（导演蓝图、场景契约、剪辑意图）；没有为 null */
+    latestPlan(workspaceId: string, projectId: string): Promise<ProductionPlan | null>;
+    /** 开始自主制作（202）：素材准备好后 AI 自己完成并交付；幂等键 → 同一运行 */
+    startRun(workspaceId: string, projectId: string, input: StartAutonomousRunRequest, options?: MutationOptions): Promise<AutonomousRun>;
+    listRuns(workspaceId: string, projectId: string): Promise<AutonomousRun[]>;
+    getRun(workspaceId: string, projectId: string, runId: string): Promise<AutonomousRun>;
+    cancelRun(workspaceId: string, projectId: string, runId: string, options?: MutationOptions): Promise<AutonomousRun>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -1850,12 +1910,23 @@ export function createClient(options: ClientOptions): AncsClient {
 
   return {
     health: () => request('GET', '/api/v1/health', healthResponseSchema),
+    capabilities: () => request('GET', '/api/v1/capabilities', capabilitiesResponseSchema),
 
     auth: {
       signIn: (input) =>
         request('POST', '/api/v1/auth/sign-in', signInResponseSchema, { body: input, bodySchema: signInRequestSchema }),
       verifyTotp: (input) =>
         request('POST', '/api/v1/auth/verify-totp', signInResponseSchema, { body: input, bodySchema: verifyTotpRequestSchema }),
+      signUp: (input) =>
+        request('POST', '/api/v1/auth/sign-up', accountEmailSentResponseSchema, { body: input, bodySchema: signUpRequestSchema }),
+      verifyEmail: (input) =>
+        request('POST', '/api/v1/auth/verify-email', verifyEmailResponseSchema, { body: input, bodySchema: verifyEmailRequestSchema }),
+      resendVerification: (input) =>
+        request('POST', '/api/v1/auth/resend-verification', accountEmailSentResponseSchema, { body: input, bodySchema: emailOnlyRequestSchema }),
+      requestPasswordReset: (input) =>
+        request('POST', '/api/v1/auth/request-password-reset', accountEmailSentResponseSchema, { body: input, bodySchema: emailOnlyRequestSchema }),
+      resetPassword: (input) =>
+        request('POST', '/api/v1/auth/reset-password', resetPasswordResponseSchema, { body: input, bodySchema: resetPasswordRequestSchema }),
       signOut: async () => {
         await request('POST', '/api/v1/auth/sign-out', emptySchema);
         cookieJar.clear();
@@ -2637,6 +2708,7 @@ export function createClient(options: ClientOptions): AncsClient {
       deleteRangeTag: (workspaceId, assetId, tagId, mutation) => request('DELETE', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/range-tags/${tagId}`, emptySchema, { idempotencyKey: mutation?.idempotencyKey }),
       transcript: (workspaceId, assetId) => request('GET', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript`, mediaTranscriptSchema),
       retryTranscript: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/retry`, mediaTranscriptSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      retryVisualAnalysis: (workspaceId, assetId, mutation) => request('POST', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/visual-analysis/retry`, retryFootageDescriptionResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
       correctTranscriptSegment: (workspaceId, assetId, input, mutation) => request('PATCH', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/segments`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
       updateTranscriptTerminology: (workspaceId, assetId, input, mutation) => request('PUT', `/api/v1/workspaces/${workspaceId}/assets/${assetId}/transcript/terminology`, mediaTranscriptSchema, { body: input, idempotencyKey: mutation?.idempotencyKey }),
       upload: async (workspaceId, input, mutation) =>
@@ -3123,6 +3195,11 @@ export function createClient(options: ClientOptions): AncsClient {
           idempotencyKey: mutation?.idempotencyKey,
         }),
       state: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/studio`, studioStateSchema),
+      fetchArticle: (workspaceId, input) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/studio-article-drafts`, studioArticleDraftSchema, {
+          body: input,
+          bodySchema: fetchStudioArticleRequestSchema,
+        }),
       undoChange: (workspaceId, projectId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/undo-change`, undoChangeResponseSchema, { idempotencyKey: mutation?.idempotencyKey }),
       updateProductionPolicy: (workspaceId, projectId, input, mutation) =>
@@ -3133,6 +3210,28 @@ export function createClient(options: ClientOptions): AncsClient {
         }),
     },
 
+    autonomy: {
+      get: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema),
+      sign: (workspaceId, projectId, input, mutation) =>
+        request('PUT', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, {
+          body: input,
+          bodySchema: signAutonomyRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      revoke: (workspaceId, projectId, mutation) =>
+        request('DELETE', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomy`, autonomyPolicySchema, { idempotencyKey: mutation?.idempotencyKey }),
+      latestPlan: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/production-plan`, productionPlanSchema.nullable()),
+      startRun: (workspaceId, projectId, input, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs`, autonomousRunSchema, {
+          body: input,
+          bodySchema: startAutonomousRunRequestSchema,
+          idempotencyKey: mutation?.idempotencyKey,
+        }),
+      listRuns: (workspaceId, projectId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs`, z.array(autonomousRunSchema)),
+      getRun: (workspaceId, projectId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}`, autonomousRunSchema),
+      cancelRun: (workspaceId, projectId, runId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}/cancel`, autonomousRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
+    },
     generations: {
       list: async (workspaceId, projectId) =>
         (await request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/generations`, generationListSchema)).items,

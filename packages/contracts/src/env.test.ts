@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvSchema, crossCheckApiEnv, crossCheckRealtimeEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, validateEnv, workerEnvSchema } from './env.js';
+import { AGENT_MODEL_PRICES, agentModelCostMicros, mergeModelPrices, resolveModelPrice } from './agent.js';
+import { apiEnvSchema, crossCheckAiSpendEnv, parseModelPriceOverrides, crossCheckApiEnv, crossCheckEmailEnv, resolveAiMonthlyCapMicros, signupInviteCliEnvSchema, crossCheckRealtimeEnv, crossCheckStorageEnv, crossCheckWorkerEnv, formatEnvFailure, originOf, realtimeEnvSchema, resolveAllowedOrigins, resolveLegacyPipeline, opsGrantCliEnvSchema, retentionCliEnvSchema, schedulerEnvSchema, validateEnv, workerEnvSchema } from './env.js';
 
 /**
  * P08-01 环境配置契约（"错误配置启动失败并说明原因"）：
@@ -11,6 +12,30 @@ const validApiEnv = {
   DATABASE_URL: 'postgres://ancs:ancs@localhost:55432/ancs_dev',
   BETTER_AUTH_SECRET: 'deployment-secret-0123456789', // secrets:check-ignore：测试专用假密钥
 };
+
+describe('DeepSeek director configuration', () => {
+  it('requires a server key when DeepSeek is selected and never echoes it', () => {
+    const result = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'deepseek' });
+    expect(result.ok).toBe(true);
+    expect(crossCheckWorkerEnv(result.value!)).toContainEqual(expect.objectContaining({ variable: 'DEEPSEEK_API_KEY' }));
+    const configured = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_AGENT_DRIVER: 'deepseek', DEEPSEEK_API_KEY: 'test-only-placeholder' }); // secrets:check-ignore：配置校验假凭据
+    expect(configured.ok).toBe(true);
+    expect(crossCheckWorkerEnv(configured.value!).some((issue) => issue.variable === 'DEEPSEEK_API_KEY')).toBe(false);
+    expect(formatEnvFailure('worker', crossCheckWorkerEnv(configured.value!))).not.toContain('test-only-placeholder');
+  });
+});
+
+describe('Elorian vision analysis configuration', () => {
+  it('requires a server key when Elorian is the visual analysis driver and never echoes it', () => {
+    const missing = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'elorian' });
+    expect(missing.ok).toBe(true);
+    expect(crossCheckWorkerEnv(missing.value!)).toContainEqual(expect.objectContaining({ variable: 'ELORIAN_API_KEY' }));
+    const configured = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_VISUAL_ANALYSIS_DRIVER: 'elorian', ELORIAN_API_KEY: 'test-only-placeholder' }); // secrets:check-ignore：配置校验假凭据
+    expect(configured.ok).toBe(true);
+    expect(crossCheckWorkerEnv(configured.value!).some((issue) => issue.variable === 'ELORIAN_API_KEY')).toBe(false);
+    expect(formatEnvFailure('worker', crossCheckWorkerEnv(configured.value!))).not.toContain('test-only-placeholder');
+  });
+});
 
 describe('validateEnv（API）', () => {
   it('最小合法配置 → 通过（默认值：PORT=3001 / storage=local / llm=mock / tts=mock）', () => {
@@ -30,14 +55,49 @@ describe('validateEnv（API）', () => {
     expect(result.issues.find((issue) => issue.variable === 'BETTER_AUTH_SECRET')?.message).toContain('≥16');
   });
 
-  it('未实现的驱动名 → 显式失败（不静默降级：s3/r2 与真实 LLM/TTS 驱动均拒绝）', () => {
-    const storage = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3' });
+  it('未实现的驱动名 → 显式失败（不静默降级：未知存储驱动与真实 LLM/TTS 驱动均拒绝）', () => {
+    const storage = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 'gcs' });
     expect(storage.ok).toBe(false);
-    expect(storage.issues.find((issue) => issue.variable === 'ANCS_STORAGE_DRIVER')?.message).toContain('仅支持 local');
+    expect(storage.issues.find((issue) => issue.variable === 'ANCS_STORAGE_DRIVER')?.message).toContain('只能是 local 或 s3');
 
     const llm = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LLM_DRIVER: 'openai' });
     expect(llm.ok).toBe(false);
     expect(llm.issues.find((issue) => issue.variable === 'ANCS_LLM_DRIVER')?.message).toContain('仅支持 mock');
+  });
+
+  it('旧 V4 流水线：生产缺省 off、其余缺省 mock、显式配置优先；非法值启动失败', () => {
+    expect(resolveLegacyPipeline({ NODE_ENV: 'production' })).toBe('off');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'development' })).toBe('mock');
+    expect(resolveLegacyPipeline({})).toBe('mock');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'production', ANCS_LEGACY_PIPELINE: 'mock' })).toBe('mock');
+    expect(resolveLegacyPipeline({ NODE_ENV: 'development', ANCS_LEGACY_PIPELINE: 'off' })).toBe('off');
+    const bad = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_LEGACY_PIPELINE: 'real' });
+    expect(bad.ok).toBe(false);
+    expect(bad.issues.find((issue) => issue.variable === 'ANCS_LEGACY_PIPELINE')?.message).toContain('mock 或 off');
+  });
+
+  it('S3 存储：缺桶 / 区域、密钥只配一半、只配浏览器端点 → 逐项说明；API、Worker、清理 CLI 同一规则；配齐通过', () => {
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3', ANCS_S3_ACCESS_KEY_ID: 'id', ANCS_S3_PUBLIC_ENDPOINT: 'https://files.example.com' });
+    expect(api.ok).toBe(true);
+    expect(crossCheckStorageEnv(api.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_S3_BUCKET', 'ANCS_S3_PUBLIC_ENDPOINT', 'ANCS_S3_REGION', 'ANCS_S3_SECRET_ACCESS_KEY']);
+    expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toContain('ANCS_S3_BUCKET');
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3' });
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable)).toEqual(expect.arrayContaining(['ANCS_S3_BUCKET', 'ANCS_S3_REGION']));
+    const sweep = validateEnv(retentionCliEnvSchema, { ...validApiEnv, ANCS_STORAGE_DRIVER: 's3', ANCS_S3_BUCKET: 'media', ANCS_S3_REGION: 'auto' });
+    expect(sweep.ok).toBe(true);
+    expect(crossCheckStorageEnv(sweep.value!)).toEqual([]);
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_S3_KEY_PREFIX: '../x' }).ok).toBe(false);
+    // s3 生产部署不需要本地签名密钥；local 仍然需要
+    const prodS3 = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_CREDENTIAL_KEYS: 'v1:key', ANCS_STORAGE_DRIVER: 's3', ANCS_S3_BUCKET: 'media', ANCS_S3_REGION: 'us-east-1' });
+    expect(crossCheckWorkerEnv(prodS3.value!).map((issue) => issue.variable)).not.toContain('ANCS_STORAGE_SECRET');
+    const prodLocal = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_CREDENTIAL_KEYS: 'v1:key' });
+    expect(crossCheckWorkerEnv(prodLocal.value!).map((issue) => issue.variable)).toContain('ANCS_STORAGE_SECRET');
+  });
+
+  it('共享限流 Redis 地址：只接受 redis:// 或 rediss://', () => {
+    expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_RATE_LIMIT_REDIS_URL: 'rediss://cache.internal:6380' }).ok).toBe(true);
+    const bad = validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_RATE_LIMIT_REDIS_URL: 'http://cache.internal' });
+    expect(bad.issues.map((issue) => issue.variable)).toEqual(['ANCS_RATE_LIMIT_REDIS_URL']);
   });
 
   it('非法 PORT / 非法 URL → 明确原因', () => {
@@ -89,6 +149,7 @@ describe('商业上线门（P09-06）：live 模式跨字段条件', () => {
     ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, // secrets:check-ignore：测试专用假密钥（非真实凭据）
     // 生产必须显式配置存储签名密钥（V5-M3：不得从会话密钥派生）
     ANCS_STORAGE_SECRET: 'S'.repeat(32), // secrets:check-ignore：测试专用假密钥（非真实凭据）
+    ANCS_AI_MONTHLY_CAP_USD: '20',
   };
 
   it('默认 internal：不启用 live 门禁（预上线内部部署不受影响）', () => {
@@ -134,11 +195,11 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
   const secret = 'S'.repeat(32); // secrets:check-ignore：测试专用假密钥（非真实凭据）
 
   it('生产 API/Worker 未显式配置存储签名密钥 → 启动失败；配置后通过', () => {
-    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    const api = validateEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION', ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, ANCS_AI_MONTHLY_CAP_USD: '20' });
     expect(crossCheckApiEnv(api.value!).map((issue) => issue.variable)).toEqual(['ANCS_STORAGE_SECRET']);
-    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production' });
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_AI_MONTHLY_CAP_USD: 'unlimited' });
     expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable).sort()).toEqual(['ANCS_CREDENTIAL_KEYS', 'ANCS_STORAGE_SECRET']);
-    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` });
+    const fixed = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: secret, ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}`, ANCS_AI_MONTHLY_CAP_USD: '20' });
     expect(crossCheckWorkerEnv(fixed.value!)).toEqual([]);
   });
 
@@ -320,5 +381,129 @@ describe('Issue #9 语音网关 / 自定义模型网关配置', () => {
     }
     expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_OPENAI_BASE_URL: 'http://gateway.example.com/v1' }).ok).toBe(false);
     expect(validateEnv(realtimeEnvSchema, { ...realtimeBase, ANCS_REALTIME_TTS_DRIVER: 'browser' }).ok).toBe(false);
+  });
+});
+
+describe('D-04 账号自助：注册方式与发信', () => {
+  const check = (extra: Record<string, string>) => {
+    const parsed = validateEnv(apiEnvSchema, { ...validApiEnv, ...extra });
+    return [...parsed.issues, ...(parsed.value === null ? [] : crossCheckApiEnv(parsed.value))].map((issue) => issue.variable);
+  };
+  const smtp = { ANCS_EMAIL_DRIVER: 'smtp', ANCS_SMTP_URL: 'smtps://mailer:password@smtp.example.com:465', ANCS_EMAIL_FROM: 'ANCS <no-reply@example.com>' }; // secrets:check-ignore：测试专用假密钥
+
+  it('缺省 closed、不发信；产品名缺省 ANCS', () => {
+    const parsed = validateEnv(apiEnvSchema, validApiEnv);
+    expect(parsed.value).toMatchObject({ ANCS_SIGNUP_MODE: 'closed', ANCS_PRODUCT_NAME: 'Kinora' });
+    expect(parsed.value?.ANCS_EMAIL_DRIVER).toBeUndefined();
+    expect(check({})).toEqual([]);
+  });
+
+  it('invite / open 必须配置发信；配好 SMTP 即通过（所有者决定内测用 invite）', () => {
+    expect(check({ ANCS_SIGNUP_MODE: 'invite' })).toEqual(['ANCS_SIGNUP_MODE']);
+    expect(check({ ANCS_SIGNUP_MODE: 'open' })).toEqual(['ANCS_SIGNUP_MODE']);
+    expect(check({ ANCS_SIGNUP_MODE: 'invite', ...smtp })).toEqual([]);
+    expect(check({ ANCS_SIGNUP_MODE: 'public' })).toEqual(['ANCS_SIGNUP_MODE']);
+  });
+
+  it('smtp 驱动缺地址或发件人；只配地址不配驱动；地址与发件人格式', () => {
+    expect(check({ ANCS_EMAIL_DRIVER: 'smtp' }).sort()).toEqual(['ANCS_EMAIL_FROM', 'ANCS_SMTP_URL']);
+    expect(check({ ANCS_SMTP_URL: smtp.ANCS_SMTP_URL })).toEqual(['ANCS_EMAIL_DRIVER']);
+    expect(check({ ...smtp, ANCS_SMTP_URL: 'https://smtp.example.com' })).toEqual(['ANCS_SMTP_URL']);
+    expect(check({ ...smtp, ANCS_EMAIL_FROM: 'no address' })).toEqual(['ANCS_EMAIL_FROM']);
+  });
+
+  it('生产：不得用 log 驱动；邮件链接必须是 https', () => {
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ANCS_EMAIL_DRIVER: 'log', BETTER_AUTH_URL: 'https://studio.example.com' }).map((issue) => issue.variable)).toEqual(['ANCS_EMAIL_DRIVER']);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0]).map((issue) => issue.variable)).toEqual(['ANCS_PUBLIC_WEB_URL']);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'production', ...smtp, BETTER_AUTH_URL: 'http://api.internal', ANCS_PUBLIC_WEB_URL: 'https://studio.example.com' } as Parameters<typeof crossCheckEmailEnv>[0])).toEqual([]);
+    expect(crossCheckEmailEnv({ NODE_ENV: 'development', ANCS_EMAIL_DRIVER: 'log' })).toEqual([]);
+  });
+
+  it('AI 月度上限：金额换算成微美元，unlimited / 未配置 = 不设；格式非法启动失败；生产 API 与 Worker 都必须显式配置', () => {
+    expect(resolveAiMonthlyCapMicros('20')).toBe(20_000_000);
+    expect(resolveAiMonthlyCapMicros('12.5')).toBe(12_500_000);
+    expect(resolveAiMonthlyCapMicros('0.05')).toBe(50_000);
+    expect(resolveAiMonthlyCapMicros('0')).toBe(0);
+    expect(resolveAiMonthlyCapMicros('unlimited')).toBeNull();
+    expect(resolveAiMonthlyCapMicros(undefined)).toBeNull();
+    for (const bad of ['-1', '$20', '20.123', 'none', '1e3']) {
+      expect(validateEnv(apiEnvSchema, { ...validApiEnv, ANCS_AI_MONTHLY_CAP_USD: bad }).issues.map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+    }
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'production' }).map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'production', ANCS_AI_MONTHLY_CAP_USD: 'unlimited' })).toEqual([]);
+    expect(crossCheckAiSpendEnv({ NODE_ENV: 'development' })).toEqual([]);
+    const worker = validateEnv(workerEnvSchema, { ...validApiEnv, NODE_ENV: 'production', ANCS_STORAGE_SECRET: 'S'.repeat(32), ANCS_CREDENTIAL_KEYS: `v1:${'A'.repeat(44)}` }); // secrets:check-ignore：测试专用假密钥
+    expect(crossCheckWorkerEnv(worker.value!).map((issue) => issue.variable)).toEqual(['ANCS_AI_MONTHLY_CAP_USD']);
+  });
+
+  it('模型单价补充（ANCS_MODEL_PRICES_JSON）：美元/百万 token 换算成微美元并覆盖内置表；缓存单价缺省按输入价；格式不对启动失败', () => {
+    const prices = mergeModelPrices(parseModelPriceOverrides('{"vendor-pro":{"input":0.5,"output":2},"vendor-flash":{"input":0.1,"output":0.4,"cacheRead":0.01}}'));
+    expect(prices['vendor-pro']).toEqual({ inputMicrosPerMTok: 500_000, outputMicrosPerMTok: 2_000_000, cacheReadMicrosPerMTok: 500_000, cacheWriteMicrosPerMTok: 500_000 });
+    expect(prices['vendor-flash']!.cacheReadMicrosPerMTok).toBe(10_000);
+    expect(Object.keys(prices)).toEqual(expect.arrayContaining(Object.keys(AGENT_MODEL_PRICES)));
+    // 100 万输入 + 50 万输出 + 20 万缓存读：0.5 + 1.0 + 0.1 = $1.60
+    expect(agentModelCostMicros('vendor-pro', { inputTokens: 1_000_000, outputTokens: 500_000, cacheReadInputTokens: 200_000, cacheCreationInputTokens: 0 }, prices)).toBe(1_600_000);
+    expect(agentModelCostMicros('vendor-pro', { inputTokens: 1, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 })).toBeNull();
+    expect(parseModelPriceOverrides(undefined)).toEqual({});
+    for (const bad of ['not json', '{"m":{"input":0,"output":1}}', '{"m":{"input":"<美元>","output":1}}', '{"m":{"input":-1,"output":1}}', '{"m":{"input":1}}', '{"m":{"input":1,"output":1,"extra":1}}', '[]']) {
+      expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: bad }).issues.map((issue) => issue.variable)).toEqual(['ANCS_MODEL_PRICES_JSON']);
+    }
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_MODEL_PRICES_JSON: '{"m":{"input":1,"output":2}}' }).ok).toBe(true);
+  });
+
+  it('供应商回带日期 / latest 快照名（如 vendor-pro-2026-09-01）按同名模型计价；同前缀的另一个模型（vendor-pro-max）仍算未定价', () => {
+    const prices = mergeModelPrices(parseModelPriceOverrides('{"vendor-pro":{"input":0.5,"output":2}}'));
+    const usage = { inputTokens: 1_000_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+    for (const snapshot of ['vendor-pro', 'vendor-pro-2026-09-01', 'vendor-pro-20260901', 'vendor-pro@20260901', 'vendor-pro-latest']) {
+      expect(resolveModelPrice(snapshot, prices), snapshot).toBe(prices['vendor-pro']);
+      expect(agentModelCostMicros(snapshot, usage, prices), snapshot).toBe(500_000);
+    }
+    for (const other of ['vendor-pro-max', 'vendor-pro-mini-2026-09-01', 'vendor-pro2', 'vendor', 'other-2026-09-01']) {
+      expect(resolveModelPrice(other, prices), other).toBeUndefined();
+      expect(agentModelCostMicros(other, usage, prices), other).toBeNull();
+    }
+  });
+
+  it('邀请 CLI 只需要数据库连接；发信可选', () => {
+    expect(validateEnv(signupInviteCliEnvSchema, { DATABASE_URL: 'postgres://x' }).ok).toBe(true);
+    expect(validateEnv(signupInviteCliEnvSchema, {}).issues.map((issue) => issue.variable)).toEqual(['DATABASE_URL']);
+  });
+});
+
+describe('I-10 维护调度器配置', () => {
+  it('缺省：每 60 秒派发通知，每天 03:30 UTC 清理', () => {
+    const result = validateEnv(schedulerEnvSchema, {});
+    expect(result.ok).toBe(true);
+    expect(result.value).toEqual({ ANCS_SCHEDULE_DISPATCH_SECONDS: 60, ANCS_SCHEDULE_RETENTION_UTC: '03:30' });
+    expect(validateEnv(schedulerEnvSchema, { ANCS_SCHEDULE_DISPATCH_SECONDS: '300', ANCS_SCHEDULE_RETENTION_UTC: '23:05' }).value).toEqual({ ANCS_SCHEDULE_DISPATCH_SECONDS: 300, ANCS_SCHEDULE_RETENTION_UTC: '23:05' });
+  });
+
+  it('非法值在启动时失败并指出变量', () => {
+    for (const env of [{ ANCS_SCHEDULE_DISPATCH_SECONDS: '5' }, { ANCS_SCHEDULE_DISPATCH_SECONDS: 'often' }, { ANCS_SCHEDULE_RETENTION_UTC: '3:30' }, { ANCS_SCHEDULE_RETENTION_UTC: '24:00' }]) {
+      const result = validateEnv(schedulerEnvSchema, env);
+      expect(result.ok).toBe(false);
+      expect(result.issues.map((issue) => issue.variable)).toEqual(Object.keys(env));
+    }
+  });
+});
+
+describe('I-13 运营后台授权配置', () => {
+  const base = { DATABASE_URL: 'postgres://x', ANCS_OPS_ENVIRONMENT: 'DEVELOPMENT', ANCS_OPS_GRANT_EMAIL: ' Owner@Example.com ' };
+
+  it('缺省角色 PRODUCTION_OPERATOR、没有工作区；邮箱规范化；逗号列表去空去重', () => {
+    expect(validateEnv(opsGrantCliEnvSchema, base).value).toMatchObject({ ANCS_OPS_GRANT_EMAIL: 'owner@example.com', ANCS_OPS_GRANT_ROLES: ['PRODUCTION_OPERATOR'], ANCS_OPS_GRANT_WORKSPACES: [] });
+    expect(validateEnv(opsGrantCliEnvSchema, { ...base, ANCS_OPS_GRANT_ROLES: 'AUDITOR, PRODUCTION_OPERATOR,,AUDITOR', ANCS_OPS_GRANT_WORKSPACES: 'ws_a, ws_b,ws_a' }).value)
+      .toMatchObject({ ANCS_OPS_GRANT_ROLES: ['AUDITOR', 'PRODUCTION_OPERATOR'], ANCS_OPS_GRANT_WORKSPACES: ['ws_a', 'ws_b'] });
+  });
+
+  it('拒绝：机器身份角色、未知角色、不像工作区 ID、缺邮箱；生产进程必须是 PRODUCTION，非生产不得授权 PRODUCTION', () => {
+    const variables = (env: Record<string, string>) => validateEnv(opsGrantCliEnvSchema, env).issues.map((issue) => issue.variable);
+    expect(variables({ ...base, ANCS_OPS_GRANT_ROLES: 'SERVICE_ACCOUNT' })[0]).toMatch(/^ANCS_OPS_GRANT_ROLES/);
+    expect(variables({ ...base, ANCS_OPS_GRANT_ROLES: 'ROOT' })[0]).toMatch(/^ANCS_OPS_GRANT_ROLES/);
+    expect(variables({ ...base, ANCS_OPS_GRANT_WORKSPACES: 'prj_1' })[0]).toMatch(/^ANCS_OPS_GRANT_WORKSPACES/);
+    expect(variables({ DATABASE_URL: 'postgres://x', ANCS_OPS_ENVIRONMENT: 'DEVELOPMENT' })).toEqual(['ANCS_OPS_GRANT_EMAIL']);
+    expect(variables({ ...base, NODE_ENV: 'production' })).toEqual(['ANCS_OPS_ENVIRONMENT']);
+    expect(variables({ ...base, ANCS_OPS_ENVIRONMENT: 'PRODUCTION' })).toEqual(['ANCS_OPS_ENVIRONMENT']);
+    expect(validateEnv(opsGrantCliEnvSchema, { ...base, NODE_ENV: 'production', ANCS_OPS_ENVIRONMENT: 'PRODUCTION' }).ok).toBe(true);
   });
 });

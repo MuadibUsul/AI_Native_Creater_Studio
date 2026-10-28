@@ -1,26 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useQueryParam } from '@/lib/query-param';
 import { useMutation } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
+import { useCapabilities } from '@/lib/queries';
 import { StateBlock } from '@/ui/StateBlock';
+import { BRAND_NAME, BrandTile } from '@/brand/brand';
+import { errorReason } from '@/ui/AccountCard';
 import { deviceAppearance, saveDeviceAppearance } from '@/lib/appearance';
 import styles from '@/components/quiet-frame/legacy.module.css';
 import { useI18n } from '@/i18n/I18nProvider';
 
-/** 登录（P05-03）：Web 会话 Cookie（SDK auth.signIn）。 */
+/** 登录（P05-03）：Web 会话 Cookie（SDK auth.signIn）。D-04 起带"忘记密码""创建账号"入口（按部署能力显示）。 */
 export default function SignInPage() {
+  return <Suspense fallback={null}><SignIn /></Suspense>;
+}
+
+function SignIn() {
   const client = useAncsClient();
-  const { messages } = useI18n();
+  const { locale, messages } = useI18n();
   const t = messages.entry.signIn;
-  const [email, setEmail] = useState('');
+  const links = messages.account.signInLinks;
+  const accounts = useCapabilities().data?.accounts;
+  const [email, setEmail] = useState(useQueryParam('email') ?? '');
   const [password, setPassword] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [totpChallenge, setTotpChallenge] = useState(false);
 
   const signIn = useMutation({
-    mutationFn: () => client.auth.signIn({ email, password }),
+    mutationFn: () => client.auth.signIn({ email, password, locale }),
     onSuccess: (result) => {
       if ('twoFactorRequired' in result) {
         setPassword('');
@@ -45,6 +55,7 @@ export default function SignInPage() {
   return (
     <main id="main" className={`page ${styles['surface']}`}>
       <section className="panel pad" style={{ maxWidth: 480, margin: 'min(8vh, 64px) auto 0' }}>
+      <div className="row gap8 mb24"><BrandTile size={32} /><span className="logotext">{BRAND_NAME}</span></div>
       <div className="eyebrow mb16">ACCOUNT / SIGN IN</div>
       <h1>{t.title}</h1>
       <p className="small muted mt8">{totpChallenge ? t.totpIntro : t.intro}</p>
@@ -90,7 +101,10 @@ export default function SignInPage() {
         </button>
       </form>}
       {verifyTotp.isError ? <div className="mt24"><StateBlock variant="error" title={t.verifyFailed} description={describeError(verifyTotp.error).message} /></div> : null}
-      {signIn.isError ? (
+      {!totpChallenge && accounts?.passwordReset === true ? <p className="small mt16"><a href={`/forgot-password${email.trim() === '' ? '' : `?email=${encodeURIComponent(email.trim())}`}`}>{links.forgot}</a></p> : null}
+      {signIn.isError && errorReason(signIn.error) === 'EMAIL_NOT_VERIFIED' ? (
+        <div className="mt24" data-email-unverified=""><StateBlock variant="info" title={links.unverifiedTitle} description={links.unverifiedBody} /></div>
+      ) : signIn.isError ? (
         <div className="mt24"><StateBlock
           variant={describeError(signIn.error).kind === 'unauthenticated' ? 'unauthenticated' : 'error'}
           title={t.signInFailed}
@@ -99,6 +113,7 @@ export default function SignInPage() {
           action={{ label: messages.common.retry, onClick: () => signIn.mutate() }}
         /></div>
       ) : null}
+      {accounts !== undefined && accounts.signup !== 'closed' ? <p className="small muted mt24">{links.noAccount} <a href="/sign-up">{links.signUp}</a></p> : null}
       </section>
     </main>
   );

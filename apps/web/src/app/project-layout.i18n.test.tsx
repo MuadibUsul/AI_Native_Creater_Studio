@@ -44,6 +44,28 @@ describe('Project layout navigation', () => {
     expect(document.body.textContent).not.toMatch(/[一-鿿]/);
   });
 
+  it('旧 V4 流水线下线：顶部说明 + 去共看片室新建（生成式作品）；素材剪辑作品直接在共看片室打开', async () => {
+    pathname = '/w/ws_1/p/prj_1/storyboard';
+    const off = { capabilities: vi.fn().mockResolvedValue({ legacyPipeline: 'off' }) };
+    const generative = renderWithClient(<ProjectLayout><p>child</p></ProjectLayout>, mockClient({ ...off, projects: { get: vi.fn().mockResolvedValue({ id: 'prj_1', title: '旧作品', status: 'STORYBOARDING', mode: 'GENERATIVE' }) } }));
+    expect(await screen.findByText('这里不再用旧版脚本 / 分镜流程制作')).toBeTruthy();
+    expect(screen.getByRole('link', { name: '去共看片室新建' }).getAttribute('href')).toBe('/w/ws_1/studio/new');
+    expect(screen.getByText('child')).toBeTruthy();
+    generative.unmount();
+
+    renderWithClient(<I18nProvider initialLocale="en"><ProjectLayout><p>child</p></ProjectLayout></I18nProvider>, mockClient({ ...off, projects: { get: vi.fn().mockResolvedValue({ id: 'prj_1', title: 'Glacier', status: 'DRAFT', mode: 'FOOTAGE_EDIT' }) } }));
+    expect((await screen.findByRole('link', { name: 'Open this project in the studio' })).getAttribute('href')).toBe('/w/ws_1/studio/prj_1');
+    expect(screen.getByRole('note').textContent).toContain('The old script / storyboard flow is retired here');
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
+  });
+
+  it('服务端未报告 off（旧服务端或查询失败）时不显示下线说明', async () => {
+    pathname = '/w/ws_1/p/prj_1/storyboard';
+    renderWithClient(<ProjectLayout><p>child</p></ProjectLayout>, mockClient({ capabilities: vi.fn().mockResolvedValue({ legacyPipeline: 'mock' }), projects: { get: vi.fn().mockResolvedValue({ id: 'prj_1', title: 'Rates weekly', status: 'STORYBOARDING' }) } }));
+    expect(await screen.findByText('分镜中')).toBeTruthy();
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
   it('renders the More menu in English outside the editor and script pages', async () => {
     pathname = '/w/ws_1/p/prj_1/render';
     renderWithClient(<I18nProvider initialLocale="en"><ProjectLayout><p>child</p></ProjectLayout></I18nProvider>, client());

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { ApiFailure, ERROR_CODES } from '@ancs/contracts';
+import { ApiFailure, ERROR_CODES, type RateLimitDecision, type RateLimitRule, type RateLimitStore } from '@ancs/contracts';
 
 /**
  * Edge 安全层（V5 §15 边缘层；代码审查 0010 遗留：限流 / CORS / Origin / 安全头）。
@@ -10,19 +10,15 @@ import { ApiFailure, ERROR_CODES } from '@ancs/contracts';
  *   其他 Origin 不给任何 CORS 头（浏览器拦截），预检 403；
  * - **Origin 校验（CSRF 纵深防御）**：携带 Cookie 的写请求若带 `Origin` 且既不在白名单也不是本服务自身 → 403；
  *   无 `Origin` 的请求（服务端/原生客户端/Provider 回调）不受影响；
- * - **限流**：按"端点类别 × 客户端 IP"令牌桶（每进程内存；多实例部署时为每实例上限）。
+ * - **限流**：按"端点类别 × 客户端 IP"令牌桶。缺省每进程内存（多实例时为每实例上限）；注入共享存储（Redis）后
+ *   多台 API 共用同一份额度，共享存储出错时退回本进程令牌桶（既不放行全部，也不拒绝全部），并限频告警。
  *   客户端 IP 取决于 `trustProxyHops`：未经可信代理时用连接地址，避免伪造 `X-Forwarded-For` 绕过。
  *   超限 → 429 `RATE_LIMITED` + `Retry-After`。
  */
 
 export type RateLimitClass = 'auth' | 'expensive' | 'write' | 'read';
 
-export interface RateLimitRule {
-  /** 桶容量（突发上限） */
-  capacity: number;
-  /** 每分钟补充的令牌数 */
-  perMinute: number;
-}
+export type { RateLimitRule } from '@ancs/contracts';
 
 export const DEFAULT_RATE_LIMITS: Readonly<Record<RateLimitClass, RateLimitRule>> = {
   auth: { capacity: 20, perMinute: 20 },
@@ -40,6 +36,8 @@ export interface EdgeOptions {
   hsts?: boolean;
   /** 时钟注入（测试） */
   now?: () => number;
+  /** 共享限流存储（如 Redis）；缺省只用本进程内存 */
+  rateLimitStore?: RateLimitStore;
 }
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -61,7 +59,7 @@ export function classifyRequest(method: string, url: string): RateLimitClass | n
 export class TokenBuckets {
   private readonly buckets = new Map<string, { tokens: number; updatedAt: number }>();
 
-  take(key: string, rule: RateLimitRule, now: number): { allowed: true } | { allowed: false; retryAfterSeconds: number } {
+  take(key: string, rule: RateLimitRule, now: number): RateLimitDecision {
     const refillPerMs = rule.perMinute / 60_000;
     const existing = this.buckets.get(key);
     const tokens = existing === undefined
@@ -102,6 +100,21 @@ export function registerEdge(app: FastifyInstance, options: EdgeOptions): void {
   const allowed = new Set(options.allowedOrigins.map(normalizeOrigin).filter((origin): origin is string => origin !== null));
   const buckets = new TokenBuckets();
   const now = options.now ?? Date.now;
+  const shared = options.rateLimitStore;
+  let lastSharedFailureLog = 0;
+  const takeToken = async (key: string, rule: RateLimitRule): Promise<RateLimitDecision> => {
+    if (shared === undefined) return buckets.take(key, rule, now());
+    try {
+      return await shared.take(key, rule);
+    } catch (error) {
+      // 共享存储不可用：退回本进程令牌桶；告警每分钟最多一次，避免日志被淹没
+      if (now() - lastSharedFailureLog > 60_000) {
+        lastSharedFailureLog = now();
+        app.log.warn({ store: shared.kind, err: (error as Error).message }, '共享限流存储不可用，已退回本进程限流');
+      }
+      return buckets.take(key, rule, now());
+    }
+  };
 
   app.addHook('onRequest', async (request, reply) => {
     const originHeader = request.headers.origin;
@@ -141,7 +154,7 @@ export function registerEdge(app: FastifyInstance, options: EdgeOptions): void {
       const limits = options.rateLimits ?? DEFAULT_RATE_LIMITS;
       const limitClass = classifyRequest(request.method, request.url);
       if (limitClass !== null) {
-        const outcome = buckets.take(`${limitClass}:${request.ip}`, limits[limitClass], now());
+        const outcome = await takeToken(`${limitClass}:${request.ip}`, limits[limitClass]);
         if (!outcome.allowed) {
           reply.header('retry-after', String(outcome.retryAfterSeconds));
           throw new ApiFailure(ERROR_CODES.RATE_LIMITED, 'rate limit exceeded', 429, {

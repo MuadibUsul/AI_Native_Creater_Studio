@@ -28,7 +28,8 @@ export type AgentLocale = z.infer<typeof agentLocaleSchema>;
 // ---------------------------------------------------------------------------
 
 /** READ：只读；DRAFT_EDIT：改本轮草稿（成为可撤销的提案）；GENERATE：付费生成（先报预估成本）。 */
-export const AGENT_TOOL_EFFECTS = ['READ', 'DRAFT_EDIT', 'GENERATE'] as const;
+/** PLAN：写规划记录（导演蓝图与场景契约，裁决 0020）——不改时间线，也不是只读 */
+export const AGENT_TOOL_EFFECTS = ['READ', 'DRAFT_EDIT', 'GENERATE', 'PLAN'] as const;
 export const agentToolEffectSchema = z.enum(AGENT_TOOL_EFFECTS);
 export type AgentToolEffect = z.infer<typeof agentToolEffectSchema>;
 
@@ -184,10 +185,55 @@ export const AGENT_MODEL_PRICES: Readonly<Record<string, AgentModelPrice>> = {
 };
 
 /**
- * 一次模型调用的成本（微美元，向上取整）。未知模型返回 null（不臆造价格；计量面显示"未定价"）。
+ * 运维补充的模型单价（美元 / 百万 token），按供应商价格页填写；内置表里没有的模型（如 DeepSeek、Elorian、Gemini）靠它计价。
+ * JSON：`{"模型名": {"input": 0.5, "output": 2, "cacheRead": 0.05, "cacheWrite": 0.5}}`；cacheRead / cacheWrite 缺省按 input（宁可多算，不少算）。
  */
-export function agentModelCostMicros(model: string, usage: AgentModelUsage): number | null {
-  const price = AGENT_MODEL_PRICES[model];
+const usdPerMTokSchema = z.number().nonnegative().max(1000);
+export const modelPriceOverrideSchema = z.object({
+  // 输入、输出价必须大于 0：填 0 等于不计费，月度上限永远不会触发
+  input: usdPerMTokSchema.positive(),
+  output: usdPerMTokSchema.positive(),
+  cacheRead: usdPerMTokSchema.optional(),
+  cacheWrite: usdPerMTokSchema.optional(),
+}).strict();
+export const modelPriceOverridesSchema = z.record(z.string().trim().min(1).max(120), modelPriceOverrideSchema);
+export type ModelPriceOverrides = z.infer<typeof modelPriceOverridesSchema>;
+
+/** 内置单价 + 运维补充（同名时以运维为准）。 */
+export function mergeModelPrices(overrides: ModelPriceOverrides): Record<string, AgentModelPrice> {
+  const micros = (usd: number): number => Math.round(usd * 1_000_000);
+  return {
+    ...AGENT_MODEL_PRICES,
+    ...Object.fromEntries(Object.entries(overrides).map(([model, price]) => [model, {
+      inputMicrosPerMTok: micros(price.input),
+      outputMicrosPerMTok: micros(price.output),
+      cacheReadMicrosPerMTok: micros(price.cacheRead ?? price.input),
+      cacheWriteMicrosPerMTok: micros(price.cacheWrite ?? price.input),
+    }])),
+  };
+}
+
+/**
+ * 一次模型调用的成本（微美元，向上取整）。未知模型返回 null（不臆造价格；计量面显示"未定价"）。
+ * `prices` 缺省为内置表；部署补充的单价由领域层（`modelCostMicros`）传入。
+ */
+/** 供应商回带的快照后缀：日期（`-2026-09-01`、`-20260901`、Vertex 的 `@20260901`）或 `-latest`。 */
+const MODEL_SNAPSHOT_SUFFIX = /(?:-\d{4}-\d{2}-\d{2}|-\d{8}|@\d{8}|-latest)$/;
+
+/**
+ * 模型单价：先精确匹配；没有时，如果供应商回带的是某个已定价模型的日期 / latest 快照（响应里的模型名常带这种后缀），
+ * 按该模型计价——否则配好单价的模型会被当成"未定价"，设了月度上限时 AI 剪辑师调一次就停。
+ * 不认同前缀的另一个模型（如 `x-mini`）：那是不同的价格。
+ */
+export function resolveModelPrice(model: string, prices: Readonly<Record<string, AgentModelPrice>> = AGENT_MODEL_PRICES): AgentModelPrice | undefined {
+  const exact = prices[model];
+  if (exact !== undefined) return exact;
+  const base = model.replace(MODEL_SNAPSHOT_SUFFIX, '');
+  return base === model ? undefined : prices[base];
+}
+
+export function agentModelCostMicros(model: string, usage: AgentModelUsage, prices: Readonly<Record<string, AgentModelPrice>> = AGENT_MODEL_PRICES): number | null {
+  const price = resolveModelPrice(model, prices);
   if (price === undefined) return null;
   const total = BigInt(usage.inputTokens) * BigInt(price.inputMicrosPerMTok)
     + BigInt(usage.outputTokens) * BigInt(price.outputMicrosPerMTok)
@@ -245,7 +291,8 @@ export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
  * APPLY_REVIEW = 把一轮审片里已确定的批注一次做完（成为一个试改提案）；
  * GENERATE = 用户确认的一次付费生成（V6-7/V6-8）：不调用模型，生成结果放进试改（在当前试改上继续）。
  */
-export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE'] as const;
+/** AUTONOMOUS：自主制作的那一轮（裁决 0020）——由自主制作工作流发起与推进，不经 AGENT_TURN 工作流 */
+export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE', 'AUTONOMOUS'] as const;
 export const agentTurnPurposeSchema = z.enum(AGENT_TURN_PURPOSES);
 export type AgentTurnPurpose = z.infer<typeof agentTurnPurposeSchema>;
 
@@ -300,6 +347,28 @@ export const projectAgentCostSchema = z.object({
 }).strict();
 export type ProjectAgentCost = z.infer<typeof projectAgentCostSchema>;
 
+/**
+ * 工作区本月 AI 模型费用与上限（UTC 自然月）：导演对话、审片执行、自主制作、风格撰写的模型调用合计。
+ * 上限来自套餐（`aiSpendMicrosPerMonth`）；套餐不设时取部署缺省（`ANCS_AI_MONTHLY_CAP_USD`）；都没有 = 不设上限。
+ * 达到上限后不再开始新的一轮，进行中的一轮在下一次模型调用前停下（已完成的修改保留为提案）；
+ * 因此实际花费最多超出上限"一次模型调用"的费用。未定价的调用不计入金额，另计次数。
+ */
+export const AI_SPEND_CAP_SOURCES = ['PLAN', 'DEPLOYMENT'] as const;
+export const aiSpendSchema = z.object({
+  /** UTC 月份（YYYY-MM） */
+  period: z.string().regex(/^\d{4}-\d{2}$/),
+  /** 本月上限（微美元）；null = 不设上限 */
+  capMicros: z.number().int().nonnegative().nullable(),
+  capSource: z.enum(AI_SPEND_CAP_SOURCES).nullable(),
+  spentMicros: z.number().int().nonnegative(),
+  unpricedCalls: z.number().int().nonnegative(),
+  /** 已达到上限（新的一轮会被拒绝） */
+  reached: z.boolean(),
+  /** 下一个月开始（上限重新计算）的时刻 */
+  resetsAt: isoDateTimeSchema,
+}).strict();
+export type AiSpend = z.infer<typeof aiSpendSchema>;
+
 export const AGENT_ERROR_REASONS = {
   SESSION_NOT_FOUND: 'AGENT_SESSION_NOT_FOUND',
   TURN_IN_PROGRESS: 'AGENT_TURN_IN_PROGRESS',
@@ -308,4 +377,8 @@ export const AGENT_ERROR_REASONS = {
   MODEL_REFUSED: 'AGENT_MODEL_REFUSED',
   BUDGET_EXCEEDED: 'AGENT_BUDGET_EXCEEDED',
   ITERATION_LIMIT: 'AGENT_ITERATION_LIMIT',
+  /** 工作区本月 AI 费用已达上限（见 aiSpendSchema） */
+  MONTHLY_CAP_REACHED: 'AI_MONTHLY_CAP_REACHED',
+  /** 设了月度上限，但所用模型没有单价（无法按额度控制费用）：先不调用，等运维在 ANCS_MODEL_PRICES_JSON 补上单价 */
+  MODEL_UNPRICED: 'AI_MODEL_UNPRICED',
 } as const;

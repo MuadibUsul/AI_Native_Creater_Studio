@@ -223,4 +223,25 @@ describe('Narrative 生成（P04-03）', () => {
     const strangerRead = await stranger.client.narrative.current(workspaceId, projectId).catch((error: unknown) => error);
     expect(strangerRead).toMatchObject({ status: 404 });
   });
+
+  it('旧 V4 流水线 off（未装配叙事 LLM）：生成 → 501 GENERATOR_UNAVAILABLE（fail-closed，不是 500）', async () => {
+    const bare = await buildServer({
+      auth: { auth, db: handle.db, tokens: { db: handle.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } },
+      content: { articleFetcher: fetcher },
+      legacyPipeline: 'off',
+    });
+    await bare.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const { client, email } = await newClient('legacy-off');
+      const { workspaceId, projectId, documentId } = await makeProject(client);
+      const offClient = createClient({ baseUrl: `http://127.0.0.1:${String((bare.server.address() as AddressInfo).port)}`, clientType: 'web', clientVersion: '0.1.0' });
+      await offClient.auth.signIn({ email, password: 'password-1234' });
+      const failure = await offClient.narrative.generate(workspaceId, projectId, documentId, { targetDurationMs: 60_000 }).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ status: 501 });
+      expect((failure as AncsApiError).details['reason']).toBe('GENERATOR_UNAVAILABLE');
+      expect((await offClient.capabilities()).legacyPipeline).toBe('off');
+    } finally {
+      await bare.close();
+    }
+  });
 });

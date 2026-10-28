@@ -23,13 +23,19 @@ import { computeBackoffSeconds, createJobInTx } from './jobs.js';
  * - 失败分类：步骤声明的 `classify`（缺省：4xx/501 的 ApiFailure 不可重试，其余可重试）；
  *   可重试且未达上限 → 记失败尝试、按退避入队新推进任务；否则运行失败并**逆序补偿**已成功步骤。
  * - 人工门：步骤返回 `WAIT_HUMAN` → 运行进入 WAITING_HUMAN，`resolveWorkflowGate` 决定后继续。
+ * - 等条件：步骤返回 `WAIT_UNTIL` → 本次尝试撤销（不计次数），延迟后由新的推进任务重新执行该步骤；运行保持 RUNNING。
  * - 推进任务丢租约时遗留的 RUNNING 尝试，由下一次推进记为 `LEASE_LOST`（计入尝试次数）。
  * 外部/付费调用只能作为步骤存在（V5 §11.1）；步骤实现自己负责幂等（例如产物按 (runId, kind) 复用）。
  */
 
 export type WorkflowStepOutcome =
   | { kind: 'DONE'; output: Record<string, unknown> }
-  | { kind: 'WAIT_HUMAN'; gate: string; reason: string };
+  | { kind: 'WAIT_HUMAN'; gate: string; reason: string }
+  /**
+   * 条件还没满足（例如素材还在处理）：过一会儿再执行同一步骤。不算一次失败的尝试，也不留下尝试记录；
+   * 等多久、等到什么时候放弃由步骤自己决定（步骤必须有自己的截止时间，引擎不替它无限等待）。
+   */
+  | { kind: 'WAIT_UNTIL'; delaySeconds: number; reason: string };
 
 export interface WorkflowStepContext {
   deps: DomainDeps;
@@ -349,6 +355,11 @@ export async function advanceWorkflow(
       // 步骤输出按步骤键并入运行上下文（jsonb 合并，单推进者无并发写）
       await deps.db.update(workflowRuns).set({ context: sql`${workflowRuns.context} || ${JSON.stringify({ [step.key]: outcome.output })}::jsonb`, updatedAt: finishedAt }).where(eq(workflowRuns.id, run.id));
       continue;
+    }
+    if (outcome !== null && outcome.kind === 'WAIT_UNTIL') {
+      await deps.db.delete(workflowSteps).where(eq(workflowSteps.id, stepRowId));
+      await enqueueAdvance(deps, run, { delaySeconds: Math.min(Math.max(outcome.delaySeconds, 1), 3600) });
+      return { status: 'RUNNING', executedSteps, superseded: false };
     }
     if (outcome !== null && outcome.kind === 'WAIT_HUMAN') {
       await deps.db.update(workflowSteps).set({ status: 'WAITING_HUMAN', result: { gate: outcome.gate, reason: outcome.reason } }).where(eq(workflowSteps.id, stepRowId));

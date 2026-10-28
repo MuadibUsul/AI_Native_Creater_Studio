@@ -61,6 +61,7 @@ import { registerFinalRenderRoutes } from './routes/final-renders.js';
 import { registerAgentRoutes } from './routes/agent.js';
 import { registerPreviewRoutes } from './routes/previews.js';
 import { registerStudioRoutes } from './routes/studio.js';
+import { registerAutonomyRoutes } from './routes/autonomy.js';
 import { registerGenerationRoutes } from './routes/generations.js';
 import { registerReviewRoutes } from './routes/review.js';
 import { registerNarrativeRoutes } from './routes/narrative.js';
@@ -130,9 +131,15 @@ export interface BuildServerOptions {
   edge?: import('./plugins/edge.js').EdgeOptions & { trustProxyHops?: number };
   /** 本进程装配的外部能力驱动清单（V5-M3；经 /capabilities 报告实现种类，客户端据此显示 Mock 标识） */
   providerInventory?: readonly import('@ancs/contracts').ProviderInventoryEntry[];
+  /** 旧 V4 流水线是否装配（经 /capabilities 报告；off 时界面隐藏旧入口） */
+  legacyPipeline?: 'mock' | 'off';
+  /** 账号自助（D-04）：注册方式与账号邮件（未提供 = closed 且不发信） */
+  accounts?: import('./plugins/email.js').AccountsDeps;
   /** 语音合成/对齐（P06-03；Mock 默认，真实适配器随凭据接入） */
   audio?: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider; storage?: import('@ancs/contracts').ObjectStorageAdapter };
   distribution?: { providers?: import('@ancs/contracts').DistributionProvider[] };
+  /** 就绪探针（生产部署）：依赖检查与退出排空状态；未提供时 /ready 只看排空 */
+  readiness?: import('./routes/health.js').ReadinessDeps;
 }
 
 /** 信任最近 N 跳代理（proxy-addr 信任函数：第 hop 跳 < N 时可信）；0/未配置 = 不信任 X-Forwarded-For。 */
@@ -199,10 +206,10 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     await app.register(
       async (instance) => {
         registerIdempotency(instance, authDeps);
-        registerAuthRoutes(instance, authDeps, adminDeps);
+        registerAuthRoutes(instance, authDeps, adminDeps, options.accounts);
         registerAppearanceRoutes(instance, authDeps);
         registerOpsAuthRoutes(instance, authDeps, adminDeps);
-        registerWorkspaceRoutes(instance, authDeps);
+        registerWorkspaceRoutes(instance, authDeps, options.accounts);
         registerChannelRoutes(instance, authDeps);
         registerCreatorIdentityRoutes(instance, authDeps);
         registerSpeechProfileRoutes(instance, authDeps);
@@ -250,7 +257,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         registerFinalRenderRoutes(instance, authDeps);
         registerAgentRoutes(instance, authDeps);
         registerPreviewRoutes(instance, { ...authDeps, ...(storageDeps === undefined ? {} : { storage: storageDeps }) });
-        registerStudioRoutes(instance, authDeps);
+        registerStudioRoutes(instance, authDeps, contentDeps?.articleFetcher === undefined ? {} : { articleFetcher: contentDeps.articleFetcher });
+        registerAutonomyRoutes(instance, authDeps);
         registerGenerationRoutes(instance, authDeps);
         registerReviewRoutes(instance, authDeps);
         registerSceneGenerationRoutes(instance, authDeps, credentialDeps);
@@ -269,7 +277,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
           ...(storageDeps?.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
         });
         registerPublicationRoutes(instance, authDeps, {
-          distributionProviders: options.distribution?.providers ?? [createMockDistributionProvider(), ...createPlatformStubProviders()],
+          distributionProviders: options.distribution?.providers ?? (options.legacyPipeline === 'off' ? createPlatformStubProviders() : [createMockDistributionProvider(), ...createPlatformStubProviders()]),
         });
         registerHandoffRoutes(instance, authDeps);
         registerCmsRoutes(instance, authDeps, {
@@ -297,8 +305,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
 
   await app.register(
     async (instance) => {
-      registerHealthRoutes(instance);
-      registerCapabilityRoutes(instance, { extensions, providers: options.providerInventory ?? [] });
+      registerHealthRoutes(instance, options.readiness);
+      registerCapabilityRoutes(instance, {
+        extensions,
+        providers: options.providerInventory ?? [],
+        ...(options.legacyPipeline === undefined ? {} : { legacyPipeline: options.legacyPipeline }),
+        accounts: { signup: options.accounts?.signupMode ?? 'closed', passwordReset: options.accounts?.email !== undefined },
+      });
       if (storageDeps !== undefined) {
         registerStorageRoutes(instance, storageDeps);
       }

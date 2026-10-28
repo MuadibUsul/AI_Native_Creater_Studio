@@ -39,7 +39,7 @@ export type VoiceErrorCode =
   | 'PROVIDER_AUTH'
   | 'ASR_FAILED';
 /** 不结束会话的一次性提示：这一句没听成（识别服务暂时失败）/ 语音回应没念出来 */
-export type VoiceNoticeCode = 'SAY_AGAIN' | 'REPLY_FAILED';
+export type VoiceNoticeCode = 'SAY_AGAIN' | 'REPLY_FAILED' | 'IDLE_STOPPED';
 
 export interface VoiceUtterance {
   utteranceId: string;
@@ -98,12 +98,24 @@ function saveVoiceChoice(voiceId: string): void {
   try { window.localStorage.setItem(VOICE_CHOICE_KEY, voiceId); } catch { /* 存不了就只在本页面内生效 */ }
 }
 
+/** 一直开着时，这么久没人说话、AI 也没在忙或说话，就停止收音（语音识别按时长计费） */
+export const VOICE_IDLE_STOP_MS = 3 * 60_000;
+
+/** 现在是不是"空等"：在听、没人在说、没有半句、AI 没在说也没在忙 */
+export function voiceIdle(input: { state: VoiceState; hearing: boolean; partial: string; replyState: ReplyPlaybackState; busy: boolean }): boolean {
+  return input.state === 'listening' && !input.hearing && input.partial === '' && input.replyState === 'idle' && !input.busy;
+}
+
 export function useVoice(options: {
   workspaceId: string;
   projectId: string;
   locale: AgentLocale;
   onUtterance: (utterance: VoiceUtterance) => void;
   onSpeechStart?: () => void;
+  /** AI 正在处理（这一轮进行中或有排队的话）：空等计时暂停 */
+  busy?: boolean;
+  /** 空等多久后停止收音（缺省 3 分钟） */
+  idleStopMs?: number;
 }) {
   const client = useAncsClient();
   const [state, setState] = useState<VoiceState>('off');
@@ -305,6 +317,15 @@ export function useVoice(options: {
       setState('off');
     }
   }, [releaseAudio, resetUtterance]);
+
+  // 空等太久自动停止收音（省识别费用），如实提示；有人说话、AI 在忙或在说时重新计时
+  const idle = voiceIdle({ state, hearing, partial, replyState: reply.state, busy: options.busy === true });
+  const idleStopMs = options.idleStopMs ?? VOICE_IDLE_STOP_MS;
+  useEffect(() => {
+    if (!idle) return;
+    const timer = setTimeout(() => { stop(); setNotice('IDLE_STOPPED'); }, idleStopMs);
+    return () => clearTimeout(timer);
+  }, [idle, idleStopMs, stop]);
 
   /** 出错或结束后收起（不重连） */
   const dismiss = useCallback(() => {

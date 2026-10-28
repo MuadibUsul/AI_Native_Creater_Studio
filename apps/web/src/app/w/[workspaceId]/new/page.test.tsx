@@ -27,6 +27,17 @@ describe('Quiet Frame 新建作品', () => {
     Object.defineProperty(globalThis.crypto, 'randomUUID', { configurable: true, value: vi.fn().mockReturnValue('12345678-1234-1234-1234-123456789abc') });
   });
 
+  it('旧 V4 流水线下线：不显示写稿表单，只给说明与去共看片室新建的入口（中英）', async () => {
+    const off = () => mockClient({ ...editableWorkspace, capabilities: vi.fn().mockResolvedValue({ legacyPipeline: 'off' }) });
+    const zh = renderWithClient(<NewProjectPage />, off());
+    expect((await screen.findByRole('link', { name: '去共看片室新建' })).getAttribute('href')).toBe('/w/ws_1/studio/new');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    zh.unmount();
+    renderWithClient(<I18nProvider initialLocale="en"><NewProjectPage /></I18nProvider>, off());
+    expect(await screen.findByRole('link', { name: 'Start in the studio' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[一-鿿]/);
+  });
+
   it('读取真实文章并在确认后生成脚本，复用同一项目', async () => {
     const createProject = vi.fn().mockResolvedValue({ id: 'prj_1' });
     const createContent = vi.fn().mockResolvedValue(parsed);

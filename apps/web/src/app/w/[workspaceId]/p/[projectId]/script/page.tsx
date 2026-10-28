@@ -110,6 +110,7 @@ export default function ScriptPage() {
     </StateBlock>
   </div>;
 
+  const mockDraft = plan.generation.method === 'LLM' && /^mock[.-]/i.test(plan.generation.providerId);
   const shownClaim = claims.data?.find((claim) => claim.id === selectedClaimId);
   return <div className="page qf-workflow qf-script-page" style={{ paddingTop: 29 }}>
     <div className="script-layout">
@@ -122,7 +123,9 @@ export default function ScriptPage() {
         {workspace.isError ? <p role="alert" className="qf-error">{t.workspaceRoleUnknown(describeError(workspace.error).message)}</p> : !canEdit && workspace.data ? <p className="notice">{t.readOnly}</p> : null}
         <div className="row between"><span className="badge blue">{t.draftBadge}</span><span className="small muted">{t.lockedCount(plan.narrationBlocks.filter((block) => block.locked).length, plan.narrationBlocks.length)}</span></div>
         <h1>{plan.title}</h1>
-        <div className="row gap8 small muted"><span>Revision {plan.revision}</span><span>·</span><span>{t.approxDuration(formatDuration(plan.estimatedDurationMs))}</span><span>·</span><span>{plan.generation.method === 'LLM' ? t.aiDraft : t.manualScript}</span></div>
+        <div className="row gap8 small muted"><span>Revision {plan.revision}</span><span>·</span><span>{t.approxDuration(formatDuration(plan.estimatedDurationMs))}</span><span>·</span><span>{plan.generation.method !== 'LLM' ? t.manualScript : mockDraft ? t.mockDraft : t.aiDraft}</span></div>
+        {/* 旧版脚本流程只接了测试替身模型时如实说明（§76-03：不得把 Mock 输出当真实生成），并指向真实的文章讲述流程 */}
+        {mockDraft ? <div className="notice mt16" role="note" data-mock-draft=""><div><strong>{t.mockDraftTitle}</strong><p className="small mt8">{t.mockDraftBody}</p><Link className="btn small mt8" href={`/w/${workspaceId}/studio/new`} onClick={() => { const url = sources.data?.find((source) => source.url)?.url; if (url) { try { window.sessionStorage.setItem('ancs-studio-draft', JSON.stringify({ start: 'link', url })); } catch { /* 新建页没有草稿也能用 */ } } }}>{t.mockDraftAction}</Link></div></div> : null}
         <p className="lead">{plan.hook || plan.thesis}</p>
         {blockError !== null ? <StateBlock variant="conflict" title={t.blockRejected} description={blockError} action={{ label: t.gotIt, onClick: () => setBlockError(null) }} /> : null}
         {plan.chapters.map((chapter, index) => <section key={chapter.id} id={'chapter-' + chapter.id} className="qf-script-chapter">

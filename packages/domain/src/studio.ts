@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import {
+  DEFAULT_AUTONOMY_POLICY,
   ApiFailure,
   ERROR_CODES,
   MEDIA_ANALYSIS_ERROR_CODES,
@@ -24,10 +25,12 @@ import {
 } from '@ancs/contracts';
 import { agentSessions, assets, assetVersions, mediaIndexRuns, mediaTranscriptRuns, projectSequences, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { workspaceAiSpend } from './ai-spend.js';
 import { createAgentSession, getAgentSession, projectAgentCost } from './agent-runtime.js';
 import { createChannel, listChannels } from './channels.js';
 import { createSequence, createTrack } from './composition.js';
 import { createProject } from './projects.js';
+import { listAutonomousRuns } from './autonomous-production.js';
 import { articleParagraphs } from './agent-article.js';
 import { generationBudget, listProjectGenerations } from './paid-generation-quote.js';
 
@@ -89,7 +92,10 @@ const analysisState = (run: { status: string; errorCode: string | null } | undef
     case 'READY':
     case 'PARTIAL': return 'READY';
     case 'EMPTY': return 'EMPTY';
-    default: return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED ? 'NOT_CONFIGURED' : 'FAILED';
+    default:
+      // 视觉模型没有单价（设了上限时不调用）也是部署配置问题
+      if (run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.CAPABILITY_NOT_CONFIGURED || run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.AI_MODEL_UNPRICED) return 'NOT_CONFIGURED';
+      return run?.errorCode === MEDIA_ANALYSIS_ERROR_CODES.AI_MONTHLY_CAP_REACHED ? 'LIMIT_REACHED' : 'FAILED';
   }
 };
 
@@ -145,11 +151,12 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
   const footage: StudioFootage[] = footageRows.map(({ asset, version }) => {
     const mime = version?.mimeType ?? String((asset.metadata as { mimeType?: unknown } | null)?.mimeType ?? '');
     const filename = (asset.metadata as { filename?: unknown } | null)?.filename;
-    // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线
+    // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线；图片等不需要探测（NOT_REQUIRED）的确认后即就绪
     const probe = (version?.mediaProbe ?? null) as { status?: unknown } | null;
+    const awaitingProbe = probe === null && version?.probeStatus !== 'NOT_REQUIRED';
     const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED' || (probe !== null && probe.status !== 'READY')
       ? 'FAILED'
-      : asset.status === 'READY' && version?.status === 'READY' ? (probe === null ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
+      : asset.status === 'READY' && version?.status === 'READY' ? (awaitingProbe ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
     return {
       assetId: asset.id,
       footageId: status === 'READY' && version !== null ? version.id : null,
@@ -174,7 +181,8 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
       allowEffects: policy?.allowProceduralGraphics === true,
       allowNarration: policy?.allowGeneratedSpeech === true,
       allowGeneratedVideo: policy?.allowGeneratedVideo === true,
-      article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length },
+      autonomy: policy?.autonomy ?? DEFAULT_AUTONOMY_POLICY,
+      article: article === null ? null : { title: article.title, characters: article.text.length, paragraphs: articleParagraphs(article.text).length, sourceUrl: article.sourceUrl ?? null },
     },
     sequenceId: sequence.id,
     session,
@@ -184,5 +192,7 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     generations: await listProjectGenerations(deps, { workspaceId: input.workspaceId, projectId: input.projectId, limit: 20 }),
     generationBudget: await generationBudget(deps, { workspaceId: input.workspaceId }),
     cost: await projectAgentCost(deps, input),
+    aiSpend: await workspaceAiSpend(deps, { workspaceId: input.workspaceId }),
+    autonomousRun: (await listAutonomousRuns(deps, { ...input, limit: 1 }))[0] ?? null,
   });
 }

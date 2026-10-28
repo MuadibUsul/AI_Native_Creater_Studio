@@ -197,6 +197,8 @@ export type { MediaAnalysisStageName, MediaAnalysisStageStatus, MediaAnalysisSta
 export {
   MEDIA_VISUAL_ANALYSIS_JOB_TYPE,
   MEDIA_VISUAL_ANALYSIS_PROCESSOR_VERSION,
+  MEDIA_VISUAL_ANALYSIS_STOPPED,
+  retryFootageDescriptionResponseSchema,
   visualSourceAnchorSchema,
   visualEvidenceFrameSchema,
   visualTrackKeyframeSchema,
@@ -207,7 +209,7 @@ export {
   generatedMediaVisualAnalysisSchema,
   mediaVisualAnalysisJobInputSchema,
 } from './media-visual-analysis.js';
-export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter } from './media-visual-analysis.js';
+export type { GeneratedMediaVisualAnalysis, MediaVisualAnalysisJobInput, MediaVisualAnalysisAdapter, MediaVisualAnalysisUsage, RetryFootageDescriptionResponse } from './media-visual-analysis.js';
 export {
   MEDIA_AUDIO_ANALYSIS_JOB_TYPE,
   MEDIA_AUDIO_ANALYSIS_PROCESSOR_VERSION,
@@ -333,6 +335,7 @@ export {
   rebaseProposalResponseSchema,
   submitProposalArtifactRequestSchema,
   submitProposalArtifactResponseSchema,
+  MAX_PROPOSAL_OPERATIONS,
 } from './proposal.js';
 export type {
   AdoptProposalPartialRequest,
@@ -963,6 +966,19 @@ export {
   tokenResponseSchema,
   revokeTokenRequestSchema,
   AUTH_METHODS,
+  // 账号自助（D-04）
+  SIGNUP_MODES,
+  signupModeSchema,
+  accountEmailLocaleSchema,
+  ACCOUNT_ERROR_REASONS,
+  signUpRequestSchema,
+  accountEmailSentResponseSchema,
+  emailOnlyRequestSchema,
+  verifyEmailRequestSchema,
+  verifyEmailResponseSchema,
+  resetPasswordRequestSchema,
+  resetPasswordResponseSchema,
+  accountCapabilitiesSchema,
 } from './auth.js';
 export type {
   AuthUser,
@@ -971,7 +987,16 @@ export type {
   TokenRequest,
   TokenResponse,
   RevokeTokenRequest,
+  SignupMode,
+  AccountEmailLocale,
+  SignUpRequest,
+  AccountEmailSentResponse,
+  EmailOnlyRequest,
+  VerifyEmailRequest,
+  ResetPasswordRequest,
+  AccountCapabilities,
 } from './auth.js';
+export type { EmailMessage, EmailSender } from './email.js';
 
 export { OPS_ENVIRONMENTS, opsEnvironmentSchema, OPS_ROLES, opsRoleSchema, opsSessionSchema, opsMfaEnrollmentRequestSchema, opsMfaEnrollmentSchema, opsRevokeSessionRequestSchema } from './ops-auth.js';
 export type { OpsEnvironment, OpsRole, OpsSession } from './ops-auth.js';
@@ -1254,9 +1279,25 @@ export {
   realtimeEnvSchema,
   crossCheckApiEnv,
   resolveAllowedOrigins,
+  resolveLegacyPipeline,
   retentionCliEnvSchema,
+  schedulerEnvSchema,
+  opsGrantCliEnvSchema,
+  OPS_GRANTABLE_ROLES,
+  migrateCliEnvSchema,
+  createUserCliEnvSchema,
+  signupInviteCliEnvSchema,
+  emailEnvShape,
+  crossCheckEmailEnv,
+  aiSpendEnvShape,
+  crossCheckAiSpendEnv,
+  resolveAiMonthlyCapMicros,
+  modelPricesEnvShape,
+  parseModelPriceOverrides,
+  s3StorageEnvShape,
+  crossCheckStorageEnv,
 } from './env.js';
-export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv } from './env.js';
+export type { EnvIssue, EnvValidationResult, ApiEnv, WorkerEnv, RetentionCliEnv, RealtimeEnv, S3StorageEnv, SchedulerEnv, OpsGrantCliEnv, SignupInviteCliEnv } from './env.js';
 export {
   COMPOSITION_FINAL_RENDER_ERROR_REASONS,
   COMPOSITION_FINAL_RENDER_STEPS,
@@ -1287,6 +1328,15 @@ export {
   renderBackendCapabilitiesSchema,
   renderPlanExecutionFileSchema,
   renderPlanExecutionResultSchema,
+  AIGC_METADATA_KEY,
+  AIGC_EXPLICIT_MIN_SECONDS,
+  AIGC_EXPLICIT_MIN_HEIGHT_RATIO,
+  AIGC_EXPLICIT_TEXT,
+  CONTENT_LABEL_LANGUAGES,
+  aigcMetadataLabelSchema,
+  contentLabelLanguageSchema,
+  contentLabelSchema,
+  serializeAigcMetadata,
   stereoPanCoefficients,
   renderPlanAnimatedTargetSchema,
   renderPlanAudioEntrySchema,
@@ -1304,6 +1354,9 @@ export type {
   RenderPlanExecutionFile,
   RenderPlanExecutionResult,
   RenderPlanExecutor,
+  AigcMetadataLabel,
+  ContentLabel,
+  ContentLabelLanguage,
   StereoPanCoefficients,
   RenderPlan,
   RenderPlanAudioEntry,
@@ -2175,8 +2228,8 @@ export {
 } from './invitations.js';
 export type { InvitationStatus, WorkspaceInvitation, MyInvitation, CreateInvitationRequest, InvitationErrorReason } from './invitations.js';
 
-export { healthResponseSchema } from './health.js';
-export type { HealthResponse } from './health.js';
+export { healthResponseSchema, readinessResponseSchema, READINESS_CHECK_STATES } from './health.js';
+export type { HealthResponse, ReadinessResponse } from './health.js';
 
 // SaaS 安全运营契约（P09-05 / §43.3、§67、§24.2）
 export {
@@ -2698,6 +2751,10 @@ export {
   AGENT_LOCALES,
   AGENT_MODEL_FAILURE_KINDS,
   AGENT_MODEL_PRICES,
+  mergeModelPrices,
+  resolveModelPrice,
+  modelPriceOverrideSchema,
+  modelPriceOverridesSchema,
   AGENT_STOP_REASONS,
   AGENT_TOOL_EFFECTS,
   AGENT_TOOL_PERMISSIONS,
@@ -2724,6 +2781,8 @@ export {
   agentTurnStatusSchema,
   createAgentSessionRequestSchema,
   projectAgentCostSchema,
+  AI_SPEND_CAP_SOURCES,
+  aiSpendSchema,
   startAgentTurnRequestSchema,
 } from './agent.js';
 export type {
@@ -2751,6 +2810,8 @@ export type {
   AgentTurnStatus,
   CreateAgentSessionRequest,
   ProjectAgentCost,
+  AiSpend,
+  ModelPriceOverrides,
   StartAgentTurnRequest,
 } from './agent.js';
 export {
@@ -2770,7 +2831,9 @@ export {
   STUDIO_ANALYSIS_STATES,
   STUDIO_ASPECT_RATIOS,
   createStudioProjectRequestSchema,
+  fetchStudioArticleRequestSchema,
   studioAnalysisStateSchema,
+  studioArticleDraftSchema,
   studioAspectRatioSchema,
   studioEffectSchema,
   studioNarrationSchema,
@@ -2779,7 +2842,7 @@ export {
   studioStateSchema,
   undoChangeResponseSchema,
 } from './studio.js';
-export type { CreateStudioProjectRequest, StudioAnalysisState, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
+export type { CreateStudioProjectRequest, FetchStudioArticleRequest, StudioAnalysisState, StudioArticleDraft, StudioEffect, StudioFootage, StudioNarration, StudioProjectRef, StudioState, UndoChangeResponse } from './studio.js';
 export {
   STRATEGY_ERROR_REASONS,
   STRATEGY_PACK_KINDS,
@@ -2965,3 +3028,51 @@ export type {
   RevokeIdentityConsentRequest,
   SetIdentityReferenceRequest,
 } from './identity-profile.js';
+export {
+  APPROVAL_TIERS,
+  approvalTierSchema,
+  MAX_AUTONOMY_BUDGET_MICROS,
+  MAX_AUTONOMY_RETRIES,
+  autonomySignatureSchema,
+  autonomyPolicySchema,
+  DEFAULT_AUTONOMY_POLICY,
+  signAutonomyRequestSchema,
+  AUTONOMY_ERROR_REASONS,
+} from './autonomy.js';
+export type {
+  ApprovalTier,
+  AutonomySignature,
+  AutonomyPolicy,
+  SignAutonomyRequest,
+  AutonomyErrorReason,
+  AutonomySpendDecision,
+} from './autonomy.js';
+export {
+  EDIT_INTENT_TYPES,
+  editIntentTypeSchema,
+  planTimeRangeSchema,
+  editIntentSchema,
+  sceneSourceSchema,
+  sceneContractSchema,
+  narrativeBlueprintSchema,
+  productionPlanInputSchema,
+  productionPlanSchema,
+} from './production-plan.js';
+export type { EditIntentType, EditIntent, SceneContract, NarrativeBlueprint, ProductionPlanInput, ProductionPlan } from './production-plan.js';
+export {
+  AUTONOMOUS_PRODUCTION_WORKFLOW,
+  AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION,
+  AUTONOMOUS_RUN_STATUSES,
+  AUTONOMOUS_RUN_ACTIVE_STATUSES,
+  autonomousRunStatusSchema,
+  startAutonomousRunRequestSchema,
+  autonomousReportSchema,
+  autonomousRunSchema,
+  AUTONOMOUS_RUN_ERROR_REASONS,
+  AUTONOMOUS_UNMET_CODES,
+} from './autonomous-run.js';
+export type { AutonomousRunStatus, StartAutonomousRunRequest, AutonomousReport, AutonomousRun } from './autonomous-run.js';
+
+// 限流存储端口（内存 / Redis 共享）
+export { retryAfterSeconds } from './rate-limit.js';
+export type { RateLimitRule, RateLimitDecision, RateLimitStore } from './rate-limit.js';

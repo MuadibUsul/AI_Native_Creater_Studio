@@ -136,6 +136,12 @@ describe('素材工程终渲染工作流（真实 PostgreSQL + 对象存储 + FF
     expect(qa.passed).toBe(true);
     expect(qa.checks.map((check) => check.name)).toEqual(expect.arrayContaining(['VIDEO.storedHash', 'MANIFEST.storedHash', 'manifest.planHash', 'decode', 'video.size', 'video.frameCount', 'audio.layout']));
     expect(qa.checks.every((check) => check.passed)).toBe(true);
+    // 只有用户自己的素材：不加 AI 生成标识（不误标）
+    expect((finished.outputs['render'] as { contentLabel?: unknown }).contentLabel).toBeNull();
+    expect(qa.checks.some((check) => check.name === 'aigc.metadata')).toBe(false);
+    const videoOutput = rendered.outputs.find((output) => output.kind === 'VIDEO')!;
+    const videoRow = (await handle.db.select().from(assetVersions).where(eq(assetVersions.id, videoOutput.assetVersionId)))[0]!;
+    expect(Buffer.from((await storage.getObject(videoRow.storageKey!))!).includes(Buffer.from('"ProduceID"'))).toBe(false);
   });
 
   it('不支持的需求（图形对象）：冻结时 501，运行失败且没有任何产物', { timeout: 60_000 }, async () => {

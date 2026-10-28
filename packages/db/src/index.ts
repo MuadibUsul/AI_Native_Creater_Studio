@@ -1,5 +1,5 @@
-export { createDb, DEFAULT_TEST_DATABASE_URL, redactDatabaseUrl, resolveTestDatabaseUrl } from './client.js';
+export { createDb, dbPoolOptionsFromEnv, DEFAULT_TEST_DATABASE_URL, redactDatabaseUrl, resolveTestDatabaseUrl, type DbPoolOptions } from './client.js';
 export type { DbHandle } from './client.js';
-export { runMigrations, MIGRATIONS_DIR } from './migrate.js';
+export { runMigrations, runMigrationsLocked, MIGRATIONS_DIR, MIGRATION_LOCK_KEY } from './migrate.js';
 export { isForeignKeyViolation, isUniqueViolation } from './errors.js';
 export * from './schema/index.js';

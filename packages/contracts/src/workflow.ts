@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
-import { finalRenderProfileSchema } from './render-plan.js';
+import { contentLabelLanguageSchema, finalRenderProfileSchema } from './render-plan.js';
 
 /**
  * V5-M4（§11.1）：工作流引擎契约。
@@ -75,6 +75,8 @@ export const startCompositionFinalRenderRequestSchema = z.object({
   profile: finalRenderProfileSchema,
   /** 发起时看到的工程 revision；冻结时不一致 → 409（避免导出用户没看过的版本） */
   expectedRevision: z.number().int().nonnegative().optional(),
+  /** 成片含 AI 生成内容时显式标识的语言（缺省英文；界面按当前语言传入） */
+  labelLanguage: contentLabelLanguageSchema.optional(),
 }).strict();
 // 入参形状（画质参数有服务端默认值，调用方可省略）
 export type StartCompositionFinalRenderRequest = z.input<typeof startCompositionFinalRenderRequestSchema>;

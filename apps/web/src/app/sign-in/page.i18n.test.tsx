@@ -10,7 +10,7 @@ describe('登录页英文界面', () => {
   it('登录失败时显示英文标题与重试', async () => {
     const signIn = vi.fn().mockRejectedValue(apiError(401, 'INVALID_CREDENTIALS', 'Invalid email or password'));
     const { container } = renderWithClient(<I18nProvider initialLocale="en"><SignInPage /></I18nProvider>, mockClient({ auth: { signIn } }));
-    expect(screen.getByRole('heading', { name: 'Sign in to Creator Studio' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Sign in to Kinora' })).toBeTruthy();
     expect(screen.getByText('Sign in to continue with your workspaces and projects.')).toBeTruthy();
     expect(container.textContent).not.toMatch(/[一-鿿]/);
 
@@ -20,7 +20,7 @@ describe('登录页英文界面', () => {
     expect(await screen.findByRole('heading', { name: 'Sign-in failed' })).toBeTruthy();
     expect(screen.getByText('Invalid email or password')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-    expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'wrong-password' });
+    expect(signIn).toHaveBeenCalledWith({ email: 'a@test.local', password: 'wrong-password', locale: 'en' });
     expect(container.textContent).not.toMatch(/[一-鿿]/);
   });
 

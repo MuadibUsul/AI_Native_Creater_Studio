@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { BRAND_NAME, BrandTile } from '@/brand/brand';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAncsClient } from '@/lib/client';
 import { applyAppearance, deviceAppearance, saveDeviceAppearance, type AppearanceMode } from '@/lib/appearance';
-import { queryKeys, useSession, useWorkspaces } from '@/lib/queries';
+import { queryKeys, useLegacyPipelineOff, useSession, useWorkspaces } from '@/lib/queries';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from './QuietIcon';
@@ -44,8 +45,8 @@ function projectHref(base: string, project: { id: string; mode?: string }): stri
 
 function Brand({ href = '/', label }: { href?: string; label: string }) {
   return <Link href={href} className="logo" aria-label={label}>
-    <span className="logomark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" /><path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none" /></svg></span>
-    <span className="logotext">Creator Studio</span>
+    <span className="logomark" style={{ background: 'none' }}><BrandTile size={32} /></span>
+    <span className="logotext">{BRAND_NAME}</span>
   </Link>;
 }
 
@@ -194,6 +195,7 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     if (deviceOverride === null) applyAppearance(saved.mode);
   };
   const toggleTheme = () => setDeviceOverride(document.body.classList.contains('theme-dark') ? 'light' : 'dark');
+  const legacyOff = useLegacyPipelineOff();
   const workspaceLinks = workspaceId ? [
     { href: homeHref, label: t.nav.home, icon: 'grid' },
     { href: `${base}/assets`, label: t.nav.assets, icon: 'folder' },
@@ -204,8 +206,11 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
     ...workspaceLinks,
     ...(projects.data ?? []).map((item) => ({ href: projectHref(base, item), label: item.title, icon: 'film' })),
     ...(projectBase ? [
-      { href: `${projectBase}/script`, label: t.nav.script, icon: 'file' },
-      { href: `${projectBase}/storyboard`, label: t.nav.storyboard, icon: 'film' },
+      // 旧 V4 流水线下线时不再提供脚本 / 分镜入口（出片、发布、数据仍可用）
+      ...(legacyOff ? [] : [
+        { href: `${projectBase}/script`, label: t.nav.script, icon: 'file' },
+        { href: `${projectBase}/storyboard`, label: t.nav.storyboard, icon: 'film' },
+      ]),
       { href: `${projectBase}/render`, label: t.nav.render, icon: 'check' },
       { href: `${projectBase}/publish`, label: t.nav.publish, icon: 'upload' },
       { href: `${projectBase}/analytics`, label: t.nav.analytics, icon: 'chart' },
@@ -264,9 +269,12 @@ function PrivateShell({ children, pathname }: { children: ReactNode; pathname: s
   </WorkspaceSelectionContext.Provider>;
 }
 
+const PUBLIC_PATHS = new Set(['/sign-in', '/welcome', '/sign-up', '/verify-email', '/forgot-password', '/reset-password']);
+
 export function StudioShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/';
-  if (pathname === '/sign-in' || pathname === '/welcome') return <>{children}</>;
+  // 未登录也能打开的页面：登录、欢迎页与账号自助（D-04：注册、验证邮箱、找回 / 重设密码）
+  if (PUBLIC_PATHS.has(pathname)) return <>{children}</>;
   // V6-1c 共看片室是单屏工作台：自带轻顶栏，不套用侧栏与全局顶栏（新建页与"我的形象与声音"是普通页面，照常套外壳）
   if (/^\/w\/[^/]+\/studio\/(?!new$|identity$)[^/]+$/.test(pathname)) return <>{children}</>;
   // V6-4 审片（手机网页优先）：同样是自带顶栏的单屏页面

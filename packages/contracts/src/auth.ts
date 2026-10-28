@@ -38,6 +38,8 @@ export type SessionInfo = z.infer<typeof sessionInfoSchema>;
 export const signInRequestSchema = z.object({
   email: z.email(),
   password: z.string().min(8).max(128),
+  /** 界面语言：邮箱未验证时会重发验证邮件，用这个语言（D-04） */
+  locale: z.enum(['zh-CN', 'en']).optional(),
 });
 
 export const signInResponseSchema = z.union([
@@ -102,3 +104,71 @@ export const revokeTokenRequestSchema = z.object({
 });
 
 export type RevokeTokenRequest = z.infer<typeof revokeTokenRequestSchema>;
+
+/**
+ * 账号自助（D-04）：邮箱注册、邮箱验证、找回密码。
+ *
+ * - 注册方式由部署配置 `ANCS_SIGNUP_MODE` 决定：closed = 只能由运营创建账号；invite = 只有收到邀请的邮箱能注册；open = 任何人；
+ * - 防枚举：注册与找回密码对"邮箱已注册 / 不存在"给出同一个答复（真实结果只出现在发往该邮箱的邮件里）；
+ * - 邮件语言取请求里的界面语言。
+ */
+export const SIGNUP_MODES = ['closed', 'invite', 'open'] as const;
+export const signupModeSchema = z.enum(SIGNUP_MODES);
+export type SignupMode = z.infer<typeof signupModeSchema>;
+
+/** 邮件语言（与 Web 界面语言一致） */
+export const accountEmailLocaleSchema = z.enum(['zh-CN', 'en']);
+export type AccountEmailLocale = z.infer<typeof accountEmailLocaleSchema>;
+
+export const ACCOUNT_ERROR_REASONS = {
+  /** 本部署不开放注册 */
+  SIGNUP_CLOSED: 'SIGNUP_CLOSED',
+  /** 仅限受邀邮箱注册，这个邮箱没有有效邀请 */
+  SIGNUP_INVITE_REQUIRED: 'SIGNUP_INVITE_REQUIRED',
+  /** 未配置发信：无法发送验证 / 重置邮件 */
+  EMAIL_NOT_CONFIGURED: 'EMAIL_NOT_CONFIGURED',
+  /** 邮箱尚未验证：登录前需点开验证邮件 */
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  /** 链接无效或已过期 */
+  INVALID_TOKEN: 'INVALID_TOKEN',
+} as const;
+
+/** 密码长度与登录一致：8—128 */
+const passwordSchema = z.string().min(8).max(128);
+
+export const signUpRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  email: z.email().max(254),
+  password: passwordSchema,
+  locale: accountEmailLocaleSchema.optional(),
+}).strict();
+export type SignUpRequest = z.infer<typeof signUpRequestSchema>;
+
+/** 注册 / 重发验证 / 找回密码的统一答复：只说"请查收邮件"，不透露邮箱是否已注册 */
+export const accountEmailSentResponseSchema = z.object({ status: z.literal('EMAIL_SENT') });
+export type AccountEmailSentResponse = z.infer<typeof accountEmailSentResponseSchema>;
+
+export const emailOnlyRequestSchema = z.object({
+  email: z.email().max(254),
+  locale: accountEmailLocaleSchema.optional(),
+}).strict();
+export type EmailOnlyRequest = z.infer<typeof emailOnlyRequestSchema>;
+
+/** 邮件链接里的一次性令牌（验证邮箱 / 重置密码） */
+const emailTokenSchema = z.string().min(16).max(4096).regex(/^[A-Za-z0-9._~-]+$/, '令牌格式不正确');
+
+export const verifyEmailRequestSchema = z.object({ token: emailTokenSchema }).strict();
+export type VerifyEmailRequest = z.infer<typeof verifyEmailRequestSchema>;
+/** 验证成功即登录（返回 Web 会话 Cookie 与用户）；链接之前已用过（邮箱早已验证）时 user 为 null，请直接登录 */
+export const verifyEmailResponseSchema = z.object({ status: z.literal('VERIFIED'), user: authUserSchema.nullable() });
+
+export const resetPasswordRequestSchema = z.object({ token: emailTokenSchema, newPassword: passwordSchema }).strict();
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
+export const resetPasswordResponseSchema = z.object({ status: z.literal('PASSWORD_RESET') });
+
+/** 账号自助能力（经 /capabilities 公开，登录页据此显示"注册""忘记密码"入口） */
+export const accountCapabilitiesSchema = z.object({
+  signup: signupModeSchema,
+  passwordReset: z.boolean(),
+});
+export type AccountCapabilities = z.infer<typeof accountCapabilitiesSchema>;

@@ -17,6 +17,12 @@ export function StudioFootageDrawer(props: {
   identityHref?: string;
   onAdd: () => void;
   onClose: () => void;
+  /** 画面理解失败或因本月 AI 额度暂停时"再理解一次"（编辑者可用） */
+  onRetryVisual?: (assetId: string) => void;
+  /** 正在重新排队的素材 */
+  retryingAssetId?: string | null;
+  /** 重新排队失败的原因（含额度仍用完的说明） */
+  retryError?: { assetId: string; message: string } | null;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.footage;
@@ -59,9 +65,17 @@ export function StudioFootageDrawer(props: {
             <div className={styles['facts']}>
               <span>{t.kinds[item.kind]}{item.duration !== null ? ` · ${t.seconds(item.duration)}` : ''}</span>
               {item.status === 'READY' ? (Object.keys(t.aspects) as (keyof typeof t.aspects)[]).map((aspect) => (
-                <span key={aspect}>{t.aspects[aspect]} <b>{t.understanding[item.understanding[aspect]]}</b></span>
+                <span key={aspect} data-understanding={`${aspect}:${item.understanding[aspect]}`}>{t.aspects[aspect]} <b>{t.understanding[item.understanding[aspect]]}</b></span>
               )) : null}
             </div>
+            {props.canEdit && props.onRetryVisual !== undefined && item.status === 'READY' && (item.understanding.visual === 'FAILED' || item.understanding.visual === 'LIMIT_REACHED') ? (
+              <div className="row gap8 mt8">
+                <button type="button" className="btn small" aria-label={t.retryVisualAria(item.name)} disabled={props.retryingAssetId === item.assetId} onClick={() => props.onRetryVisual?.(item.assetId)}>
+                  <QuietIcon name="spark" />{props.retryingAssetId === item.assetId ? t.retrying : t.retryVisual}
+                </button>
+              </div>
+            ) : null}
+            {props.retryError?.assetId === item.assetId ? <p className={styles['alert']} role="alert">{props.retryError.message}</p> : null}
           </div>
         ))}
       </div>

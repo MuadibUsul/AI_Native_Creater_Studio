@@ -1,13 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { capabilitiesResponseSchema, type ProviderInventoryEntry } from '@ancs/contracts';
+import { capabilitiesResponseSchema, type AccountCapabilities, type ProviderInventoryEntry } from '@ancs/contracts';
 import type { ExtensionRegistry } from '@ancs/extensions';
 
 export interface ExtensionsDeps {
   extensions: ExtensionRegistry;
   /** 装配的外部能力驱动与实现种类（V5-M3；不含任何凭据） */
   providers?: readonly ProviderInventoryEntry[];
+  /** 旧 V4 流水线是否装配（缺省 mock） */
+  legacyPipeline?: 'mock' | 'off';
+  /** 账号自助：注册方式与能否找回密码（缺省 closed、不能找回） */
+  accounts?: AccountCapabilities;
 }
 
 /**
@@ -37,6 +41,8 @@ export function registerCapabilityRoutes(app: FastifyInstance, deps: ExtensionsD
         outputFormatAvailability:
           requested === undefined ? null : deps.extensions.availability(requested),
         providers: [...(deps.providers ?? [])],
+        legacyPipeline: deps.legacyPipeline ?? 'mock',
+        accounts: deps.accounts ?? { signup: 'closed' as const, passwordReset: false },
       };
     },
   );

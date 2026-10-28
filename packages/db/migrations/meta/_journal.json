@@ -673,6 +673,41 @@
       "when": 1791616864473,
       "tag": "0096_identity_consent_workspace_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1791616924473,
+      "tag": "0097_production_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791616984473,
+      "tag": "0098_autonomous_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1792651283184,
+      "tag": "0099_signup_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792737683184,
+      "tag": "0100_agent_turns_workspace_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792824083184,
+      "tag": "0101_ai_usage_records",
+      "breakpoints": true
     }
   ]
 }

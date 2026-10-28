@@ -122,7 +122,7 @@ try {
   await page.getByText('试改预览 · 还没采用').waitFor({ timeout: 120_000 });
   const revisionOf = async () => `版本 ${String(await page.locator('header [data-revision]').getAttribute('data-revision'))}`;
   const revisionBefore = await revisionOf();
-  const video = page.locator('video');
+  const video = page.locator('video[aria-label]');
   await video.evaluate((element) => element.play());
   await page.waitForTimeout(1500);
   const playedTo = await video.evaluate((element) => element.currentTime);
@@ -202,6 +202,8 @@ try {
   await page.getByRole('button', { name: '导出' }).click();
   await page.getByRole('button', { name: '开始导出' }).click();
   await page.getByText('导出完成').waitFor({ timeout: 240_000 });
+  // 只有用户自己的素材：不加 AI 生成标识，面板也不提
+  if (await page.locator('[data-aigc-label]').count() > 0) throw new Error('footage-only export claims an AI-generated label');
   await shot('12-export-done');
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '下载成片' }).click()]);
   const downloaded = join(workDir, 'final.mp4');

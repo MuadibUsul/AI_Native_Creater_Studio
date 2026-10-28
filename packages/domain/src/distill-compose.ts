@@ -3,7 +3,6 @@ import {
   ApiFailure,
   DISTILL_ERROR_REASONS,
   ERROR_CODES,
-  agentModelCostMicros,
   strategyPackSchema,
   type AgentImage,
   type AgentModelAdapter,
@@ -12,6 +11,7 @@ import {
   type StrategyPack,
 } from '@ancs/contracts';
 import type { DistilledStats } from './distill-dna.js';
+import { modelCostMicros } from './ai-spend.js';
 
 /**
  * 蒸馏器的风格说明撰写（V6-6）：剪辑 DNA 的**数值**只来自测量；这里写的是给人看的说明、给 AI 的风格要点、旋钮与评分项。
@@ -277,5 +277,5 @@ export async function composeStrategyWithModel(model: AgentModelAdapter, input: 
       confidenceNote: `${(input.base.source.confidenceNote ?? '').replace(' Descriptions written from statistics (no model viewed the video).', '')} Descriptions written by ${response.model} from the measurements and ${String(input.frames.length)} sampled frames; caption and framing notes are model inference.`.slice(0, 500),
     },
   });
-  return { pack, model: response.model, costMicros: agentModelCostMicros(response.model, response.usage) };
+  return { pack, model: response.model, costMicros: modelCostMicros(response.model, response.usage) };
 }

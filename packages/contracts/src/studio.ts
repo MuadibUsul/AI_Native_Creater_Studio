@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { opaqueIdSchema } from './common/ids.js';
-import { agentLocaleSchema, agentSessionSchema, projectAgentCostSchema } from './agent.js';
-import { projectArticleSchema } from './narration.js';
+import { agentLocaleSchema, agentSessionSchema, aiSpendSchema, projectAgentCostSchema } from './agent.js';
+import { MAX_ARTICLE_CHARS, projectArticleSchema } from './narration.js';
 import { generationBudgetSchema, generationSchema } from './paid-generation.js';
+import { DEFAULT_AUTONOMY_POLICY, autonomyPolicySchema } from './autonomy.js';
+import { autonomousRunSchema } from './autonomous-run.js';
 
 /**
  * V6-1c 共看片室（Studio）：素材剪辑工程的单屏工作台。
@@ -28,6 +30,25 @@ export const createStudioProjectRequestSchema = z.object({
 }).strict().refine((value) => value.narration === undefined || value.article !== undefined, { message: 'narration is chosen together with an article', path: ['narration'] });
 export type CreateStudioProjectRequest = z.input<typeof createStudioProjectRequestSchema>;
 
+/**
+ * 从链接导入文章（文章讲述的起点）：服务端按 SSRF 守卫抓取页面、抽出正文，返回给用户核对后再建工程；不写库。
+ * 正文超过 MAX_ARTICLE_CHARS 时按段截断（truncated 为真）。
+ */
+export const fetchStudioArticleRequestSchema = z.object({
+  url: z.string().trim().min(1).max(2048),
+}).strict();
+export type FetchStudioArticleRequest = z.infer<typeof fetchStudioArticleRequestSchema>;
+
+export const studioArticleDraftSchema = z.object({
+  title: z.string().max(200),
+  text: z.string().min(1).max(MAX_ARTICLE_CHARS),
+  sourceUrl: z.string().url().max(2048),
+  publisher: z.string().max(200),
+  paragraphs: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+}).strict();
+export type StudioArticleDraft = z.infer<typeof studioArticleDraftSchema>;
+
 export const studioProjectRefSchema = z.object({
   projectId: opaqueIdSchema,
   sequenceId: opaqueIdSchema,
@@ -36,7 +57,8 @@ export const studioProjectRefSchema = z.object({
 export type StudioProjectRef = z.infer<typeof studioProjectRefSchema>;
 
 /** NONE = 没排队；WORKING = 排队或进行中；READY / EMPTY（分析完但没有内容）/ NOT_CONFIGURED（驱动未配置，不是分析失败）/ FAILED。 */
-export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'NOT_CONFIGURED', 'FAILED'] as const;
+/** LIMIT_REACHED：工作区本月 AI 额度用完，这一项（画面理解）暂停，额度恢复后可重试 */
+export const STUDIO_ANALYSIS_STATES = ['NONE', 'WORKING', 'READY', 'EMPTY', 'NOT_CONFIGURED', 'LIMIT_REACHED', 'FAILED'] as const;
 export const studioAnalysisStateSchema = z.enum(STUDIO_ANALYSIS_STATES);
 export type StudioAnalysisState = z.infer<typeof studioAnalysisStateSchema>;
 
@@ -90,8 +112,14 @@ export const studioStateSchema = z.object({
     allowNarration: z.boolean(),
     /** 项目制作规则是否允许付费生成画面（数字人出镜、生成镜头、选区重绘；V6-7/V6-8） */
     allowGeneratedVideo: z.boolean(),
+    /** 自主制作的审批档位与预算授权（裁决 0020）；未签署时为逐项审批、无预算 */
+    autonomy: autonomyPolicySchema.default(DEFAULT_AUTONOMY_POLICY),
     /** 从文章开始的工程：文章概况（原文在工程简报里） */
-    article: z.object({ title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative() }).strict().nullable(),
+    article: z.object({
+      title: z.string(), characters: z.number().int().nonnegative(), paragraphs: z.number().int().nonnegative(),
+      /** 从链接导入的文章：来源地址 */
+      sourceUrl: z.string().max(2048).nullable().optional(),
+    }).strict().nullable(),
   }).strict(),
   sequenceId: opaqueIdSchema,
   /** 该序列最近的 AI 会话；没有时为空（只读读面不代建，界面在第一次说话前经 agent 接口建会话） */
@@ -104,6 +132,10 @@ export const studioStateSchema = z.object({
   /** 工作区生成预算（确认生成前展示；未设置时确认会被拒绝） */
   generationBudget: generationBudgetSchema,
   cost: projectAgentCostSchema,
+  /** 工作区本月 AI 费用与上限（达到上限时界面说明原因与恢复时间） */
+  aiSpend: aiSpendSchema,
+  /** 最近一次自主制作（裁决 0020；没有为 null）：界面据此显示进度与交付报告 */
+  autonomousRun: autonomousRunSchema.nullable().default(null),
 }).strict();
 export type StudioState = z.infer<typeof studioStateSchema>;
 

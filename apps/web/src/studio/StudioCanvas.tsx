@@ -1,15 +1,58 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import type { FrameRegion, RenderPlanCaption, SequencePreview } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
+import { unionRect, useBoardCamera } from './board-camera';
+import type { PresenceTarget } from './editor-presence';
 import styles from './studio.module.css';
 
 /**
  * 作品画布：播放服务端低清预览（与终渲染同一计划）；字幕由浏览器按计划叠加，不烧录。
  * 视频保持原色；试改预览有明确标记，采用前工程不变。
+ *
+ * 无限画布（参照 Stitch）：成片屏幕放在世界坐标原点，素材、制作计划、文章等画框并排在右侧；拖动空白处平移，
+ * ⌘/Ctrl + 滚轮或双指捏合缩放，"看全部"/"只看成片"适配。语音条与画布视图按钮浮在视口上，不随镜头缩放；
+ * 时间带在画布外，测量不受影响。手机宽度保持一列（不变换，只放成片屏幕）。
  */
+
+/** 世界坐标里成片屏幕的尺寸：长边 640（与右侧画框的文字大小成比例，"看全部"时画框文字仍清楚） */
+export function monitorWorldSize(ratio: number): { width: number; height: number } {
+  return ratio >= 1 ? { width: 640, height: Math.round(640 / ratio) } : { width: Math.round(640 * ratio), height: 640 };
+}
+/** 成片屏幕与右侧画框之间的间距、右侧画框列宽（世界坐标） */
+export const BOARD_GAP = 56;
+export const BOARD_SIDE_WIDTH = 300;
+
+/** 手机宽度（与样式表的 760px 断点一致）：一列布局，不做画布变换 */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(max-width: 760px)');
+    const update = () => setNarrow(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+  return narrow;
+}
+
+/** 元素的布局高度（不受父级变换影响） */
+function useLayoutHeight(ref: RefObject<HTMLElement | null>, active: boolean): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null || !active) { setHeight(0); return; }
+    const update = () => setHeight(element.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, active]);
+  return height;
+}
 
 /** article（V6-5）：从文章开始的工程，还没有素材也还没有剪辑 */
 export type CanvasMode = 'empty' | 'processing' | 'noCut' | 'article' | 'video';
@@ -91,6 +134,10 @@ export function StudioCanvas(props: {
   onAddFootage: () => void;
   onDropFiles: (files: File[]) => void;
   onFirstCut: () => void;
+  /** V6-9：交给 AI 剪完（打开设置）；有进行中的自主制作时不给 */
+  onDelegate?: (() => void) | null;
+  /** V6-9 交给 AI 剪完的按钮文案 */
+  delegateLabel?: string;
   onRetryPreview: () => void;
   onVideoError: () => void;
   onTimeUpdate: () => void;
@@ -103,11 +150,60 @@ export function StudioCanvas(props: {
   onRegion: (region: FrameRegion) => void;
   /** Issue #9：浮在看片区底部的语音条；有它时看片区下边距加大，画面按画幅缩进让出位置（不压视频与字幕） */
   voiceDock?: ReactNode;
+  /** 无限画布：成片屏幕右侧的画框（素材、制作计划、文章…）；手机宽度不显示 */
+  boardFrames?: ReactNode;
+  /** 剪辑师在场：AI 这一轮正在做事时，光标移到它正在处理的画框（文案已翻译） */
+  presence?: { target: PresenceTarget; label: string } | null;
+  /** 没开语音时画布底部的"和剪辑师说话"（手机宽度不显示，输入框旁有麦克风） */
+  voiceHero?: ReactNode;
 }) {
   const { messages } = useI18n();
   const t = messages.studio.canvas;
+  const tb = messages.studio.board;
   const ratio = parseRatio(props.aspectRatio);
-  const [stageRef, box] = useFittedBox(ratio);
+  const [stageRef, fitted] = useFittedBox(ratio);
+  const narrow = useNarrow();
+  const board = !narrow;
+  const monitor = monitorWorldSize(ratio);
+  const box = board ? monitor : fitted;
+  const sideRef = useRef<HTMLDivElement | null>(null);
+  const hasSide = board && props.boardFrames !== undefined && props.boardFrames !== null;
+  const sideHeight = useLayoutHeight(sideRef, hasSide);
+  const voiceOn = props.voiceDock !== undefined && props.voiceDock !== null;
+  const heroOn = board && !voiceOn && props.voiceHero !== undefined && props.voiceHero !== null;
+  const monitorRect = { x: 0, y: 0, width: monitor.width, height: monitor.height };
+  const all = hasSide && sideHeight > 0 ? unionRect([monitorRect, { x: monitor.width + BOARD_GAP, y: 0, width: BOARD_SIDE_WIDTH, height: sideHeight }]) : null;
+  // 画框标签浮在画框上方（屏幕上恒定大小），留白里已给它让出位置
+  const camera = useBoardCamera(stageRef, {
+    enabled: board,
+    all,
+    monitor: monitorRect,
+    insets: { top: 92, right: 32, bottom: voiceOn ? 124 : heroOn ? 84 : 32, left: 32 },
+    initial: 'all',
+  });
+  // 剪辑师光标：量出目标画框在世界里的位置（右侧画框相对右侧列偏移），光标滑过去；目标画框不在时落在成片上
+  const worldRef = useRef<HTMLDivElement | null>(null);
+  const [cursorAt, setCursorAt] = useState<{ x: number; y: number } | null>(null);
+  const presenceTarget = props.presence?.target ?? null;
+  useLayoutEffect(() => {
+    if (!board || presenceTarget === null) { setCursorAt(null); return; }
+    const frame = presenceTarget === 'monitor' ? null : worldRef.current?.querySelector<HTMLElement>(`[data-frame-key="${presenceTarget}"]`) ?? null;
+    if (frame === null) { setCursorAt({ x: monitor.width * 0.72, y: monitor.height * 0.18 }); return; }
+    setCursorAt({ x: monitor.width + BOARD_GAP + frame.offsetLeft + frame.offsetWidth * 0.62, y: frame.offsetTop + 28 });
+  }, [board, presenceTarget, sideHeight, monitor.width, monitor.height]);
+  // 键盘：Shift+1 看全部，Shift+2 只看成片（正在输入、带其他修饰键时不接管）
+  useEffect(() => {
+    if (!board) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (event.code === 'Digit1') { event.preventDefault(); camera.fitAll(); }
+      if (event.code === 'Digit2') { event.preventDefault(); camera.fitMonitor(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [board, camera.fitAll, camera.fitMonitor]);
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [drawFrom, setDrawFrom] = useState<{ x: number; y: number } | null>(null);
@@ -142,13 +238,21 @@ export function StudioCanvas(props: {
     </div>
   );
 
+  const delegate = props.canEdit && props.onDelegate !== undefined && props.onDelegate !== null
+    ? <button type="button" className={styles['onMatteButtonQuiet']} onClick={props.onDelegate}><QuietIcon name="spark" />{props.delegateLabel}</button>
+    : null;
   let content: ReactNode;
   if (props.mode === 'empty') {
     content = (
       <div className={styles['empty']}>
         <h2>{t.emptyTitle}</h2>
         <p>{t.emptyBody}</p>
-        {props.canEdit ? <button type="button" className={styles['onMatteButton']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button> : null}
+        {props.canEdit ? (
+          <div className={styles['emptyActions']}>
+            <button type="button" className={styles['onMatteButton']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button>
+            {delegate}
+          </div>
+        ) : null}
         {uploadsList}
       </div>
     );
@@ -158,6 +262,7 @@ export function StudioCanvas(props: {
         <span className={styles['spinner']} aria-hidden="true" />
         <h2>{t.processingTitle}</h2>
         <p>{t.processingBody}</p>
+        {delegate}
         {uploadsList}
       </div>
     );
@@ -170,6 +275,7 @@ export function StudioCanvas(props: {
           <div className={styles['emptyActions']}>
             <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.articleFirstCut}</button>
             <button type="button" className={styles['onMatteButtonQuiet']} onClick={props.onAddFootage}><QuietIcon name="upload" />{t.addFootage}</button>
+            {delegate}
           </div>
         ) : null}
         {uploadsList}
@@ -180,7 +286,12 @@ export function StudioCanvas(props: {
       <div className={styles['empty']}>
         <h2>{t.noCutTitle}</h2>
         <p>{t.noCutBody}</p>
-        {props.canEdit ? <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.firstCut}</button> : null}
+        {props.canEdit ? (
+          <div className={styles['emptyActions']}>
+            <button type="button" className={styles['onMatteButton']} disabled={props.firstCutBusy} onClick={props.onFirstCut}><QuietIcon name="spark" />{t.firstCut}</button>
+            {delegate}
+          </div>
+        ) : null}
         {uploadsList}
       </div>
     );
@@ -246,19 +357,52 @@ export function StudioCanvas(props: {
     );
   }
 
+  const { x, y, k } = camera.camera;
   return (
     <div
       ref={stageRef}
       className={`${styles['stage']} ${dragging ? styles['stageDrop'] : ''}`}
-      data-voice={props.voiceDock !== undefined && props.voiceDock !== null ? 'on' : undefined}
+      data-voice={voiceOn ? 'on' : undefined}
+      data-board={board ? 'on' : undefined}
       onDragOver={onDragOver}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       aria-label={t.label}
       role="region"
     >
-      {content}
+      {board ? (
+        <>
+          <div ref={worldRef} className={styles['world']} style={{ transform: `translate(${String(x)}px, ${String(y)}px) scale(${String(k)})`, ['--board-inv' as string]: String(1 / k) }}>
+            <section data-board-frame className={styles['monitor']} style={{ width: `${String(monitor.width)}px`, height: `${String(monitor.height)}px` }} data-mode={props.mode}>
+              <h3 className={styles['boardLabel']}>{tb.monitor}</h3>
+              {content}
+            </section>
+            {hasSide ? (
+              <div ref={sideRef} className={styles['boardSide']} style={{ left: `${String(monitor.width + BOARD_GAP)}px`, width: `${String(BOARD_SIDE_WIDTH)}px` }}>
+                {props.boardFrames}
+              </div>
+            ) : null}
+            {cursorAt !== null && props.presence ? (
+              <div className={styles['editorCursor']} style={{ transform: `translate(${String(cursorAt.x)}px, ${String(cursorAt.y)}px)` }} data-target={props.presence.target} aria-hidden="true">
+                <span className={styles['editorCursorInner']}>
+                  <svg viewBox="0 0 24 24" width="22" height="22" className={styles['editorArrow']}><path d="M4 2.5 20 11l-7.2 1.8L9.6 20Z" /></svg>
+                  <span className={styles['editorChip']}>{props.presence.label}</span>
+                </span>
+              </div>
+            ) : null}
+          </div>
+          <div className={`${styles['boardControls']} ui-glass`} role="toolbar" aria-label={tb.viewLabel} title={tb.hint}>
+            <button type="button" className="btn icononly ghost small" aria-label={tb.zoomOut} onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
+            <span className={styles['boardZoom']} aria-live="polite">{tb.zoomLevel(Math.round(k * 100))}</span>
+            <button type="button" className="btn icononly ghost small" aria-label={tb.zoomIn} onClick={() => camera.zoomBy(1.25)}>+</button>
+            <span className={styles['divider']} aria-hidden="true" />
+            <button type="button" className="btn ghost small" aria-pressed={camera.follow === 'all'} aria-keyshortcuts="Shift+1" onClick={camera.fitAll}>{tb.fitAll}</button>
+            <button type="button" className="btn ghost small" aria-pressed={camera.follow === 'monitor'} aria-keyshortcuts="Shift+2" onClick={camera.fitMonitor}>{tb.fitMonitor}</button>
+          </div>
+        </>
+      ) : content}
       {props.voiceDock ?? null}
+      {heroOn ? props.voiceHero : null}
       {dragging ? <span className={styles['visuallyHidden']} role="status">{t.dropHere}</span> : null}
     </div>
   );

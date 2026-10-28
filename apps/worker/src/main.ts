@@ -1,12 +1,14 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { createDb, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
+import { DEEPSEEK_IMAGE_MODEL, DeepSeekAgentModel } from '@ancs/providers-deepseek';
+import { ElorianAgentModel } from '@ancs/providers-elorian';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, narrationVoiceSchema, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -89,8 +91,12 @@ const leaseSeconds = config.ANCS_WORKER_LEASE_SECONDS;
 const heartbeatIntervalMs = config.ANCS_WORKER_HEARTBEAT_MS ?? Math.max(1000, (leaseSeconds * 1000) / 3);
 
 // 部署策略一次性注入领域层（领域层不读 process.env）
-configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
-const handle = createDb(databaseUrl);
+configureDeploymentPolicy({
+  defaultPlan: config.ANCS_DEFAULT_PLAN,
+  aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD),
+  modelPrices: mergeModelPrices(parseModelPriceOverrides(config.ANCS_MODEL_PRICES_JSON)),
+});
+const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
 const deps = createDomainDeps(handle, config);
 const ffmpegPaths = {
   ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
@@ -119,7 +125,7 @@ const speechRecognitionAdapter = asrDriver === 'deepgram' && config.DEEPGRAM_API
     : undefined;
 
 /**
- * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（anthropic 缺密钥在 env 校验中启动失败）；
+ * V6-1：通用导演 Agent 的模型。驱动由 ANCS_AGENT_DRIVER 显式选择（缺对应密钥在 env 校验中启动失败）；
  * 未配置时装配"未配置"端口：AI 轮次明确失败（501），不回退 Mock。密钥只在本进程内存中。
  */
 /** Claude 经兼容 Anthropic Messages 协议的网关时的基址（不配 = 直连 Anthropic） */
@@ -128,7 +134,9 @@ const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_
   ? new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'claude-opus-5-5', ...anthropicGateway })
   : config.ANCS_AGENT_DRIVER === 'gemini' && config.GEMINI_API_KEY !== undefined
     ? new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'gemini-flash-latest' })
-    : unconfiguredAgentModel();
+    : config.ANCS_AGENT_DRIVER === 'deepseek' && config.DEEPSEEK_API_KEY !== undefined
+      ? new DeepSeekAgentModel({ apiKey: config.DEEPSEEK_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'deepseek-v4-pro' })
+      : unconfiguredAgentModel();
 /** V6-1b：AI 导演看素材的抽帧（源/代理文件流式物化 + FFmpeg 单帧解码，进程内 LRU 缓存）。 */
 const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) });
 /** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
@@ -237,17 +245,36 @@ if (inventoryIssues.length > 0) {
   console.error(formatEnvFailure('worker', inventoryIssues));
   process.exit(1);
 }
+if (config.NODE_ENV === 'production' && config.ANCS_AIGC_PRODUCER_CODE === undefined) {
+  // 不阻止启动（并非所有部署都面向中国境内公众），但如实提示：含 AI 生成内容的成片元数据里服务提供者编码为空
+  console.warn('[worker] 未配置 ANCS_AIGC_PRODUCER_CODE：含 AI 生成内容的成片仍加显式标识与 AIGC 元数据，但其中服务提供者编码为空（面向中国境内公众时必须配置）。');
+}
 console.log(`[worker] 外部能力驱动：${providerInventory.length === 0 ? '（无）' : providerInventory.map((entry) => `${entry.capability}=${entry.driver}:${entry.implementation}`).join('、')}`);
 const mediaVisualAnalysisAdapter = visualDriver === 'anthropic' && config.ANTHROPIC_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new AnthropicAgentModel({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANCS_VISION_MODEL ?? 'claude-haiku-5-5', ...anthropicGateway }), ...ffmpegPaths })
   : visualDriver === 'gemini' && config.GEMINI_API_KEY !== undefined
   ? createModelVisualAnalysisAdapter({ model: new GeminiAgentModel({ apiKey: config.GEMINI_API_KEY, model: config.ANCS_VISION_MODEL ?? 'gemini-flash-lite-latest' }), ...ffmpegPaths })
+  : visualDriver === 'elorian' && config.ELORIAN_API_KEY !== undefined
+  ? createModelVisualAnalysisAdapter({ model: new ElorianAgentModel({ apiKey: config.ELORIAN_API_KEY, model: config.ANCS_VISION_MODEL ?? 'elorian-1-agent' }), ...ffmpegPaths })
   : visualDriver === 'process' && config.ANCS_VISUAL_ANALYSIS_EXECUTABLE !== undefined
     ? createProcessMediaVisualAnalysisAdapter({
       executable: config.ANCS_VISUAL_ANALYSIS_EXECUTABLE,
       args: config.ANCS_VISUAL_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_VISUAL_ANALYSIS_ARGS_JSON) as string[],
     })
     : undefined;
+/**
+ * 设了月度 AI 上限时，Worker 会调用的模型都要有单价（内置或 ANCS_MODEL_PRICES_JSON）：没有单价的模型不调用（AI 导演说明原因、
+ * 画面理解标为"未配置"、学风格改用规则撰写），其他任务照常。启动时把缺单价的模型列出来，运维一眼能看到。
+ */
+const billedModels = [
+  ...(config.ANCS_AGENT_DRIVER === undefined ? [] : [agentModel.model]),
+  ...(config.ANCS_AGENT_DRIVER === 'deepseek' ? [DEEPSEEK_IMAGE_MODEL] : []),
+  ...(mediaVisualAnalysisAdapter?.model === undefined ? [] : [mediaVisualAnalysisAdapter.model]),
+];
+const unpricedModels = [...new Set(billedModels)].filter((model) => !modelIsPriced(model));
+if (resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) !== null && unpricedModels.length > 0) {
+  console.error(`[worker] 设了 ANCS_AI_MONTHLY_CAP_USD，但这些模型没有单价：${unpricedModels.join('、')}。在补上单价前不会调用它们（AI 导演与画面理解不可用，其他任务照常）。请在 ANCS_MODEL_PRICES_JSON 按供应商价格页填写，例：{"${unpricedModels[0] ?? 'model'}":{"input":<美元/百万输入token>,"output":<美元/百万输出token>}}`);
+}
 const mediaAudioAnalysisAdapter = config.ANCS_AUDIO_ANALYSIS_EXECUTABLE === undefined ? undefined : createProcessMediaAudioAnalysisAdapter({
   executable: config.ANCS_AUDIO_ANALYSIS_EXECUTABLE,
   args: config.ANCS_AUDIO_ANALYSIS_ARGS_JSON === undefined ? [] : JSON.parse(config.ANCS_AUDIO_ANALYSIS_ARGS_JSON) as string[],
@@ -267,6 +294,8 @@ const workflowRegistry = new WorkflowRegistry()
   .register(compositionFinalRenderWorkflow({
     executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
     outputProbe: sourceMediaProbe,
+    // 成片含 AI 生成合成媒体时加显式标识与 AIGC 元数据；服务提供者编码由运营方配置
+    ...(config.ANCS_AIGC_PRODUCER_CODE === undefined ? {} : { aigc: { producerCode: config.ANCS_AIGC_PRODUCER_CODE } }),
   }))
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
   .register(agentTurnWorkflow({
@@ -275,6 +304,13 @@ const workflowRegistry = new WorkflowRegistry()
     ...(effectPorts === undefined ? {} : { effects: effectPorts }),
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
     ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
+  }))
+  // V6-9：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 → 导演 → 自检 → 按审批档位采用 → 交付报告
+  .register(autonomousProductionWorkflow({
+    model: agentModel,
+    frames: frameSampler,
+    ...(effectPorts === undefined ? {} : { effects: effectPorts }),
+    ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
   }))
   // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
   // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）

@@ -4,14 +4,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
+  AIGC_EXPLICIT_TEXT,
   ApiFailure,
   COMPOSITION_FINAL_RENDER_ERROR_REASONS,
   COMPOSITION_FINAL_RENDER_WORKFLOW,
   COMPOSITION_FINAL_RENDER_WORKFLOW_VERSION,
   ERROR_CODES,
+  contentLabelLanguageSchema,
   finalRenderProfileSchema,
   renderPlanSchema,
+  serializeAigcMetadata,
   startCompositionFinalRenderRequestSchema,
+  type ContentLabel,
+  type ContentLabelLanguage,
   type FinalRenderProfile,
   type RenderPlan,
   type RenderPlanExecutionFile,
@@ -44,6 +49,26 @@ export interface CompositionFinalRenderPorts {
   /** 读真实输出的探测器（QA） */
   outputProbe: SourceMediaProbe;
   workDirRoot?: string;
+  /** AI 生成合成内容标识：服务提供者编码（运营方配置；未配置时元数据里为空串，导出结果如实报告） */
+  aigc?: { producerCode?: string };
+}
+
+/** 视为 AI 生成合成媒体的资产来源（付费生成的镜头与数字人、合成讲述、AI 写的特效图层都记为 GENERATED） */
+const AI_GENERATED_ORIGINS = ['GENERATED', 'PROVIDER_GENERATED'];
+/** 显式标识在开头的持续秒数（标准要求 ≥2 秒） */
+const AIGC_EXPLICIT_SECONDS = 3;
+/** 未指定语言时的显式标识语言（面向全球市场：英文） */
+const DEFAULT_LABEL_LANGUAGE: ContentLabelLanguage = 'en';
+
+/** 成片含 AI 生成合成媒体时的标识（显式文字按导出语言 + 文件元数据）；不含则为 null */
+export function contentLabelFor(input: { generatedSources: number; runId: string; producerCode: string | undefined; language?: ContentLabelLanguage }): ContentLabel | null {
+  if (input.generatedSources === 0) return null;
+  const producer = input.producerCode ?? '';
+  return {
+    explicitText: AIGC_EXPLICIT_TEXT[input.language ?? DEFAULT_LABEL_LANGUAGE],
+    explicitSeconds: AIGC_EXPLICIT_SECONDS,
+    metadata: { Label: '1', ContentProducer: producer, ProduceID: input.runId, ReservedCode1: '', ContentPropagator: producer, PropagateID: input.runId, ReservedCode2: '' },
+  };
 }
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -60,17 +85,35 @@ const EXTENSION_BY_MIME: Readonly<Record<string, string>> = {
   'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac',
 };
 
-interface FrozenOutput { plan: RenderPlan; projectVersionId: string; planHash: string }
-interface RenderedOutput { graphHash: string; frameCount: string; sampleCount: string; outputs: { kind: RenderPlanExecutionFile['kind']; fileName: string; assetId: string; assetVersionId: string; sha256: string; sizeBytes: number }[] }
+interface FrozenOutput {
+  plan: RenderPlan;
+  projectVersionId: string;
+  planHash: string;
+  /** 用到的 AI 生成合成媒体（冻结时按资产来源判定；旧运行没有此字段） */
+  aiGenerated?: { assetVersionId: string; assetType: string }[];
+}
+interface RenderedOutput {
+  graphHash: string;
+  frameCount: string;
+  sampleCount: string;
+  outputs: { kind: RenderPlanExecutionFile['kind']; fileName: string; assetId: string; assetVersionId: string; sha256: string; sizeBytes: number }[];
+  /** 加在成片上的 AI 生成合成内容标识；null = 不含 AI 生成合成媒体 */
+  contentLabel?: ContentLabel | null;
+}
 
 function failure(reason: string, message: string, status: number, details: Record<string, unknown> = {}): ApiFailure {
   return new ApiFailure(status === 409 ? ERROR_CODES.PRECONDITION_FAILED : status === 422 ? ERROR_CODES.VALIDATION_FAILED : status === 501 ? ERROR_CODES.CAPABILITY_UNAVAILABLE : ERROR_CODES.INTERNAL, message, status, { reason, ...details });
 }
 
-const inputOf = (context: WorkflowStepContext): { sequenceId: string; profile: FinalRenderProfile; expectedRevision: number | undefined } => {
-  const raw = context.run.input as { sequenceId?: unknown; profile?: unknown; expectedRevision?: unknown };
+const inputOf = (context: WorkflowStepContext): { sequenceId: string; profile: FinalRenderProfile; expectedRevision: number | undefined; labelLanguage: ContentLabelLanguage | undefined } => {
+  const raw = context.run.input as { sequenceId?: unknown; profile?: unknown; expectedRevision?: unknown; labelLanguage?: unknown };
   if (typeof raw.sequenceId !== 'string') throw failure('FINAL_RENDER_INPUT_INVALID', 'workflow input missing sequenceId', 500);
-  return { sequenceId: raw.sequenceId, profile: finalRenderProfileSchema.parse(raw.profile), expectedRevision: typeof raw.expectedRevision === 'number' ? raw.expectedRevision : undefined };
+  const labelLanguage = contentLabelLanguageSchema.safeParse(raw.labelLanguage);
+  return {
+    sequenceId: raw.sequenceId, profile: finalRenderProfileSchema.parse(raw.profile),
+    expectedRevision: typeof raw.expectedRevision === 'number' ? raw.expectedRevision : undefined,
+    labelLanguage: labelLanguage.success ? labelLanguage.data : undefined,
+  };
 };
 
 /** 产物落自有存储（按 (runId, kind) 幂等：重试/崩溃恢复不产生重复资产行；内容变化则追加新版本）。 */
@@ -135,7 +178,11 @@ export function compositionFinalRenderWorkflow(ports: CompositionFinalRenderPort
             const version = await createProjectVersionInTx(tx, { workspaceId: context.run.workspaceId, projectId, reason: 'FINAL_RENDER', note: `素材工程终渲染（${context.run.id}）` });
             return { plan, projectVersionId: version.id };
           }, { isolationLevel: 'repeatable read' });
-          const output: FrozenOutput = { plan: frozen.plan, projectVersionId: frozen.projectVersionId, planHash: frozen.plan.planHash };
+          const sourceIds = frozen.plan.sources.map((source) => source.assetVersionId);
+          const aiGenerated = sourceIds.length === 0 ? [] : await context.deps.db.select({ assetVersionId: assetVersions.id, assetType: assets.assetType })
+            .from(assetVersions).innerJoin(assets, eq(assets.id, assetVersions.assetId))
+            .where(and(eq(assetVersions.workspaceId, context.run.workspaceId), inArray(assetVersions.id, sourceIds), inArray(assets.origin, AI_GENERATED_ORIGINS)));
+          const output: FrozenOutput = { plan: frozen.plan, projectVersionId: frozen.projectVersionId, planHash: frozen.plan.planHash, aiGenerated };
           return { kind: 'DONE', output: output as unknown as Record<string, unknown> };
         },
       },
@@ -145,7 +192,7 @@ export function compositionFinalRenderWorkflow(ports: CompositionFinalRenderPort
         async run(context) {
           const frozen = context.run.outputs['freeze'] as FrozenOutput;
           const plan = renderPlanSchema.parse(frozen.plan);
-          const { profile } = inputOf(context);
+          const { profile, labelLanguage } = inputOf(context);
           const storage = context.deps.storage;
           if (storage === undefined) throw failure(COMPOSITION_FINAL_RENDER_ERROR_REASONS.STORAGE_UNAVAILABLE, '未配置对象存储：冻结源与产物必须走自有存储', 501);
           const projectId = context.run.projectId as string;
@@ -169,7 +216,8 @@ export function compositionFinalRenderWorkflow(ports: CompositionFinalRenderPort
               await writeFile(join(workDir, 'assets', fileName), bytes);
               staged.push({ assetVersionId: source.assetVersionId, fileName });
             }
-            const result = await ports.executor.execute({ plan, profile, workDir, sources: staged });
+            const contentLabel = contentLabelFor({ generatedSources: frozen.aiGenerated?.length ?? 0, runId: context.run.id, producerCode: ports.aigc?.producerCode, ...(labelLanguage === undefined ? {} : { language: labelLanguage }) });
+            const result = await ports.executor.execute({ plan, profile, workDir, sources: staged, label: contentLabel });
             if (result.planHash !== plan.planHash) throw failure('FINAL_RENDER_PLAN_MISMATCH', '执行回执的 planHash 与冻结计划不一致', 500);
             const outputs: RenderedOutput['outputs'] = [];
             for (const file of result.files) {
@@ -179,7 +227,7 @@ export function compositionFinalRenderWorkflow(ports: CompositionFinalRenderPort
               const persisted = await persistArtifact(context.deps, { workspaceId: context.run.workspaceId, projectId, runId: context.run.id, kind: file.kind, fileName: file.fileName, bytes, sha256: digest, planHash: plan.planHash });
               outputs.push({ kind: file.kind, fileName: file.fileName, sha256: digest, sizeBytes: bytes.byteLength, ...persisted });
             }
-            const output: RenderedOutput = { graphHash: result.graphHash, frameCount: result.frameCount, sampleCount: result.sampleCount, outputs };
+            const output: RenderedOutput = { graphHash: result.graphHash, frameCount: result.frameCount, sampleCount: result.sampleCount, outputs, contentLabel };
             return { kind: 'DONE', output: output as unknown as Record<string, unknown> };
           } finally {
             await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
@@ -223,6 +271,10 @@ export function compositionFinalRenderWorkflow(ports: CompositionFinalRenderPort
             check('manifest.planHash', plan.planHash, manifest.planHash);
             check('manifest.graphHash', rendered.graphHash, manifest.graphHash);
             check('manifest.frameCount', rendered.frameCount, manifest.frameCount);
+          }
+          // AI 生成合成内容的隐式标识必须真的写进了成片文件（执行器忽略标识时在这里拦下，不交付无标识的文件）
+          if (video !== null && rendered.contentLabel != null) {
+            check('aigc.metadata', true, Buffer.from(video).includes(Buffer.from(serializeAigcMetadata(rendered.contentLabel.metadata), 'utf8')));
           }
           if (video !== null) {
             const workDir = await mkdtemp(join(ports.workDirRoot ?? tmpdir(), 'ancs-final-qa-'));
@@ -272,7 +324,11 @@ export async function startCompositionFinalRender(
     type: COMPOSITION_FINAL_RENDER_WORKFLOW,
     version: COMPOSITION_FINAL_RENDER_WORKFLOW_VERSION,
     subjectRef: `sequence:${input.sequenceId}`,
-    input: { sequenceId: input.sequenceId, profile: request.profile, ...(request.expectedRevision === undefined ? {} : { expectedRevision: request.expectedRevision }) },
+    input: {
+      sequenceId: input.sequenceId, profile: request.profile,
+      ...(request.expectedRevision === undefined ? {} : { expectedRevision: request.expectedRevision }),
+      ...(request.labelLanguage === undefined ? {} : { labelLanguage: request.labelLanguage }),
+    },
     idempotencyKey: input.idempotencyKey ?? null,
     createdBy: input.createdBy ?? null,
     priority,

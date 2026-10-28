@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createDb } from '@ancs/db';
+import { createDb, dbPoolOptionsFromEnv } from '@ancs/db';
 import { checkProviderInventory, crossCheckRealtimeEnv, formatEnvFailure, originOf, realtimeEnvSchema, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDeepgramLiveRecognizer } from './deepgram-live.js';
 import { createOpenAiSpeechSynthesizer, createOpenAiTranscriptionRecognizer } from './openai-audio.js';
@@ -32,7 +32,7 @@ const allowedOrigins = config.ANCS_ALLOWED_ORIGINS !== undefined
     ...(config.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://127.0.0.1:3000']),
   ].filter((item) => item !== '');
 
-const handle = createDb(config.DATABASE_URL);
+const handle = createDb(config.DATABASE_URL, dbPoolOptionsFromEnv(config));
 const log = (event: string, detail: Record<string, unknown>) => console.log(JSON.stringify({ service: 'realtime', event, ...detail }));
 const openAi = config.OPENAI_API_KEY === undefined ? undefined : { apiKey: config.OPENAI_API_KEY, ...(config.ANCS_OPENAI_BASE_URL === undefined ? {} : { baseUrl: config.ANCS_OPENAI_BASE_URL }) };
 const recognizer = config.ANCS_REALTIME_ASR_DRIVER === 'openai' && openAi !== undefined

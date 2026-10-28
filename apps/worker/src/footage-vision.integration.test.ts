@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { AgentModelAdapter, AgentModelRequest, AgentModelResponse } from '@ancs/contracts';
+import { MEDIA_VISUAL_ANALYSIS_STOPPED, type AgentModelAdapter, type AgentModelRequest, type AgentModelResponse } from '@ancs/contracts';
 import { LocalObjectStorage } from '@ancs/providers-storage-local';
 import { createStorageFrameSampler, extractJpegFrame } from './frame-sampler-process.js';
 import { VISUAL_DESCRIPTION_PROMPT, createModelVisualAnalysisAdapter } from './model-visual-analysis.js';
@@ -83,7 +83,10 @@ describe('视觉理解分析器（真实 FFmpeg + 脚本视觉模型）', () => 
   it('按时长均匀取样、分批带图、逐帧说明写成 VISUAL_EVENT（覆盖取样间隔）', async () => {
     const model = scriptedVision((request) => JSON.stringify(Array.from({ length: framesIn(request) }, (_, frame) => ({ frame, description: `  wide shot   of test pattern ${String(frame)} ` }))));
     const adapter = createModelVisualAnalysisAdapter({ model, minIntervalMs: 1000, batchSize: 2 });
-    const result = await adapter.analyze({ sourcePath });
+    const reported: unknown[] = [];
+    const result = await adapter.analyze({ sourcePath, beforeModelCall: () => Promise.resolve(true), onUsage: (usage) => reported.push(usage) });
+    // 脚本模型不在价格表里：只计次数、不计金额（计入月度上限的"未定价调用"）
+    expect(reported.at(-1)).toEqual({ calls: 3, costMicros: 0, unpricedCalls: 3, model: 'scripted-vision' });
     expect(result.durationMs).toBe(5000);
     expect(result.sampledFrameCount).toBe(5);
     expect(model.requests.map(framesIn)).toEqual([2, 2, 1]);
@@ -108,5 +111,13 @@ describe('视觉理解分析器（真实 FFmpeg + 脚本视觉模型）', () => 
     const broken = scriptedVision((request) => JSON.stringify([{ frame: 0, description: 'only one' }].slice(0, framesIn(request) - 1)));
     await expect(createModelVisualAnalysisAdapter({ model: broken, minIntervalMs: 2500, batchSize: 4 }).analyze({ sourcePath })).rejects.toThrow(/unusable description batch/);
     expect(broken.requests).toHaveLength(2);
+  });
+
+  it('调用前被叫停：不再调用模型，以 MEDIA_VISUAL_ANALYSIS_STOPPED 失败', async () => {
+    const model = scriptedVision((request) => JSON.stringify(Array.from({ length: framesIn(request) }, (_, frame) => ({ frame, description: 'ok' }))));
+    let allowed = 1;
+    const stopped = createModelVisualAnalysisAdapter({ model, minIntervalMs: 1000, batchSize: 2 }).analyze({ sourcePath, beforeModelCall: () => Promise.resolve(allowed-- > 0) });
+    await expect(stopped).rejects.toThrow(MEDIA_VISUAL_ANALYSIS_STOPPED);
+    expect(model.requests).toHaveLength(1);
   });
 });

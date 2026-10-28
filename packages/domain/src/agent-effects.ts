@@ -306,7 +306,7 @@ const addEffectInput = z.object({
   code: z.string().min(20).max(20_000).optional().describe('Your own effect code, only when list_effects says codeWriting is enabled and no template fits.'),
   name: z.string().min(1).max(80).optional().describe('Short name for an effect written as code.'),
   params: paramsSchema.optional().describe('Parameter values; omitted ones use the template defaults.'),
-  at: secondsSchema.optional().describe('Timeline start; defaults to the start of the pointer time range, else 0.'),
+  at: secondsSchema.optional().describe('Timeline start; defaults to the start of the pointer time range, else the start of the clip the person pointed at, else 0.'),
   seconds: secondsSchema.optional().describe('How long the effect lasts; defaults to the template suggestion.'),
   region: regionInputSchema.optional().describe('Where in the picture; defaults to the region the person framed, else the whole frame for full-frame templates or a centered half-size box.'),
   seed: z.string().min(1).max(64).optional().describe('Variation seed. Use a new seed for "another one" with the same look.'),
@@ -375,8 +375,11 @@ async function placeEffectUnguarded(context: AgentToolContext, spec: EffectSpec,
   const fps = frameRateOf(timebase);
   const durationInFrames = Math.max(2, Math.round(spec.durationSeconds * fps));
   const durationSeconds = trimDecimal((durationInFrames / fps).toFixed(6));
+  // 没给时间：所指时间段的起点；只指了片段（如说"这里"时点着时间带上的一段）→ 该片段的起点；都没有 → 0
+  const pointedClip = context.pointer?.clipIds.map((id) => state.clips.find((clip) => clip.id === id)).find((clip) => clip !== undefined);
   const at = timing.replace !== null ? timing.replace.sequenceRange.start
-    : agentSecondsToTime(timing.at ?? context.pointer?.timeRange?.start ?? '0', timebase);
+    : timing.at === undefined && context.pointer?.timeRange == null && pointedClip !== undefined ? pointedClip.sequenceRange.start
+      : agentSecondsToTime(timing.at ?? context.pointer?.timeRange?.start ?? '0', timebase);
   const size = effectLayerSize(await projectAspectRatio(context), spec.region);
   const layout = { ...size, fps, durationInFrames };
 

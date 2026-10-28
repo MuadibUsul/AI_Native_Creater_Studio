@@ -10,12 +10,13 @@ import { StudioShell } from '@/ui/StudioShell';
 import { APPEARANCE_COOKIE, initialAppearance, type AppearanceMode } from '@/lib/appearance';
 import { LOCALE_COOKIE, negotiateLocale, parseLocale, type Locale } from '@/i18n/locale';
 import { MESSAGES } from '@/i18n/messages';
+import { BRAND_NAME } from '@/brand/brand';
 
 const baseMetadata: Metadata = {
-  title: 'Creator Studio · ANCS',
+  title: BRAND_NAME,
   // V6-4：手机网页审片可添加到主屏幕（manifest 由 app/manifest.ts 生成）
-  appleWebApp: { capable: true, title: 'ANCS', statusBarStyle: 'black-translucent' },
-  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
+  appleWebApp: { capable: true, title: BRAND_NAME, statusBarStyle: 'black-translucent' },
+  icons: { icon: [{ url: '/icons/icon.svg', type: 'image/svg+xml' }, { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }], apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

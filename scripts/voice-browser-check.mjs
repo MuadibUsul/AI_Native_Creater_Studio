@@ -45,7 +45,6 @@ try {
     director: new ScriptedDirector(), webPort, workDirPrefix: 'ancs-v62-',
     voice: { script: (query) => (query.get('language') === 'en' ? enScript() : zhScript()) },
   });
-  const { client, password } = await env.signedInClient(email);
 
   // 准备：一条已采用的第一版（3 段真实素材）
   const footageDir = join(env.workDir, 'footage');
@@ -58,6 +57,9 @@ try {
   // 假麦克风的声音（Chrome 从这个文件采集）
   const micFile = join(env.workDir, 'mic.wav');
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=220:duration=60', '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', micFile]);
+  // 素材与麦克风文件先同步生成、再登录：同步 FFmpeg 会卡住同一进程里的 API 与代理，登录留下的空闲长连接
+  // 在卡住期间到期，下一个请求复用它时被对端重置（ECONNRESET）
+  const { client, password } = await env.signedInClient(email);
 
   const workspace = await client.workspaces.create({ name: '语音验收' });
   const ref = await client.studio.create(workspace.id, { title: '冰岛环岛 · 语音', aspectRatio: '16:9', locale: 'zh-CN' }, { idempotencyKey: `s-${randomUUID()}` });

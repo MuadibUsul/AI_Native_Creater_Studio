@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BRAND_NAME, BrandTile } from '@/brand/brand';
 import { useSession } from '@/lib/queries';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -9,7 +10,7 @@ import styles from './public-entry.module.css';
 import './workspace.css';
 
 function Mark() {
-  return <span className="logo"><span className="logomark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 4H4v5M15 4h5v5M4 15v5h5M20 15v5h-5" /><path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none" /></svg></span><span className="logotext">Creator Studio</span></span>;
+  return <span className="logo"><span className="logomark" aria-hidden="true" style={{ background: 'none' }}><BrandTile size={32} /></span><span className="logotext">{BRAND_NAME}</span></span>;
 }
 
 function LandingCanvasPreview() {
@@ -46,7 +47,7 @@ const colors = [
 
 export function DesignSystemPage() {
   const t = useI18n().messages.entry.designSystem;
-  return <main className={`page qf-workspace-page ${styles['designSystem']}`}><div className="sectionhead"><div><div className="eyebrow mb16">ANCS / DESIGN SYSTEM 01</div><h1>{t.title}</h1><p>{t.intro}</p></div><Link href="/" className="btn small">{t.back}</Link></div>
+  return <main className={`page qf-workspace-page ${styles['designSystem']}`}><div className="sectionhead"><div><div className="eyebrow mb16">{BRAND_NAME.toUpperCase()} / DESIGN SYSTEM 01</div><h1>{t.title}</h1><p>{t.intro}</p></div><Link href="/" className="btn small">{t.back}</Link></div>
     <div className="design-colors mt32">{colors.map(([token, name, captionKey, foreground]) => <div className="color-tile" key={name} style={{ background: `var(--ui-${token})`, color: `var(--ui-${foreground})` }}><strong>{name} · {t.colors[captionKey]}</strong><span>{`ui.${token.replaceAll('-', '.')}`}</span></div>)}</div>
     <div className="type-spec mt32">
       <section className="panel pad">

@@ -7,7 +7,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DOCUMENT_IMPORT_MAX_BYTES, type ContentDocumentRecord } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
-import { queryKeys, useWorkspace } from '@/lib/queries';
+import { queryKeys, useLegacyPipelineOff, useWorkspace } from '@/lib/queries';
+import { LegacyPipelineNotice } from '@/ui/LegacyPipelineNotice';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { useI18n } from '@/i18n/I18nProvider';
 
@@ -31,6 +32,7 @@ export default function NewProjectPage() {
   const t = messages.entry.newProject;
   const client = useAncsClient();
   const queryClient = useQueryClient();
+  const legacyOff = useLegacyPipelineOff();
   const workspace = useWorkspace(workspaceId);
   const canEdit = workspace.data?.role === 'OWNER' || workspace.data?.role === 'ADMIN' || workspace.data?.role === 'EDITOR';
   const [restoring, setRestoring] = useState(true);
@@ -171,6 +173,9 @@ export default function NewProjectPage() {
   const changeSource = (value: string) => { if (kind !== 'file') setSources((current) => ({ ...current, [kind]: value })); contentKeyRef.current = null; };
   const changeFile = (value: File | null) => { setFile(value); contentKeyRef.current = null; };
   const preview = document?.document.blocks.find((block) => block.text?.trim())?.text ?? '';
+
+  // 旧 V4 流水线下线：这里的写稿 → 分镜流程不可用，只给说明和去共看片室的入口
+  if (legacyOff) return <div className="page narrow"><LegacyPipelineNotice workspaceId={workspaceId} /></div>;
 
   return <div className="page narrow">
     <div className="page-head"><h1>{t.title}</h1><p>{t.subtitle}</p></div>

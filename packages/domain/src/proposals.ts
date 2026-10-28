@@ -828,6 +828,8 @@ export async function adoptProposal(deps: DomainDeps, input: {
   idempotencyKey: string;
   /** N06-07：已确认内容保护（附带的意外移位会阻止自动采用） */
   protectionIds?: readonly string[];
+  /** 谁采用的：缺省为用户；自主制作（裁决 0020）在用户签署的授权下由 AI 采用，如实记为 AI */
+  actorType?: 'USER' | 'AI';
 }): Promise<{ proposal: Proposal; projectRevision: number }> {
   const row = await loadProposalRow(deps, input);
   // 幂等：同一幂等键重放返回同一结果（不产生第二次写入）
@@ -869,7 +871,7 @@ export async function adoptProposal(deps: DomainDeps, input: {
   const result = await processEdits(deps, {
     workspaceId: input.workspaceId,
     projectId: input.projectId,
-    actor: { type: 'USER', id: input.actorId ?? 'proposal-adopt' },
+    actor: { type: input.actorType ?? 'USER', id: input.actorId ?? 'proposal-adopt' },
     request: {
       schemaVersion: '1.0',
       baseProjectRevision: row.baseProjectRevision,

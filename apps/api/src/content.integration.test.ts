@@ -312,3 +312,33 @@ describe('输入归一化（P04-01）', () => {
     expect(envelope.error.requestId.length).toBeGreaterThan(0);
   });
 });
+
+describe('从链接导入文章（V6 文章讲述的起点）', () => {
+  it('编辑者：抓取并抽正文给人核对（不写库）；查看者 403；内网地址被拦；跨工作区 404', async () => {
+    const owner = await newClient('article-draft');
+    const workspace = await owner.client.workspaces.create({ name: `文章-${randomUUID().slice(0, 8)}` });
+    const url = `https://news.example/articles/${randomUUID()}`;
+    fetcher.responses.set(url, { contentType: 'text/html; charset=utf-8', bytes: new TextEncoder().encode(ARTICLE_HTML) });
+    const before = await handle.db.select({ id: contentDocuments.id }).from(contentDocuments);
+
+    const draft = await owner.client.studio.fetchArticle(workspace.id, { url });
+    expect(draft.title).toBe('本周市场回顾');
+    expect(draft.text).toContain('美股三大指数集体上涨，科技股领涨。');
+    expect(draft.text).toContain('· 纳斯达克 +2.1%');
+    expect(draft.text).not.toContain('指数走势');
+    expect(draft).toMatchObject({ sourceUrl: url, publisher: 'news.example', truncated: false });
+    expect((await handle.db.select({ id: contentDocuments.id }).from(contentDocuments)).length).toBe(before.length);
+
+    // 建工程时带上来源：工作台状态里能看到
+    const ref = await owner.client.studio.create(workspace.id, { title: draft.title, article: { title: draft.title, text: draft.text, sourceUrl: draft.sourceUrl } }, { idempotencyKey: `s-${randomUUID()}` });
+    expect((await owner.client.studio.state(workspace.id, ref.projectId)).project.article).toMatchObject({ title: '本周市场回顾', sourceUrl: url });
+
+    const viewer = await newClient('article-viewer');
+    await owner.client.workspaces.members.add(workspace.id, { email: viewer.email, role: 'VIEWER' });
+    await expect(viewer.client.studio.fetchArticle(workspace.id, { url })).rejects.toMatchObject({ status: 403 });
+
+    await expect(owner.client.studio.fetchArticle(workspace.id, { url: 'http://169.254.169.254/latest/meta-data' })).rejects.toMatchObject({ status: 403, details: { reason: 'BLOCKED_TARGET' } });
+    const other = await newClient('article-other');
+    await expect(other.client.studio.fetchArticle(workspace.id, { url })).rejects.toMatchObject({ status: 404 });
+  });
+});

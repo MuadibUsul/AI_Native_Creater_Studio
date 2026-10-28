@@ -118,3 +118,4 @@
   .color-tile{min-width:0;overflow-wrap:anywhere}
   .rounded-demo{flex-wrap:wrap;gap:10px}
 }
+.qf-legacy-strip{padding:16px 27px 0}@media(max-width:760px){.qf-legacy-strip{padding:12px 16px 0}}

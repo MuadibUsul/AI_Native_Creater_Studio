@@ -10,6 +10,8 @@ import {
   contentDocumentSchema,
   contentDocumentRecordSchema,
   contentSourceSchema,
+  MAX_ARTICLE_CHARS,
+  studioArticleDraftSchema,
   type ArticleFetcher,
   type ContentBlock,
   type ContentDocument,
@@ -20,6 +22,7 @@ import {
   type DocumentKind,
   type DocumentParser,
   type ParsedDocumentElement,
+  type StudioArticleDraft,
   type UpdateSourceRequest,
 } from '@ancs/contracts';
 import { contentBlocks, contentDocuments, projectSources, projects } from '@ancs/db';
@@ -175,17 +178,15 @@ async function persistDocument(
   });
 }
 
-/** URL 文章 → ContentDocument（+ Source 与快照事实）。 */
-export async function createContentFromUrl(
-  deps: DomainDeps,
-  input: { workspaceId: string; projectId: string; createdBy: string | null; input: CreateContentRequest },
-): Promise<ContentDocumentRecord> {
-  const url = input.input.url;
-  if (url === undefined || url.trim() === '') {
-    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'URL_ARTICLE 需要 url', 400, { reason: CONTENT_INPUT_ERROR_REASONS.INVALID_URL });
-  }
-  await assertProjectWritable(deps, input.workspaceId, input.projectId);
-  // 归一化前置守卫：无论适配器是否自觉，先做 URL 形态与 SSRF 校验（逐跳复检仍由适配器负责）
+/**
+ * 抓取文章页并抽出正文块（URL 文章导入与"从链接导入文章"共用）：
+ * 先做 URL 形态与 SSRF 校验（逐跳复检仍由适配器负责），只接受 HTML / 纯文本，大小有上限，空正文明确报错。
+ */
+async function fetchArticleBlocks(deps: DomainDeps, url: string): Promise<{
+  fetched: { finalUrl: string; contentType: string | null; bytes: Uint8Array };
+  decoded: ReturnType<typeof decodeContentBytes>;
+  blocks: ContentBlock[];
+}> {
   assertSafeUrl(url);
   const fetcher = requireFetcher(deps);
   const fetched = await fetcher.fetch({ url, maxBytes: DEFAULT_MAX_BYTES, timeoutMs: DEFAULT_TIMEOUT_MS });
@@ -198,15 +199,14 @@ export async function createContentFromUrl(
       contentType,
     });
   }
-  const bytes = fetched.bytes;
-  if (bytes.byteLength > DEFAULT_MAX_BYTES) {
+  if (fetched.bytes.byteLength > DEFAULT_MAX_BYTES) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '文章超过大小上限', 413, {
       reason: CONTENT_INPUT_ERROR_REASONS.TOO_LARGE,
       maxBytes: DEFAULT_MAX_BYTES,
     });
   }
 
-  const decoded = decodeContentBytes(bytes, contentType);
+  const decoded = decodeContentBytes(fetched.bytes, contentType);
   const blocks = isPlain(contentType) ? extractBlocksFromText(decoded.text, 'PASTED_TEXT') : extractBlocksFromHtml(decoded.text);
   if (blocks.length === 0) {
     throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '页面没有可读正文（空正文）', 422, {
@@ -215,6 +215,80 @@ export async function createContentFromUrl(
       contentType,
     });
   }
+  return { fetched, decoded, blocks };
+}
+
+/** 网页标题里常见的几个实体 */
+const decodeEntities = (text: string): string => text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, ' ');
+
+/** 中日韩文字与全角标点之间不该有空格（HTML 行内标签抽取时会留下空格） */
+const CJK = '\\u3000-\\u303F\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uFF00-\\uFFEF';
+const CJK_GAP = new RegExp(`([${CJK}])\\s+(?=[${CJK}])`, 'g');
+const tidyLine = (text: string): string => text.replace(/\s+/g, ' ').replace(CJK_GAP, '$1').trim();
+
+/** 正文块 → 文章原文（标题、段落、引用、列表逐行；表格、图片、图表不进讲述原文） */
+function articleTextFromBlocks(blocks: readonly ContentBlock[]): string[] {
+  const lines: string[] = [];
+  for (const block of blocks) {
+    if (block.type === 'heading' || block.type === 'paragraph' || block.type === 'quote') {
+      const text = tidyLine(block.text ?? '');
+      if (text) lines.push(text);
+    } else if (block.type === 'list') {
+      for (const item of block.items ?? []) {
+        const text = tidyLine(item);
+        if (text) lines.push(`· ${text}`);
+      }
+    }
+  }
+  return lines;
+}
+
+/**
+ * V6 文章讲述：从链接导入文章原文（不写库）。用户在新建页核对后，原文随工程进入 AI 导演的上下文；
+ * 超过 MAX_ARTICLE_CHARS 时按段截断，并如实标出。
+ */
+export async function fetchStudioArticle(deps: DomainDeps, input: { url: string }): Promise<StudioArticleDraft> {
+  const { fetched, decoded, blocks } = await fetchArticleBlocks(deps, input.url.trim());
+  const lines = articleTextFromBlocks(blocks);
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    const cost = line.length + (kept.length > 0 ? 2 : 0);
+    if (used + cost > MAX_ARTICLE_CHARS) break;
+    kept.push(line);
+    used += cost;
+  }
+  if (kept.length === 0) {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, '页面没有可读正文（空正文）', 422, {
+      reason: CONTENT_INPUT_ERROR_REASONS.EMPTY_CONTENT,
+      url: fetched.finalUrl,
+      contentType: fetched.contentType,
+    });
+  }
+  // 标题：正文里的第一个标题；没有时取网页 <title>
+  const pageTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(decoded.text)?.[1]?.replace(/<[^>]+>/g, ' ') ?? '';
+  const heading = tidyLine(blocks.find((block) => block.type === 'heading')?.text ?? '') || tidyLine(decodeEntities(pageTitle));
+  return studioArticleDraftSchema.parse({
+    title: heading.slice(0, 200),
+    text: kept.join('\n\n'),
+    sourceUrl: fetched.finalUrl,
+    publisher: hostAsPublisher(fetched.finalUrl).slice(0, 200),
+    paragraphs: kept.length,
+    truncated: kept.length < lines.length,
+  });
+}
+
+/** URL 文章 → ContentDocument（+ Source 与快照事实）。 */
+export async function createContentFromUrl(
+  deps: DomainDeps,
+  input: { workspaceId: string; projectId: string; createdBy: string | null; input: CreateContentRequest },
+): Promise<ContentDocumentRecord> {
+  const url = input.input.url;
+  if (url === undefined || url.trim() === '') {
+    throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, 'URL_ARTICLE 需要 url', 400, { reason: CONTENT_INPUT_ERROR_REASONS.INVALID_URL });
+  }
+  await assertProjectWritable(deps, input.workspaceId, input.projectId);
+  const { fetched, decoded, blocks } = await fetchArticleBlocks(deps, url);
 
   const firstHeading = blocks.find((block) => block.type === 'heading')?.text;
   const firstParagraph = blocks.find((block) => block.type === 'paragraph')?.text;

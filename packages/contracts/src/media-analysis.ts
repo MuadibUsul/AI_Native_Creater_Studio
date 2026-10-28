@@ -3,7 +3,13 @@ import { opaqueIdSchema } from './common/ids.js';
 import { isoDateTimeSchema } from './common/time.js';
 
 /** 分析运行的机器可读错误码：驱动未配置 ≠ 分析失败（界面显示"未配置"）。 */
-export const MEDIA_ANALYSIS_ERROR_CODES = { CAPABILITY_NOT_CONFIGURED: 'CAPABILITY_NOT_CONFIGURED' } as const;
+export const MEDIA_ANALYSIS_ERROR_CODES = {
+  CAPABILITY_NOT_CONFIGURED: 'CAPABILITY_NOT_CONFIGURED',
+  /** 工作区本月 AI 额度用完：画面理解暂停，额度恢复后可重试 */
+  AI_MONTHLY_CAP_REACHED: 'AI_MONTHLY_CAP_REACHED',
+  /** 设了月度上限，但视觉模型没有单价：不调用（属于部署配置问题，界面显示"未配置"） */
+  AI_MODEL_UNPRICED: 'AI_MODEL_UNPRICED',
+} as const;
 
 export const MEDIA_ANALYSIS_STAGES = ['PROBE', 'PROXY', 'WAVEFORM', 'ASR', 'SHOT', 'SAMPLING', 'VISION', 'OCR', 'AUDIO', 'EMBEDDINGS', 'SEARCH_INDEX'] as const;
 export const MEDIA_ANALYSIS_STAGE_STATUSES = ['NOT_REQUESTED', 'QUEUED', 'RUNNING', 'PARTIAL', 'READY', 'EMPTY', 'FAILED', 'DISABLED', 'STALE', 'CANCEL_REQUESTED', 'CANCELLED'] as const;

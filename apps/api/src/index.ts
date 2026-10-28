@@ -1,11 +1,16 @@
 import { createHmac } from 'node:crypto';
 import { createAuth, DEFAULT_NATIVE_TOKEN_CONFIG, parseNativeClients } from '@ancs/auth';
-import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, resolveAllowedOrigins, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
-import { createDb, redactDatabaseUrl } from '@ancs/db';
+import { apiEnvSchema, checkProviderInventory, crossCheckApiEnv, formatEnvFailure, originOf, resolveAiMonthlyCapMicros, resolveAllowedOrigins, resolveLegacyPipeline, validateEnv, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
 import { LocalObjectStorage, localStorageOptionsFromEnv } from '@ancs/providers-storage-local';
+import { S3ObjectStorage, s3StorageOptionsFromEnv } from '@ancs/providers-storage-s3';
+import { RedisRateLimitStore } from '@ancs/providers-ratelimit-redis';
 import { buildServer } from './server.js';
+import { createShutdown } from './shutdown.js';
 import { DEFAULT_RATE_LIMITS } from './plugins/edge.js';
 import { createStorageDeps } from './plugins/storage.js';
+import { createAccountEmailOptions, createEmailSender, type AccountsDeps } from './plugins/email.js';
+import { describeSmtpError, SmtpEmailSender } from '@ancs/providers-email-smtp';
 import { createAdminDeps } from './plugins/admin.js';
 import { MockPaymentProvider } from '@ancs/providers-mock-payments';
 import { credentialDepsFromEnv } from './plugins/credentials.js';
@@ -38,7 +43,7 @@ if (envIssues.length > 0) {
 }
 const config = envResult.value;
 // 部署策略一次性注入领域层（领域层不读 process.env；非法值已在上面 fail-closed）
-configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN });
+configureDeploymentPolicy({ defaultPlan: config.ANCS_DEFAULT_PLAN, aiMonthlyCapMicros: resolveAiMonthlyCapMicros(config.ANCS_AI_MONTHLY_CAP_USD) });
 const port = config.PORT;
 const secret = config.BETTER_AUTH_SECRET;
 const databaseUrl = config.DATABASE_URL;
@@ -51,58 +56,108 @@ try {
   process.exit(1);
 }
 
-const handle = createDb(databaseUrl);
+const handle = createDb(databaseUrl, dbPoolOptionsFromEnv(config));
+
+/**
+ * 对象存储（P02-04）：local = 单机磁盘（字节经 API 端点转发，签名密钥与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`）；
+ * s3 = S3 兼容对象存储（浏览器预签名直传直下，API 不转发字节、不注册本地端点；多机部署用它）。
+ * 上传扫描：启发式扫描器检查经 API 端点写入的字节；s3 直传不经过 API，完成上传时仍做内容嗅探与 SHA-256 校验。
+ */
+const storageDriver = config.ANCS_STORAGE_DRIVER;
+if (storageDriver === 's3') console.info(`[api] 对象存储 = s3（桶 ${String(config.ANCS_S3_BUCKET)}${config.ANCS_S3_ENDPOINT === undefined ? '' : `，端点 ${originOf(config.ANCS_S3_ENDPOINT) ?? '已配置'}`}）`);
+const s3Storage = storageDriver === 's3' ? new S3ObjectStorage(s3StorageOptionsFromEnv(config)) : null;
+const storageDeps = createStorageDeps(
+  s3Storage ?? new LocalObjectStorage(localStorageOptionsFromEnv(config)),
+  {
+    // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
+    scanner: new HeuristicMalwareScanner(),
+    auditSink: async (entry) => {
+      await recordAudit({ db: handle.db }, {
+        actorKind: 'SYSTEM',
+        action: entry.action,
+        targetType: 'storage_object',
+        targetId: entry.key,
+        workspaceId: entry.workspaceId,
+        details: { filename: entry.filename, contentType: entry.contentType, findings: entry.findings, scanner: entry.scanner },
+      });
+    },
+  },
+);
+
+// s3：启动时探一次桶（HeadBucket），桶名、区域或凭据错误立即启动失败，不等到用户上传才暴露
+if (s3Storage !== null) {
+  try {
+    await s3Storage.checkBucket();
+  } catch (error) {
+    const failure = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    const status = failure.$metadata?.httpStatusCode;
+    console.error(`启动失败：对象存储不可用（${failure.name ?? 'Error'}${status === undefined ? '' : `，HTTP ${String(status)}`}）——检查 ANCS_S3_BUCKET、ANCS_S3_REGION、ANCS_S3_ENDPOINT 与访问密钥。`);
+    process.exit(1);
+  }
+}
+
+// 共享限流：多台 API 共用同一份额度；启动时连不上即失败（配置了就要能用），运行中出错时退回本进程限流
+const rateLimitStore = config.ANCS_RATE_LIMIT_REDIS_URL === undefined || config.ANCS_RATE_LIMIT === 'off'
+  ? undefined
+  : new RedisRateLimitStore({ url: config.ANCS_RATE_LIMIT_REDIS_URL });
+if (rateLimitStore !== undefined) {
+  const reachable = await rateLimitStore.ping().catch(() => false);
+  if (!reachable) {
+    console.error('启动失败：共享限流的 Redis 连不上——检查 ANCS_RATE_LIMIT_REDIS_URL（地址、密码、网络）。');
+    process.exit(1);
+  }
+  console.info('[api] 限流 = Redis 共享（多台 API 共用额度）');
+}
+
+/**
+ * 账号自助（D-04）：注册方式 + 账号邮件（验证邮箱、找回密码、邀请）。配置已在上面校验：invite / open 必须配了发信，
+ * 生产不得用 log 驱动。SMTP 启动自检失败只告警（不让整个服务因发信商短暂故障而起不来），注册与找回密码在恢复前收不到邮件。
+ */
+const emailSender = createEmailSender(config);
+const accountEmail = emailSender === null ? undefined : createAccountEmailOptions({
+  config,
+  sender: emailSender,
+  fallbackWebBaseUrl: `http://localhost:${String(port)}`,
+  rateLimitStore,
+  log: { warn: (details, message) => console.warn(`[api] ${message}`, details) },
+});
+const accounts: AccountsDeps = { signupMode: config.ANCS_SIGNUP_MODE, ...(accountEmail === undefined ? {} : { email: accountEmail }) };
+console.info(`[api] 账号：注册方式 = ${accounts.signupMode}，发信 = ${emailSender?.kind ?? '未配置（不能注册、不能找回密码）'}`);
+if (emailSender instanceof SmtpEmailSender) {
+  await emailSender.verify().catch((error: unknown) => console.warn(`[api] SMTP 自检失败（${describeSmtpError(error)}）——检查 ANCS_SMTP_URL；恢复前注册与找回密码收不到邮件`));
+}
+
 const auth = createAuth({
   db: handle.db,
   secret,
   baseUrl: config.BETTER_AUTH_URL ?? `http://localhost:${String(port)}`,
+  ...(accountEmail === undefined ? {} : { email: accountEmail }),
 });
 
-/**
- * 对象存储（P02-04）：默认本地驱动（开发）；生产接 S3/R2 预签名直传（真实凭据阶段，P08/P12）。
- * 本地驱动的端点签名密钥独立于会话密钥：未显式配置时由 BETTER_AUTH_SECRET 派生（作用域隔离，仅非生产）；
- * 派生规则与 Worker、清理 CLI 共用 `localStorageOptionsFromEnv`（同一把密钥、同一公开基址）。
- */
-const storageDriver = config.ANCS_STORAGE_DRIVER;
-let storageDeps;
-if (storageDriver === 'local') {
-  storageDeps = createStorageDeps(
-    new LocalObjectStorage(localStorageOptionsFromEnv(config)),
-    {
-      // 上传扫描（§43.3）：启发式为确定性默认（非杀毒引擎）；真实引擎接入 = 替换 seam（BLOCKED：部署决策）
-      scanner: new HeuristicMalwareScanner(),
-      auditSink: async (entry) => {
-        await recordAudit({ db: handle.db }, {
-          actorKind: 'SYSTEM',
-          action: entry.action,
-          targetType: 'storage_object',
-          targetId: entry.key,
-          workspaceId: entry.workspaceId,
-          details: { filename: entry.filename, contentType: entry.contentType, findings: entry.findings, scanner: entry.scanner },
-        });
-      },
-    },
-  );
-} else {
-  console.error(`启动失败：未知的 ANCS_STORAGE_DRIVER=${storageDriver}（当前仅支持 local；S3/R2 适配器在真实凭据阶段接入）。`);
-  process.exit(1);
-}
-
 const credentialDeps = credentialDepsFromEnv();
+
+/**
+ * 旧 V4 流水线（脚本 / 分镜 / 旧编辑器的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）：目前只有测试替身。
+ * 生产缺省 off（不装配，相关端点由领域层 501 fail-closed，界面隐藏旧入口）；开发缺省 mock。
+ * V6 共看片室、文章、自主制作走工作流与 Provider Gateway，不依赖这些替身。
+ */
+const legacyPipeline = resolveLegacyPipeline(config);
+const legacyMock = legacyPipeline === 'mock';
+if (!legacyMock) console.info('[api] 旧 V4 流水线 = off：脚本 / 分镜 / 旧配音 / 声音克隆 / 素材搜索 / Mock 分发未装配（端点 501），共看片室不受影响。');
 
 /**
  * 声音克隆（P10-02）：V1 使用**明确 Mock**（无真实训练能力——同其他 Mock 驱动）。
  * 真实 Provider（ElevenLabs/HeyGen 等）为契约同构 seam 替换（BLOCKED：凭据）。
  */
-console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）：仅限开发/测试，不得视为真实克隆结果。');
-const voiceCloneDeps = { provider: new MockVoiceCloneProvider() };
+if (legacyMock) console.warn('[api] 声音克隆驱动 = mock（无真实训练/验证能力）：仅限开发/测试，不得视为真实克隆结果。');
+const voiceCloneDeps = legacyMock ? { provider: new MockVoiceCloneProvider() } : {};
 
 /**
  * 素材搜索（P10-03）：Mock（确定性结果，含无许可/缺署名两类不可用样本——证明守卫）。
  * Runway：**fail-closed 骨架**（未实现；接入需凭据 + 端点核验——不以未核验实现冒充真实接入）。
  */
-console.warn('[api] 素材搜索驱动 = mock（确定性素材；不代表真实素材库）：仅限开发/测试。');
-const mediaDeps = { stockSearch: new MockAssetSearchProvider() };
+if (legacyMock) console.warn('[api] 素材搜索驱动 = mock（确定性素材；不代表真实素材库）：仅限开发/测试。');
+const mediaDeps = legacyMock ? { stockSearch: new MockAssetSearchProvider() } : {};
 void RunwayGenerationAdapter;
 
 /**
@@ -110,8 +165,10 @@ void RunwayGenerationAdapter;
  * ANCS_LLM_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
 const llmDriver = config.ANCS_LLM_DRIVER;
-let llmDeps: { llm?: import('@ancs/contracts').LlmAdapter };
-if (llmDriver === 'mock') {
+let llmDeps: { llm?: import('@ancs/contracts').LlmAdapter } = {};
+if (!legacyMock) {
+  // 旧流水线未装配：不注入叙事 LLM（V6 导演的模型经 Provider Gateway 配置）
+} else if (llmDriver === 'mock') {
   console.warn('[api] LLM 驱动 = mock（无真实凭据）：叙事生成为 Mock 输出，不得视为真实模型结果。');
   llmDeps = { llm: new MockLlmAdapter() };
 } else {
@@ -124,8 +181,10 @@ if (llmDriver === 'mock') {
  * ANCS_TTS_DRIVER=mock（默认）| 未来真实驱动名（未知名 → 启动失败，fail-closed）。
  */
 const ttsDriver = config.ANCS_TTS_DRIVER;
-let audioDeps: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider };
-if (ttsDriver === 'mock') {
+let audioDeps: { tts?: import('@ancs/contracts').AudioSynthesisAdapter; aligner?: import('@ancs/contracts').AlignmentProvider } = {};
+if (!legacyMock) {
+  // 旧流水线未装配：不注入旧配音（V6 旁白经 Provider Gateway）
+} else if (ttsDriver === 'mock') {
   console.warn('[api] TTS 驱动 = mock（无真实凭据）：Master Narration 为确定性 Mock 音频（带词级时间戳），不得视为真实语音。');
   audioDeps = { tts: new MockTtsAdapter() };
 } else {
@@ -152,20 +211,24 @@ if (paymentsDriver === 'mock') {
 }
 
 /**
- * 分发 Provider（P13-01）：Mock（脚本化发布，无真实平台账户）+ 平台占位（只报能力矩阵，不伪造发布成功）。
+ * 分发 Provider（P13-01）：Mock（脚本化发布，无真实平台账户，仅旧流水线 mock 时装配）+ 平台占位（只报能力矩阵，不伪造发布成功）。
  */
-const distributionProviders = [createMockDistributionProvider(), ...createPlatformStubProviders()];
+const distributionProviders = legacyMock ? [createMockDistributionProvider(), ...createPlatformStubProviders()] : createPlatformStubProviders();
 
 /**
  * 装配清单与生产守卫（V5-M3，§11.3）：生产进程装配 MOCK/SCRIPTED 必须显式 ANCS_ALLOW_MOCK_PROVIDERS=1，
  * 否则启动失败；清单经 /capabilities 报告（客户端据此显示 Mock 标识）。
  */
 const providerInventory: ProviderInventoryEntry[] = [
-  { capability: 'llm', driver: llmDriver, implementation: 'MOCK' },
-  { capability: 'tts', driver: ttsDriver, implementation: 'MOCK' },
-  { capability: 'voice_clone', driver: 'mock', implementation: 'MOCK' },
-  { capability: 'stock_search', driver: 'mock', implementation: 'MOCK' },
-  { capability: 'distribution', driver: 'mock', implementation: 'MOCK' },
+  ...(legacyMock
+    ? ([
+        { capability: 'llm', driver: llmDriver, implementation: 'MOCK' },
+        { capability: 'tts', driver: ttsDriver, implementation: 'MOCK' },
+        { capability: 'voice_clone', driver: 'mock', implementation: 'MOCK' },
+        { capability: 'stock_search', driver: 'mock', implementation: 'MOCK' },
+        { capability: 'distribution', driver: 'mock', implementation: 'MOCK' },
+      ] as const)
+    : []),
   ...(paymentsDriver === 'mock' ? [{ capability: 'payments', driver: 'mock', implementation: 'MOCK' as const }] : []),
 ];
 const inventoryIssues = checkProviderInventory(config, providerInventory);
@@ -179,6 +242,16 @@ const webhookDeps = {
   resultFetcher: createHttpResultFetcher(),
   ...(storageDeps.adapter !== undefined ? { storage: storageDeps.adapter } : {}),
 };
+
+// 优雅退出：排空 → 停止接新请求并等进行中的请求 → 释放连接池（超时强制退出）
+const lifecycle = createShutdown({
+  drainMs: config.ANCS_SHUTDOWN_DRAIN_SECONDS * 1000,
+  timeoutMs: config.ANCS_SHUTDOWN_TIMEOUT_SECONDS * 1000,
+  closeServer: () => app.close(),
+  closeResources: async () => { await rateLimitStore?.close(); if (emailSender instanceof SmtpEmailSender) emailSender.close(); await handle.close(); },
+  exit: (code) => process.exit(code),
+  log: (message) => app.log.info(message),
+});
 
 const app = await buildServer({
   logger: true,
@@ -216,14 +289,25 @@ const app = await buildServer({
   voice: config.ANCS_VOICE_SESSION_SECRET === undefined ? {} : { sessionSecret: config.ANCS_VOICE_SESSION_SECRET },
   distribution: { providers: distributionProviders },
   providerInventory,
+  legacyPipeline,
+  accounts,
+  // 就绪探针：数据库能查询、没有在退出排空（生产部署编排用；/health 只看存活）
+  readiness: {
+    checks: { database: async () => (await handle.pool.query('select 1')).rowCount === 1 },
+    draining: () => lifecycle.isDraining(),
+  },
   // V5-M4 Edge：CORS/Origin 白名单、按 IP 限流（可信代理跳数决定客户端 IP）、生产 HSTS
   edge: {
     allowedOrigins: resolveAllowedOrigins(config),
     rateLimits: config.ANCS_RATE_LIMIT === 'off' ? false : DEFAULT_RATE_LIMITS,
     hsts: config.NODE_ENV === 'production',
     trustProxyHops: config.ANCS_TRUST_PROXY_HOPS,
+    ...(rateLimitStore === undefined ? {} : { rateLimitStore }),
   },
 });
+
+process.on('SIGTERM', () => { void lifecycle.shutdown('SIGTERM'); });
+process.on('SIGINT', () => { void lifecycle.shutdown('SIGINT'); });
 
 try {
   await app.listen({ port, host: '0.0.0.0' });

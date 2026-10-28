@@ -1,17 +1,18 @@
 // 进程内共看片室环境（验收与评测脚本共用）：隔离测试库 + Fastify API + 进程内 Worker（与生产装配同一组处理器：
 // 真实 FFmpeg 探测/代理/索引/预览/终渲染）+ 一个把 /api/v1 转给 API、其余转给 Web 的本地代理。
 // 外部能力（导演模型、语音识别、视觉理解）由调用方传入；不传即"未配置"，相应任务如实失败。
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
-import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG } from '../../packages/auth/dist/index.js';
-import { WorkflowRegistry, agentTurnWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
+import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, DEFAULT_OPS_SESSION_POLICY } from '../../packages/auth/dist/index.js';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
+import { createAdminDeps } from '../../apps/api/dist/plugins/admin.js';
 import { createDefaultRegistry } from '../../apps/worker/dist/handlers.js';
 import { executeJob } from '../../apps/worker/dist/runner.js';
 import { createFfmpegSourceMediaProbe } from '../../apps/worker/dist/source-media-probe-process.js';
@@ -26,6 +27,7 @@ import { createReferenceFetcher } from '../../apps/worker/dist/reference-fetcher
 import { createFliteNarrationSynthesizer } from '../../apps/worker/dist/narration-synthesizer-process.js';
 import { createPaidGenerationExecutor, createScriptedGenerationProvider } from '../../apps/worker/dist/paid-generation.js';
 import { LocalObjectStorage } from '../../packages/providers/storage-local/dist/index.js';
+import { S3ObjectStorage } from '../../packages/providers/storage-s3/dist/index.js';
 import { createClient } from '../../packages/sdk/dist/index.js';
 import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramLive } from '../../apps/realtime/dist/index.js';
 
@@ -33,7 +35,10 @@ import { createDeepgramLiveRecognizer, createRealtimeGateway, startFakeDeepgramL
  * @param {{ director: object, speechRecognitionAdapter?: object, mediaVisualAnalysisAdapter?: object, webPort?: number, workDirPrefix?: string,
  *   voice?: { script: (query: URLSearchParams) => { atSeconds: number, message: object }[] }, effects?: { codegen?: 'enabled' | 'disabled' },
  *   distill?: { model?: object, allowPrivateNetwork?: boolean, downloadCommand?: string[] }, narration?: { engine?: 'flite', synthesizer?: (probe: object) => object },
- *   generation?: { provider?: object, behavior?: () => string } }} options
+ *   generation?: { provider?: object, behavior?: () => string }, articleFetcher?: object,
+ *   accounts?: { signupMode: 'closed' | 'invite' | 'open', sender: object }, ops?: { environment: 'DEVELOPMENT' | 'TEST' } }} options
+ *   ops：开启运营后台（/admin；与 API 入口同样装配）。经 http 验收只能用不带 Secure cookie 的 DEVELOPMENT / TEST 环境。
+ *   articleFetcher：从链接导入文章用的网页抓取器（真实抓取器会拦下本机地址，验收脚本注入脚本化抓取器）。
  *   generation（V6-7/V6-8）：装配付费生成。缺省是 FFmpeg 测试替身（SCRIPTED，只验证流程）；可传入真实供应商（provider）。
  *   narration（V6-5）：装配讲述配音（缺省 flite = FFmpeg 内置本地英文语音，真实合成，不是测试替身；synthesizer(probe) 可换成真实供应商，如 Gemini TTS）。
  *   voice：启动 Realtime Gateway。`{ script }` = 流式识别用**本地同协议假服务**（真实 Deepgram 适配器连假服务，标为 SCRIPTED）；
@@ -58,10 +63,24 @@ export async function startStudioEnv(options) {
   });
   const proxyPort = await new Promise((done, fail) => { proxy.once('error', fail); proxy.listen(0, '127.0.0.1', () => done(proxy.address().port)); });
   const baseUrl = `http://127.0.0.1:${String(proxyPort)}`;
-  const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl });
-  const storage = new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') });
+  // accounts（D-04）：注册方式 + 账号邮件驱动（如真实 SMTP 驱动连本机收信服务）；邮件链接指向本代理（同时承载网站与 API）
+  const accountEmail = options.accounts === undefined ? undefined : { sender: options.accounts.sender, webBaseUrl: baseUrl, productName: 'Kinora' };
+  const auth = createAuth({ db: db.db, secret: randomBytes(32).toString('hex'), baseUrl, ...(accountEmail === undefined ? {} : { email: accountEmail }) });
+  // ANCS_STUDIO_S3_ENDPOINT：同一套验收改跑在 S3 兼容存储上（浏览器预签名直传直下、Worker 物化 / 写回都走对象存储；
+  // 桶需已存在，每次运行用独立前缀）。缺省是本地磁盘。
+  const s3Endpoint = process.env.ANCS_STUDIO_S3_ENDPOINT;
+  const storage = s3Endpoint === undefined
+    ? new LocalObjectStorage({ rootDir: join(workDir, 'storage'), publicBaseUrl: baseUrl, signingSecret: randomBytes(32).toString('hex') })
+    : new S3ObjectStorage({
+      bucket: process.env.ANCS_STUDIO_S3_BUCKET ?? 'ancs-test',
+      region: process.env.ANCS_STUDIO_S3_REGION ?? 'us-east-1',
+      endpoint: s3Endpoint,
+      forcePathStyle: true,
+      credentials: { accessKeyId: process.env.ANCS_STUDIO_S3_ACCESS_KEY_ID ?? 'ancs-test', secretAccessKey: process.env.ANCS_STUDIO_S3_SECRET_ACCESS_KEY ?? 'ancs-test-secret-0000' }, // secrets:check-ignore：测试专用假密钥
+      keyPrefix: `studio-${randomUUID()}`,
+    });
   const voiceSecret = randomBytes(32).toString('hex');
-  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret } });
+  const app = await buildServer({ auth: { auth, db: db.db, tokens: { db: db.db, config: DEFAULT_NATIVE_TOKEN_CONFIG } }, storage: createStorageDeps(storage), voice: { sessionSecret: voiceSecret }, ...(options.articleFetcher === undefined ? {} : { content: { articleFetcher: options.articleFetcher } }), ...(options.accounts === undefined ? {} : { accounts: { signupMode: options.accounts.signupMode, email: accountEmail } }), ...(options.ops === undefined ? {} : { admin: createAdminDeps({ db: db.db, environment: options.ops.environment, fingerprintKey: randomBytes(32).toString('hex'), policy: DEFAULT_OPS_SESSION_POLICY }) }) });
 
   // V6-2：Realtime Gateway（独立 HTTP 服务器）+ 代理转发 /realtime/ 的 WebSocket 升级
   let realtime = null;
@@ -118,6 +137,13 @@ export async function startStudioEnv(options) {
       ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
       ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
     }))
+    // V6-9：自主制作（同一个导演与工具；等素材的轮询间隔缩短到 2 秒，方便验收）
+    .register(autonomousProductionWorkflow({
+      model: options.director,
+      frames: createStorageFrameSampler({ storage }),
+      footageWait: { pollSeconds: 2 },
+      ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
+    }))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
     .register(referenceDistillWorkflow({
       analyzer: createFfmpegReferenceAnalyzer(),
@@ -150,6 +176,8 @@ export async function startStudioEnv(options) {
     baseUrl,
     db,
     deps,
+    /** 账号邮件配置（装配了 accounts 时；验收脚本用它发平台邀请邮件） */
+    accountEmail,
     workDir,
     /** 语音：本地假识别服务的连接记录（查询参数、音频字节数等） */
     voiceAsrConnections: realtime?.fakeAsr?.connections ?? [],

@@ -4,6 +4,10 @@ import { PROJECT_FLOW_TEXT } from './pages/project-flow';
 import { WORKSPACE_ADMIN_TEXT } from './pages/workspace-admin';
 import { DELIVERY_TEXT } from './pages/delivery';
 import { ENTRY_TEXT } from './pages/entry';
+import { AUTONOMY_TEXT } from './pages/autonomy';
+import { LEGACY_TEXT } from './pages/legacy';
+import { SYSTEM_TEXT } from './pages/system';
+import { ACCOUNT_TEXT } from './pages/account';
 
 /**
  * 界面文案目录（中文为基准，英文必须覆盖同一结构——类型检查保证不缺键）。
@@ -30,7 +34,7 @@ const zhCN = {
     studioAction: '进入共看片室',
   },
   shell: {
-    brandAria: 'Creator Studio 创作台',
+    brandAria: 'Kinora 创作台',
     mainNav: '主导航',
     openNav: '打开导航',
     closeNav: '关闭导航',
@@ -79,7 +83,7 @@ const zhCN = {
     placeholders: {
       footage: '说说这条视频：拍了什么、想剪多长、什么感觉……（也可以先空着，进去再放素材）',
       article: '把文章贴在这里：AI 会写讲述稿、配音，再配上图解；数据图只用文章里的数字。',
-      link: '粘贴文章链接：先导入并确认脚本，再进入生成流程。',
+      link: '粘贴文章链接：先抓取正文给你核对，再由 AI 剪辑师写讲述稿、配音、配图解。',
     },
     addFootage: '放入素材，新建一条视频',
     start: '开始创作',
@@ -161,6 +165,21 @@ const zhCN = {
     articlePlaceholder: '把文章贴在这里。AI 会拆出要点，写成讲述稿，配上图解；数据图只用文章里的数字。',
     articleCount: (count: number, max: number) => `${count.toLocaleString('zh-CN')} / ${max.toLocaleString('zh-CN')} 字`,
     articleRequired: '请贴上文章',
+    linkLabel: '从链接导入',
+    linkPlaceholder: 'https://…',
+    linkImport: '导入正文',
+    linkImporting: '正在抓取正文…',
+    linkImported: (publisher: string, paragraphs: number) => `已从 ${publisher} 导入 ${String(paragraphs)} 段正文。请核对，AI 只会用这里的内容。`,
+    linkTruncated: '文章太长，只导入了前面的部分。',
+    linkErrors: {
+      INVALID_URL: '请粘贴以 http:// 或 https:// 开头的完整链接。',
+      BLOCKED: '这个地址不能访问（内网地址或被安全规则拦下）。',
+      UNSUPPORTED: '这个链接不是文章网页（可能是图片、视频或文件）。',
+      EMPTY: '这个网页上没有读到正文，可以复制正文粘贴进来。',
+      TOO_LARGE: '网页太大，可以复制正文粘贴进来。',
+      UNAVAILABLE: '服务端还没有配置网页抓取。',
+      FAILED: '没能打开这个网页（可能需要登录或拒绝了抓取），可以复制正文粘贴进来。',
+    },
     narrationLabel: 'AI 配音讲述',
     narrationHint: '用合成声音读讲述稿。可用的声音和语言取决于部署的配音引擎，AI 会如实告诉你。',
     nameLabel: '作品名称',
@@ -183,6 +202,8 @@ const zhCN = {
     aiCost: (amount: string) => `AI 用量 ${amount}`,
     aiCostUnpriced: 'AI 用量含未定价调用',
     aiCostHint: '这条视频累计的 AI 模型费用（按公开单价估算）',
+    /** 工作区本月 AI 费用与额度（有上限时显示在费用提示里） */
+    aiMonthHint: (spent: string, cap: string, unpriced: number) => `本工作区本月 AI 费用 ${spent} / 额度 ${cap}${unpriced > 0 ? `（另有 ${String(unpriced)} 次未定价的调用没有计入）` : ''}`,
     exportButton: '导出',
     loading: '正在打开作品…',
     notFound: '找不到这个作品',
@@ -225,6 +246,44 @@ const zhCN = {
     rail: {
       label: '画布工具',
     },
+    board: {
+      viewLabel: '画布视图',
+      zoomIn: '放大',
+      zoomOut: '缩小',
+      zoomLevel: (percent: number) => `${String(percent)}%`,
+      fitAll: '看全部',
+      fitMonitor: '只看成片',
+      hint: '拖动空白处平移；⌘ / Ctrl + 滚轮或双指捏合缩放',
+      monitor: '成片',
+      footage: (count: number) => `素材 ${String(count)}`,
+      footageMore: (count: number) => `还有 ${String(count)} 段，打开素材面板查看`,
+      footageDetails: '素材面板',
+      plan: (version: number) => `制作计划 · 第 ${String(version)} 版`,
+      planStale: '计划之后作品又改过',
+      planStructure: (structure: string) => `结构：${structure}`,
+      planTarget: (seconds: string) => `目标约 ${seconds} 秒`,
+      sceneSources: (count: number) => `${String(count)} 段素材`,
+      intents: {
+        HOOK: '钩子', SETUP: '铺垫', EMPHASIS: '强调', RHYTHM: '节奏', COVER_JUMP: '遮跳切', BREATHE: '留白', PAYOFF: '收束', TRANSITION: '转场', INFORM: '交代信息',
+      },
+      article: '文章',
+      articleFacts: (paragraphs: number, characters: string) => `${String(paragraphs)} 段 · ${characters} 字`,
+      articleSource: (host: string) => `来自 ${host}`,
+    },
+    presence: {
+      editor: '剪辑师',
+      cursor: (activity: string) => `剪辑师 · ${activity}`,
+      step: (count: number, activity: string) => `第 ${String(count)} 步 · ${activity}`,
+      activities: {
+        thinking: '在想', watching: '在看成片', footage: '在看素材', editPoints: '在找剪点', planning: '在写制作计划', cutting: '在剪',
+        captions: '在加字幕', checking: '在自检', pace: '在量节奏', effects: '在做特效', narration: '在配讲述', reading: '在读文章', quoting: '在报价',
+      },
+      greetingFootage: (count: number, seconds: number | null) => (seconds === null ? `${String(count)} 段素材已就绪。` : `${String(count)} 段素材已就绪，共约 ${String(seconds)} 秒。`),
+      greetingProcessing: (ready: number, total: number) => `素材还在处理：已就绪 ${String(ready)}/${String(total)} 段。处理好我就能开始看。`,
+      greetingArticle: (title: string, paragraphs: number) => `文章《${title}》已读入，共 ${String(paragraphs)} 段。`,
+      voiceHero: '和剪辑师说话',
+      voiceHeroHint: '开着麦克风边看边说；说"这里"时指着画面或时间带（V）',
+    },
     transport: {
       play: '播放',
       pause: '暂停',
@@ -243,6 +302,7 @@ const zhCN = {
       footageProcessing: '正在探测、生成编辑代理和索引…',
       footageFailed: '处理失败：请在素材里查看原因后重新放入。',
       understanding: '正在理解语音与画面…',
+      understandingPaused: '工作区本月 AI 额度已用完，画面理解暂停；额度恢复后在素材面板里再理解一次',
       footageReady: (count: number) => `${String(count)} 段素材已就绪`,
       quoteWaiting: '报价等你确认（确认前不生成、不扣费）',
       generationFailed: '没有生成成功，详见对话里的卡片。',
@@ -386,6 +446,8 @@ const zhCN = {
       errors: {
         modelNotConfigured: 'AI 导演还没配置好：服务端尚未接入模型凭据。',
         budget: '达到这一轮的用量上限。',
+        /** 工作区本月 AI 额度用完（resets 为 ISO 时刻，按 UTC 日期显示） */
+        monthlyCap: (cap: string, resets: string) => `这个工作区本月的 AI 额度（${cap}）已用完，${new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(resets))}恢复。`,
         refused: '模型拒绝了这个请求，换个说法试试。',
         busy: '上一句还在处理，等它完成或先停止。',
         generic: '请稍后重试。',
@@ -515,6 +577,7 @@ const zhCN = {
         TURN_STOPPED: '已让 AI 停下这一轮。',
         TURN_STOPPED_QUEUE: (count: number) => `已让 AI 停下这一轮，排队的 ${String(count)} 句也取消了。`,
         TURN_FAILED: '刚才那句 AI 没能完成，原因在对话里。',
+        IDLE_STOPPED: '有一阵没听到你说话，已停止收音（语音识别按时长计费）。要说话时再点"和剪辑师说话"。',
       },
       errors: {
         UNSUPPORTED: '这个浏览器不支持实时语音，请用文字。',
@@ -536,7 +599,12 @@ const zhCN = {
       kinds: { video: '视频', audio: '音频', image: '照片', other: '文件' },
       status: { UPLOADING: '上传中', PROCESSING: '处理中', READY: '就绪', FAILED: '处理失败' },
       aspects: { index: '镜头', transcript: '语音', visual: '画面' },
-      understanding: { NONE: '未开始', WORKING: '分析中', READY: '已理解', EMPTY: '无内容', NOT_CONFIGURED: '未配置', FAILED: '失败' },
+      understanding: { NONE: '未开始', WORKING: '分析中', READY: '已理解', EMPTY: '无内容', NOT_CONFIGURED: '未配置', LIMIT_REACHED: 'AI 额度已用完', FAILED: '失败' },
+      /** 画面理解失败或因额度暂停：再试一次 */
+      retryVisual: '再理解一次画面',
+      retryVisualAria: (name: string) => `重新理解「${name}」的画面`,
+      retrying: '已重新排队…',
+      retryFailed: '没能重新开始，请稍后再试。',
       seconds: (value: string) => `${value} 秒`,
       uploading: (percent: number) => `上传 ${String(percent)}%`,
       uploadFailed: '上传失败',
@@ -550,6 +618,7 @@ const zhCN = {
       running: (step: string) => `正在导出：${step}`,
       queued: '正在排队…',
       done: '导出完成',
+      aiLabelled: (text: string) => `成片含 AI 生成的画面、配音或特效：已按规定在开头加"${text}"角标，并在文件里写入 AI 生成标识。`,
       download: '下载成片',
       failed: '导出失败',
       revisionChanged: '导出期间作品有了改动，请重新导出。',
@@ -637,6 +706,10 @@ const zhCN = {
   workspaceAdmin: WORKSPACE_ADMIN_TEXT['zh-CN'],
   delivery: DELIVERY_TEXT['zh-CN'],
   entry: ENTRY_TEXT['zh-CN'],
+  autonomy: AUTONOMY_TEXT['zh-CN'],
+  legacy: LEGACY_TEXT['zh-CN'],
+  system: SYSTEM_TEXT['zh-CN'],
+  account: ACCOUNT_TEXT['zh-CN'],
 };
 
 export type Messages = typeof zhCN;
@@ -661,7 +734,7 @@ const en: Messages = {
     studioAction: 'Open the studio',
   },
   shell: {
-    brandAria: 'Creator Studio home',
+    brandAria: 'Kinora home',
     mainNav: 'Main navigation',
     openNav: 'Open navigation',
     closeNav: 'Close navigation',
@@ -710,7 +783,7 @@ const en: Messages = {
     placeholders: {
       footage: 'Describe the video: what you shot, how long, how it should feel… (or leave it empty and add footage first)',
       article: 'Paste the article. AI writes the narration, voices it and adds explainer graphics using only numbers from your text.',
-      link: 'Paste an article link: import it and review the script before anything is generated.',
+      link: 'Paste an article link: the text is fetched for you to check, then the AI editor writes the narration, voices it and adds diagrams.',
     },
     addFootage: 'Add footage to a new video',
     start: 'Start',
@@ -792,6 +865,21 @@ const en: Messages = {
     articlePlaceholder: 'Paste the article here. AI pulls out the points, writes a script to narrate and adds diagrams; data charts only use numbers from the article.',
     articleCount: (count: number, max: number) => `${count.toLocaleString('en')} / ${max.toLocaleString('en')} characters`,
     articleRequired: 'Please paste an article',
+    linkLabel: 'Import from a link',
+    linkPlaceholder: 'https://…',
+    linkImport: 'Import text',
+    linkImporting: 'Fetching the article…',
+    linkImported: (publisher: string, paragraphs: number) => `Imported ${String(paragraphs)} paragraphs from ${publisher}. Check them — AI only uses what is here.`,
+    linkTruncated: 'The article is long; only the first part was imported.',
+    linkErrors: {
+      INVALID_URL: 'Paste a full link starting with http:// or https://.',
+      BLOCKED: 'This address cannot be opened (private network or blocked by security rules).',
+      UNSUPPORTED: 'This link is not an article page (it may be an image, video or file).',
+      EMPTY: 'No article text was found on this page. You can copy the text and paste it here.',
+      TOO_LARGE: 'The page is too large. You can copy the text and paste it here.',
+      UNAVAILABLE: 'Fetching web pages is not configured on the server.',
+      FAILED: 'Could not open this page (it may need a sign-in or refuse fetching). You can copy the text and paste it here.',
+    },
     narrationLabel: 'AI voice-over',
     narrationHint: 'A synthesized voice reads the script. Which voices and languages are available depends on the speech engine of this deployment; AI tells you plainly.',
     nameLabel: 'Title',
@@ -814,6 +902,7 @@ const en: Messages = {
     aiCost: (amount: string) => `AI cost ${amount}`,
     aiCostUnpriced: 'AI cost includes unpriced calls',
     aiCostHint: 'Total AI model cost for this video (estimated from public prices)',
+    aiMonthHint: (spent: string, cap: string, unpriced: number) => `This workspace this month: ${spent} of ${cap} AI allowance${unpriced > 0 ? ` (${String(unpriced)} unpriced call${unpriced === 1 ? '' : 's'} not counted)` : ''}`,
     exportButton: 'Export',
     loading: 'Opening the project…',
     notFound: 'Project not found',
@@ -856,6 +945,44 @@ const en: Messages = {
     rail: {
       label: 'Canvas tools',
     },
+    board: {
+      viewLabel: 'Canvas view',
+      zoomIn: 'Zoom in',
+      zoomOut: 'Zoom out',
+      zoomLevel: (percent: number) => `${String(percent)}%`,
+      fitAll: 'Show all',
+      fitMonitor: 'Video only',
+      hint: 'Drag empty space to pan; ⌘ / Ctrl + scroll or pinch to zoom',
+      monitor: 'Video',
+      footage: (count: number) => `Footage ${String(count)}`,
+      footageMore: (count: number) => `${String(count)} more in the footage panel`,
+      footageDetails: 'Footage panel',
+      plan: (version: number) => `Production plan · v${String(version)}`,
+      planStale: 'The video changed after this plan',
+      planStructure: (structure: string) => `Structure: ${structure}`,
+      planTarget: (seconds: string) => `Target about ${seconds} s`,
+      sceneSources: (count: number) => `${String(count)} footage range${count === 1 ? '' : 's'}`,
+      intents: {
+        HOOK: 'Hook', SETUP: 'Setup', EMPHASIS: 'Emphasis', RHYTHM: 'Rhythm', COVER_JUMP: 'Cover a jump', BREATHE: 'Breathe', PAYOFF: 'Payoff', TRANSITION: 'Transition', INFORM: 'Inform',
+      },
+      article: 'Article',
+      articleFacts: (paragraphs: number, characters: string) => `${String(paragraphs)} paragraph${paragraphs === 1 ? '' : 's'} · ${characters} characters`,
+      articleSource: (host: string) => `From ${host}`,
+    },
+    presence: {
+      editor: 'Editor',
+      cursor: (activity: string) => `Editor · ${activity}`,
+      step: (count: number, activity: string) => `Step ${String(count)} · ${activity}`,
+      activities: {
+        thinking: 'thinking', watching: 'watching the cut', footage: 'looking at footage', editPoints: 'finding cut points', planning: 'writing the plan', cutting: 'cutting',
+        captions: 'adding captions', checking: 'checking the cut', pace: 'measuring pace', effects: 'making effects', narration: 'adding narration', reading: 'reading the article', quoting: 'getting a quote',
+      },
+      greetingFootage: (count: number, seconds: number | null) => (seconds === null ? `${String(count)} clip${count === 1 ? '' : 's'} ready.` : `${String(count)} clip${count === 1 ? '' : 's'} ready, about ${String(seconds)} s in total.`),
+      greetingProcessing: (ready: number, total: number) => `Footage is still processing: ${String(ready)} of ${String(total)} ready. I can start looking once it is done.`,
+      greetingArticle: (title: string, paragraphs: number) => `Article "${title}" is in, ${String(paragraphs)} paragraph${paragraphs === 1 ? '' : 's'}.`,
+      voiceHero: 'Talk to the editor',
+      voiceHeroHint: 'Keep the mic on and talk while you watch; point at the picture or the timeline when you say "here" (V)',
+    },
     transport: {
       play: 'Play',
       pause: 'Pause',
@@ -874,6 +1001,7 @@ const en: Messages = {
       footageProcessing: 'Probing, building the edit proxy and index…',
       footageFailed: 'Processing failed: check the reason under Footage and add it again.',
       understanding: 'Understanding speech and picture…',
+      understandingPaused: "This workspace's AI allowance for the month is used up, so describing the picture is paused. Once it resets, try again from the footage panel",
       footageReady: (count: number) => (count === 1 ? '1 clip ready' : `${String(count)} clips ready`),
       quoteWaiting: 'A quote is waiting for you (nothing is generated or charged before you confirm)',
       generationFailed: 'Generation did not succeed; see the card in the conversation.',
@@ -1017,6 +1145,7 @@ const en: Messages = {
       errors: {
         modelNotConfigured: "The AI director isn't set up yet: the server has no model credentials.",
         budget: "Reached this turn's usage limit.",
+        monthlyCap: (cap: string, resets: string) => `This workspace has used its AI allowance for this month (${cap}). It resets on ${new Intl.DateTimeFormat('en', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(resets))}.`,
         refused: 'The model declined this request. Try phrasing it differently.',
         busy: 'The previous request is still running. Wait for it or stop it first.',
         generic: 'Please try again later.',
@@ -1146,6 +1275,7 @@ const en: Messages = {
         TURN_STOPPED: 'Asked the AI to stop this turn.',
         TURN_STOPPED_QUEUE: (count: number) => `Asked the AI to stop this turn; ${String(count)} queued ${count === 1 ? 'sentence was' : 'sentences were'} cancelled too.`,
         TURN_FAILED: 'The AI could not finish that one; the reason is in the conversation.',
+        IDLE_STOPPED: 'Stopped listening after a quiet stretch (speech recognition is billed by time). Tap "Talk to the editor" when you want to talk again.',
       },
       errors: {
         UNSUPPORTED: 'This browser does not support live voice. Please type instead.',
@@ -1167,7 +1297,11 @@ const en: Messages = {
       kinds: { video: 'Video', audio: 'Audio', image: 'Photo', other: 'File' },
       status: { UPLOADING: 'Uploading', PROCESSING: 'Processing', READY: 'Ready', FAILED: 'Failed' },
       aspects: { index: 'Shots', transcript: 'Speech', visual: 'Visuals' },
-      understanding: { NONE: 'Not started', WORKING: 'Analyzing', READY: 'Understood', EMPTY: 'Nothing found', NOT_CONFIGURED: 'Not set up', FAILED: 'Failed' },
+      understanding: { NONE: 'Not started', WORKING: 'Analyzing', READY: 'Understood', EMPTY: 'Nothing found', NOT_CONFIGURED: 'Not set up', LIMIT_REACHED: 'AI allowance used up', FAILED: 'Failed' },
+      retryVisual: 'Describe the visuals again',
+      retryVisualAria: (name: string) => `Describe the visuals of "${name}" again`,
+      retrying: 'Queued again…',
+      retryFailed: "Couldn't start again. Please try later.",
       seconds: (value: string) => `${value}s`,
       uploading: (percent: number) => `Uploading ${String(percent)}%`,
       uploadFailed: 'Upload failed',
@@ -1181,6 +1315,7 @@ const en: Messages = {
       running: (step: string) => `Exporting: ${step}`,
       queued: 'Queued…',
       done: 'Export finished',
+      aiLabelled: (text) => `This video contains AI-generated footage, narration or effects, so it opens with an "${text}" badge and carries an AI-generated label in the file, as the rules require.`,
       download: 'Download video',
       failed: 'Export failed',
       revisionChanged: 'The project changed during export. Please export again.',
@@ -1268,6 +1403,10 @@ const en: Messages = {
   workspaceAdmin: WORKSPACE_ADMIN_TEXT.en,
   delivery: DELIVERY_TEXT.en,
   entry: ENTRY_TEXT.en,
+  autonomy: AUTONOMY_TEXT.en,
+  legacy: LEGACY_TEXT.en,
+  system: SYSTEM_TEXT.en,
+  account: ACCOUNT_TEXT.en,
 };
 
 export const MESSAGES: Record<Locale, Messages> = { 'zh-CN': zhCN, en };

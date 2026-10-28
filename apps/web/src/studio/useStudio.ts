@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentLocale, AgentPointer, AgentTurn, Clip, Generation, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
+import type { AgentLocale, AgentPointer, AgentTurn, Clip, ContentLabelLanguage, Generation, MediaRange, Proposal, SequencePreview, StudioState, WorkflowRun } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
+import type { Locale } from '@/i18n/locale';
 
 /**
  * 共看片室的数据层：一律经 SDK 读写服务端（不维护第二套工程状态）。
@@ -21,6 +22,8 @@ export const studioKeys = {
   previewRequest: (projectId: string, sequenceId: string, target: string) => ['studio', 'preview-request', projectId, sequenceId, target] as const,
   preview: (workspaceId: string, previewId: string) => ['studio', 'preview', workspaceId, previewId] as const,
   exportRun: (workspaceId: string, runId: string) => ['studio', 'export', workspaceId, runId] as const,
+  /** 最新的制作计划（无限画布上的计划画框，AP-04） */
+  plan: (workspaceId: string, projectId: string) => ['studio', 'plan', workspaceId, projectId] as const,
   /** 这条视频的导出运行列表（任务中心只读） */
   exports: (workspaceId: string, projectId: string) => ['studio', 'exports', workspaceId, projectId] as const,
 };
@@ -28,6 +31,9 @@ export const studioKeys = {
 const footageBusy = (state: StudioState | undefined): boolean =>
   state?.footage.some((item) => item.status === 'UPLOADING' || item.status === 'PROCESSING'
     || Object.values(item.understanding).some((value) => value === 'WORKING')) ?? false;
+/** 交给 AI 剪完进行中（V6-9）：轮询进度到交付 */
+const autonomyBusy = (state: StudioState | undefined): boolean =>
+  state?.autonomousRun !== null && state?.autonomousRun !== undefined && ['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING'].includes(state.autonomousRun.status);
 /** 付费生成进行中（V6-7/V6-8）：轮询到结果出来 */
 const generationBusy = (state: StudioState | undefined): boolean => state?.generations.some((item) => item.status === 'RUNNING') ?? false;
 
@@ -36,7 +42,7 @@ export function useStudioState(workspaceId: string, projectId: string) {
   return useQuery({
     queryKey: studioKeys.state(workspaceId, projectId),
     queryFn: () => client.studio.state(workspaceId, projectId),
-    refetchInterval: (query) => (footageBusy(query.state.data) || generationBusy(query.state.data) ? 2500 : false),
+    refetchInterval: (query) => (footageBusy(query.state.data) || generationBusy(query.state.data) || autonomyBusy(query.state.data) ? 2500 : false),
   });
 }
 
@@ -137,6 +143,19 @@ export function exportVideoAssetId(run: WorkflowRun | undefined): string | null 
   return rendered?.outputs?.find((output) => output.kind === 'VIDEO')?.assetId ?? null;
 }
 
+/** 导出时是否加了 AI 生成合成内容标识（成片含 AI 生成的画面、配音或特效时由服务端加上）。 */
+/** 导出成片上实际加的 AI 生成显式标识文字；没加标识（不含 AI 生成内容）时为 null */
+export function exportContentLabel(run: WorkflowRun | undefined): string | null {
+  const rendered = run?.outputs['render'] as { contentLabel?: { explicitText?: unknown } | null } | undefined;
+  const text = rendered?.contentLabel?.explicitText;
+  return typeof text === 'string' ? text : null;
+}
+
+/** 界面语言 → 成片显式标识语言 */
+export function labelLanguageFor(locale: Locale): ContentLabelLanguage {
+  return locale === 'zh-CN' ? 'zh' : 'en';
+}
+
 /** 用户选用的风格策略（可选）：包 + 旋钮取值。 */
 export interface StudioStrategyChoice {
   packId: string;
@@ -204,8 +223,8 @@ export function useStudioActions(workspaceId: string, projectId: string) {
   });
 
   const startExport = useMutation({
-    mutationFn: (input: { sequenceId: string; width: number; height: number; revision: number }) =>
-      client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision }, { idempotencyKey: randomKey('export') }),
+    mutationFn: (input: { sequenceId: string; width: number; height: number; revision: number; labelLanguage: ContentLabelLanguage }) =>
+      client.finalRenders.start(workspaceId, projectId, input.sequenceId, { profile: { width: input.width, height: input.height }, expectedRevision: input.revision, labelLanguage: input.labelLanguage }, { idempotencyKey: randomKey('export') }),
     // 任务中心的导出列表随之刷新（进行中时它自己每 5 秒轮询到结束）
     onSuccess: () => queryClient.invalidateQueries({ queryKey: studioKeys.exports(workspaceId, projectId) }),
   });

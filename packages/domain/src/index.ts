@@ -126,6 +126,7 @@ export {
   verifyPaymentWebhook,
 } from './payments.js';
 export { assignWorkspacePlanInTx, cancelWorkspaceSubscriptionInTx } from './plans.js';
+export { aiSpendWindow, assertAiSpendAvailable, modelCostMicros, modelIsPriced, recordAiUsage, workspaceAiSpend } from './ai-spend.js';
 export { acquireStockAsset, searchStockAssets } from './asset-acquisition.js';
 export { buildRenderOutputEnhancements } from './output-enhancements.js';
 export { searchWorkspace } from './search.js';
@@ -231,6 +232,7 @@ export {
   ensureDefaultPlans,
   getActivePlanVersion,
   getWorkspaceEntitlement,
+  getWorkspacePlan,
   getWorkspaceSubscription,
   listPlans as listPlanVersions,
   resolveRenderPriority,
@@ -341,6 +343,7 @@ export {
   createContentFromText,
   createContentFromUrl,
   detectDocumentKind,
+  fetchStudioArticle,
   getContentDocument,
   listContentDocuments,
   listProjectSources,
@@ -605,6 +608,7 @@ export {
   beginMediaVisualAnalysis,
   completeMediaVisualAnalysis,
   failMediaVisualAnalysis,
+  retryFootageDescription,
   retryMediaVisualAnalysis,
   scheduleMediaVisualAnalysisInTx,
 } from './media-visual-analysis.js';
@@ -653,7 +657,7 @@ export {
 } from './workflow.js';
 export type { AdvanceWorkflowResult, StartWorkflowInput, WorkflowDefinition, WorkflowStepContext, WorkflowStepDefinition, WorkflowStepOutcome } from './workflow.js';
 // V5-M4（§11.2）：素材工程终渲染工作流（冻结 → 渲染 → 技术 QA）
-export { compositionFinalRenderWorkflow, startCompositionFinalRender } from './composition-final-render.js';
+export { compositionFinalRenderWorkflow, contentLabelFor, startCompositionFinalRender } from './composition-final-render.js';
 // V6 §6/§8：通用导演 Agent（统一工具目录 + 可续跑的轮次运行时）
 export {
   DEFAULT_AGENT_RUNTIME_LIMITS,
@@ -729,3 +733,22 @@ export { DISTILL_PROMPT_VERSION, composeStrategyFromStats, composeStrategyWithMo
 export type { ComposedPack, DistillSource } from './distill-compose.js';
 export { getReferenceDistill, referenceDistillWorkflow, startReferenceDistill, updateStrategyPack } from './reference-distill.js';
 export type { ReferenceDistillPorts } from './reference-distill.js';
+export { autonomySpendDecision, autonomyMayAdopt, autonomyRemainingMicros, getProjectAutonomy, signProjectAutonomy, revokeProjectAutonomy } from './autonomy.js';
+export type { AutonomySpendKind } from './autonomy.js';
+export { saveProductionPlan, getLatestProductionPlan, compactPlanView } from './production-plan.js';
+export { findEditPoints, captionLinesFromWords, isFillerWord } from './edit-candidates.js';
+export type { EditPoints, EditPointsInput, CutPoint, RemovalCandidate, CaptionLine, TimedWord } from './edit-candidates.js';
+export { measurePace, paceDeviations } from './pace-score.js';
+export type { PaceScore, PaceWindow, PaceTarget, PaceDeviation } from './pace-score.js';
+export { draftPace, timelineSpeech } from './agent-edit-points.js';
+export {
+  startAutonomousRun,
+  getAutonomousRun,
+  listAutonomousRuns,
+  cancelAutonomousRun,
+  autonomousProductionWorkflow,
+  autonomousSpentMicros,
+  MIN_AUTONOMOUS_RUN_MICROS,
+} from './autonomous-production.js';
+export type { AutonomousProductionPorts } from './autonomous-production.js';
+export { createAutonomousTurn } from './agent-runtime.js';
