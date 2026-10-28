@@ -81,6 +81,15 @@ describe('DeepSeek director adapter', () => {
     expect(earlier.filter((message) => message.role === 'assistant').every((message) => message.reasoning_content === 'think')).toBe(true);
   });
 
+  it('V7 B2: a loop reminder after the tool results is sent as user text right after the tool messages', () => {
+    const replay = toDeepSeekMessages([
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'call_9', name: 'get_timeline', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', toolUseId: 'call_9', content: '{}', isError: false }, { type: 'text', text: 'You are repeating the exact same tool call.' }] },
+    ]);
+    expect(replay.map((message) => message.role)).toEqual(['assistant', 'tool', 'user']);
+    expect(replay[2]).toEqual({ role: 'user', content: 'You are repeating the exact same tool call.' });
+  });
+
   it.each([[401, 'AUTH'], [402, 'AUTH'], [429, 'RATE_LIMITED'], [503, 'OVERLOADED'], [500, 'TRANSIENT'], [400, 'BAD_REQUEST']])('classifies HTTP %s without reflecting credentials or retrying', async (status, kind) => {
     let calls = 0;
     const model = new DeepSeekAgentModel({ apiKey: TEST_API_KEY, fetch: async () => { calls++; return new Response('test-only-placeholder', { status: Number(status) }); } });

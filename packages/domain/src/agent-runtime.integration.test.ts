@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import {
   AGENT_ERROR_REASONS,
   AgentModelFailure,
@@ -502,6 +502,29 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
     expect(done.toolCalls.map((call) => call.name)).toEqual(['edit_timeline', 'review_draft', 'look_at_timeline']);
     expect(done.toolCalls[1]!.summary).toBe('review: 2 warnings, 1 notes');
+  });
+
+  it('V7 B2 重复调用提醒（裁决 0022）：同样参数连续第 3 次调用，提醒追加在本步工具结果之后并写进日志；调用照常执行', async () => {
+    const f = await fixture();
+    const look = (id: string) => () => reply([{ type: 'tool_use', id, name: 'get_timeline', input: {} }], 'tool_use');
+    const reminderOf = (request: AgentModelRequest) => lastMessage(request).content.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+    const model = new ScriptedModel([
+      look('g1'), look('g2'), look('g3'),
+      (request) => reply([{ type: 'text', text: reminderOf(request).length > 0 ? '不再重复。' : '没有提醒。' }], 'end_turn'),
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看时间线' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+    // 第 2、3 次请求没有提醒；第 4 次请求里，提醒排在第 3 个工具结果之后
+    expect(model.requests.slice(1).map(reminderOf).map((text) => text.startsWith('You are repeating the exact same tool call'))).toEqual([false, false, true]);
+    const lastContent = lastMessage(model.requests[3]!).content;
+    expect(lastContent.map((block) => block.type)).toEqual(['tool_result', 'text']);
+    expect(toolResults(model.requests[3]!)[0]).toMatchObject({ toolUseId: 'g3', isError: false });
+    // 提醒写进日志，之后的请求原样带着它（只追加，不改历史）
+    const logged = await handle.db.select().from(agentTurnMessages).where(eq(agentTurnMessages.turnId, turn.id)).orderBy(asc(agentTurnMessages.seq));
+    expect(logged.at(-2)?.content).toEqual(lastContent);
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    expect(done.toolCalls.map((call) => call.name)).toEqual(['get_timeline', 'get_timeline', 'get_timeline']);
+    expect(done.reply).toBe('不再重复。');
   });
 });
 

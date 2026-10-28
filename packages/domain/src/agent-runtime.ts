@@ -39,6 +39,7 @@ import {
 } from '@ancs/contracts';
 import { agentSessions, agentTurnMessages, agentTurns, autonomousRuns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { repeatToolReminder } from './agent-repeat-reminder.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
 import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
 import { articleContextView, projectArticle } from './agent-article.js';
@@ -660,6 +661,9 @@ export async function runAgentTurnLoop(
       });
       calls.push({ name: use.name, ok: !outcome.isError, summary: outcome.summary.slice(0, 500) });
     }
+    // V7 B2（裁决 0022）：连续用同样参数调用同一工具时，在本步工具结果之后追加提醒；只提醒、不拦截，计数只看轮次日志
+    const reminder = repeatToolReminder(log);
+    if (reminder !== null) results.push({ type: 'text', text: reminder });
     const seq = last.seq + 1;
     const current = turn;
     turn = await deps.db.transaction(async (tx) => {
