@@ -79,13 +79,13 @@ async function uploadAndProbe() {
   const version = (await handle.db.select().from(assetVersions).where(eq(assetVersions.assetId, intent.asset.id)).limit(1))[0]!;
   await storage.putObject(version.storageKey, bytes);
   await confirmUpload(deps(), { workspaceId, assetId: intent.asset.id, input: { checksumSha256 } });
-  const job = await claimJob(deps(), { workerId: 'probe', leaseSeconds: 120, types: [MEDIA_PROBE_JOB_TYPE] });
+  const job = await claimJob(deps(), { workerId: 'probe', leaseSeconds: 120, types: [MEDIA_PROBE_JOB_TYPE], workspaceId });
   await executeJob(deps(), createDefaultRegistry({ sourceMediaProbe: createFfmpegSourceMediaProbe({ timeoutMs: 30_000 }) }), { workerId: 'probe', leaseSeconds: 120, heartbeatIntervalMs: 30_000 }, job!);
   return { workspaceId, assetId: intent.asset.id, versionId: version.id };
 }
 
 async function describeFootage(workspaceId: string, model: AgentModelAdapter) {
-  const job = await claimJob(deps(), { workerId: 'vision', leaseSeconds: 120, types: [MEDIA_VISUAL_ANALYSIS_JOB_TYPE] });
+  const job = await claimJob(deps(), { workerId: 'vision', leaseSeconds: 120, types: [MEDIA_VISUAL_ANALYSIS_JOB_TYPE], workspaceId });
   expect(job).not.toBeNull();
   // 4 秒素材、每秒一帧、每批一帧 → 4 次调用
   const adapter = createModelVisualAnalysisAdapter({ model, minIntervalMs: 1000, batchSize: 1 });

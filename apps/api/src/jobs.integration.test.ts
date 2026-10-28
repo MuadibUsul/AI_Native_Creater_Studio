@@ -146,6 +146,17 @@ describe('任务生命周期（P03-01）', () => {
     expect(await claimJob(deps(), { workerId: 'w1' })).toBeNull();
   });
 
+  it('按工作区认领：只认领该工作区的任务，即使别的工作区有更早的同类任务（共享库测试的隔离依据）', async () => {
+    const other = await makeWorkspace();
+    const mine = await makeWorkspace();
+    const older = await createJob(deps(), { workspaceId: other, type: NOOP_JOB_TYPE, input: {} });
+    const own = await createJob(deps(), { workspaceId: mine, type: NOOP_JOB_TYPE, input: {} });
+    expect((await claimJob(deps(), { workerId: 'w1', types: [NOOP_JOB_TYPE], workspaceId: mine }))?.id).toBe(own.id);
+    expect(await claimJob(deps(), { workerId: 'w1', types: [NOOP_JOB_TYPE], workspaceId: mine })).toBeNull();
+    // 不传工作区（Worker 的方式）：照旧按先后认领别的工作区留下的任务
+    expect((await claimJob(deps(), { workerId: 'w1', types: [NOOP_JOB_TYPE] }))?.id).toBe(older.id);
+  });
+
   it('投递中断可恢复（不丢任务）：队列不可用时不标记发布，重跑派发恢复', async () => {
     const workspaceId = await makeWorkspace();
     const job = await createJob(deps(), { workspaceId, type: NOOP_JOB_TYPE, input: {} });
