@@ -33,14 +33,6 @@ export const AGENT_TOOL_EFFECTS = ['READ', 'DRAFT_EDIT', 'GENERATE', 'PLAN'] as 
 export const agentToolEffectSchema = z.enum(AGENT_TOOL_EFFECTS);
 export type AgentToolEffect = z.infer<typeof agentToolEffectSchema>;
 
-/**
- * V7（裁决 0021）：Agent 运行时。legacy = ANCS 现有循环；dsh_shadow = DeepSeek Harness Fork 只读影子运行，不建提案、不花钱；
- * dsh_active = 由 DSH Fork 驱动轮次。后两者在 P2 接入前不可用。
- */
-export const AGENT_RUNTIME_KINDS = ['legacy', 'dsh_shadow', 'dsh_active'] as const;
-export const agentRuntimeKindSchema = z.enum(AGENT_RUNTIME_KINDS);
-export type AgentRuntimeKind = z.infer<typeof agentRuntimeKindSchema>;
-
 export const AGENT_TOOL_PERMISSIONS = ['project:read', 'project:write'] as const;
 export const agentToolPermissionSchema = z.enum(AGENT_TOOL_PERMISSIONS);
 

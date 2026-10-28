@@ -2757,8 +2757,6 @@ export {
   modelPriceOverridesSchema,
   AGENT_STOP_REASONS,
   AGENT_TOOL_EFFECTS,
-  AGENT_RUNTIME_KINDS,
-  agentRuntimeKindSchema,
   AGENT_TOOL_PERMISSIONS,
   AGENT_TURN_PURPOSES,
   AGENT_TURN_STATUSES,
@@ -2807,7 +2805,6 @@ export type {
   AgentStopReason,
   AgentToolDescriptor,
   AgentToolEffect,
-  AgentRuntimeKind,
   AgentTurn,
   AgentTurnPurpose,
   AgentTurnStatus,
@@ -3079,24 +3076,3 @@ export type { AutonomousRunStatus, StartAutonomousRunRequest, AutonomousReport, 
 // 限流存储端口（内存 / Redis 共享）
 export { retryAfterSeconds } from './rate-limit.js';
 export type { RateLimitRule, RateLimitDecision, RateLimitStore } from './rate-limit.js';
-
-// V7 工具桥 video-tool.v1（裁决 0021）：DSH Fork 的视频工具经它调用 ANCS 的统一工具目录
-export {
-  VIDEO_TOOL_PROTOCOL_VERSION,
-  VIDEO_TOOL_MAX_ARGS_BYTES,
-  VIDEO_TOOL_MAX_CONTENT_CHARS,
-  VIDEO_TOOL_RESULT_STATUSES,
-  VIDEO_TOOL_REJECT_REASONS,
-  VIDEO_TOOL_EXECUTION_STATES,
-  VIDEO_BRIDGE_TOKEN_MAX_TTL_SECONDS,
-  videoToolDescriptorSchema,
-  videoToolDescriptorOf,
-  videoToolInvocationSchema,
-  videoToolResultStatusSchema,
-  videoToolRejectReasonSchema,
-  videoToolResultSchema,
-  videoToolExecutionStateSchema,
-  videoToolExecutionSchema,
-  videoBridgeTokenClaimsSchema,
-} from './video-tool.js';
-export type { VideoToolDescriptor, VideoToolInvocation, VideoToolRejectReason, VideoToolResult, VideoToolExecution, VideoBridgeTokenClaims } from './video-tool.js';

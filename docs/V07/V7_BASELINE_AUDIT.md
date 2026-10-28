@@ -3,6 +3,7 @@
 - 日期：2026-10-28
 - 依据：裁决 `docs/decisions/0021-v7-video-native-harness.md`；方案原文 `docs/V07/ANCS_V7_Video_Native_Harness_Incremental_Refactor_Plan.md` §0、§8 P0
 - 机器可读指标：`docs/V07/V7_BASELINE_METRICS.json`
+- 后续：裁决 `docs/decisions/0022-v7-borrow-harness-mechanisms.md` 撤回了迁往 Fork 的方向（下文 §8—§10 的 P1/P2 安排随之失效）。本审计的基线、调用链与 DSH 静态审计仍作为逐项借鉴的参考。
 - 结论：
   - **ANCS 侧可以进入 P1**：已实现的基线套件全部通过，2 项集成失败已分类为原有测试隔离缺陷，单独运行通过（§2）。
   - **DSH 侧 P1 需要所有者先定四件事**，见 §9。

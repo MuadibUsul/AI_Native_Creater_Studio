@@ -29,7 +29,6 @@ import {
   type AgentModelMessage,
   type AgentModelUsage,
   type AgentSession,
-  type AgentRuntimeKind,
   type AgentStopReason,
   type AgentTurn,
   type CreateAgentSessionRequest,
@@ -91,28 +90,6 @@ export interface AgentTurnPorts {
   /** 可选策略（V6 §6.6）：按 id 返回风格要点文本；未配置或找不到 → 不注入 */
   /** 策略要点（缺省从内置预设与工作区策略包生成，见 strategies.ts） */
   strategyGuidance?: (input: { workspaceId: string; strategyPackId: string; knobs: Record<string, string>; locale: string }) => Promise<string | null>;
-  /** 由谁驱动模型轮次（V7，裁决 0021）；缺省 legacy = 本文件的 runAgentTurnLoop */
-  runtime?: AgentRuntime;
-}
-
-/**
- * V7 运行时切换点（裁决 0021）：所有模型驱动的轮次（对话、语音、批注讨论、自主制作）都经它执行。
- * 草稿、门禁、提案结算、取消与恢复的语义由 ANCS 定义，换运行时也不变；P2 接入 DSH 前只有 legacy。
- */
-export interface AgentRuntime {
-  readonly kind: AgentRuntimeKind;
-  runTurn(deps: DomainDeps, ports: AgentTurnPorts, input: { turnId: string; workflowRunId: string | null; limits?: Partial<AgentRuntimeLimits> }): Promise<Record<string, unknown>>;
-}
-
-export const legacyAgentRuntime: AgentRuntime = {
-  kind: 'legacy',
-  runTurn: (deps, ports, input) => runAgentTurnLoop(deps, ports, input),
-};
-
-/** 按配置选运行时；DSH 运行时在 P2 接入前一律报错（Worker 启动失败），不静默退回 legacy。 */
-export function resolveAgentRuntime(kind: AgentRuntimeKind): AgentRuntime {
-  if (kind === 'legacy') return legacyAgentRuntime;
-  throw new Error(`agent runtime "${kind}" is not available in this build: the DeepSeek Harness runtime arrives in V7 P2 (ADR 0021); use legacy`);
 }
 
 type TurnRow = typeof agentTurns.$inferSelect;
@@ -462,7 +439,7 @@ export function agentTurnWorkflow(ports: AgentTurnPorts): WorkflowDefinition {
         key: 'run',
         maxAttempts: 2,
         run: async (context) => {
-          const result = await (ports.runtime ?? legacyAgentRuntime).runTurn(context.deps, ports, { turnId: String(context.run.input['turnId']), workflowRunId: context.run.id });
+          const result = await runAgentTurnLoop(context.deps, ports, { turnId: String(context.run.input['turnId']), workflowRunId: context.run.id });
           return { kind: 'DONE', output: result };
         },
         classify: (error): WorkflowErrorClass => {

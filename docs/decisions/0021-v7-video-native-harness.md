@@ -1,6 +1,7 @@
 # 0021 V7：Agent 运行时分阶段迁往 DeepSeek Harness 的 Fork（Video-Native Harness），本轮只做 P0 基线审计
 
-- 状态：生效（2026-10-28）。项目所有者指示"按这个重构方案来推进"，所指方案为所有者共享看板上的文档 `ancs/v7-video-native-harness-incremental-refactor-plan` 第 1 版。进度：P0 已完成（`docs/V07/V7_BASELINE_AUDIT.md`）；所有者当天对四项待决事项作出决定（第 6 条）；P1 中不依赖 Fork 的部分进行中。
+- 状态：**运行时迁移方向已被 `0022-v7-borrow-harness-mechanisms.md` 取代（2026-10-28）**：不建 Fork，Agent 运行时留在 ANCS，从 DSH 逐项借鉴机制；第 2 条的不变量与所有者关于真实花费的决定继续有效。以下为原文。
+- 原状态：生效（2026-10-28）。项目所有者指示"按这个重构方案来推进"，所指方案为所有者共享看板上的文档 `ancs/v7-video-native-harness-incremental-refactor-plan` 第 1 版。进度：P0 已完成（`docs/V07/V7_BASELINE_AUDIT.md`）；所有者当天对四项待决事项作出决定（第 6 条）；P1 中不依赖 Fork 的部分进行中。
 - 前一裁决编号：`0020-autonomous-production-adoption.md`（方案原文建议的 0019 已被 `0019-stitch-canvas-design-language.md` 占用）
 - 依据（原文归档，只读）：`docs/V07/ANCS_V7_Video_Native_Harness_Incremental_Refactor_Plan.md`
 - P0 结果：`docs/V07/V7_BASELINE_AUDIT.md`、`docs/V07/V7_BASELINE_METRICS.json`

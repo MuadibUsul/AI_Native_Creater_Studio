@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, resolveAgentRuntime, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { DEEPSEEK_IMAGE_MODEL, DeepSeekAgentModel } from '@ancs/providers-deepseek';
 import { ElorianAgentModel } from '@ancs/providers-elorian';
@@ -48,12 +48,6 @@ const envResult = validateEnv(workerEnvSchema, process.env);
 const envIssues: EnvIssue[] = envResult.ok ? [] : envResult.issues;
 if (envResult.ok && envResult.value !== null) {
   envIssues.push(...crossCheckWorkerEnv(envResult.value));
-  // V7（裁决 0021）：DSH 运行时在 P2 接入前不可用：选它启动即失败，不静默退回 legacy
-  try {
-    resolveAgentRuntime(envResult.value.ANCS_AGENT_RUNTIME ?? 'legacy');
-  } catch (error) {
-    envIssues.push({ variable: 'ANCS_AGENT_RUNTIME', message: error instanceof Error ? error.message : String(error) });
-  }
   // 渲染执行器/验证器/媒体探测：默认命令解析失败或脚本文件不存在 → 启动即失败（错误配置不等到任务时才暴露）
   const disableRender = envResult.value.ANCS_DISABLE_RENDER === '1';
   const customRenderCmd = envResult.value.ANCS_RENDER_EXECUTOR_CMD !== undefined;
@@ -143,8 +137,6 @@ const agentModel = config.ANCS_AGENT_DRIVER === 'anthropic' && config.ANTHROPIC_
     : config.ANCS_AGENT_DRIVER === 'deepseek' && config.DEEPSEEK_API_KEY !== undefined
       ? new DeepSeekAgentModel({ apiKey: config.DEEPSEEK_API_KEY, model: config.ANCS_AGENT_MODEL ?? 'deepseek-v4-pro' })
       : unconfiguredAgentModel();
-/** V7 运行时切换点（裁决 0021）：对话、语音、批注讨论与自主制作的轮次都经它执行；缺省 legacy = 现有循环 */
-const agentRuntime = resolveAgentRuntime(config.ANCS_AGENT_RUNTIME ?? 'legacy');
 /** V6-1b：AI 导演看素材的抽帧（源/代理文件流式物化 + FFmpeg 单帧解码，进程内 LRU 缓存）。 */
 const frameSampler = createStorageFrameSampler({ storage: deps.storage, ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) });
 /** V6-1b：视觉理解驱动（anthropic = 视觉模型写镜头说明；process = 运维子进程）。 */
@@ -308,7 +300,6 @@ const workflowRegistry = new WorkflowRegistry()
   // V6-1：通用导演 Agent 轮次（统一工具目录 + 可续跑循环；改动以提案交给用户采用）
   .register(agentTurnWorkflow({
     model: agentModel,
-    runtime: agentRuntime,
     frames: frameSampler,
     ...(effectPorts === undefined ? {} : { effects: effectPorts }),
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
@@ -317,7 +308,6 @@ const workflowRegistry = new WorkflowRegistry()
   // V6-9：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 → 导演 → 自检 → 按审批档位采用 → 交付报告
   .register(autonomousProductionWorkflow({
     model: agentModel,
-    runtime: agentRuntime,
     frames: frameSampler,
     ...(effectPorts === undefined ? {} : { effects: effectPorts }),
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),

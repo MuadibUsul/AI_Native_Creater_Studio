@@ -79,7 +79,6 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
 | `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
 | `ANCS_AGENT_DRIVER` / `ANCS_VISUAL_ANALYSIS_DRIVER`（Worker） | 未配置 | AI 导演 / 素材画面理解：`anthropic`（需 `ANTHROPIC_API_KEY`）或 `gemini`（需 `GEMINI_API_KEY`；模型 `ANCS_AGENT_MODEL` 缺省 `gemini-flash-latest`、`ANCS_VISION_MODEL` 缺省 `gemini-flash-lite-latest`）；画面理解另可 `process`。缺密钥启动失败 |
-| `ANCS_AGENT_RUNTIME`（Worker） | `legacy` | Agent 运行时（V7，裁决 0021）。`legacy` = 现有循环；`dsh_shadow` / `dsh_active` 在 V7 P2 接入 DeepSeek Harness 前不可用，选了 Worker 启动失败，不会静默退回 legacy |
 | `ANCS_AIGC_PRODUCER_CODE`（Worker） | 未配置（生产启动时警告） | AI 生成合成内容标识的服务提供者编码，写进成片 `AIGC` 元数据的 ContentProducer / ContentPropagator（§5.6）。面向中国境内公众提供服务时必须配置 |
 | `ANCS_VEO_OFFER_JSON`（Worker） | 未配置 | V6-8 生成镜头接 Google Veo：VIDEO_SHOT 报价依据（必须带 `durationOptions`，价格按 Google 价格页填写），需 `GEMINI_API_KEY`；装配清单出现 `video_generation=veo` |
 | `ANCS_RUNWAY_OFFER_JSON`（Worker） | 未配置 | V6-8 选区重绘接 Runway gen4_aleph：VIDEO_REGION 报价依据（价格按 Runway 价格页换算填写），需 `RUNWAYML_API_SECRET`；可选 `ANCS_RUNWAY_BASE_URL`；装配清单出现 `region_generation=runway` |
