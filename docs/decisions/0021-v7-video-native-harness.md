@@ -1,6 +1,6 @@
 # 0021 V7：Agent 运行时分阶段迁往 DeepSeek Harness 的 Fork（Video-Native Harness），本轮只做 P0 基线审计
 
-- 状态：生效（2026-10-28）。项目所有者指示"按这个重构方案来推进"，所指方案为所有者共享看板上的文档 `ancs/v7-video-native-harness-incremental-refactor-plan` 第 1 版。
+- 状态：生效（2026-10-28）。项目所有者指示"按这个重构方案来推进"，所指方案为所有者共享看板上的文档 `ancs/v7-video-native-harness-incremental-refactor-plan` 第 1 版。进度：P0 已完成（`docs/V07/V7_BASELINE_AUDIT.md`）；所有者当天对四项待决事项作出决定（第 6 条）；P1 中不依赖 Fork 的部分进行中。
 - 前一裁决编号：`0020-autonomous-production-adoption.md`（方案原文建议的 0019 已被 `0019-stitch-canvas-design-language.md` 占用）
 - 依据（原文归档，只读）：`docs/V07/ANCS_V7_Video_Native_Harness_Incremental_Refactor_Plan.md`
 - P0 结果：`docs/V07/V7_BASELINE_AUDIT.md`、`docs/V07/V7_BASELINE_METRICS.json`
@@ -30,18 +30,26 @@
 
 5. **分阶段暂停。** V6-10（长素材分章并行）与 V6-11（补镜头）暂停：它们都建在 Agent 运行时之上，等 V7 的运行时归属在 P2 前后定下来再排。暂停前 V6-10 只做了设计阅读，没有写代码。
 
-6. **需要所有者决定或授权的事项**（P0 审计给出依据，本裁决不替所有者决定）：
-   - Fork 仓库的创建、归属与名称（方案建议 `ANCS-Video-Harness`）；本会话对它的写权限。
-   - 是否允许在本开发容器里安装并运行 DSH 的依赖、构建与测试（会执行外部仓库代码；本轮被自动安全检查拦下，未运行）。
-   - DSH 服务的生产运行时：Node ≥ 24.9 与 pnpm 11.28.5，ANCS 是 Node 22 与 pnpm 9，需要独立镜像。
-   - DSH 侧使用哪家模型与密钥。所有真实模型调用仍需所有者先同意额度。
-   - 方案锁定的 DSH 提交与上游主干已相差 637 个提交，需要决定继续锁在方案的提交还是改锁新版本。
+6. **所有者的四项决定（2026-10-28，保守方案）。** P0 审计列出待决事项后，所有者在共享看板文档 `ancs/video-harness-conservative-decisions` 中逐项决定：
+
+   | 事项 | 决定 |
+   |---|---|
+   | Fork 仓库 | 在 ANCS 组织账号下建 `ANCS-Video-Harness`，由服务账号做 owner，不用个人账号。开发会话只拿分支推送权限；`main` 受保护，改动一律走 PR |
+   | 运行 DSH 代码 | 只在 Fork 自己的 CI 里运行。开发机不安装、不构建、不运行，也不绕过安全检查。需要交互调试时开一次性容器，不碰开发机工作区 |
+   | DSH 版本 | 锁定 `0.2.1-rc.3`（`22ddee37`），暂不升到 `0.2.2-alpha.2`。等 P1 的运行时切换点、工具桥契约、测试隔离完成后再单独评估 |
+   | 运行时与模型 | DSH 镜像钉死 Node 24。先用最便宜的模型跑通端到端，额度最小；每一笔真实花费仍需所有者逐笔审批 |
+
+   同时确认两条约束：
+   - **每一轮的编辑草稿留在 ANCS**：DSH 只经工具桥读写它，不持有副本；
+   - **DSH 只拿最小 bundle**：不挂 Shell、文件写入、联网工具、代码执行、插件安装。这里的"联网"指给模型用的网页工具；DSH 进程本身的出网只允许 ANCS 工具桥与所选模型的 API。
+
+   据此，P1 中不依赖 Fork 的五项照常推进。Fork 由所有者（服务账号）创建；建好前本会话不宣称 Fork 已存在。P0 时为在开发机上运行 DSH 而另装的 Node 24 与 pnpm 11 已删除；DSH 源码只保留一份只读副本，供核对契约用。
 
 ## 影响
 
 - 新增 `docs/V07/`（方案原文、P0 审计与指标）；AGENTS.md 增加一行 V7 指向。
 - `scripts/eval-first-cut.mjs` 多记录提案操作数与类型、采用前后版本、RenderPlan `planHash`、成片 sha256 与渲染耗时，供 P2 / P6 的 legacy 与 DSH 对照使用。这是测量字段，不改变评测流程。
-- 代码、迁移、接口、界面：P0 不涉及。
+- 代码、迁移、接口、界面：P0 不涉及。P1 的改动与证据记在 `docs/V07/milestones/P1.md`。
 
 ## 回滚
 
