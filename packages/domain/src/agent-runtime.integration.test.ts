@@ -316,7 +316,8 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     ]);
     const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看海边那段的画面' } });
     expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
-    expect(sampled.map((call) => call.storageKey)).toEqual([`proxies/${proxyVersionId}.mp4`, `v6-1a/${f.sunset}.mp4`]);
+    // 两次看画面在同一步里并行执行（V7 B3），抽帧的先后不固定
+    expect(sampled.map((call) => call.storageKey).sort()).toEqual([`proxies/${proxyVersionId}.mp4`, `v6-1a/${f.sunset}.mp4`].sort());
     expect(sampled.every((call) => call.maxWidth === 512)).toBe(true);
     // 图像进入日志（重试时原样回放）
     const logged = await handle.db.select().from(agentTurnMessages).where(eq(agentTurnMessages.turnId, turn.id));
@@ -525,6 +526,48 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
     expect(done.toolCalls.map((call) => call.name)).toEqual(['get_timeline', 'get_timeline', 'get_timeline']);
     expect(done.reply).toBe('不再重复。');
+  });
+
+  it('V7 B3 并行只读（裁决 0022）：同一步里相邻的只读调用并行执行，结果按模型给出的顺序；修改前后的读取各自看到当时的草稿', async () => {
+    const f = await fixture();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const frames: AgentFrameSampler = {
+      sample: async (input) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        inFlight -= 1;
+        return input.times.map(() => ({ mediaType: 'image/jpeg' as const, data: '/9j/4AAQ' }));
+      },
+    };
+    const clipsIn = (content: string) => (JSON.parse(content) as { clips: unknown[] }).clips.length;
+    const model = new ScriptedModel([
+      () => reply([
+        { type: 'tool_use', id: 'l1', name: 'look_at_footage', input: { footageId: f.beach, times: ['1'] } },
+        { type: 'tool_use', id: 'l2', name: 'look_at_footage', input: { footageId: f.sunset, times: ['1'] } },
+        { type: 'tool_use', id: 'l3', name: 'look_at_footage', input: { footageId: f.beach, times: ['2'] } },
+      ], 'tool_use'),
+      (request) => {
+        expect(toolResults(request).map((result) => [result.toolUseId, result.isError, result.images?.length])).toEqual([['l1', false, 1], ['l2', false, 1], ['l3', false, 1]]);
+        return reply([
+          { type: 'tool_use', id: 't1', name: 'get_timeline', input: {} },
+          { type: 'tool_use', id: 'e1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '2' }] } },
+          { type: 'tool_use', id: 't2', name: 'get_timeline', input: {} },
+        ], 'tool_use');
+      },
+      (request) => {
+        const [before, edit, after] = toolResults(request);
+        expect(edit).toMatchObject({ toolUseId: 'e1', isError: false });
+        expect([clipsIn(before!.content), clipsIn(after!.content)]).toEqual([0, 1]);
+        return reply([{ type: 'text', text: '好了。' }], 'end_turn');
+      },
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看三段' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
+    expect(maxInFlight).toBe(3);
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    expect(done.toolCalls.map((call) => call.name)).toEqual(['look_at_footage', 'look_at_footage', 'look_at_footage', 'get_timeline', 'edit_timeline', 'get_timeline']);
   });
 });
 
