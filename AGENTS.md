@@ -1,6 +1,6 @@
 # AGENTS.md — 代理协作规则
 
-**唯一权威：`docs/V06/ANCS_v0.6_Product_Architecture.md`（V6，按里程碑 V6-0—V6-8 推进，裁决见 `docs/decisions/0018-v6-adoption.md`）。** V6 增量：裁决 `docs/decisions/0020-autonomous-production-adoption.md` 纳入自主制作模式（提案原文 `docs/V06/proposals/`，里程碑 V6-9—V6-11）；生产与商业化缺口见 `docs/V06/production-readiness-checklist.md`。 V5（`docs/V05/ANCS_v0.5_Architecture.md` 与裁决 0011—0017）的架构骨架继续有效；v0.4 文档（`docs/V04/`）是需求与交互细节的参考库，N 系列任务账本冻结为历史（`pnpm spec:check` 继续校验其一致性，不新增条目）。冲突优先级：项目所有者后续明确要求 → V6 → V5 架构裁决 → v0.4 需求参考 → 更早的规范。
+**唯一权威：`docs/V06/ANCS_v0.6_Product_Architecture.md`（V6，按里程碑 V6-0—V6-8 推进，裁决见 `docs/decisions/0018-v6-adoption.md`）。** V6 增量：裁决 `docs/decisions/0020-autonomous-production-adoption.md` 纳入自主制作模式（提案原文 `docs/V06/proposals/`，里程碑 V6-9—V6-11）；生产与商业化缺口见 `docs/V06/production-readiness-checklist.md`。 V7 增量：裁决 `docs/decisions/0021-v7-video-native-harness.md` 把 Agent 运行时分阶段迁往 DeepSeek Harness 的 Fork（方案原文与各阶段记录在 `docs/V07/`，P0→P8 逐阶段 Go/No-Go，当前 P0）。V7 只改变运行时的归属，产品定义与工程权威（V6、ProjectDocument、操作日志、提案、内核、RenderPlan）不变，冲突时以它们为准。 V5（`docs/V05/ANCS_v0.5_Architecture.md` 与裁决 0011—0017）的架构骨架继续有效；v0.4 文档（`docs/V04/`）是需求与交互细节的参考库，N 系列任务账本冻结为历史（`pnpm spec:check` 继续校验其一致性，不新增条目）。冲突优先级：项目所有者后续明确要求 → V6 → V5 架构裁决 → v0.4 需求参考 → 更早的规范。
 
 任何模型接手前必须按顺序执行：
 
