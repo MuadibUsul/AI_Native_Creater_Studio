@@ -1,0 +1,36 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "404": {
+      "versions": [
+        {
+          "path": "404.html",
+          "createdAt": "2026-10-29T17:19:10.619Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "index": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-10-29T17:19:10.546Z",
+          "status": "needs-review"
+        }
+      ]
+    },
+    "app": {
+      "versions": [
+        {
+          "path": "app.html",
+          "createdAt": "2026-10-29T17:19:10.586Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-10-29T17:19:10.547Z",
+  "updatedAt": "2026-10-29T17:19:10.620Z"
+}

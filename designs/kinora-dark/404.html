@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kinora · Page not found</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="media/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=Geist+Mono:wght@400&family=Noto+Sans+SC:wght@400;600&display=swap">
+<style>
+:root { color-scheme: dark; --screen: #000000; --line: #313131; --text: #f2ede4; --text-2: #b3ada2; --amber: #f2c14e; --veil: rgba(0, 0, 0, 0.72); --ease: cubic-bezier(0.22, 1, 0.36, 1); --font: "Geist", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, Menlo, monospace; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--screen); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 24px; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--amber); color: #1a1405; }
+main { min-height: 100%; display: grid; align-content: center; gap: 24px; padding: 64px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px)); max-width: 760px; margin-inline: auto; }
+.frame { position: relative; aspect-ratio: 1280 / 536; max-width: 100%; background: #0a0a0a; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; }
+.frame span { font-family: var(--mono); font-size: 14px; line-height: 20px; color: var(--text-2); }
+.sub { position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%); width: 86%; text-align: center; }
+.sub b { padding: 2px 8px; background: var(--veil); color: var(--amber); font-weight: 500; font-size: 18px; line-height: 28px; }
+h1 { margin: 0; font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+p { margin: 0; color: var(--text-2); text-wrap: pretty; }
+a.btn { justify-self: start; display: inline-flex; align-items: center; min-height: 40px; padding: 8px 12px; border-radius: 8px; background: var(--text); color: var(--screen); font-weight: 600; text-decoration: none; transition: background-color 300ms var(--ease), transform 300ms var(--ease); }
+a.btn:hover { background: #ffffff; }
+a.btn:active { transform: scale(0.98); }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="frame" aria-hidden="true"><span>00:00:00:00</span><div class="sub"><b data-zh="这一页没有剪进来。">This page did not make the cut.</b></div></div>
+  <h1 data-zh="找不到这个页面">We could not find that page</h1>
+  <p data-zh="链接可能已经过期，或者地址拼错了。">The link may be old, or the address has a typo.</p>
+  <a class="btn" href="index.html" data-zh="回到 Kinora">Back to Kinora</a>
+</main>
+<script>
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('kinora-lang'); } catch (e) { saved = null; }
+  var zh = saved ? saved === 'zh' : (navigator.language || '').toLowerCase().indexOf('zh') === 0;
+  if (!zh) return;
+  document.documentElement.lang = 'zh-Hans';
+  document.title = 'Kinora · 找不到页面';
+  document.querySelectorAll('[data-zh]').forEach(function (el) { el.textContent = el.getAttribute('data-zh'); });
+})();
+</script>
+</body>
+</html>
