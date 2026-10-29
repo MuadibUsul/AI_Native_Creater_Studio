@@ -4,9 +4,9 @@
  */
 
 type Tier = 'ASK_EACH' | 'AUTO_SAFE';
-type RunStatus = 'WAITING_FOR_FOOTAGE' | 'DIRECTING' | 'CHECKING' | 'DELIVERED' | 'NEEDS_REVIEW' | 'FAILED' | 'CANCELLED';
+type RunStatus = 'WAITING_FOR_FOOTAGE' | 'PLANNING' | 'CUTTING_CHAPTERS' | 'DIRECTING' | 'CHECKING' | 'DELIVERED' | 'NEEDS_REVIEW' | 'FAILED' | 'CANCELLED';
 type NotAdopted = 'APPROVAL_ASK_EACH' | 'REVIEW_GATE' | 'AUTHORIZATION_CHANGED' | 'PROJECT_CHANGED' | 'NO_CHANGES' | 'TURN_FAILED';
-type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'MONTHLY_AI_LIMIT' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL';
+type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'MONTHLY_AI_LIMIT' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL' | 'CHAPTER_NOT_ASSEMBLED';
 type FailReason = 'FOOTAGE_TIMEOUT' | 'NO_FOOTAGE' | 'SESSION_BUSY' | 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MODEL' | 'GENERIC';
 type StartError = 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MONTHLY_AI_LIMIT' | 'RUN_IN_PROGRESS' | 'GENERIC';
 
@@ -50,6 +50,8 @@ const zhCN = {
     label: 'AI 自己剪',
     status: {
       WAITING_FOR_FOOTAGE: '等素材准备好',
+      PLANNING: '正在定计划',
+      CUTTING_CHAPTERS: '分章在剪',
       DIRECTING: '正在剪',
       CHECKING: '正在自检',
       DELIVERED: '剪好了',
@@ -118,6 +120,7 @@ const zhCN = {
       MONTHLY_AI_LIMIT: () => '工作区本月的 AI 额度用完，AI 提前停下',
       ITERATION_LIMIT: () => '步骤用完，AI 提前停下',
       UNPRICED_MODEL: () => '导演模型没有价格表，花费无法核算',
+      CHAPTER_NOT_ASSEMBLED: (detail: string) => `没拼进成片的章节：${detail}`,
     } satisfies Record<Unmet, (detail: string) => string>,
     cost: (spent: string, budget: string | null) => (budget === null ? `花费 ${spent}` : `花费 ${spent} / 上限 ${budget}`),
     unpriced: (count: number) => `另有 ${String(count)} 次调用未定价`,
@@ -165,6 +168,8 @@ const en: typeof zhCN = {
     label: 'AI editing on its own',
     status: {
       WAITING_FOR_FOOTAGE: 'Waiting for footage',
+      PLANNING: 'Planning',
+      CUTTING_CHAPTERS: 'Cutting chapters',
       DIRECTING: 'Editing',
       CHECKING: 'Checking its work',
       DELIVERED: 'Done',
@@ -231,6 +236,7 @@ const en: typeof zhCN = {
       MONTHLY_AI_LIMIT: () => "The workspace used this month's AI allowance, so AI stopped early",
       ITERATION_LIMIT: () => 'AI ran out of steps and stopped early',
       UNPRICED_MODEL: () => 'The director model has no price table, so spending cannot be counted',
+      CHAPTER_NOT_ASSEMBLED: (detail: string) => `Chapters not in the film: ${detail}`,
     },
     cost: (spent: string, budget: string | null) => (budget === null ? `Spent ${spent}` : `Spent ${spent} of ${budget}`),
     unpriced: (count: number) => `${String(count)} unpriced call${count === 1 ? '' : 's'}`,

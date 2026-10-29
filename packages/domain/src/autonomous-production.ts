@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   AGENT_ERROR_REASONS,
   AUTONOMOUS_PRODUCTION_WORKFLOW,
@@ -10,7 +10,9 @@ import {
   AgentModelFailure,
   ApiFailure,
   ERROR_CODES,
+  autonomousChapterSchema,
   autonomousReportSchema,
+  autonomousRunModeSchema,
   autonomousRunSchema,
   editOperationSchema,
   productionPolicySchema,
@@ -22,7 +24,7 @@ import {
   type StartAutonomousRunRequest,
   type WorkflowErrorClass,
 } from '@ancs/contracts';
-import { agentTurns, assets, assetVersions, autonomousRuns, projects } from '@ancs/db';
+import { agentTurns, assets, assetVersions, autonomousChapters, autonomousRuns, projects } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { assertAiSpendAvailable } from './ai-spend.js';
 import { createAgentSession, createAutonomousTurn, getAgentTurn, runAgentTurnLoop, type AgentTurnPorts } from './agent-runtime.js';
@@ -74,11 +76,30 @@ async function progressOf(deps: DomainDeps, turnId: string | null): Promise<Auto
   return { steps: calls.length, lastStep: last?.summary.slice(0, 500) ?? null, lastTool: last?.name.slice(0, 80) ?? null };
 }
 
+/** V6-10：分章模式的各章（按成片顺序），进行中的章带上步骤进度 */
+async function chaptersOf(deps: DomainDeps, runId: string): Promise<AutonomousRun['chapters']> {
+  const rows = await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.runId, runId)).orderBy(asc(autonomousChapters.index));
+  return Promise.all(rows.map(async (chapter) => {
+    const progress = await progressOf(deps, chapter.turnId);
+    const error = chapter.error as { reason?: unknown; message?: unknown } | null;
+    return autonomousChapterSchema.parse({
+      id: chapter.id, index: chapter.index, sceneId: chapter.sceneId, title: chapter.title, status: chapter.status, attempts: chapter.attempts,
+      budgetMicros: chapter.budgetMicros, costMicros: chapter.costMicros,
+      progress: { steps: progress.steps, lastStep: progress.lastStep },
+      error: error === null ? null : { reason: String(error.reason ?? 'FAILED').slice(0, 80), message: String(error.message ?? '').slice(0, 300) },
+      startedAt: chapter.startedAt?.toISOString() ?? null,
+      completedAt: chapter.completedAt?.toISOString() ?? null,
+    });
+  }));
+}
+
 async function toRun(deps: DomainDeps, row: Row): Promise<AutonomousRun> {
   return autonomousRunSchema.parse({
     id: row.id,
     projectId: row.projectId,
     status: row.status,
+    mode: autonomousRunModeSchema.parse(row.mode),
+    chapters: row.mode === 'CHAPTERS' ? await chaptersOf(deps, row.id) : [],
     goal: row.goal,
     targetDurationSeconds: row.targetDurationSeconds,
     strategyPackId: row.strategyPackId,

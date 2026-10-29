@@ -33,7 +33,7 @@ const footageBusy = (state: StudioState | undefined): boolean =>
     || Object.values(item.understanding).some((value) => value === 'WORKING')) ?? false;
 /** 交给 AI 剪完进行中（V6-9）：轮询进度到交付 */
 const autonomyBusy = (state: StudioState | undefined): boolean =>
-  state?.autonomousRun !== null && state?.autonomousRun !== undefined && ['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING'].includes(state.autonomousRun.status);
+  state?.autonomousRun !== null && state?.autonomousRun !== undefined && ['WAITING_FOR_FOOTAGE', 'PLANNING', 'CUTTING_CHAPTERS', 'DIRECTING', 'CHECKING'].includes(state.autonomousRun.status);
 /** 付费生成进行中（V6-7/V6-8）：轮询到结果出来 */
 const generationBusy = (state: StudioState | undefined): boolean => state?.generations.some((item) => item.status === 'RUNNING') ?? false;
 

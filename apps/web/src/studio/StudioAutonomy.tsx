@@ -234,7 +234,7 @@ export function StudioAutonomyDialog({ workspaceId, projectId, policy, initialGo
   );
 }
 
-const ACTIVE = new Set<AutonomousRun['status']>(['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING']);
+const ACTIVE = new Set<AutonomousRun['status']>(['WAITING_FOR_FOOTAGE', 'PLANNING', 'CUTTING_CHAPTERS', 'DIRECTING', 'CHECKING']);
 export const autonomousRunActive = (run: AutonomousRun | null | undefined): boolean => run !== null && run !== undefined && ACTIVE.has(run.status);
 
 type FailKey = keyof Messages['autonomy']['card']['failed'];

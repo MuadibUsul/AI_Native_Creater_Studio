@@ -16,7 +16,7 @@ const unsigned: AutonomyPolicy = { approval: 'ASK_EACH', budgetMicros: null, per
 const signed: AutonomyPolicy = { ...unsigned, approval: 'AUTO_SAFE', budgetMicros: 3_000_000, signature: { userId: 'usr_1', signedAt: '2026-10-21T00:00:00.000Z', version: 2 } };
 
 const run = (overrides: Partial<AutonomousRun> = {}): AutonomousRun => ({
-  id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', goal: '60 秒冰岛自驾，节奏轻快', targetDurationSeconds: 60, strategyPackId: null,
+  id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', mode: 'SINGLE', chapters: [], goal: '60 秒冰岛自驾，节奏轻快', targetDurationSeconds: 60, strategyPackId: null,
   approval: 'AUTO_SAFE', policyVersion: 2, budgetMicros: 3_000_000, modelCapMicros: 2_700_000, locale: 'zh-CN',
   turnId: 'agt_9', workflowRunId: 'wfr_9', proposalId: null, adoptedRevision: null,
   progress: { steps: 4, lastStep: '找到 12 个剪点候选', lastTool: 'find_edit_points' },
@@ -33,6 +33,7 @@ const report = (overrides: Partial<NonNullable<AutonomousRun['report']>> = {}): 
   plan: { version: 1, logline: '从冰川到湖面的一天', scenes: 4, intents: 7 },
   unmet: [{ code: 'TARGET_DURATION', detail: '60/48.0' }],
   cost: { spentMicros: 420_000, budgetMicros: 3_000_000, unpricedCalls: 0 },
+  chapters: [],
   ...overrides,
 });
 

@@ -292,7 +292,11 @@ export type StartAgentTurnRequest = z.input<typeof startAgentTurnRequestSchema>;
  * GENERATE = 用户确认的一次付费生成（V6-7/V6-8）：不调用模型，生成结果放进试改（在当前试改上继续）。
  */
 /** AUTONOMOUS：自主制作的那一轮（裁决 0020）——由自主制作工作流发起与推进，不经 AGENT_TURN 工作流 */
-export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE', 'AUTONOMOUS'] as const;
+/**
+ * AUTONOMOUS_PLAN：V6-10 分章前的规划（只能读和写计划，改动类工具在执行时拦下）；
+ * AUTONOMOUS_CHAPTER：V6-10 一章（在本章子序列上剪；草稿交给拼装，不单独建提案）。
+ */
+export const AGENT_TURN_PURPOSES = ['EDIT', 'DISCUSS_NOTE', 'APPLY_REVIEW', 'GENERATE', 'AUTONOMOUS', 'AUTONOMOUS_PLAN', 'AUTONOMOUS_CHAPTER'] as const;
 export const agentTurnPurposeSchema = z.enum(AGENT_TURN_PURPOSES);
 export type AgentTurnPurpose = z.infer<typeof agentTurnPurposeSchema>;
 
