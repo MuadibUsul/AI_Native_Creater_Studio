@@ -26,6 +26,8 @@ export const studioKeys = {
   plan: (workspaceId: string, projectId: string) => ['studio', 'plan', workspaceId, projectId] as const,
   /** 这条视频的导出运行列表（任务中心只读） */
   exports: (workspaceId: string, projectId: string) => ['studio', 'exports', workspaceId, projectId] as const,
+  /** 一次自主制作运行（重做某一章时读最初那次分章运行） */
+  autonomousRun: (workspaceId: string, projectId: string, runId: string) => ['studio', 'autonomous-run', workspaceId, projectId, runId] as const,
 };
 
 const footageBusy = (state: StudioState | undefined): boolean =>

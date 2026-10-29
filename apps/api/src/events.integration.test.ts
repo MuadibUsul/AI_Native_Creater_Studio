@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
 import { createDb, outboxEvents, redactDatabaseUrl, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
@@ -318,10 +318,16 @@ describe('通知（Outbox 消费者 + 持久化 inbox）', () => {
 
     // 直接驱动消费者（SSE tick 与 CLI 使用同一函数）
     const { runNotificationDispatch } = await import('@ancs/domain');
-    const dispatch = await runNotificationDispatch({ db: handle.db }, { limit: 100 });
-    expect(dispatch.dispatched).toBeGreaterThanOrEqual(1); // addScene 的 project.updated
+    // 共享测试库里其它文件可能留下超过一批的未派发事件：派发到没有剩余为止，只检查本工作区
+    let dispatched = 0;
+    for (let round = 0; round < 50; round += 1) {
+      const batch = await runNotificationDispatch({ db: handle.db }, { limit: 100 });
+      dispatched += batch.dispatched;
+      if (batch.scanned === 0) break;
+    }
+    expect(dispatched).toBeGreaterThanOrEqual(1); // addScene 的 project.updated
     // Outbox 已标记 published（P02-02 遗留义务）
-    const pending = await handle.db.select().from(outboxEvents).where(isNull(outboxEvents.publishedAt));
+    const pending = await handle.db.select().from(outboxEvents).where(and(isNull(outboxEvents.publishedAt), eq(outboxEvents.workspaceId, workspaceId)));
     expect(pending).toHaveLength(0);
 
     const bobNotifications = await bob.client.notifications.list({ workspaceId: ids.workspaceId });

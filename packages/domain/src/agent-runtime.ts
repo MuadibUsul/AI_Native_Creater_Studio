@@ -856,7 +856,9 @@ async function autonomousContextOf(deps: DomainDeps, turn: TurnRow): Promise<Rec
     const chapter = (await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.turnId, turn.id)).limit(1))[0];
     const run = chapter === undefined ? undefined : (await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.id, chapter.runId)).limit(1))[0];
     if (chapter === undefined || run === undefined) return null;
-    const siblings = await deps.db.select({ index: autonomousChapters.index, title: autonomousChapters.title }).from(autonomousChapters).where(eq(autonomousChapters.runId, run.id)).orderBy(asc(autonomousChapters.index));
+    // 重做一章时，整部的章节按最初那次运行列出
+    const familyRunId = (run.redoOf as { runId?: string } | null)?.runId ?? run.id;
+    const siblings = await deps.db.select({ index: autonomousChapters.index, title: autonomousChapters.title }).from(autonomousChapters).where(eq(autonomousChapters.runId, familyRunId)).orderBy(asc(autonomousChapters.index));
     const plan = await getLatestProductionPlan(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId });
     const scene = plan?.scenes.find((item) => item.id === chapter.sceneId) ?? null;
     return {
@@ -876,12 +878,29 @@ async function autonomousContextOf(deps: DomainDeps, turn: TurnRow): Promise<Rec
   if (run.mode !== 'CHAPTERS') return { ...base(run, run.modelCapMicros), note };
   const chapters = await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.runId, run.id)).orderBy(asc(autonomousChapters.index));
   const outputs = run.workflowRunId === null ? {} : ((await deps.db.select({ context: workflowRuns.context }).from(workflowRuns).where(eq(workflowRuns.id, run.workflowRunId)).limit(1))[0]?.context ?? {}) as Record<string, unknown>;
-  const placements = ((outputs['assemble'] as { placements?: Record<string, [string, string]> } | undefined)?.placements) ?? {};
+  const assembled = (outputs['assemble'] ?? {}) as { placements?: Record<string, [string, string]>; placedAtEnd?: string[] };
+  const placements = assembled.placements ?? {};
+  const placedAtEnd = new Set(assembled.placedAtEnd ?? []);
+  const chapterView = chapters.map((chapter) => ({
+    number: chapter.index + 1, title: chapter.title, status: chapter.status, at: placements[chapter.id] ?? null,
+    ...(placedAtEnd.has(chapter.id) ? { placedAtEnd: true } : {}),
+    ...(chapter.error === null ? {} : { problem: (chapter.error as { message?: unknown }).message ?? null }),
+  }));
+  if (run.redoOf !== null) {
+    return {
+      ...base(run, run.modelCapMicros),
+      note,
+      phase: 'FINISH_CHAPTERS',
+      redo: true,
+      chapters: chapterView,
+      instructions: 'One chapter was missing from the delivered film, so it was cut again on its own and inserted at the listed position, after the chapter before it (or at the end of the film if its place could not be found, marked placedAtEnd). Review the joins on both sides of that chapter with review_draft and fix the seams. Leave the rest of the film as it is. If it was placed at the end, say so in your delivery note so the person can move it.',
+    };
+  }
   return {
     ...base(run, run.modelCapMicros),
     note,
     phase: 'FINISH_CHAPTERS',
-    chapters: chapters.map((chapter) => ({ title: chapter.title, status: chapter.status, at: placements[chapter.id] ?? null, ...(chapter.error === null ? {} : { problem: (chapter.error as { message?: unknown }).message ?? null }) })),
+    chapters: chapterView,
     instructions: 'The chapters were cut separately and joined into this draft in plan order (each chapter at the listed position). Review the whole film: run review_draft, look at the joins between chapters, the opening and the ending, and fix seams, repeats and the overall length. Do not rebuild chapters that work. If a chapter is missing, cover the gap in the story as well as the footage allows and say so in your delivery note.',
   };
 }

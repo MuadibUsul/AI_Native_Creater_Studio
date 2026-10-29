@@ -6,7 +6,10 @@
 type Tier = 'ASK_EACH' | 'AUTO_SAFE';
 type RunStatus = 'WAITING_FOR_FOOTAGE' | 'PLANNING' | 'CUTTING_CHAPTERS' | 'DIRECTING' | 'CHECKING' | 'DELIVERED' | 'NEEDS_REVIEW' | 'FAILED' | 'CANCELLED';
 type NotAdopted = 'APPROVAL_ASK_EACH' | 'REVIEW_GATE' | 'AUTHORIZATION_CHANGED' | 'PROJECT_CHANGED' | 'NO_CHANGES' | 'TURN_FAILED';
-type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'MONTHLY_AI_LIMIT' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL' | 'CHAPTER_NOT_ASSEMBLED';
+type Unmet = 'TARGET_DURATION' | 'NO_FOOTAGE_USED' | 'BUDGET_REACHED' | 'MONTHLY_AI_LIMIT' | 'ITERATION_LIMIT' | 'UNPRICED_MODEL' | 'CHAPTER_NOT_ASSEMBLED' | 'CHAPTER_PLACED_AT_END';
+type ChapterStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+type ChapterProblem = 'BUDGET' | 'TIMEOUT' | 'STEPS' | 'MONTHLY_AI_LIMIT' | 'ASSEMBLY' | 'CANCELLED';
+type RedoError = 'NEEDS_ADOPTION' | 'RUN_IN_PROGRESS' | 'BUDGET_EXHAUSTED' | 'NOT_SIGNED' | 'MONTHLY_AI_LIMIT' | 'ALREADY_REDONE' | 'GENERIC';
 type FailReason = 'FOOTAGE_TIMEOUT' | 'NO_FOOTAGE' | 'SESSION_BUSY' | 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MODEL' | 'GENERIC';
 type StartError = 'NOT_SIGNED' | 'BUDGET_EXHAUSTED' | 'MONTHLY_AI_LIMIT' | 'RUN_IN_PROGRESS' | 'GENERIC';
 
@@ -62,6 +65,37 @@ const zhCN = {
     waitingBody: '放入素材，处理好就开始。',
     steps: (count: number) => `已做 ${String(count)} 步`,
     goal: (goal: string) => `你的要求：${goal}`,
+    // V6-10 分章：逐章进度、各章结果、只重做没剪成的那一章
+    redoOf: (number: number, title: string) => `重做第 ${String(number)} 章「${title}」，剪好后放回原来的位置`,
+    chaptersTitle: '各章',
+    chapter: (number: number, title: string) => `第 ${String(number)} 章 ${title}`,
+    chapterStatus: { PENDING: '排队中', RUNNING: '剪辑中', SUCCEEDED: '完成', FAILED: '没剪成', CANCELLED: '已取消' } satisfies Record<ChapterStatus, string>,
+    chapterEmpty: '剪完了，但没有内容',
+    /** 没剪成的常见原因；其余原因如实显示原文 */
+    chapterProblems: {
+      BUDGET: '分到这一章的预算用完了',
+      TIMEOUT: '这一章没在时限内剪完',
+      STEPS: '步骤用完，没剪完',
+      MONTHLY_AI_LIMIT: '工作区本月的 AI 额度用完了',
+      ASSEMBLY: '剪好的内容拼不进成片',
+      CANCELLED: '运行停下了',
+    } satisfies Record<ChapterProblem, string>,
+    placedAt: (start: string, end: string) => `在成片 ${start}–${end} 秒`,
+    chapterCost: (usd: string) => `花费 ${usd}`,
+    redo: '重做这一章',
+    redoLabel: (title: string) => `重做「${title}」`,
+    redoing: '正在开始…',
+    redone: '已重做',
+    remainingTitle: '最初那次交付里还没剪成的章',
+    redoErrors: {
+      NEEDS_ADOPTION: '这一版还是试改：先采用它，再重做没剪成的章。',
+      RUN_IN_PROGRESS: 'AI 正在做另一件事，结束后再重做。',
+      BUDGET_EXHAUSTED: '授权的预算不够再剪一章：在"交给 AI 剪完…"里调高预算。',
+      NOT_SIGNED: '授权已撤回：先在"交给 AI 剪完…"里重新签署。',
+      MONTHLY_AI_LIMIT: '工作区本月的 AI 额度用完了，下个月再重做。',
+      ALREADY_REDONE: '这一章已经重做过了。',
+      GENERIC: '没能开始重做，请再试一次。',
+    } satisfies Record<RedoError, string>,
     stop: '停下',
     stopping: '正在停下…',
     stopFailed: '没能停下，请再试一次。',
@@ -121,6 +155,7 @@ const zhCN = {
       ITERATION_LIMIT: () => '步骤用完，AI 提前停下',
       UNPRICED_MODEL: () => '导演模型没有价格表，花费无法核算',
       CHAPTER_NOT_ASSEMBLED: (detail: string) => `没拼进成片的章节：${detail}`,
+      CHAPTER_PLACED_AT_END: (detail: string) => `找不到原来的位置，放在了成片末尾：${detail}（可以在时间带上拖回去）`,
     } satisfies Record<Unmet, (detail: string) => string>,
     cost: (spent: string, budget: string | null) => (budget === null ? `花费 ${spent}` : `花费 ${spent} / 上限 ${budget}`),
     unpriced: (count: number) => `另有 ${String(count)} 次调用未定价`,
@@ -180,6 +215,35 @@ const en: typeof zhCN = {
     waitingBody: 'Add footage; it starts once processing finishes.',
     steps: (count: number) => `${String(count)} step${count === 1 ? '' : 's'} so far`,
     goal: (goal: string) => `Your brief: ${goal}`,
+    redoOf: (number: number, title: string) => `Redoing chapter ${String(number)}, “${title}”, then putting it back in its place`,
+    chaptersTitle: 'Chapters',
+    chapter: (number: number, title: string) => `Chapter ${String(number)} · ${title}`,
+    chapterStatus: { PENDING: 'Waiting', RUNNING: 'Cutting', SUCCEEDED: 'Done', FAILED: 'Not cut', CANCELLED: 'Cancelled' },
+    chapterEmpty: 'Done, but empty',
+    chapterProblems: {
+      BUDGET: 'its share of the budget ran out',
+      TIMEOUT: 'it did not finish in time',
+      STEPS: 'it ran out of steps',
+      MONTHLY_AI_LIMIT: "the workspace used this month's AI allowance",
+      ASSEMBLY: 'the cut could not be joined into the film',
+      CANCELLED: 'the run was stopped',
+    },
+    placedAt: (start: string, end: string) => `at ${start}–${end} s in the film`,
+    chapterCost: (usd: string) => `spent ${usd}`,
+    redo: 'Redo this chapter',
+    redoLabel: (title: string) => `Redo “${title}”`,
+    redoing: 'Starting…',
+    redone: 'Redone',
+    remainingTitle: 'Still missing from the first delivery',
+    redoErrors: {
+      NEEDS_ADOPTION: 'This version is still a trial edit: keep it first, then redo the missing chapter.',
+      RUN_IN_PROGRESS: 'AI is busy with something else. Redo it when that finishes.',
+      BUDGET_EXHAUSTED: 'The authorized budget is not enough for another chapter. Raise it in “Let AI finish the edit…”.',
+      NOT_SIGNED: 'The authorization was withdrawn. Sign it again in “Let AI finish the edit…”.',
+      MONTHLY_AI_LIMIT: "The workspace used this month's AI allowance. Redo it next month.",
+      ALREADY_REDONE: 'This chapter was already redone.',
+      GENERIC: 'Could not start the redo. Please try again.',
+    },
     stop: 'Stop',
     stopping: 'Stopping…',
     stopFailed: 'Could not stop. Please try again.',
@@ -237,6 +301,7 @@ const en: typeof zhCN = {
       ITERATION_LIMIT: () => 'AI ran out of steps and stopped early',
       UNPRICED_MODEL: () => 'The director model has no price table, so spending cannot be counted',
       CHAPTER_NOT_ASSEMBLED: (detail: string) => `Chapters not in the film: ${detail}`,
+      CHAPTER_PLACED_AT_END: (detail: string) => `Could not find its place, so it is at the end of the film: ${detail} (drag it into place on the timeline)`,
     },
     cost: (spent: string, budget: string | null) => (budget === null ? `Spent ${spent}` : `Spent ${spent} of ${budget}`),
     unpriced: (count: number) => `${String(count)} unpriced call${count === 1 ? '' : 's'}`,

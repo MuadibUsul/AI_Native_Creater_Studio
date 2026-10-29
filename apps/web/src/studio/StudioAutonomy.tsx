@@ -8,6 +8,8 @@ import {
   AUTONOMY_ERROR_REASONS,
   MAX_AUTONOMY_BUDGET_MICROS,
   type AgentLocale,
+  type AutonomousChapter,
+  type AutonomousReport,
   type AutonomousRun,
   type AutonomyPolicy,
 } from '@ancs/contracts';
@@ -25,7 +27,9 @@ import styles from './studio.module.css';
  *   （签署人、时间、版本由服务端写入；总预算是硬上限）。新建页与共看片室共用同一组字段；
  * - 进度卡：等素材 / 正在剪（步骤数与最近一步）/ 自检 / 交付；可随时停下；
  * - 交付报告：如实列出用了哪些素材、生成内容、自检与节奏、没满足的约束与实际花费（服务端算好，界面只翻译代码）。
- * 这一版不调用付费生成，所以只给两档；"完全授权"随付费生成代为确认一起开放（V6-10）。
+ * - V6-10 分章：卡片逐章显示进度（排队 / 剪辑中 / 完成 / 没剪成及原因）；交付后各章写明在成片里的位置与花费，
+ *   没剪成的章可以只重做这一章（新的一次运行，剪好后放回原来的位置）。重做那次的卡片还列出最初那次交付里其余没剪成的章。
+ * 这一版不调用付费生成，所以只给两档；"完全授权"随付费生成代为确认一起开放（V6-11）。
  */
 
 export type AutonomyTier = 'ASK_EACH' | 'AUTO_SAFE';
@@ -66,6 +70,19 @@ export function autonomySetupValid(setup: AutonomySetup): boolean {
 }
 
 type StartErrorKey = keyof Messages['autonomy']['setup']['startErrors'];
+type RedoErrorKey = keyof Messages['autonomy']['card']['redoErrors'];
+/** 重做一章被拒绝的原因 → 文案键 */
+export function autonomyRedoErrorKey(error: unknown): RedoErrorKey {
+  const details = describeError(error).details;
+  const reason = details['reason'];
+  if (reason === AUTONOMOUS_RUN_ERROR_REASONS.REDO_NEEDS_ADOPTION) return 'NEEDS_ADOPTION';
+  if (reason === AUTONOMOUS_RUN_ERROR_REASONS.RUN_IN_PROGRESS) return 'RUN_IN_PROGRESS';
+  if (reason === AUTONOMY_ERROR_REASONS.BUDGET_EXHAUSTED) return 'BUDGET_EXHAUSTED';
+  if (reason === AUTONOMY_ERROR_REASONS.NOT_SIGNED) return 'NOT_SIGNED';
+  if (reason === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED) return 'MONTHLY_AI_LIMIT';
+  if (reason === AUTONOMOUS_RUN_ERROR_REASONS.CHAPTER_NOT_REDOABLE && details['why'] === 'ALREADY_REDONE') return 'ALREADY_REDONE';
+  return 'GENERIC';
+}
 export function autonomyStartErrorKey(error: unknown): StartErrorKey {
   const reason = describeError(error).details['reason'];
   if (reason === AUTONOMY_ERROR_REASONS.NOT_SIGNED) return 'NOT_SIGNED';
@@ -250,14 +267,69 @@ function failureKey(run: AutonomousRun): FailKey {
 }
 
 const numberText = (value: number, locale: string) => value.toLocaleString(locale, { maximumFractionDigits: 1 });
+const REDOABLE = new Set<AutonomousChapter['status']>(['FAILED', 'CANCELLED']);
+
+type ChapterProblemKey = keyof Messages['autonomy']['card']['chapterProblems'];
+const ASSEMBLY_REASONS = ['CHAPTER_DRAFT_MISSING', 'CHAPTER_DRAFT_INVALID', 'CHAPTER_CONTENT_UNSUPPORTED', 'CHAPTER_TIMEBASE_MISMATCH', 'CHAPTER_SEQUENCE_NOT_FOUND', 'CHAPTER_ASSEMBLY_FAILED'];
+/** 没剪成的原因：常见的翻译成界面语言；其余（多是模型返回的原文）如实显示 */
+function chapterProblemKey(error: NonNullable<AutonomousChapter['error']>): ChapterProblemKey | null {
+  const reason = error.reason;
+  if (reason === AUTONOMY_ERROR_REASONS.BUDGET_EXHAUSTED || reason === 'BUDGET_EXHAUSTED' || reason === AGENT_ERROR_REASONS.BUDGET_EXCEEDED) return 'BUDGET';
+  if (reason === 'CHAPTER_TIMEOUT') return 'TIMEOUT';
+  if (reason === AGENT_ERROR_REASONS.ITERATION_LIMIT) return 'STEPS';
+  if (reason === AGENT_ERROR_REASONS.MONTHLY_CAP_REACHED) return 'MONTHLY_AI_LIMIT';
+  if (ASSEMBLY_REASONS.includes(reason)) return 'ASSEMBLY';
+  if (reason === 'CANCELLED') return 'CANCELLED';
+  return null;
+}
+
+/** 一章一行：第几章、标题、状态；进行中带步骤数，没剪成带原因，交付后带位置与花费；可以重做时带按钮 */
+function ChapterLine({ chapter, result, redo }: {
+  chapter: AutonomousChapter;
+  result: AutonomousReport['chapters'][number] | undefined;
+  redo: { onRedo: () => void; pending: boolean } | null;
+}) {
+  const { messages, locale } = useI18n();
+  const t = messages.autonomy.card;
+  const paren = (text: string) => (locale === 'en' ? `(${text})` : `（${text}）`);
+  const empty = result?.outcome === 'EMPTY';
+  const known = chapter.error === null ? null : chapterProblemKey(chapter.error);
+  const problem = chapter.error === null ? null
+    : known !== null ? t.chapterProblems[known]
+      : chapter.error.message.trim() !== '' ? chapter.error.message : chapter.error.reason;
+  return (
+    <li className={styles['autonomyChapter']} data-status={chapter.status}>
+      <span className={styles['autonomyChapterMark']} aria-hidden="true" />
+      <strong>{t.chapter(chapter.index + 1, chapter.title)}</strong>
+      <span>{empty ? t.chapterEmpty : t.chapterStatus[chapter.status]}</span>
+      {chapter.status === 'RUNNING' && chapter.progress.steps > 0 ? <span>· {t.steps(chapter.progress.steps)}</span> : null}
+      {result?.placement !== null && result?.placement !== undefined && !empty ? <span>· {t.placedAt(result.placement[0], result.placement[1])}</span> : null}
+      {result !== undefined && result.costMicros > 0 ? <span>· {t.chapterCost(formatUsdMicros(result.costMicros))}</span> : null}
+      {REDOABLE.has(chapter.status) && problem !== null ? <span className={styles['autonomyChapterProblem']}>{paren(problem)}</span> : null}
+      {chapter.redoneByRunId !== null ? <span>· {t.redone}</span> : null}
+      {redo !== null ? (
+        <button type="button" className="textbtn small" aria-label={t.redoLabel(chapter.title)} disabled={redo.pending} onClick={redo.onRedo}>
+          {redo.pending ? t.redoing : t.redo}
+        </button>
+      ) : null}
+    </li>
+  );
+}
 
 /** 进度与交付报告卡（对话栏里、对话记录之后） */
-export function StudioAutonomyCard({ run, canEdit, stopping, error, onStop }: {
+export function StudioAutonomyCard({ run, canEdit, stopping, error, onStop, rootRun = null, onRedo, redoing = null, redoError = null }: {
   run: AutonomousRun;
   canEdit: boolean;
   stopping: boolean;
   error: string | null;
   onStop: () => void;
+  /** 这次是重做某一章时：最初那次分章运行（列出其余没剪成的章） */
+  rootRun?: AutonomousRun | null;
+  /** 只重做没剪成的那一章（运行结束后、可编辑时） */
+  onRedo?: (runId: string, chapterId: string) => void;
+  /** 正在开始重做的那一章 */
+  redoing?: string | null;
+  redoError?: string | null;
 }) {
   const { messages, locale } = useI18n();
   const t = messages.autonomy.card;
@@ -268,6 +340,14 @@ export function StudioAutonomyCard({ run, canEdit, stopping, error, onStop }: {
   const paren = (text: string) => (locale === 'en' ? `(${text})` : `（${text}）`);
   const labelled = (label: string, text: string) => (locale === 'en' ? `${label}: ${text}` : `${label}：${text}`);
   useEffect(() => { if (!active) setOpen(true); }, [active]);
+  const canRedo = !active && canEdit && onRedo !== undefined;
+  const redoFor = (owner: AutonomousRun, chapter: AutonomousChapter) => (canRedo && REDOABLE.has(chapter.status) && chapter.redoneByRunId === null
+    ? { onRedo: () => onRedo(owner.id, chapter.id), pending: redoing === chapter.id }
+    : null);
+  const resultOf = (chapter: AutonomousChapter) => report?.chapters.find((item) => item.sceneId === chapter.sceneId);
+  // 重做那次结束后：最初那次交付里其余没剪成、也还没重做的章
+  const remaining = run.redoOf === null || rootRun === null || active ? []
+    : rootRun.chapters.filter((chapter) => REDOABLE.has(chapter.status) && chapter.redoneByRunId === null && chapter.index !== run.redoOf?.index);
   return (
     <article className={styles['autonomyCard']} data-status={run.status} aria-label={t.label}>
       <header className={styles['generationHead']}>
@@ -277,11 +357,25 @@ export function StudioAutonomyCard({ run, canEdit, stopping, error, onStop }: {
         <span className={styles['spacer']} />
         {active && canEdit ? <button type="button" className="btn small" disabled={stopping} onClick={onStop}>{stopping ? t.stopping : t.stop}</button> : null}
       </header>
-      <p className={`${styles['lineMeta']} ${styles['autonomyGoal']}`}>{t.goal(run.goal)}</p>
+      <p className={`${styles['lineMeta']} ${styles['autonomyGoal']}`}>{run.redoOf === null ? t.goal(run.goal) : t.redoOf(run.redoOf.index + 1, run.redoOf.title)}</p>
       {run.status === 'WAITING_FOR_FOOTAGE' ? <p className={styles['lineMeta']}>{t.waitingBody}</p> : null}
       {run.status === 'DIRECTING' && run.progress.lastStep !== null ? <p className={`${styles['autonomyStep']} ui-ai-text`}>{run.progress.lastStep}</p> : null}
+      {run.chapters.length > 0 ? (
+        <ol className={styles['autonomyChapters']} aria-label={t.chaptersTitle}>
+          {run.chapters.map((chapter) => <ChapterLine key={chapter.id} chapter={chapter} result={resultOf(chapter)} redo={redoFor(run, chapter)} />)}
+        </ol>
+      ) : null}
+      {remaining.length > 0 && rootRun !== null ? (
+        <section className={styles['autonomyRemaining']} aria-label={t.remainingTitle}>
+          <span className={styles['lineMeta']}>{t.remainingTitle}</span>
+          <ol className={styles['autonomyChapters']}>
+            {remaining.map((chapter) => <ChapterLine key={chapter.id} chapter={chapter} result={undefined} redo={redoFor(rootRun, chapter)} />)}
+          </ol>
+        </section>
+      ) : null}
       {run.status === 'FAILED' ? <p className={styles['alert']} role="alert">{t.failed[failureKey(run)]}</p> : null}
       {error !== null ? <p className={styles['alert']} role="alert">{error}</p> : null}
+      {redoError !== null ? <p className={styles['alert']} role="alert">{redoError}</p> : null}
       {report !== null ? (
         <section className={styles['autonomyReport']} aria-label={t.reportTitle}>
           <p>{t.outcome[report.outcome]}{report.notAdoptedReason !== null && report.outcome !== 'FAILED' && report.notAdoptedReason !== 'NO_CHANGES' ? `${locale === 'en' ? ' ' : ''}${t.notAdopted[report.notAdoptedReason]}` : ''}</p>

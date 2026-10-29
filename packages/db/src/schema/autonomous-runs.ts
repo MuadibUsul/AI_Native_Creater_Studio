@@ -36,6 +36,8 @@ export const autonomousRuns = pgTable(
     report: jsonb('report'),
     error: jsonb('error'),
     idempotencyKey: text('idempotency_key'),
+    /** V6-10 S5：重做某一章的运行 → { runId, chapterId, index, title }（指回最初那次分章运行）；普通运行为 null */
+    redoOf: jsonb('redo_of'),
     createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -45,6 +47,7 @@ export const autonomousRuns = pgTable(
     index('autonomous_runs_project_idx').on(table.projectId, table.createdAt),
     uniqueIndex('autonomous_runs_active_uq').on(table.projectId).where(sql`${table.status} in ('WAITING_FOR_FOOTAGE','PLANNING','CUTTING_CHAPTERS','DIRECTING','CHECKING')`),
     uniqueIndex('autonomous_runs_idempotency_uq').on(table.projectId, table.idempotencyKey).where(sql`${table.idempotencyKey} is not null`),
+    index('autonomous_runs_redo_of_idx').on(sql`(${table.redoOf} ->> 'runId')`).where(sql`${table.redoOf} is not null`),
     check('autonomous_runs_status_ck', sql`${table.status} in ('WAITING_FOR_FOOTAGE','PLANNING','CUTTING_CHAPTERS','DIRECTING','CHECKING','DELIVERED','NEEDS_REVIEW','FAILED','CANCELLED')`),
     check('autonomous_runs_mode_ck', sql`${table.mode} in ('SINGLE','CHAPTERS')`),
     check('autonomous_runs_approval_ck', sql`${table.approval} in ('ASK_EACH','AUTO_SAFE','FULL')`),
@@ -75,6 +78,8 @@ export const autonomousChapters = pgTable(
     budgetMicros: bigint('budget_micros', { mode: 'number' }).notNull(),
     costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),
     error: jsonb('error'),
+    /** S5：拼进主序列时的位置与片段 id → { start, end, clipIds }（重做时按前后章的片段找回位置） */
+    placement: jsonb('placement'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp('started_at', { withTimezone: true }),

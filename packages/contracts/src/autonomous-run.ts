@@ -10,7 +10,7 @@ import { approvalTierSchema } from './autonomy.js';
  * - V6-9 的自主制作不调用付费生成；导演模型的花费计入签署的总预算（硬上限）；
  * - 交付报告如实写出：用了哪些原片、哪些是生成内容、自检发现、节奏偏差、没满足的约束、实际花费（含未定价的调用）。
  * - V6-10（`docs/V06/milestones/V6-10.md`）：素材够长时分章——先定计划，各章在自己的子序列上并行剪，
- *   再拼进主序列、通看收尾；一章没剪成不挡其它章，报告逐章写明。
+ *   再拼进主序列、通看收尾；一章没剪成不挡其它章，报告逐章写明。之后可以只重做没剪成的那一章（S5）。
  */
 
 export const AUTONOMOUS_PRODUCTION_WORKFLOW = 'AUTONOMOUS_PRODUCTION';
@@ -54,8 +54,9 @@ const secondsPairSchema = z.tuple([z.string().max(20), z.string().max(20)]);
  * 交付报告里"没满足 / 要留意"的代码：
  * TARGET_DURATION 成片时长与目标相差超过 20%（detail "目标秒数/实际秒数"）；NO_FOOTAGE_USED 成片里没有用到原片；
  * BUDGET_REACHED 模型花费到了本次上限；ITERATION_LIMIT 步骤用完；UNPRICED_MODEL 导演模型没有价格表、花费无法核算。
+ * CHAPTER_NOT_ASSEMBLED 有章没拼进成片（detail 章名）；CHAPTER_PLACED_AT_END 重做的章找不到原来的位置，放在了成片末尾（detail 章名）。
  */
-export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'MONTHLY_AI_LIMIT', 'ITERATION_LIMIT', 'UNPRICED_MODEL', 'CHAPTER_NOT_ASSEMBLED'] as const;
+export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'MONTHLY_AI_LIMIT', 'ITERATION_LIMIT', 'UNPRICED_MODEL', 'CHAPTER_NOT_ASSEMBLED', 'CHAPTER_PLACED_AT_END'] as const;
 
 /** V6-10：一章的结果。ASSEMBLED 拼进了成片；EMPTY 剪完但没有内容；FAILED 没剪成或拼不进去（reason 写原因） */
 export const autonomousReportChapterSchema = z.object({
@@ -120,10 +121,25 @@ export const autonomousChapterSchema = z.object({
   /** 进行中：已做的步骤数与最近一步 */
   progress: z.object({ steps: z.number().int().nonnegative(), lastStep: z.string().max(500).nullable() }).strict(),
   error: z.object({ reason: z.string().max(80), message: z.string().max(300) }).strict().nullable(),
+  /** S5：没剪成的章后来由哪次重做补上了（那次重做的运行 id）；没有为 null */
+  redoneByRunId: opaqueIdSchema.nullable(),
   startedAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),
 }).strict();
 export type AutonomousChapter = z.infer<typeof autonomousChapterSchema>;
+
+/**
+ * V6-10 S5：只重做没剪成的那一章。重做是新的一次运行：不再定计划，只剪这一章，再放回它在成片里的位置
+ * （前一章之后；找不到就放在末尾并在报告里写明），然后照常通看收尾、按档位交付。
+ * runId / chapterId 指最初那次分章运行与它里面没剪成的那一章（重做的重做也指回最初那次）。
+ */
+export const autonomousRedoOfSchema = z.object({
+  runId: opaqueIdSchema,
+  chapterId: opaqueIdSchema,
+  index: z.number().int().nonnegative(),
+  title: z.string().max(80),
+}).strict();
+export type AutonomousRedoOf = z.infer<typeof autonomousRedoOfSchema>;
 
 export const autonomousRunSchema = z.object({
   id: opaqueIdSchema,
@@ -132,6 +148,8 @@ export const autonomousRunSchema = z.object({
   mode: autonomousRunModeSchema,
   /** 分章模式的各章（按成片顺序）；一轮剪完时为空 */
   chapters: z.array(autonomousChapterSchema).max(12),
+  /** 重做某一章的运行：重做的是哪次运行的哪一章；普通运行为 null */
+  redoOf: autonomousRedoOfSchema.nullable(),
   goal: z.string(),
   targetDurationSeconds: z.number().int().nullable(),
   strategyPackId: opaqueIdSchema.nullable(),
@@ -165,4 +183,8 @@ export const AUTONOMOUS_RUN_ERROR_REASONS = {
   NO_FOOTAGE: 'AUTONOMOUS_NO_FOOTAGE',
   /** 用户正在和 AI 说话，等了太久这一轮还没结束 */
   SESSION_BUSY: 'AUTONOMOUS_SESSION_BUSY',
+  /** 这一章不能重做：不是没剪成的章、运行还没结束、不是分章运行、已经重做过，或计划里找不到这一章的场景 */
+  CHAPTER_NOT_REDOABLE: 'AUTONOMOUS_CHAPTER_NOT_REDOABLE',
+  /** 这次交付的成片还是试改、没有采用：先采用（或放弃）它，再重做没剪成的章 */
+  REDO_NEEDS_ADOPTION: 'AUTONOMOUS_REDO_NEEDS_ADOPTION',
 } as const;

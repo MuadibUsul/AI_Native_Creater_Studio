@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  AUTONOMOUS_RUN_ERROR_REASONS,
   AgentModelFailure,
   sourceMediaProbeResultSchema,
   type AgentContentBlock,
@@ -18,7 +19,10 @@ import {
   cancelAutonomousRun,
   createStudioProject,
   getAutonomousRun,
+  getProject,
   getStudioState,
+  processEdits,
+  redoAutonomousChapter,
   signProjectAutonomy,
   startAutonomousRun,
   type AutonomousProductionPorts,
@@ -85,7 +89,8 @@ class PhaseDirector implements AgentModelAdapter {
   readonly implementation = 'SCRIPTED' as const;
   readonly model = 'claude-opus-5-5';
   readonly calls: { phase: string; step: number; request: AgentModelRequest }[] = [];
-  constructor(private readonly footageId: string, private readonly failChapter: number | null) {}
+  /** finish：通看收尾时草稿里应有的画面（[成片位置, 素材位置]）；缺省是第 1、3 章拼好、第 2 章没剪成 */
+  constructor(private readonly footageId: string, private readonly failChapter: number | null, private readonly finish: [[string, string], [string, string]][] = [[['0.000', '6.000'], ['0.000', '6.000']], [['6.000', '12.000'], ['12.000', '18.000']]]) {}
   respond(request: AgentModelRequest): Promise<AgentModelResponse> {
     const context = contextOf(request);
     const step = request.messages.filter((message) => message.role === 'assistant').length;
@@ -130,7 +135,7 @@ class PhaseDirector implements AgentModelAdapter {
       if (step === 1) {
         const timeline = JSON.parse(toolResults(request)[0]!.content) as { clips: { at: [string, string]; source: [string, string] | null; footageId: string | null }[] };
         const pictures = timeline.clips.filter((clip) => clip.footageId === this.footageId && clip.source !== null);
-        expect(pictures.map((clip) => [clip.at, clip.source])).toEqual(expect.arrayContaining([[['0.000', '6.000'], ['0.000', '6.000']], [['6.000', '12.000'], ['12.000', '18.000']]]));
+        expect(pictures.map((clip) => [clip.at, clip.source])).toEqual(expect.arrayContaining(this.finish));
         return reply([{ type: 'tool_use', id: 'review', name: 'review_draft', input: {} }], 'tool_use');
       }
       return reply([{ type: 'text', text: '两章拼好了，第 2 章没剪成。' }], 'end_turn');
@@ -255,5 +260,87 @@ describe('V6-10 S3 长素材分章并行', () => {
     expect(rows.some((chapter) => chapter.status === 'CANCELLED')).toBe(true);
     const running = await handle.db.select({ id: agentTurns.id }).from(agentTurns).where(and(eq(agentTurns.projectId, f.projectId), eq(agentTurns.status, 'RUNNING')));
     expect(running).toHaveLength(0);
+  });
+  /** 先交付一版：三章里第 2 章没剪成，第 1、3 章拼在 0–6 s、6–12 s */
+  async function deliverWithMissingChapter(approval: 'AUTO_SAFE' | 'ASK_EACH' = 'AUTO_SAFE') {
+    const f = await fixture();
+    if (approval === 'ASK_EACH') await signProjectAutonomy(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, actorId: f.userId, request: { approval, budgetMicros: 5_000_000 } });
+    const started = await startAutonomousRun(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, request: { goal: '剪一条冰岛一日', targetDurationSeconds: 18 }, createdBy: null });
+    expect(await drive(new PhaseDirector(f.footageId, 2), f.workspaceId, started.workflowRunId!)).toBe('SUCCEEDED');
+    const first = await getAutonomousRun(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: started.id });
+    expect(first.chapters.map((chapter) => chapter.status)).toEqual(['SUCCEEDED', 'FAILED', 'SUCCEEDED']);
+    return { f, first };
+  }
+  const seconds = (range: unknown) => { const value = range as { start: { ticks: string; timebase: { num: number; den: number } }; end: { ticks: string } }; const tb = value.start.timebase; return [Number(value.start.ticks) * tb.num / tb.den, Number(value.end.ticks) * tb.num / tb.den]; };
+  async function mainPictures(f: { workspaceId: string; projectId: string }) {
+    const state = await getStudioState(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    const { timeline } = await readTimelineSnapshot(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    return timeline.clips.filter((clip) => clip.sequenceId === state.sequenceId && timeline.tracks.find((track) => track.id === clip.trackId)?.kind === 'VIDEO')
+      .map((clip) => [seconds(clip.sequenceRange), seconds(clip.sourceRange)]).sort((a, b) => a[0]![0]! - b[0]![0]!);
+  }
+
+  it('S5 只重做没剪成的那一章：不再定计划，只剪这一章，插回第 1、3 章之间（之后的内容后移）；报告与花费只算这一次', async () => {
+    const { f, first } = await deliverWithMissingChapter();
+    const failed = first.chapters[1]!;
+    // 完成的章不能重做
+    await expect(redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: first.chapters[0]!.id, createdBy: null }))
+      .rejects.toMatchObject({ httpStatus: 409, details: { reason: AUTONOMOUS_RUN_ERROR_REASONS.CHAPTER_NOT_REDOABLE, why: 'NOT_FAILED' } });
+
+    const model = new PhaseDirector(f.footageId, null, [[['0.000', '6.000'], ['0.000', '6.000']], [['6.000', '12.000'], ['6.000', '12.000']], [['12.000', '18.000'], ['12.000', '18.000']]]);
+    const redo = await redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: failed.id, createdBy: null, idempotencyKey: 'redo-1' });
+    expect(redo.redoOf).toEqual({ runId: first.id, chapterId: failed.id, index: 1, title: '路上' });
+    expect([redo.status, redo.mode, redo.chapters.map((chapter) => [chapter.index, chapter.title, chapter.status])]).toEqual(['CUTTING_CHAPTERS', 'CHAPTERS', [[1, '路上', 'PENDING']]]);
+    // 幂等键 → 同一次重做
+    expect((await redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: failed.id, createdBy: null, idempotencyKey: 'redo-1' })).id).toBe(redo.id);
+    expect(await drive(model, f.workspaceId, redo.workflowRunId!)).toBe('SUCCEEDED');
+
+    const done = await getAutonomousRun(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: redo.id });
+    expect([done.status, done.report?.outcome, done.report?.timeline]).toEqual(['DELIVERED', 'ADOPTED', { lengthSeconds: '18.000', clips: 3, captions: 0 }]);
+    expect(done.report?.chapters.map((chapter) => [chapter.title, chapter.outcome, chapter.placement])).toEqual([['路上', 'ASSEMBLED', ['6.000', '12.000']]]);
+    expect(done.report?.unmet.map((item) => item.code)).toEqual([]);
+    // 只有这一章与通看收尾，没有规划；这一章的交代里仍是"第 2 章，共 3 章"
+    expect(model.calls.map((call) => call.phase)).toEqual(['CUT_CHAPTER', 'CUT_CHAPTER', 'FINISH_CHAPTERS', 'FINISH_CHAPTERS', 'FINISH_CHAPTERS']);
+    expect(contextOf(model.calls[0]!.request)).toContain('"number":2,"of":3');
+    expect(contextOf(model.calls[2]!.request)).toContain('"redo":true');
+    expect(done.report?.cost.spentMicros).toBe(model.calls.length * CALL_MICROS);
+    // 作品：三章按顺序，第 3 章后移到 12–18 s
+    expect(await mainPictures(f)).toEqual([[[0, 6], [0, 6]], [[6, 12], [6, 12]], [[12, 18], [12, 18]]]);
+    // 最初那次运行里，这一章记下由这次重做补上了
+    const root = await getAutonomousRun(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id });
+    expect(root.chapters.map((chapter) => chapter.redoneByRunId)).toEqual([null, redo.id, null]);
+    // 同一章重做好了就不再重做
+    await expect(redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: failed.id, createdBy: null }))
+      .rejects.toMatchObject({ details: { reason: AUTONOMOUS_RUN_ERROR_REASONS.CHAPTER_NOT_REDOABLE, why: 'ALREADY_REDONE' } });
+  });
+
+  it('S5 原来的位置插不进去（用户在接缝上放了一段）→ 接在成片末尾，报告写明', async () => {
+    const { f, first } = await deliverWithMissingChapter();
+    const state = await getStudioState(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    const { timeline } = await readTimelineSnapshot(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    const video = timeline.tracks.find((track) => track.sequenceId === state.sequenceId && track.kind === 'VIDEO')!;
+    const ms = (value: number) => ({ ticks: String(value), timebase: { num: 1, den: 1000 } });
+    const project = await getProject(deps(), { workspaceId: f.workspaceId, projectId: f.projectId });
+    await processEdits(deps(), {
+      workspaceId: f.workspaceId, projectId: f.projectId, actor: { type: 'USER', id: f.userId },
+      request: { schemaVersion: '1.0', baseProjectRevision: project.revision, expectedSceneRevisions: {}, idempotencyKey: `idem_${randomUUID()}`, operations: [
+        { op: 'insert_clip', sequenceId: state.sequenceId, trackId: video.id, assetVersionId: f.footageId, nestedSequenceId: null, sourceStreamId: null, sourceRange: { start: ms(20_000), end: ms(22_000) }, mode: 'OVERWRITE', sequenceStart: ms(5_000), linkAudio: false, audioTrackId: null },
+      ] },
+    });
+    const model = new PhaseDirector(f.footageId, null, [[['12.000', '18.000'], ['6.000', '12.000']]]);
+    const redo = await redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: first.chapters[1]!.id, createdBy: null });
+    expect(await drive(model, f.workspaceId, redo.workflowRunId!)).toBe('SUCCEEDED');
+    const done = await getAutonomousRun(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: redo.id });
+    expect(done.report?.chapters.map((chapter) => [chapter.outcome, chapter.placement])).toEqual([['ASSEMBLED', ['12.000', '18.000']]]);
+    expect(done.report?.unmet).toEqual([{ code: 'CHAPTER_PLACED_AT_END', detail: '路上' }]);
+    expect(contextOf(model.calls[2]!.request)).toContain('"placedAtEnd":true');
+    // 用户放的那一段原样保留
+    expect(await mainPictures(f)).toContainEqual([[5, 7], [20, 22]]);
+  });
+
+  it('S5 交付的还是没采用的试改：先采用再重做（409）', async () => {
+    const { f, first } = await deliverWithMissingChapter('ASK_EACH');
+    expect([first.status, first.report?.outcome]).toEqual(['NEEDS_REVIEW', 'TRIAL']);
+    await expect(redoAutonomousChapter(deps(), { workspaceId: f.workspaceId, projectId: f.projectId, runId: first.id, chapterId: first.chapters[1]!.id, createdBy: null }))
+      .rejects.toMatchObject({ httpStatus: 409, details: { reason: AUTONOMOUS_RUN_ERROR_REASONS.REDO_NEEDS_ADOPTION } });
   });
 });

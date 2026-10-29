@@ -746,6 +746,7 @@ export {
   getAutonomousRun,
   listAutonomousRuns,
   cancelAutonomousRun,
+  redoAutonomousChapter,
   autonomousProductionWorkflow,
   autonomousProductionWorkflowV1,
   autonomousChapterWorkflow,

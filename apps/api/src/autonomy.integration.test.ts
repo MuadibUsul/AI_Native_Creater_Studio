@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AncsApiError, createClient, type AncsClient } from '@ancs/sdk';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, type AuthInstance } from '@ancs/auth';
-import { createDb, outboxEvents, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
+import { autonomousChapters, autonomousRuns, createDb, outboxEvents, resolveTestDatabaseUrl, runMigrations, type DbHandle } from '@ancs/db';
 import { saveProductionPlan } from '@ancs/domain';
 import { buildServer } from './server.js';
 
@@ -14,6 +14,7 @@ import { buildServer } from './server.js';
  * - 签署：预算必填，单次生成上限不得超过总预算（契约拒绝）；签署人与时间由服务端写入，版本逐次加一；写工作区事件；
  * - 工作台状态带出授权；撤回回到逐项审批（事件记录撤回前的授权）；
  * - VIEWER 可读不可签（403）；跨工作区 404。
+ * - V6-10 S5：只重做没剪成的那一章（新的一次运行，带上 redoOf；只能重做没剪成的章）。
  */
 
 const PASSWORD = 'password-1234';
@@ -118,6 +119,48 @@ describe('V6-9 自主制作授权（HTTP + SDK）', () => {
 
     // 停止：在步骤边界生效（没有 Worker 推进时运行记录保持原状态，工作流已请求取消）
     expect((await owner.autonomy.cancelRun(workspace.id, ref.projectId, run.id, { idempotencyKey: `c-${randomUUID()}` })).id).toBe(run.id);
+  }, 60_000);
+
+  it('V6-10 S5 重做没剪成的那一章：202 新运行（redoOf、只有这一章）、幂等；完成的章 409；进行中再重做 409；VIEWER 403；跨工作区 404', async () => {
+    const { client: owner, userId } = await signedIn();
+    const workspace = await owner.workspaces.create({ name: `重做-${randomUUID().slice(0, 8)}` });
+    const ref = await owner.studio.create(workspace.id, { title: 'Redo' }, { idempotencyKey: `s-${randomUUID()}` });
+    await owner.autonomy.sign(workspace.id, ref.projectId, { approval: 'AUTO_SAFE', budgetMicros: 3_000_000 }, { idempotencyKey: `a-${randomUUID()}` });
+    const state = await owner.studio.state(workspace.id, ref.projectId);
+    await saveProductionPlan({ db: handle.db }, { workspaceId: workspace.id, projectId: ref.projectId, turnId: null, baseRevision: state.project.revision, plan: {
+      blueprint: { logline: '冰岛一日', structure: '出发 → 路上' },
+      scenes: [{ id: 'scene_1', title: '出发', goal: '出门' }, { id: 'scene_2', title: '路上', goal: '在路上' }],
+    } });
+    // 一次已经交付的分章运行：第 2 章没剪成（这里不跑 Worker，直接写下交付后的样子）
+    const runId = `aut_${randomUUID()}`;
+    await handle.db.insert(autonomousRuns).values({
+      id: runId, workspaceId: workspace.id, projectId: ref.projectId, status: 'DELIVERED', mode: 'CHAPTERS', goal: '剪一条冰岛一日', approval: 'AUTO_SAFE',
+      policyVersion: 1, budgetMicros: 3_000_000, locale: 'zh-CN', createdBy: userId, completedAt: new Date(),
+    });
+    await handle.db.insert(autonomousChapters).values([
+      { id: `ach_${randomUUID()}`, workspaceId: workspace.id, runId, index: 0, sceneId: 'scene_1', title: '出发', status: 'SUCCEEDED', attempts: 1, budgetMicros: 500_000 },
+      { id: `ach_${randomUUID()}`, workspaceId: workspace.id, runId, index: 1, sceneId: 'scene_2', title: '路上', status: 'FAILED', attempts: 2, budgetMicros: 500_000, error: { reason: 'CHAPTER_FAILED', message: 'model error' } },
+    ]);
+    const original = await owner.autonomy.getRun(workspace.id, ref.projectId, runId);
+    const [done, failed] = original.chapters;
+
+    const key = `redo-${randomUUID()}`;
+    const redo = await owner.autonomy.redoChapter(workspace.id, ref.projectId, runId, failed!.id, { idempotencyKey: key });
+    expect(redo).toMatchObject({ status: 'CUTTING_CHAPTERS', mode: 'CHAPTERS', redoOf: { runId, chapterId: failed!.id, index: 1, title: '路上' }, chapters: [{ index: 1, title: '路上', status: 'PENDING', budgetMicros: 500_000 }] });
+    expect(redo.workflowRunId).not.toBeNull();
+    expect((await owner.autonomy.redoChapter(workspace.id, ref.projectId, runId, failed!.id, { idempotencyKey: key })).id).toBe(redo.id);
+    expect((await owner.studio.state(workspace.id, ref.projectId)).autonomousRun).toMatchObject({ id: redo.id, redoOf: { chapterId: failed!.id } });
+    await expectApiError(owner.autonomy.redoChapter(workspace.id, ref.projectId, runId, done!.id, { idempotencyKey: `redo-${randomUUID()}` }), 409);
+    await expectApiError(owner.autonomy.redoChapter(workspace.id, ref.projectId, runId, failed!.id, { idempotencyKey: `redo-${randomUUID()}` }), 409);
+
+    const viewerEmail = `autonomy-redo-viewer-${randomUUID()}@test.local`;
+    const { client: viewer } = await signedIn(viewerEmail);
+    await owner.workspaces.members.add(workspace.id, { email: viewerEmail, role: 'VIEWER' });
+    await expectApiError(viewer.autonomy.redoChapter(workspace.id, ref.projectId, runId, failed!.id, { idempotencyKey: `redo-${randomUUID()}` }), 403);
+    const { client: stranger } = await signedIn();
+    const strangerWorkspace = await stranger.workspaces.create({ name: `外部-${randomUUID().slice(0, 8)}` });
+    await expectApiError(stranger.autonomy.redoChapter(strangerWorkspace.id, ref.projectId, runId, failed!.id, { idempotencyKey: `redo-${randomUUID()}` }), 404);
+    await owner.autonomy.cancelRun(workspace.id, ref.projectId, redo.id, { idempotencyKey: `c-${randomUUID()}` });
   }, 60_000);
 
   it('预算必填、单次上限不得超过总预算；VIEWER 403；跨工作区 404', async () => {

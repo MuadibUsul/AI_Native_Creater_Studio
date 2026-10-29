@@ -140,6 +140,57 @@ describe('V6-10 S1 分章拼装（assembleChapters）', () => {
     expect(reasonOf(() => assembleChapters({ ...otherBase, sequences }, { mainSequenceId: 'seq_main', chapters: CHAPTERS }, ids('x')))).toEqual(['CHAPTER_TIMEBASE_MISMATCH', 'c3']);
   });
 
+  it('S5 插在中间：位置之后的片段（连同随画面的声音）与字幕整体后移，章节放进空出来的位置；返回复制出来的片段 id', () => {
+    // 主序列：前一章 [0, 1000)（一对画面与声音）、后一章 [1000, 2500)（一对画面与声音 + 绑在片段上的字幕 + 一条独立字幕）
+    const before = state({
+      mainClips: [
+        clip('clp_pv', 'seq_main', 'trk_mv', r(0, 1_000), r(0, 1_000), { avGroupId: 'gp' }),
+        clip('clp_pa', 'seq_main', 'trk_ma', r(0, 1_000), r(0, 1_000), { avGroupId: 'gp' }),
+        clip('clp_nv', 'seq_main', 'trk_mv', r(1_000, 2_500), r(30_000, 31_500), { avGroupId: 'gn' }),
+        clip('clp_na', 'seq_main', 'trk_ma', r(1_000, 2_500), r(30_000, 31_500), { avGroupId: 'gn' }),
+      ],
+    });
+    const sequences = new Map(before.sequences);
+    sequences.set('seq_main', { id: 'seq_main', duration: t(2_500) });
+    const withCaptions: TimelineState = {
+      ...before,
+      sequences,
+      captions: [
+        ...before.captions,
+        caption('cap_n', 'seq_main', 'trk_mc', r(1_200, 2_000), '湖边', { basis: 'CLIP_LOCAL', clipId: 'clp_nv' }),
+        caption('cap_end', 'seq_main', 'trk_mc', r(2_100, 2_400), '完'),
+      ],
+    };
+    const assembly = assembleChapters(withCaptions, { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1), at: t(1_000) }, ids('asm'));
+    expect(assembly.chapters.map((chapter) => [chapter.id, Number(chapter.start.ticks), Number(chapter.end.ticks), chapter.clipIds.length])).toEqual([['c1', 1_000, 4_000, 2]]);
+    // 关联的一对只移一条（另一条由内核跟着移）
+    expect(assembly.operations.filter((operation) => operation.op === 'move_clip')).toHaveLength(1);
+
+    const after = applyAll(withCaptions, assembly.operations);
+    expect(Number(after.sequences.get('seq_main')!.duration.ticks)).toBe(5_500);
+    const placed = onMain(after.clips).map((item) => [item.id, item.trackId, span(item.sequenceRange), span(item.sourceRange)]);
+    expect(placed.filter(([id]) => id === 'clp_pv' || id === 'clp_pa').map(([, , at]) => at)).toEqual([[0, 1_000], [0, 1_000]]);
+    expect(placed.filter(([id]) => id === 'clp_nv' || id === 'clp_na').map(([, , at, source]) => [at, source])).toEqual([[[4_000, 5_500], [30_000, 31_500]], [[4_000, 5_500], [30_000, 31_500]]]);
+    const inserted = placed.filter(([id]) => assembly.chapters[0]!.clipIds.includes(id as string));
+    expect(inserted.map(([, , at, source]) => [at, source])).toEqual([[[1_000, 4_000], [5_000, 8_000]], [[1_000, 4_000], [5_000, 8_000]]]);
+    expect(onMain(after.captions).map((item) => [item.text, span(item.sequenceRange)]).sort()).toEqual([['出发', [1_500, 3_000]], ['完', [5_100, 5_400]], ['湖边', [4_200, 5_000]]].sort());
+  });
+
+  it('S5 插在中间：位置落在片段中间、或画面与声音分在两边时报错（不切开用户的内容）', () => {
+    const reasonOf = (fn: () => unknown): unknown => { try { fn(); } catch (error) { return error instanceof ApiFailure ? [error.details['reason'], error.details['objectId']] : error; } return null; };
+    const long = clip('clp_long', 'seq_main', 'trk_mv', r(0, 1_000), r(0, 1_000));
+    expect(reasonOf(() => assembleChapters(state({ mainClips: [long] }), { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1), at: t(500) }, ids('x')))).toEqual(['CHAPTER_POSITION_UNSUPPORTED', 'clp_long']);
+    const jCut = [
+      clip('clp_jv', 'seq_main', 'trk_mv', r(500, 1_000), r(0, 500), { avGroupId: 'gj' }),
+      clip('clp_ja', 'seq_main', 'trk_ma', r(0, 500), r(0, 500), { avGroupId: 'gj' }),
+    ];
+    expect(reasonOf(() => assembleChapters(state({ mainClips: jCut }), { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1), at: t(500) }, ids('x')))).toEqual(['CHAPTER_POSITION_UNSUPPORTED', 'clp_jv']);
+    expect(reasonOf(() => assembleChapters(state({ mainClips: [long] }), { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1), at: t(2_000) }, ids('x')))).toEqual(['CHAPTER_POSITION_UNSUPPORTED', null]);
+    // 正好在末尾 = 接在末尾
+    const atEnd = assembleChapters(state({ mainClips: [long] }), { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1), at: t(1_000) }, ids('x'));
+    expect(atEnd).toEqual(assembleChapters(state({ mainClips: [long] }), { mainSequenceId: 'seq_main', chapters: CHAPTERS.slice(0, 1) }, ids('x')));
+  });
+
   it('确定性：同样的状态与 id 序列得到同样的操作', () => {
     const one = assembleChapters(state(), { mainSequenceId: 'seq_main', chapters: CHAPTERS }, ids('asm'));
     const two = assembleChapters(state(), { mainSequenceId: 'seq_main', chapters: CHAPTERS }, ids('asm'));

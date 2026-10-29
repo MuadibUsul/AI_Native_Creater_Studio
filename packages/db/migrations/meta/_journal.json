@@ -715,6 +715,13 @@
       "when": 1792910483184,
       "tag": "0102_autonomous_chapters",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1792996883184,
+      "tag": "0103_autonomous_chapter_redo",
+      "breakpoints": true
     }
   ]
 }

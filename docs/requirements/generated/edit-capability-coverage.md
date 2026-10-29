@@ -9,9 +9,9 @@
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 11 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 12 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
-| `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
+| `move_clip` | NATIVE | `move_clip` | KERNEL | 2 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 12 | PLANNED | — | — |
 | `split_clip` | NATIVE | `split_clip` | KERNEL | 1 | 5 | PLANNED | — | — |
 | `duplicate_clip` | NATIVE | `duplicate_clip` | KERNEL | 1 | 1 | PLANNED | — | — |

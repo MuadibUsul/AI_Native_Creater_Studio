@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import {
   AGENT_ERROR_REASONS,
   AUTONOMOUS_CHAPTER_WORKFLOW,
@@ -13,16 +13,19 @@ import {
   ApiFailure,
   ERROR_CODES,
   autonomousChapterSchema,
+  autonomousRedoOfSchema,
   autonomousReportSchema,
   autonomousRunModeSchema,
   autonomousRunSchema,
   editOperationSchema,
   frameRateSchema,
+  mediaRangeSchema,
   mediaTimeSchema,
   mediaTimeToDisplaySecondsText,
   productionPolicySchema,
   startAutonomousRunRequestSchema,
   type AgentTurn,
+  type AutonomousRedoOf,
   type AutonomousReport,
   type AutonomousRun,
   type AutonomousRunStatus,
@@ -34,7 +37,7 @@ import {
   type WorkflowErrorClass,
 } from '@ancs/contracts';
 import { agentTurns, assets, assetVersions, autonomousChapters, autonomousRuns, projects, projectSequences, workflowRuns } from '@ancs/db';
-import { assembleChapters } from '@ancs/kernel';
+import { assembleChapters, type TimelineState } from '@ancs/kernel';
 import type { DomainDeps } from './deps.js';
 import { assertAiSpendAvailable } from './ai-spend.js';
 import { createAgentSession, createAutonomousTurn, getAgentTurn, runAgentTurnLoop, type AgentTurnPorts } from './agent-runtime.js';
@@ -96,6 +99,11 @@ async function progressOf(deps: DomainDeps, turnId: string | null): Promise<Auto
 /** V6-10：分章模式的各章（按成片顺序），进行中的章带上步骤进度 */
 async function chaptersOf(deps: DomainDeps, runId: string): Promise<AutonomousRun['chapters']> {
   const rows = await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.runId, runId)).orderBy(asc(autonomousChapters.index));
+  // S5：之后的重做补上了哪些章（重做的章拼进了成片）
+  const redone = new Map((await deps.db.select({ index: autonomousChapters.index, runId: autonomousChapters.runId }).from(autonomousChapters)
+    .innerJoin(autonomousRuns, eq(autonomousRuns.id, autonomousChapters.runId))
+    .where(and(sql`${autonomousRuns.redoOf} ->> 'runId' = ${runId}`, eq(autonomousChapters.status, 'SUCCEEDED'), sql`${autonomousChapters.placement} is not null`)))
+    .map((item) => [item.index, item.runId]));
   return Promise.all(rows.map(async (chapter) => {
     const progress = await progressOf(deps, chapter.turnId);
     const error = chapter.error as { reason?: unknown; message?: unknown } | null;
@@ -104,6 +112,7 @@ async function chaptersOf(deps: DomainDeps, runId: string): Promise<AutonomousRu
       budgetMicros: chapter.budgetMicros, costMicros: chapter.costMicros,
       progress: { steps: progress.steps, lastStep: progress.lastStep },
       error: error === null ? null : { reason: String(error.reason ?? 'FAILED').slice(0, 80), message: String(error.message ?? '').slice(0, 300) },
+      redoneByRunId: chapter.status === 'SUCCEEDED' ? null : redone.get(chapter.index) ?? null,
       startedAt: chapter.startedAt?.toISOString() ?? null,
       completedAt: chapter.completedAt?.toISOString() ?? null,
     });
@@ -117,6 +126,7 @@ async function toRun(deps: DomainDeps, row: Row): Promise<AutonomousRun> {
     status: row.status,
     mode: autonomousRunModeSchema.parse(row.mode),
     chapters: row.mode === 'CHAPTERS' ? await chaptersOf(deps, row.id) : [],
+    redoOf: row.redoOf === null ? null : autonomousRedoOfSchema.parse(row.redoOf),
     goal: row.goal,
     targetDurationSeconds: row.targetDurationSeconds,
     strategyPackId: row.strategyPackId,
@@ -207,6 +217,29 @@ export async function startAutonomousRun(deps: DomainDeps, input: {
       .where(and(eq(autonomousRuns.projectId, input.projectId), eq(autonomousRuns.workspaceId, input.workspaceId), eq(autonomousRuns.idempotencyKey, input.idempotencyKey))).limit(1);
     if (existing[0] !== undefined) return toRun(deps, existing[0]);
   }
+  const { policy } = await assertCanStart(deps, input);
+  const strategyKnobs = request.strategyPackId === null ? {}
+    : resolveStrategyKnobs(await getStrategyPack(deps, { workspaceId: input.workspaceId, packId: request.strategyPackId }), request.strategyKnobs);
+  return insertAndStartRun(deps, {
+    id: `aut_${randomUUID()}`,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    status: 'WAITING_FOR_FOOTAGE',
+    goal: request.goal,
+    targetDurationSeconds: request.targetDurationSeconds,
+    strategyPackId: request.strategyPackId,
+    strategyKnobs,
+    approval: policy.approval,
+    policyVersion: policy.signature.version,
+    budgetMicros: policy.budgetMicros,
+    locale: request.locale,
+    idempotencyKey: input.idempotencyKey ?? null,
+    createdBy: input.createdBy,
+  });
+}
+
+/** 开始一次运行前的核对：已签署授权、工作区本月 AI 费用没到上限、剩余预算够开始 */
+async function assertCanStart(deps: DomainDeps, input: { workspaceId: string; projectId: string }) {
   const policy = await loadPolicy(deps, input);
   if (policy.signature === null || policy.budgetMicros === null) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'sign the autonomous production authorization first', 409, { reason: AUTONOMY_ERROR_REASONS.NOT_SIGNED });
@@ -218,48 +251,40 @@ export async function startAutonomousRun(deps: DomainDeps, input: {
   if (!decision.allowed) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'not enough authorized budget left to start', 409, { reason: decision.reason, spentMicros: spent, budgetMicros: policy.budgetMicros });
   }
-  const strategyKnobs = request.strategyPackId === null ? {}
-    : resolveStrategyKnobs(await getStrategyPack(deps, { workspaceId: input.workspaceId, packId: request.strategyPackId }), request.strategyKnobs);
-  const id = `aut_${randomUUID()}`;
+  return { policy: { ...policy, signature: policy.signature, budgetMicros: policy.budgetMicros }, spent };
+}
+
+/**
+ * 插入运行并启动工作流（开始一次运行与重做一章共用）：同一工程同一时刻只有一个进行中的运行（409）；幂等键 → 同一运行；
+ * `prepare` 在启动工作流前执行（重做时先建好那一章）；它或工作流起不来 → 运行记为失败。
+ */
+async function insertAndStartRun(deps: DomainDeps, values: typeof autonomousRuns.$inferInsert & { id: string }, prepare?: (row: Row) => Promise<void>): Promise<AutonomousRun> {
+  const { id, projectId, idempotencyKey } = values;
   let row: Row | undefined;
   try {
-    [row] = await deps.db.insert(autonomousRuns).values({
-      id,
-      workspaceId: input.workspaceId,
-      projectId: input.projectId,
-      status: 'WAITING_FOR_FOOTAGE',
-      goal: request.goal,
-      targetDurationSeconds: request.targetDurationSeconds,
-      strategyPackId: request.strategyPackId,
-      strategyKnobs,
-      approval: policy.approval,
-      policyVersion: policy.signature.version,
-      budgetMicros: policy.budgetMicros,
-      locale: request.locale,
-      idempotencyKey: input.idempotencyKey ?? null,
-      createdBy: input.createdBy,
-    }).returning();
+    [row] = await deps.db.insert(autonomousRuns).values(values).returning();
   } catch (error) {
     if (isUniqueViolation(error, 'autonomous_runs_active_uq')) {
       throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'an autonomous run is already in progress for this video', 409, { reason: AUTONOMOUS_RUN_ERROR_REASONS.RUN_IN_PROGRESS });
     }
-    if (isUniqueViolation(error, 'autonomous_runs_idempotency_uq') && input.idempotencyKey !== undefined && input.idempotencyKey !== null) {
-      const existing = await deps.db.select().from(autonomousRuns).where(and(eq(autonomousRuns.projectId, input.projectId), eq(autonomousRuns.idempotencyKey, input.idempotencyKey))).limit(1);
+    if (isUniqueViolation(error, 'autonomous_runs_idempotency_uq') && idempotencyKey !== undefined && idempotencyKey !== null) {
+      const existing = await deps.db.select().from(autonomousRuns).where(and(eq(autonomousRuns.projectId, projectId), eq(autonomousRuns.idempotencyKey, idempotencyKey))).limit(1);
       if (existing[0] !== undefined) return toRun(deps, existing[0]);
     }
     throw error;
   }
   if (row === undefined) throw new ApiFailure(ERROR_CODES.INTERNAL, 'autonomous run insert failed', 500);
   try {
+    await prepare?.(row);
     const run = await startWorkflow(deps, {
-      workspaceId: input.workspaceId,
-      projectId: input.projectId,
+      workspaceId: row.workspaceId,
+      projectId,
       type: AUTONOMOUS_PRODUCTION_WORKFLOW,
       version: AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION,
       subjectRef: `autonomous-run:${id}`,
       input: { runId: id },
       idempotencyKey: `autonomous-run:${id}`,
-      createdBy: input.createdBy,
+      createdBy: row.createdBy,
     });
     const [updated] = await deps.db.update(autonomousRuns).set({ workflowRunId: run.id, updatedAt: new Date() }).where(eq(autonomousRuns.id, id)).returning();
     return toRun(deps, updated ?? row);
@@ -301,6 +326,82 @@ export async function cancelAutonomousRun(deps: DomainDeps, input: { workspaceId
   }
   await cancelWorkflow(deps, { workspaceId: input.workspaceId, runId: row.workflowRunId });
   return toRun(deps, await loadRow(deps, input));
+}
+
+/** 一章拼进主序列时记下的位置与片段 id（S5） */
+interface ChapterPlacement { start: string; end: string; clipIds: string[] }
+const placementOf = (chapter: { placement: unknown }): ChapterPlacement | null => (chapter.placement ?? null) as ChapterPlacement | null;
+
+/** 最初那次分章运行与它之后各次重做的全部章 */
+async function familyChapters(deps: DomainDeps, rootRunId: string) {
+  const runs = await deps.db.select({ id: autonomousRuns.id }).from(autonomousRuns)
+    .where(or(eq(autonomousRuns.id, rootRunId), sql`${autonomousRuns.redoOf} ->> 'runId' = ${rootRunId}`));
+  return deps.db.select().from(autonomousChapters).where(inArray(autonomousChapters.runId, runs.map((run) => run.id)));
+}
+
+/**
+ * V6-10 S5：只重做没剪成的那一章。重做是新的一次运行（同样核对授权与预算、同一工程只有一个进行中的运行）：
+ * 不再定计划，只剪这一章（预算不超过它原来分到的份额），再放回它在成片里的位置，然后照常通看收尾、按档位交付。
+ * 只能重做已结束的分章运行里没剪成的章；交付的成片还是没采用的试改时，先采用它（409，说明原因）。
+ */
+export async function redoAutonomousChapter(deps: DomainDeps, input: {
+  workspaceId: string;
+  projectId: string;
+  runId: string;
+  chapterId: string;
+  createdBy: string | null;
+  idempotencyKey?: string | null;
+}): Promise<AutonomousRun> {
+  if (input.idempotencyKey !== undefined && input.idempotencyKey !== null) {
+    const existing = await deps.db.select().from(autonomousRuns)
+      .where(and(eq(autonomousRuns.projectId, input.projectId), eq(autonomousRuns.workspaceId, input.workspaceId), eq(autonomousRuns.idempotencyKey, input.idempotencyKey))).limit(1);
+    if (existing[0] !== undefined) return toRun(deps, existing[0]);
+  }
+  const source = await loadRow(deps, input);
+  const notRedoable = (why: string, status = 409) => new ApiFailure(status === 404 ? ERROR_CODES.NOT_FOUND : ERROR_CODES.PRECONDITION_FAILED, `this chapter cannot be redone (${why})`, status, { reason: AUTONOMOUS_RUN_ERROR_REASONS.CHAPTER_NOT_REDOABLE, why });
+  const chapter = (await deps.db.select().from(autonomousChapters).where(and(eq(autonomousChapters.id, input.chapterId), eq(autonomousChapters.runId, source.id))).limit(1))[0];
+  if (chapter === undefined) throw notRedoable('CHAPTER_NOT_FOUND', 404);
+  if (source.mode !== 'CHAPTERS') throw notRedoable('NOT_CHAPTERS');
+  if (ACTIVE.has(source.status)) throw notRedoable('RUN_NOT_FINISHED');
+  if (chapter.status !== 'FAILED' && chapter.status !== 'CANCELLED') throw notRedoable('NOT_FAILED');
+  const redoOf: AutonomousRedoOf = source.redoOf === null
+    ? { runId: source.id, chapterId: chapter.id, index: chapter.index, title: chapter.title }
+    : autonomousRedoOfSchema.parse(source.redoOf);
+  const family = await familyChapters(deps, redoOf.runId);
+  if (family.some((item) => item.index === redoOf.index && item.status === 'SUCCEEDED' && placementOf(item) !== null)) throw notRedoable('ALREADY_REDONE');
+  // 交付的成片要在作品里：各章拼进去的片段一条都找不到，说明那一版还是没采用的试改
+  const placed = family.flatMap((item) => placementOf(item)?.clipIds ?? []);
+  if (placed.length > 0) {
+    const snapshot = await readTimelineSnapshot(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+    const present = new Set(snapshot.timeline.clips.map((clip) => clip.id));
+    if (!placed.some((id) => present.has(id))) {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, 'adopt the delivered trial before redoing a chapter', 409, { reason: AUTONOMOUS_RUN_ERROR_REASONS.REDO_NEEDS_ADOPTION });
+    }
+  }
+  const plan = await getLatestProductionPlan(deps, { workspaceId: input.workspaceId, projectId: input.projectId });
+  const scene = plan?.scenes.find((item) => item.id === chapter.sceneId);
+  if (scene === undefined) throw notRedoable('SCENE_MISSING');
+  const { policy, spent } = await assertCanStart(deps, input);
+  const pool = Math.max(1, Math.min(chapter.budgetMicros, Math.round((policy.budgetMicros - spent) * CHAPTERS_SHARE)));
+  return insertAndStartRun(deps, {
+    id: `aut_${randomUUID()}`,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    // 跳过等素材与定计划，直接剪这一章
+    status: 'CUTTING_CHAPTERS',
+    mode: 'CHAPTERS',
+    redoOf,
+    goal: source.goal,
+    targetDurationSeconds: source.targetDurationSeconds,
+    strategyPackId: source.strategyPackId,
+    strategyKnobs: source.strategyKnobs,
+    approval: policy.approval,
+    policyVersion: policy.signature.version,
+    budgetMicros: policy.budgetMicros,
+    locale: source.locale,
+    idempotencyKey: input.idempotencyKey ?? null,
+    createdBy: input.createdBy,
+  }, (row) => createChapters(deps, row, [{ index: chapter.index, scene }], pool));
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +546,7 @@ function autonomousSteps(ports: AutonomousProductionPorts) {
     run: async ({ deps, run }) => {
       const row = await loadRow(deps, { workspaceId: run.workspaceId, runId: String(run.input['runId']) });
       if (!ACTIVE.has(row.status)) return { kind: 'DONE', output: { skipped: true } };
-      const delivered = await deliverAutonomousRun(deps, row, placementsOf(run.outputs));
+      const delivered = await deliverAutonomousRun(deps, row, assemblyOf(run.outputs));
       return { kind: 'DONE', output: { status: delivered.status, outcome: delivered.report.outcome } };
     },
   };
@@ -466,7 +567,7 @@ function autonomousSteps(ports: AutonomousProductionPorts) {
     }
     if (!ACTIVE.has(row.status)) return;
     const now = new Date();
-    const report = row.turnId === null && chapters.length === 0 ? null : await buildReport(deps, row, { outcome: 'FAILED', notAdoptedReason: 'TURN_FAILED', adopted: false, placements: placementsOf(run.outputs) }).catch(() => null);
+    const report = row.turnId === null && chapters.length === 0 ? null : await buildReport(deps, row, { outcome: 'FAILED', notAdoptedReason: 'TURN_FAILED', adopted: false, assembly: assemblyOf(run.outputs) }).catch(() => null);
     await deps.db.update(autonomousRuns).set({ status, error: status === 'CANCELLED' ? { reason: 'CANCELLED' } : error, ...(report === null ? {} : { report }), updatedAt: now, completedAt: now })
       .where(eq(autonomousRuns.id, row.id));
   };
@@ -528,7 +629,7 @@ export function autonomousProductionWorkflow(ports: AutonomousProductionPorts): 
         return { kind: 'DONE', output: { mode: 'SINGLE', reason: planned === null ? 'NO_PLAN' : 'ONE_SCENE' } };
       }
       const remaining = await remainingMicros(deps, row);
-      await createChapters(deps, row, planned.scenes.slice(0, MAX_CHAPTERS), Math.round(remaining * CHAPTERS_SHARE));
+      await createChapters(deps, row, planned.scenes.slice(0, MAX_CHAPTERS).map((scene, index) => ({ index, scene })), Math.round(remaining * CHAPTERS_SHARE));
       await setStatus(deps, row.id, 'CUTTING_CHAPTERS');
       return { kind: 'DONE', output: { mode: 'CHAPTERS', chapters: Math.min(planned.scenes.length, MAX_CHAPTERS), planVersion: planned.version } };
     },
@@ -612,7 +713,7 @@ export function autonomousProductionWorkflow(ports: AutonomousProductionPorts): 
       }));
       if (waiting !== null) return waiting;
       await deps.db.update(autonomousRuns).set({ turnId, sessionId: main.sessionId, modelCapMicros: cap, updatedAt: new Date() }).where(eq(autonomousRuns.id, row.id));
-      return { kind: 'DONE', output: { placements: assembled.placements, assembled: Object.keys(assembled.placements).length } };
+      return { kind: 'DONE', output: { placements: assembled.placements, placedAtEnd: assembled.placedAtEnd, assembled: Object.keys(assembled.placements).length } };
     },
   };
 
@@ -645,7 +746,7 @@ export function autonomousChapterWorkflow(ports: AutonomousProductionPorts): Wor
         const turnId = chapterTurnId(row.id, chapter.index, attempt);
         const existing = await deps.db.select({ status: agentTurns.status }).from(agentTurns).where(eq(agentTurns.id, turnId)).limit(1);
         if (existing[0] === undefined) {
-          const of = (await deps.db.select({ id: autonomousChapters.id }).from(autonomousChapters).where(eq(autonomousChapters.runId, row.id))).length;
+          const of = await chapterTotal(deps, row);
           await createAutonomousTurn(deps, {
             workspaceId: row.workspaceId, sessionId: chapter.sessionId, turnId, message: chapterBrief(row, chapter, of), workflowRunId: run.id, purpose: 'AUTONOMOUS_CHAPTER',
             strategyPackId: row.strategyPackId, strategyKnobs: row.strategyKnobs as Record<string, string>, createdBy: row.createdBy,
@@ -684,6 +785,12 @@ function chapterError(error: unknown, fallback: string): { reason: string; messa
   return { reason: String(value.reason ?? fallback).slice(0, 80), message: String(value.message ?? '').slice(0, 300) };
 }
 
+/** 整部有几章（重做时按最初那次运行算） */
+async function chapterTotal(deps: DomainDeps, row: Row): Promise<number> {
+  const runId = row.redoOf === null ? row.id : autonomousRedoOfSchema.parse(row.redoOf).runId;
+  return (await deps.db.select({ id: autonomousChapters.id }).from(autonomousChapters).where(eq(autonomousChapters.runId, runId))).length;
+}
+
 /** 交给一章导演的那句话（用户的语言）：第几章、标题、整部的需求 */
 function chapterBrief(row: Row, chapter: ChapterRow, of: number): string {
   return row.locale === 'en'
@@ -695,7 +802,7 @@ function chapterBrief(row: Row, chapter: ChapterRow, of: number): string {
  * 为计划里的每个场景建一章：主序列下的子序列（同帧率，轨道照主序列的种类、名称与位置建，拼装时按"种类 + 名称"归位）、
  * 这一章自己的会话与章节记录。各章预算按场景素材时长分配。已建过的章跳过（步骤重试时不重复建）。
  */
-async function createChapters(deps: DomainDeps, row: Row, scenes: readonly SceneContract[], poolMicros: number): Promise<void> {
+async function createChapters(deps: DomainDeps, row: Row, scenes: readonly { index: number; scene: SceneContract }[], poolMicros: number): Promise<void> {
   const main = await mainSession(deps, row);
   const sequence = (await deps.db.select().from(projectSequences).where(eq(projectSequences.id, main.sequenceId)).limit(1))[0];
   if (sequence === undefined) throw new ApiFailure(ERROR_CODES.NOT_FOUND, 'main sequence not found', 404);
@@ -707,9 +814,9 @@ async function createChapters(deps: DomainDeps, row: Row, scenes: readonly Scene
     const windowSeconds = scene.window === null ? 0 : Math.max(0, Number(scene.window.end) - Number(scene.window.start));
     return sourceSeconds > 0 ? sourceSeconds : windowSeconds > 0 ? windowSeconds : 1;
   };
-  const total = scenes.reduce((sum, scene) => sum + weightOf(scene), 0);
+  const total = scenes.reduce((sum, { scene }) => sum + weightOf(scene), 0);
   const existing = new Set((await deps.db.select({ index: autonomousChapters.index }).from(autonomousChapters).where(eq(autonomousChapters.runId, row.id))).map((item) => item.index));
-  for (const [index, scene] of scenes.entries()) {
+  for (const { index, scene } of scenes) {
     if (existing.has(index)) continue;
     const child = await createSequence(deps, {
       workspaceId: row.workspaceId, projectId: row.projectId,
@@ -730,11 +837,38 @@ async function createChapters(deps: DomainDeps, row: Row, scenes: readonly Scene
 const secondsInTimebase = (seconds: number, timebase: { num: number; den: number }): MediaTime =>
   mediaTimeSchema.parse({ ticks: String((BigInt(seconds) * BigInt(timebase.den)) / BigInt(timebase.num)), timebase });
 
+/** 两个时刻比先后（精确比较，不换算成浮点秒） */
+const isLater = (a: MediaTime, b: MediaTime): boolean =>
+  BigInt(a.ticks) * BigInt(a.timebase.num) * BigInt(b.timebase.den) > BigInt(b.ticks) * BigInt(b.timebase.num) * BigInt(a.timebase.den);
+
+/**
+ * S5 重做一章：它在成片里的位置 = 前面最近一章（拼进去的片段还在主序列上）的末尾；前面都找不到，就是后面最近一章的开头；
+ * 都找不到（各章都被删掉或改过）→ undefined，接在末尾。
+ */
+async function redoPosition(deps: DomainDeps, row: Row, timeline: TimelineState, mainSequenceId: string): Promise<MediaTime | undefined> {
+  const redo = autonomousRedoOfSchema.parse(row.redoOf);
+  const family = (await familyChapters(deps, redo.runId)).filter((item) => item.runId !== row.id && item.status === 'SUCCEEDED' && placementOf(item) !== null);
+  const ranges = new Map(timeline.clips.filter((clip) => clip.sequenceId === mainSequenceId).map((clip) => [clip.id, mediaRangeSchema.parse(clip.sequenceRange)]));
+  const rangesOf = (index: number) => family.filter((item) => item.index === index).flatMap((item) => placementOf(item)!.clipIds).flatMap((id) => ranges.get(id) ?? []);
+  const indexes = [...new Set(family.map((item) => item.index))];
+  for (const index of indexes.filter((value) => value < redo.index).sort((a, b) => b - a)) {
+    const found = rangesOf(index);
+    if (found.length > 0) return found.map((range) => range.end).reduce((max, value) => (isLater(value, max) ? value : max));
+  }
+  for (const index of indexes.filter((value) => value > redo.index).sort((a, b) => a - b)) {
+    const found = rangesOf(index);
+    if (found.length > 0) return found.map((range) => range.start).reduce((min, value) => (isLater(min, value) ? value : min));
+  }
+  return undefined;
+}
+
 /**
  * 拼装（S1 的内核纯函数）：完成的各章草稿一起在当前工程版本上模拟，再按计划顺序拷进主序列。
  * 某章的草稿放不上去，或含拼装器不认识的内容 → 这一章记为失败（写明原因），其余照常拼。
+ * 重做一章时插回它原来的位置；那个位置插不进去（落在内容中间、之后的内容平移不了）→ 接在末尾，报告里写明。
+ * 每章拼进去的位置与片段 id 记在章节上，之后重做别的章时据此找位置。
  */
-async function assembleRunChapters(deps: DomainDeps, row: Row): Promise<{ baseRevision: number; operations: EditOperation[]; placements: Record<string, [string, string]> }> {
+async function assembleRunChapters(deps: DomainDeps, row: Row): Promise<{ baseRevision: number; operations: EditOperation[]; placements: Record<string, [string, string]>; placedAtEnd: string[] }> {
   const main = await mainSession(deps, row);
   const context = { deps, workspaceId: row.workspaceId, projectId: row.projectId, actorId: 'agent' };
   const snapshot = await readTimelineSnapshot(deps, { workspaceId: row.workspaceId, projectId: row.projectId });
@@ -760,16 +894,31 @@ async function assembleRunChapters(deps: DomainDeps, row: Row): Promise<{ baseRe
     ok = ok.filter((chapter) => drafts.has(chapter.id));
     simulated = await simulate(ok.map((chapter) => chapter.id));
   }
+  let at = row.redoOf === null ? undefined : await redoPosition(deps, row, simulated.timeline, main.sequenceId);
+  let placedAtEnd = false;
   for (;;) {
     try {
-      const assembly = assembleChapters(simulated.timeline, { mainSequenceId: main.sequenceId, chapters: ok.map((chapter) => ({ id: chapter.id, sequenceId: chapter.sequenceId! })) }, { newId: (prefix) => `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 24)}` });
+      const assembly = assembleChapters(simulated.timeline, {
+        mainSequenceId: main.sequenceId, chapters: ok.map((chapter) => ({ id: chapter.id, sequenceId: chapter.sequenceId! })), ...(at === undefined ? {} : { at }),
+      }, { newId: (prefix) => `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 24)}` });
       // 拼装结果只改主序列：在当前版本上验证一次（内核拒绝就让这一步失败，不交出一份放不上去的草稿）
       if (assembly.operations.length > 0) await simulateAgentDraft(context, { baseRevision: simulated.baseRevision, operations: assembly.operations });
-      const placements = Object.fromEntries(assembly.chapters.map((chapter) => [chapter.id, [mediaTimeToDisplaySecondsText(chapter.start, 3), mediaTimeToDisplaySecondsText(chapter.end, 3)] as [string, string]]));
-      return { baseRevision: simulated.baseRevision, operations: assembly.operations, placements };
+      const text = (time: MediaTime) => mediaTimeToDisplaySecondsText(time, 3);
+      for (const chapter of assembly.chapters) {
+        const placement: ChapterPlacement = { start: text(chapter.start), end: text(chapter.end), clipIds: chapter.clipIds };
+        await deps.db.update(autonomousChapters).set({ placement, updatedAt: new Date() }).where(eq(autonomousChapters.id, chapter.id));
+      }
+      const placements = Object.fromEntries(assembly.chapters.map((chapter) => [chapter.id, [text(chapter.start), text(chapter.end)] as [string, string]]));
+      return { baseRevision: simulated.baseRevision, operations: assembly.operations, placements, placedAtEnd: placedAtEnd ? assembly.chapters.map((chapter) => chapter.id) : [] };
     } catch (error) {
       const chapterId = error instanceof ApiFailure ? error.details['chapterId'] : undefined;
       const chapter = ok.find((item) => item.id === chapterId);
+      // 插不回原来的位置（位置落在内容中间，或之后的内容平移时被内核拒绝，如锁定的片段）：改为接在末尾
+      if (chapter === undefined && at !== undefined && error instanceof ApiFailure) {
+        at = undefined;
+        placedAtEnd = true;
+        continue;
+      }
       if (chapter === undefined) throw error;
       await fail(chapter, String(error instanceof ApiFailure ? error.details['reason'] : 'CHAPTER_ASSEMBLY_FAILED'), error instanceof Error ? error.message : String(error));
       ok = ok.filter((item) => item.id !== chapter.id);
@@ -777,14 +926,18 @@ async function assembleRunChapters(deps: DomainDeps, row: Row): Promise<{ baseRe
   }
 }
 
-const placementsOf = (outputs: Record<string, unknown>): Record<string, [string, string]> =>
-  ((outputs['assemble'] as { placements?: Record<string, [string, string]> } | undefined)?.placements) ?? {};
+/** 拼装步骤的输出：各章位置，以及没能放回原位、接在末尾的章 */
+interface AssemblyOutcome { placements: Record<string, [string, string]>; placedAtEnd: string[] }
+const assemblyOf = (outputs: Record<string, unknown>): AssemblyOutcome => {
+  const value = (outputs['assemble'] ?? {}) as { placements?: Record<string, [string, string]>; placedAtEnd?: string[] };
+  return { placements: value.placements ?? {}, placedAtEnd: value.placedAtEnd ?? [] };
+};
 
 // ---------------------------------------------------------------------------
 // 交付：门禁 + 授权核对 + 采用 + 报告
 // ---------------------------------------------------------------------------
 
-async function deliverAutonomousRun(deps: DomainDeps, row: Row, placements: Record<string, [string, string]> = {}): Promise<{ status: AutonomousRunStatus; report: AutonomousReport }> {
+async function deliverAutonomousRun(deps: DomainDeps, row: Row, assembly: AssemblyOutcome = { placements: {}, placedAtEnd: [] }): Promise<{ status: AutonomousRunStatus; report: AutonomousReport }> {
   const turn = row.turnId === null ? null : await getAgentTurn(deps, { workspaceId: row.workspaceId, turnId: row.turnId });
   const finish = async (status: AutonomousRunStatus, report: AutonomousReport, extra: Partial<typeof autonomousRuns.$inferInsert> = {}) => {
     const now = new Date();
@@ -792,11 +945,11 @@ async function deliverAutonomousRun(deps: DomainDeps, row: Row, placements: Reco
     return { status, report };
   };
   if (turn === null || turn.status !== 'COMPLETED') {
-    const report = await buildReport(deps, row, { outcome: 'FAILED', notAdoptedReason: 'TURN_FAILED', adopted: false, placements });
+    const report = await buildReport(deps, row, { outcome: 'FAILED', notAdoptedReason: 'TURN_FAILED', adopted: false, assembly });
     return finish('FAILED', report, { error: turn?.error ?? { reason: 'TURN_NOT_COMPLETED' } });
   }
   if (turn.proposalId === null) {
-    return finish('DELIVERED', await buildReport(deps, row, { outcome: 'NO_CHANGES', notAdoptedReason: 'NO_CHANGES', adopted: false, placements }));
+    return finish('DELIVERED', await buildReport(deps, row, { outcome: 'NO_CHANGES', notAdoptedReason: 'NO_CHANGES', adopted: false, assembly }));
   }
   const proposal = await loadProposalForRead(deps, { workspaceId: row.workspaceId, projectId: row.projectId, proposalId: turn.proposalId });
   const review = await reviewOperations(deps, row, { baseRevision: proposal.baseProjectRevision, operations: editOperationSchema.array().parse(proposal.operations) });
@@ -825,7 +978,7 @@ async function deliverAutonomousRun(deps: DomainDeps, row: Row, placements: Reco
       notAdoptedReason = 'PROJECT_CHANGED';
     }
   }
-  const report = await buildReport(deps, row, { outcome: adoptedRevision === null ? 'TRIAL' : 'ADOPTED', notAdoptedReason, adopted: adoptedRevision !== null, review, turn, placements });
+  const report = await buildReport(deps, row, { outcome: adoptedRevision === null ? 'TRIAL' : 'ADOPTED', notAdoptedReason, adopted: adoptedRevision !== null, review, turn, assembly });
   return finish(adoptedRevision === null ? 'NEEDS_REVIEW' : 'DELIVERED', report, { proposalId: proposal.proposalId, adoptedRevision });
 }
 
@@ -865,8 +1018,8 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   adopted: boolean;
   review?: ReviewSummary;
   turn?: AgentTurn;
-  /** V6-10：各章拼进成片时的位置（拼装步骤的输出） */
-  placements?: Record<string, [string, string]>;
+  /** V6-10：各章拼进成片时的位置，以及没能放回原位的章（拼装步骤的输出） */
+  assembly?: AssemblyOutcome;
 }): Promise<AutonomousReport> {
   const turn = input.turn ?? (row.turnId === null ? null : await getAgentTurn(deps, { workspaceId: row.workspaceId, turnId: row.turnId }).catch(() => null));
   const state = await getStudioState(deps, { workspaceId: row.workspaceId, projectId: row.projectId });
@@ -917,7 +1070,7 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   // V6-10：逐章结果（按成片顺序）；没剪成或拼不进去的章写明原因
   const chapterRows = row.mode === 'CHAPTERS' ? await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.runId, row.id)).orderBy(asc(autonomousChapters.index)) : [];
   const chapters: AutonomousReport['chapters'] = chapterRows.map((chapter) => {
-    const placement = input.placements?.[chapter.id] ?? null;
+    const placement = input.assembly?.placements[chapter.id] ?? null;
     const outcome = chapter.status !== 'SUCCEEDED' || placement === null ? 'FAILED' : placement[0] === placement[1] ? 'EMPTY' : 'ASSEMBLED';
     const error = chapter.error as { reason?: unknown; message?: unknown } | null;
     return {
@@ -940,6 +1093,8 @@ async function buildReport(deps: DomainDeps, row: Row, input: {
   if (turnError.includes(AGENT_ERROR_REASONS.ITERATION_LIMIT)) unmet.push({ code: 'ITERATION_LIMIT', detail: '' });
   const missing = chapters.filter((chapter) => chapter.outcome === 'FAILED');
   if (missing.length > 0) unmet.push({ code: 'CHAPTER_NOT_ASSEMBLED', detail: missing.map((chapter) => chapter.title).join(' / ').slice(0, 300) });
+  const atEnd = chapterRows.filter((chapter) => input.assembly?.placedAtEnd.includes(chapter.id) === true);
+  if (atEnd.length > 0) unmet.push({ code: 'CHAPTER_PLACED_AT_END', detail: atEnd.map((chapter) => chapter.title).join(' / ').slice(0, 300) });
   const unpriced = runCost.unpricedCalls;
   // 有未定价的调用，或因模型没有单价而没有开始（设了月度上限时）
   if (unpriced > 0 || turnError.includes(AGENT_ERROR_REASONS.MODEL_UNPRICED)) unmet.push({ code: 'UNPRICED_MODEL', detail: String(unpriced) });

@@ -11,11 +11,15 @@ import type { KernelCaption, KernelClip, KernelContext, KernelTrack, TimelineSta
  *   轨道按"种类 + 名称"对应到主序列（没有就新建），所以特效轨、讲述轨各自归位；
  * - 拼装器不认识的内容（变速片段、嵌套序列、独立音频区域、组件自定义参数、按语义点定时的字幕）
  *   直接报错，不悄悄丢掉：调用方据此把这一章记为没拼进去，并如实说明。
+ * - S5 重做一章：给出 `at` 时从主序列的这个位置插入，这之后的片段（连同随画面的声音）与字幕整体后移各章的总长，
+ *   不留空档、不重叠。位置落在某个片段或字幕中间、或之后有独立音频区域时报错（不切开用户的内容），调用方改为接在末尾。
  */
 export interface ChapterAssemblyRequest {
   mainSequenceId: string;
   /** 按成片顺序 */
   chapters: readonly { id: string; sequenceId: string }[];
+  /** 从主序列的这个位置插入；不给 = 接在现有内容末尾 */
+  at?: MediaTime;
 }
 
 export interface AssembledChapter {
@@ -25,6 +29,8 @@ export interface AssembledChapter {
   end: MediaTime;
   videoClips: number;
   captions: number;
+  /** 复制进主序列的片段 id（画面、声音、特效层）：之后据此找回这一章在成片里的位置 */
+  clipIds: string[];
 }
 
 export interface ChapterAssembly {
@@ -36,7 +42,14 @@ export const CHAPTER_ASSEMBLY_ERROR_REASONS = {
   SEQUENCE_NOT_FOUND: 'CHAPTER_SEQUENCE_NOT_FOUND',
   TIMEBASE_MISMATCH: 'CHAPTER_TIMEBASE_MISMATCH',
   UNSUPPORTED_CONTENT: 'CHAPTER_CONTENT_UNSUPPORTED',
+  /** `at` 不在主序列内容范围内，或落在片段 / 字幕中间，或之后有不能平移的内容 */
+  POSITION_UNSUPPORTED: 'CHAPTER_POSITION_UNSUPPORTED',
 } as const;
+
+const positionUnsupported = (what: string, objectId: string | null): ApiFailure =>
+  new ApiFailure(ERROR_CODES.VALIDATION_FAILED, `chapters cannot be inserted there: ${what}`, 422, {
+    reason: CHAPTER_ASSEMBLY_ERROR_REASONS.POSITION_UNSUPPORTED, objectId, what,
+  });
 
 const unsupported = (chapterId: string, what: string, objectId: string): ApiFailure =>
   new ApiFailure(ERROR_CODES.VALIDATION_FAILED, `chapter ${chapterId}: ${what} cannot be assembled yet`, 422, {
@@ -88,7 +101,17 @@ export function assembleChapters(state: TimelineState, request: ChapterAssemblyR
     return id;
   };
 
-  let offset = contentEnd(main.id);
+  const mainEnd = contentEnd(main.id);
+  let offset = mainEnd;
+  const shiftOps: EditOperation[] = [];
+  let shiftedEnd = 0n;
+  if (request.at !== undefined) {
+    if (!sameTimebase(request.at)) throw positionUnsupported('the position uses another timebase', null);
+    offset = exactTicks(timeFraction(request.at), timebase);
+    if (offset < 0n || offset > mainEnd) throw positionUnsupported('the position is outside the main sequence content', null);
+    const total = request.chapters.reduce((sum, chapter) => sum + (state.sequences.has(chapter.sequenceId) ? contentEnd(chapter.sequenceId) : 0n), 0n);
+    shiftedEnd = makeRoom(state, main.id, timebase, offset, total, shiftOps);
+  }
   const chapters: AssembledChapter[] = [];
   for (const chapter of request.chapters) {
     const sequence = state.sequences.get(chapter.sequenceId);
@@ -176,14 +199,63 @@ export function assembleChapters(state: TimelineState, request: ChapterAssemblyR
       } as EditOperation);
     }
     const length = contentEnd(sequence.id);
-    chapters.push({ id: chapter.id, start: mediaTimeOf(offset, timebase), end: mediaTimeOf(offset + length, timebase), videoClips, captions: captions.length });
+    chapters.push({ id: chapter.id, start: mediaTimeOf(offset, timebase), end: mediaTimeOf(offset + length, timebase), videoClips, captions: captions.length, clipIds: [...copied.values()] });
     offset += length;
   }
 
-  if (offset > exactTicks(timeFraction(main.duration), timebase)) {
-    operations.push({ op: 'set_sequence_duration', sequenceId: main.id, duration: mediaTimeOf(offset, timebase) } as EditOperation);
+  // 序列长度先放够（之后的平移与插入都要落在序列内）；插在中间时，被后移的内容可能比新插入的更靠后
+  const needed = offset > shiftedEnd ? offset : shiftedEnd;
+  if (needed > exactTicks(timeFraction(main.duration), timebase)) {
+    operations.push({ op: 'set_sequence_duration', sequenceId: main.id, duration: mediaTimeOf(needed, timebase) } as EditOperation);
   }
-  return { operations: [...operations, ...contentOps], chapters };
+  return { operations: [...operations, ...shiftOps, ...contentOps], chapters };
+}
+
+/**
+ * 给插在 `at` 处的各章腾地方：`at` 之后的片段与字幕整体后移 `amount`。
+ * 关联在一起的画面与声音是一个单元，只移其中一条（内核让其余的跟着移）；从最靠后的单元开始移，不与还没移的内容重叠。
+ * 返回后移后主序列内容的末尾。
+ */
+function makeRoom(state: TimelineState, sequenceId: string, timebase: { num: number; den: number }, at: bigint, amount: bigint, out: EditOperation[]): bigint {
+  const spanOf = (range: unknown) => ticksInRange(mediaRangeSchema.parse(range), timebase);
+  const clips = state.clips.filter((clip) => clip.sequenceId === sequenceId);
+  const captions = state.captions.filter((caption) => caption.sequenceId === sequenceId);
+  let end = 0n;
+  for (const item of [...clips, ...captions, ...state.audioRegions.filter((region) => region.sequenceId === sequenceId)]) {
+    const span = spanOf(item.sequenceRange);
+    if (span.start < at && span.end > at) throw positionUnsupported('the position falls inside existing content', item.id);
+    end = span.end > end ? span.end : end;
+  }
+  const regionAfter = state.audioRegions.find((region) => region.sequenceId === sequenceId && spanOf(region.sequenceRange).start >= at);
+  if (regionAfter !== undefined) throw positionUnsupported('an audio region follows the position', regionAfter.id);
+  if (amount === 0n) return end;
+
+  const units = new Map<string, KernelClip[]>();
+  for (const clip of clips) {
+    const key = clip.avGroupId === null ? `clip:${clip.id}` : `group:${clip.avGroupId}`;
+    units.set(key, [...(units.get(key) ?? []), clip]);
+  }
+  const moving: { lead: KernelClip; start: bigint }[] = [];
+  for (const members of units.values()) {
+    const after = members.filter((clip) => spanOf(clip.sequenceRange).start >= at);
+    if (after.length === 0) continue;
+    if (after.length !== members.length) throw positionUnsupported('linked picture and sound sit on both sides of the position', after[0]!.id);
+    const lead = [...members].sort((left, right) => left.id.localeCompare(right.id))[0]!;
+    moving.push({ lead, start: members.reduce((min, clip) => (spanOf(clip.sequenceRange).start < min ? spanOf(clip.sequenceRange).start : min), spanOf(lead.sequenceRange).start) });
+  }
+  moving.sort((left, right) => (left.start === right.start ? right.lead.id.localeCompare(left.lead.id) : left.start > right.start ? -1 : 1));
+  for (const { lead } of moving) {
+    const span = spanOf(lead.sequenceRange);
+    out.push({ op: 'move_clip', clipId: lead.id, sequenceRange: rangeOf(span.start + amount, span.end + amount, timebase) } as EditOperation);
+  }
+  const laterCaptions = captions.filter((caption) => spanOf(caption.sequenceRange).start >= at)
+    .sort((left, right) => -compareCaption(left, right, timebase));
+  for (const caption of laterCaptions) {
+    const span = spanOf(caption.sequenceRange);
+    out.push({ op: 'update_caption', captionId: caption.id, changes: { sequenceRange: rangeOf(span.start + amount, span.end + amount, timebase) } } as EditOperation);
+  }
+  const moved = moving.length > 0 || laterCaptions.length > 0;
+  return moved ? end + amount : end;
 }
 
 /** 片段的变换 / 裁切 / 透明度：只为与缺省值不同的那几项发操作 */
