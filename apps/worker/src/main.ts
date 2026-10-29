@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousChapterWorkflow, autonomousProductionWorkflow, autonomousProductionWorkflowV1, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { DEEPSEEK_IMAGE_MODEL, DeepSeekAgentModel } from '@ancs/providers-deepseek';
 import { ElorianAgentModel } from '@ancs/providers-elorian';
@@ -290,6 +290,13 @@ const effectPorts = config.ANCS_DISABLE_RENDER === '1' ? undefined : {
 };
 // V5-M4：工作流定义（素材工程终渲染：FFmpeg 媒体图后端 + 真实输出探测）。不依赖 Remotion/Chromium，
 // 因此 ANCS_DISABLE_RENDER 不影响它；FFmpeg 缺失时推进会显式失败（工作流运行 FAILED，带错误）。
+/** 自主制作的端口（v2、v1 与分章子运行共用） */
+const autonomousPorts = {
+  model: agentModel,
+  frames: frameSampler,
+  ...(effectPorts === undefined ? {} : { effects: effectPorts }),
+  ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
+};
 const workflowRegistry = new WorkflowRegistry()
   .register(compositionFinalRenderWorkflow({
     executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
@@ -305,13 +312,11 @@ const workflowRegistry = new WorkflowRegistry()
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
     ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
   }))
-  // V6-9：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 → 导演 → 自检 → 按审批档位采用 → 交付报告
-  .register(autonomousProductionWorkflow({
-    model: agentModel,
-    frames: frameSampler,
-    ...(effectPorts === undefined ? {} : { effects: effectPorts }),
-    ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
-  }))
+  // V6-9 / V6-10：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 →（素材够长时：定计划 → 分章并行 → 拼装）
+  // → 导演 / 通看收尾 → 自检 → 按审批档位采用 → 交付报告。v1 留给升级前开始的运行走完；每章是一个子运行
+  .register(autonomousProductionWorkflow(autonomousPorts))
+  .register(autonomousProductionWorkflowV1(autonomousPorts))
+  .register(autonomousChapterWorkflow(autonomousPorts))
   // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
   // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）
   .register(referenceDistillWorkflow({

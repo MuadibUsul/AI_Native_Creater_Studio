@@ -14,8 +14,8 @@ import { approvalTierSchema } from './autonomy.js';
  */
 
 export const AUTONOMOUS_PRODUCTION_WORKFLOW = 'AUTONOMOUS_PRODUCTION';
-/** V6-10 S3 引入分章定义时升到 2（v1 的运行按 v1 的定义走完） */
-export const AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION = 1;
+/** 2 = V6-10 分章（v1 的运行按 v1 的定义走完：Worker 两个版本都注册） */
+export const AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION = 2;
 /** V6-10：一章一个子运行（同一个通用导演，在本章的子序列上剪） */
 export const AUTONOMOUS_CHAPTER_WORKFLOW = 'AUTONOMOUS_CHAPTER';
 export const AUTONOMOUS_CHAPTER_WORKFLOW_VERSION = 1;

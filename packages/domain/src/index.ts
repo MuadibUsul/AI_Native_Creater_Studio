@@ -747,7 +747,10 @@ export {
   listAutonomousRuns,
   cancelAutonomousRun,
   autonomousProductionWorkflow,
+  autonomousProductionWorkflowV1,
+  autonomousChapterWorkflow,
   autonomousSpentMicros,
+  CHAPTER_MODE_MIN_SECONDS,
   MIN_AUTONOMOUS_RUN_MICROS,
 } from './autonomous-production.js';
 export type { AutonomousProductionPorts } from './autonomous-production.js';
