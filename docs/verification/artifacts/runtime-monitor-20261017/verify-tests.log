@@ -1,0 +1,1355 @@
+===== STEP test:unit =====
+
+> ancs@0.0.0 test:unit <repo>
+> vitest run --project unit
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  unit  packages/contracts/src/timeline-targeting.test.ts (12 tests) 431ms
+   ✓ N04-04 逐帧步进（分数帧率不累计漂移） (4)
+     ✓ 分数帧率 29.97：步进 30000 帧后恰好到 1001 秒（无漂移） 409ms
+ ✓  unit  apps/realtime/src/openai-audio.test.ts (5 tests) 1001ms
+   ✓ OpenAI 兼容语音接口 (5)
+     ✓ 识别：开口通知 → 临时转写（可修订）→ 静音后最终结果与说完；请求带密钥头与模型、语言；结果按估算给词时间 576ms
+     ✓ whisper-1 用供应商词时间；401 不可重试且错误不含密钥；429 可重试；网关不自动重试 306ms
+ ✓  unit  apps/worker/src/deepgram-speech-recognition.test.ts (6 tests) 55ms
+ ✓  unit  apps/worker/src/audio-analysis-process.test.ts (2 tests) 205ms
+ ✓  unit  packages/kernel/src/timeline/structure-ops.test.ts (19 tests) 47ms
+ ✓  unit  packages/contracts/src/timeline-band.test.ts (10 tests) 335ms
+   ✓ timeline-band 播放头与时间选区分离 (5)
+     ✓ 区间数量上限 fail-closed 307ms
+ ✓  unit  packages/providers/gemini/src/index.test.ts (6 tests) 221ms
+ ✓  unit  packages/kernel/src/render/compile.test.ts (13 tests) 145ms
+ ✓  unit  apps/realtime/src/deepgram-live.test.ts (3 tests) 262ms
+ ✓  unit  packages/contracts/src/selection.test.ts (8 tests) 52ms
+ ✓  unit  packages/providers/storage-local/src/local-storage.test.ts (11 tests) 97ms
+ ✓  unit  apps/worker/src/speech-recognition-process.test.ts (2 tests) 247ms
+ ✓  unit  apps/worker/src/visual-analysis-process.test.ts (2 tests) 264ms
+ ✓  unit  packages/contracts/src/env.test.ts (30 tests) 73ms
+ ✓  unit  packages/contracts/src/ops-auth.test.ts (3 tests) 16ms
+ ✓  unit  packages/scene-components/src/ComponentVariants.test.tsx (45 tests) 409ms
+ ✓  unit  packages/sdk/src/client.test.ts (12 tests) 154ms
+ ✓  unit  packages/arch-check/src/scan.test.ts (3 tests) 84ms
+ ✓  unit  packages/contracts/src/edits.test.ts (14 tests) 122ms
+ ✓  unit  packages/kernel/src/timeline/clip-ops.test.ts (18 tests) 3047ms
+   ✓ 属性测试：随机原语序列在 29.97fps 下保持时间线不变量 (5)
+     ✓ seed=1：200 步后不变量成立，失败只以 ApiFailure 出现且不改变状态 411ms
+     ✓ seed=7：200 步后不变量成立，失败只以 ApiFailure 出现且不改变状态 536ms
+     ✓ seed=42：200 步后不变量成立，失败只以 ApiFailure 出现且不改变状态 652ms
+     ✓ seed=1337：200 步后不变量成立，失败只以 ApiFailure 出现且不改变状态 731ms
+     ✓ seed=2026：200 步后不变量成立，失败只以 ApiFailure 出现且不改变状态 681ms
+ ✓  unit  packages/contracts/src/media-clock.test.ts (13 tests) 27ms
+ ✓  unit  packages/contracts/src/playback-engine.test.ts (14 tests) 38ms
+ ✓  unit  packages/domain/src/visual-grammar.test.ts (17 tests) 22ms
+ ✓  unit  packages/domain/src/render-execution.test.ts (6 tests) 57ms
+ ✓  unit  packages/providers/runway/src/index.test.ts (3 tests) 178ms
+ ✓  unit  packages/domain/src/qa.test.ts (19 tests) 16ms
+ ✓  unit  packages/kernel/src/render/slice.test.ts (6 tests) 32ms
+ ✓  unit  packages/contracts/src/common/media-time.test.ts (15 tests) 38ms
+ ✓  unit  packages/scene-components/src/registry.test.ts (5 tests) 67ms
+ ✓  unit  apps/worker/src/render-plan/ffmpeg-graph.test.ts (18 tests) 31ms
+ ✓  unit  packages/domain/src/agent-operations.test.ts (7 tests) 38ms
+ ✓  unit  packages/domain/src/realtime-attention.test.ts (8 tests) 11ms
+ ✓  unit  packages/scene-components/src/render.test.tsx (4 tests) 20ms
+ ✓  unit  packages/domain/src/paid-generation.test.ts (10 tests) 36ms
+ ✓  unit  packages/domain/src/agent-review.test.ts (6 tests) 8ms
+ ✓  unit  packages/domain/src/evidence-extract.test.ts (8 tests) 20ms
+ ✓  unit  packages/contracts/src/common/common.test.ts (13 tests) 17ms
+ ✓  unit  packages/domain/src/content-extract.test.ts (15 tests) 45ms
+ ✓  unit  packages/providers/document-extract/src/zip-limits.test.ts (6 tests) 83ms
+ ✓  unit  packages/domain/src/ai-edit.test.ts (7 tests) 11ms
+ ✓  unit  packages/kernel/src/timeline/refine-ops.test.ts (6 tests) 20ms
+ ✓  unit  packages/domain/src/narration.test.ts (8 tests) 13ms
+ ✓  unit  packages/time/src/fraction.test.ts (4 tests) 11ms
+ ✓  unit  packages/domain/src/alignment.test.ts (7 tests) 17ms
+ ✓  unit  packages/domain/src/distill.test.ts (10 tests) 4087ms
+   ✓ 节拍检测 (6)
+     ✓ 82 BPM（噪声 0.3）：速度误差 < 1 BPM；节拍平均偏差 ≤ 20 ms、最大 ≤ 60 ms（卡点判定窗口 ±70 ms） 487ms
+     ✓ 97 BPM（噪声 0.1）：速度误差 < 1 BPM；节拍平均偏差 ≤ 20 ms、最大 ≤ 60 ms（卡点判定窗口 ±70 ms） 540ms
+     ✓ 120 BPM（噪声 0.05）：速度误差 < 1 BPM；节拍平均偏差 ≤ 20 ms、最大 ≤ 60 ms（卡点判定窗口 ±70 ms） 496ms
+     ✓ 140 BPM（噪声 0.2）：速度误差 < 1 BPM；节拍平均偏差 ≤ 20 ms、最大 ≤ 60 ms（卡点判定窗口 ±70 ms） 453ms
+     ✓ 174 BPM（噪声 0.1）：速度误差 < 1 BPM；节拍平均偏差 ≤ 20 ms、最大 ≤ 60 ms（卡点判定窗口 ±70 ms） 457ms
+     ✓ 白噪声与随机爆发音（像说话）：置信度很低（< 0.2） 1627ms
+ ✓  unit  apps/api/src/sdk-roundtrip.test.ts (2 tests) 2118ms
+ ✓  unit  packages/domain/src/voice-alignment.test.ts (7 tests) 27ms
+ ✓  unit  packages/sdk/src/appearance.test.ts (2 tests) 69ms
+ ✓  unit  apps/api/src/edge.test.ts (8 tests) 2655ms
+   ✓ Edge 中间件（Fastify inject） (5)
+     ✓ 安全头始终存在（未配置 Edge 时也有）；生产开启 HSTS 2580ms
+ ✓  unit  apps/api/src/server.test.ts (8 tests) 2680ms
+   ✓ API 路由（Fastify inject；无数据库模式） (8)
+     ✓ 日志脱敏（P08-03 / §75）：Authorization/Cookie 一律 REDACTED 且原文不落日志 2576ms
+ ✓  unit  packages/providers/anthropic/src/index.test.ts (5 tests) 189ms
+ ✓  unit  packages/contracts/src/unified-media-index.test.ts (5 tests) 33ms
+ ✓  unit  packages/providers/ark/src/index.test.ts (3 tests) 147ms
+ ✓  unit  packages/domain/src/content-article.test.ts (4 tests) 34ms
+ ✓  unit  packages/contracts/src/json-schema.test.ts (20 tests) 49ms
+ ✓  unit  packages/providers/deepseek/src/index.test.ts (9 tests) 52ms
+ ✓  unit  packages/contracts/src/media-search.test.ts (2 tests) 18ms
+ ✓  unit  packages/contracts/src/scene-graph.test.ts (5 tests) 40ms
+ ✓  unit  packages/contracts/src/playback-sync-report.test.ts (11 tests) 36ms
+ ✓  unit  packages/contracts/src/attention.test.ts (9 tests) 50ms
+ ✓  unit  packages/domain/src/director.test.ts (16 tests) 48ms
+ ✓  unit  packages/contracts/src/visual-transform.test.ts (5 tests) 13ms
+ ✓  unit  packages/contracts/src/playback-source.test.ts (13 tests) 20ms
+ ✓  unit  packages/domain/src/composition-migration.test.ts (2 tests) 29ms
+ ✓  unit  packages/contracts/src/media-visual-analysis.test.ts (3 tests) 22ms
+ ✓  unit  packages/domain/src/narrative-repair.test.ts (8 tests) 33ms
+ ✓  unit  packages/extensions/src/registry.test.ts (7 tests) 14ms
+ ✓  unit  packages/providers/document-extract/src/index.test.ts (4 tests) 17ms
+ ✓  unit  packages/providers/mock-provider/src/mock-provider.test.ts (8 tests) 16ms
+ ✓  unit  packages/contracts/src/asset-relink.test.ts (2 tests) 15ms
+ ✓  unit  packages/scene-components/src/protocol.test.ts (7 tests) 25ms
+ ✓  unit  packages/contracts/src/mix-compute.test.ts (8 tests) 38ms
+ ✓  unit  packages/contracts/src/timeline-projection.test.ts (9 tests) 18ms
+stderr | packages/providers/credential-vault-local/src/vault.test.ts > LocalCredentialVault > 生产环境必须显式配置 ANCS_CREDENTIAL_KEYS（不得从会话密钥派生）
+[credential-vault] 未配置 ANCS_CREDENTIAL_KEYS，当前从 BETTER_AUTH_SECRET 派生（仅限非生产）。生产环境请显式配置；且轮换 BETTER_AUTH_SECRET 会导致已存凭据无法解密。
+
+ ✓  unit  packages/providers/credential-vault-local/src/vault.test.ts (5 tests) 16ms
+ ✓  unit  packages/contracts/src/compare-playback.test.ts (4 tests) 28ms
+ ✓  unit  apps/worker/src/cms-writeback-sender.test.ts (2 tests) 33ms
+ ✓  unit  packages/contracts/src/composition-objects.test.ts (3 tests) 17ms
+ ✓  unit  packages/contracts/src/media-index.test.ts (1 test) 20ms
+ ✓  unit  packages/contracts/src/extensions.test.ts (8 tests) 22ms
+ ✓  unit  packages/contracts/src/assets-media-probe.test.ts (2 tests) 25ms
+ ✓  unit  packages/contracts/src/range-edit-length-guard.test.ts (7 tests) 15ms
+ ✓  unit  packages/contracts/src/paid-generation.test.ts (3 tests) 12ms
+ ✓  unit  packages/contracts/src/workspace-features.test.ts (2 tests) 16ms
+ ✓  unit  packages/contracts/src/p14-contracts.test.ts (3 tests) 28ms
+ ✓  unit  packages/contracts/src/media-transcript.test.ts (1 test) 13ms
+ ✓  unit  packages/contracts/src/media-audio-analysis.test.ts (3 tests) 16ms
+ ✓  unit  packages/contracts/src/content.test.ts (4 tests) 27ms
+ ✓  unit  packages/contracts/src/asset-lifecycle.test.ts (2 tests) 17ms
+ ✓  unit  packages/domain/src/speech-plan.test.ts (8 tests) 14ms
+ ✓  unit  packages/domain/src/custom-motion.test.ts (8 tests) 15ms
+ ✓  unit  packages/contracts/src/edit-impact.test.ts (9 tests) 9ms
+ ✓  unit  packages/contracts/src/media-analysis.test.ts (2 tests) 13ms
+ ✓  unit  packages/arch-check/src/rules.test.ts (17 tests) 15ms
+ ✓  unit  packages/domain/src/effect-templates.test.ts (3 tests) 23ms
+ ✓  unit  packages/remotion-core/src/timeline.test.ts (5 tests) 8ms
+ ✓  unit  packages/contracts/src/proposal-disposition.test.ts (17 tests) 11ms
+ ✓  unit  packages/contracts/src/media-proxy.test.ts (1 test) 11ms
+ ✓  unit  packages/domain/src/project-document.test.ts (3 tests) 27ms
+ ✓  unit  packages/contracts/src/mime-sniff.test.ts (4 tests) 8ms
+ ✓  unit  packages/contracts/src/appearance.test.ts (1 test) 32ms
+ ✓  unit  packages/kernel/src/render/hash.test.ts (6 tests) 13ms
+ ✓  unit  packages/domain/src/edit-operation-registry.test.ts (4 tests) 18ms
+ ✓  unit  packages/providers/queue-bullmq/src/queue-bullmq.test.ts (3 tests) 14ms
+ ✓  unit  packages/contracts/src/content-protection.test.ts (5 tests) 6ms
+ ✓  unit  packages/time/src/decimal-seconds.test.ts (3 tests) 12ms
+ ✓  unit  packages/contracts/src/auth.test.ts (4 tests) 12ms
+ ✓  unit  packages/contracts/src/provider-kind.test.ts (2 tests) 12ms
+ ✓  unit  apps/worker/src/child-env.test.ts (2 tests) 6ms
+ ✓  unit  packages/contracts/src/visual-picking.test.ts (8 tests) 23ms
+ ✓  unit  packages/contracts/src/contracts.test.ts (7 tests) 25ms
+ ✓  unit  apps/api/src/storage-range.test.ts (2 tests) 14ms
+ ✓  unit  packages/domain/src/ops.test.ts (3 tests) 11ms
+ ✓  unit  packages/domain/src/strategies.test.ts (4 tests) 27ms
+ ✓  unit  packages/domain/src/webhook-verifier.test.ts (4 tests) 8ms
+ ✓  unit  packages/domain/src/voice-reply.test.ts (3 tests) 8ms
+ ✓  unit  apps/worker/src/handlers.test.ts (4 tests) 7ms
+ ✓  unit  packages/domain/src/security-ops-projection.test.ts (1 test) 3ms
+ ✓  unit  apps/worker/src/effect-placement.test.ts (4 tests) 4ms
+
+ Test Files  118 passed (118)
+      Tests  848 passed (848)
+   Start at  03:27:40
+   Duration  22.82s (import 76%, transform 12%, tests 11%, worker 1%)
+
+     Import   unit  634 modules were evaluated 4689 times · 148.86s total, 76% of tracked time
+             ~2.76s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+STEP_EXIT test:unit 0
+===== STEP test:web =====
+
+> ancs@0.0.0 test:web <repo>
+> vitest run --project web
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  web  apps/web/src/ui/render-review.test.tsx (7 tests) 1133ms
+   ✓ Render 与审核（P07-05） (7)
+     ✓ 空态可以选择规格，但缺后端报价和能力确认时不提交渲染 346ms
+ ✓  web  apps/web/src/ui/security-ops.test.tsx (6 tests) 2256ms
+   ✓ N15-03 限定范围运营诊断 (6)
+     ✓ 运营角色显式提交 workspace 后才查询项目与存储，切换范围立即清理旧结果 606ms
+     ✓ 403 不显示上一次数据，保留范围并允许手动重试 308ms
+     ✓ 支持人员仅在提交 workspace+ticket 后查当前授权，主动打开摘要并明示留痕 732ms
+     ✓ 英文界面：运营查询与支持摘要全部为英文，时间按英文格式显示 600ms
+ ✓  web  apps/web/src/components/quiet-frame/workspace-pages.test.tsx (10 tests) 2217ms
+   ✓ Quiet Frame 工作区与公开页 (10)
+     ✓ 身份页从真实 SDK 列表读取，并通过 create 提交新身份 406ms
+     ✓ 声音授权读取当前声明后才允许确认，不触发付费克隆任务 386ms
+     ✓ 英文界面：设置页各分类显示英文，额度按界面语言格式化，没有中文残留 436ms
+ ✓  web  apps/web/src/app/script.test.tsx (9 tests) 2615ms
+   ✓ Script (7)
+     ✓ 显示真实来源快照与事实引用，链接只来自已验证的网页协议 609ms
+     ✓ 空：导入文章 → 归一化 → 抽取 → 生成叙事（全部经 SDK） 541ms
+     ✓ 锁定后编辑禁用；并发锁定导致保存 409 时保留文本草稿 529ms
+     ✓ 切换段落编辑时保留各段未提交草稿，取消仅放弃当前段 432ms
+ ✓  web  apps/web/src/components/quiet-frame/workspace-identity.test.tsx (8 tests) 2692ms
+   ✓ Quiet Frame 声音样本 (1)
+     ✓ 从素材库读取已上传音频，选择 READY 版本后提交音质检测 603ms
+   ✓ Quiet Frame 声音生命周期 (6)
+     ✓ 本地退休先说明影响；取消不写入，确认后读取服务端状态且保留供应商声音 511ms
+     ✓ 已退休的声音可经独立确认解绑，未授权不妨碍停止使用声音 326ms
+     ✓ 训练中仅可确认查询现有任务；失败反馈不触发付费重试 307ms
+ ✓  web  apps/web/src/ui/StudioShell.test.tsx (15 tests) 2600ms
+   ✓ Quiet Frame 工作台外壳 (15)
+     ✓ 用真实工作区和项目生成导航，通知只从 SDK 读取 446ms
+     ✓ 命令搜索支持快捷键、过滤、Esc 关闭与焦点返回 355ms
+     ✓ 设计系统状态动作只展示说明，Esc 关闭并保留焦点，不写入作品或授权 336ms
+ ✓  web  apps/web/src/app/storyboard-editor.test.tsx (18 tests) 3799ms
+   ✓ Storyboard (10)
+     ✓ 读取素材检索带入的真实源范围，明确不自动修改项目并允许取消 361ms
+     ✓ 场景选择更新画布和检查器；AI 计划在确认前不写入，确认后走编辑协议 458ms
+   ✓ Scene Editor (4)
+     ✓ props 表单由组件协议驱动；保存经编辑协议（base + scene revision）；成功提示 436ms
+     ✓ props 非法（组件 schema 拒绝）→ 不调用 SDK，表单给出原因 427ms
+   ✓ English UI (4)
+     ✓ Director workspace, inspector, PropForm and Lite Timeline render in English 564ms
+ ✓  web  apps/web/src/ui/LiteTimeline.test.tsx (9 tests) 1497ms
+   ✓ Storyboard × Lite Timeline（刷新后一致） (2)
+     ✓ 编辑成功后失效并重新查询 graph（以服务端权威数据渲染） 456ms
+     ✓ 项目新上传且未绑定的 READY 素材可替换空绑定媒体场景 307ms
+ ✓  web  apps/web/src/ui/project-flow-ui.i18n.test.tsx (5 tests) 769ms
+ ✓  web  apps/web/src/components/quiet-frame/delivery-assets.test.tsx (18 tests) 6428ms
+   ✓ Quiet Frame asset flow (18)
+     ✓ uses the SDK resumable flow for every selected real file without whole-file reads 474ms
+     ✓ uses the source PTS map when an index interval starts playback and exposes pagination 314ms
+     ✓ shows ASR as unconfirmed evidence, plays its source range, and saves a versioned correction 555ms
+     ✓ searches real source ranges, labels evidence, and plays the selected interval 356ms
+     ✓ shows a truthful empty state and keeps instruction-like transcript text inert 524ms
+     ✓ edits real rights, removes only the selected scene reference, and requires typed privacy deletion confirmation 1276ms
+     ✓ compares a missing original with an uploaded candidate and requires explicit replacement confirmation 584ms
+     ✓ renders the library, upload dialog and Finance entry in English without Chinese copy 402ms
+     ✓ renders the asset detail panels in English, including lifecycle, relink, analysis, index and transcript 644ms
+ ✓  web  apps/web/src/ui/ScenePreview.test.tsx (4 tests) 944ms
+   ✓ SignIn (1)
+     ✓ 提交调用 SDK 登录；失败显示可重试的错误块 700ms
+ ✓  web  apps/web/src/review/review.test.tsx (5 tests) 1541ms
+   ✓ V6-4 批注式审片 (5)
+     ✓ 标记：停在这一刻 → 写一句话 → 添加批注（带时间范围与这一刻画面上的片段） 645ms
+     ✓ 逐条问 AI：发起只给方案的讨论；AI 给出方案后"就按这个改"把它定为方案 327ms
+ ✓  web  apps/web/src/ui/AiEditPanel.test.tsx (7 tests) 1546ms
+   ✓ AiEditPanel（P05-06） (6)
+     ✓ 生成计划：提交意图（不触发 Apply/SDK 之外的任何动作） 497ms
+   ✓ Storyboard × AI Edit（计划不落库 → Apply 走编辑协议） (1)
+     ✓ Apply 只在用户确认后发生，并以计划 operations + revision 条件提交 761ms
+ ✓  web  apps/web/src/app/w/[workspaceId]/new/page.test.tsx (9 tests) 6927ms
+   ✓ Quiet Frame 新建作品 (9)
+     ✓ 读取真实文章并在确认后生成脚本，复用同一项目 997ms
+     ✓ 读取失败保留输入，重试不创建第二个项目 776ms
+     ✓ 修正失败的来源后换用新幂等键，避免复用被拒绝的请求正文 1199ms
+     ✓ URL 读取失败后可改用粘贴正文，同一作品使用新内容幂等键 1241ms
+     ✓ 切换输入标签保留各自草稿，超限文档在创建作品前被拒绝 1349ms
+     ✓ 英文界面：表单、校验与解析结果全部为英文 1042ms
+ ✓  web  apps/web/src/voice/voice.test.tsx (6 tests) 7176ms
+   ✓ V6-2 / Issue #9 连续语音（浏览器侧） (6)
+     ✓ 一直开着：边说边出 → 一句话说完带着绑定指向发出 → AI 忙时第二句排队 → 服务端语音念回应 → 开口打断 → 停止这一轮 → 结束 2078ms
+     ✓ 键盘：V 开始 / 结束语音；没有服务端合成时用浏览器朗读并如实标注 1331ms
+     ✓ 用语音交出的一句 AI 没能完成：画布边缘如实提示，不朗读 1310ms
+     ✓ 一句发失败：停在队首如实说明，重试用同一个幂等键（不会重复执行），也可以不要了 402ms
+     ✓ 没有麦克风权限 / 服务端未配置语音 / 识别未配置：如实说明；能恢复的给"重新连接" 584ms
+     ✓ 断线 / 会话过期 / 识别服务密钥失效 / 暂时识别失败：分别说明；重新连接开新会话，已发出的话不重发 1467ms
+ ✓  web  apps/web/src/ui/FinanceWorkspace.test.tsx (4 tests) 3349ms
+   ✓ FinanceWorkspace (4)
+     ✓ keeps all six visualization types and rejects missing numeric data 884ms
+     ✓ preserves licensed source, template version, unit and observation metadata in SDK calls 1813ms
+     ✓ renders Finance Pack in English, including local validation notices and frozen artifact metadata 556ms
+ ✓  web  apps/web/src/components/quiet-frame/delivery-render.test.tsx (8 tests) 1760ms
+   ✓ Quiet Frame render approval (8)
+     ✓ approves only the render selected by the reviewer after an explicit check 547ms
+ ✓  web  apps/web/src/app/assets-history-render.test.tsx (8 tests) 1419ms
+   ✓ Assets × 外部处理回绑（P06-07） (2)
+     ✓ 展示待回绑的 Provider 任务引用；选择 READY 资产 → 回绑调用 SDK 423ms
+   ✓ Assets (3)
+     ✓ 空：上传表单可用；提交调用 SDK 可恢复上传（含 projectId） 303ms
+stderr | apps/web/src/p05-exit.test.tsx > P05 阶段退出条件（预览 → 修改 → 撤销 → 恢复快照） > 完整 Draft 闭环（组件层串联；浏览器 E2E 仍为 PLANNED）
+Symbol(__remotion_level_warn) Note: Some companies are required to obtain a license to use Remotion. See: https://remotion.dev/license
+Pass the `acknowledgeRemotionLicense` prop to `<Player />` function to make this message disappear.
+Symbol(__remotion_level_warn) AudioContext is not supported in this browser
+
+stderr | apps/web/src/ui/PreviewPlayer.test.tsx > PreviewPlayer（Remotion Player 消费 Graph） > 帧数/时长按 timeline 绝对边界换算（与成片同一模块）
+Symbol(__remotion_level_warn) Note: Some companies are required to obtain a license to use Remotion. See: https://remotion.dev/license
+Pass the `acknowledgeRemotionLicense` prop to `<Player />` function to make this message disappear.
+Symbol(__remotion_level_warn) AudioContext is not supported in this browser
+
+ ✓  web  apps/web/src/ui/PreviewPlayer.test.tsx (4 tests) 539ms
+ ✓  web  apps/web/src/p05-exit.test.tsx (1 test) 1139ms
+   ✓ P05 阶段退出条件（预览 → 修改 → 撤销 → 恢复快照） (1)
+     ✓ 完整 Draft 闭环（组件层串联；浏览器 E2E 仍为 PLANNED） 1137ms
+ ✓  web  apps/web/src/ui/team-management.test.tsx (6 tests) 1818ms
+   ✓ 团队与隐私（P09-04） (6)
+     ✓ 成员：角色变更与移除调用 SDK；移除提示访问立即失效 590ms
+     ✓ 邀请：创建（邮箱+角色）与撤销调用 SDK；PENDING 唯一与接受条件有明确说明 684ms
+ ✓  web  apps/web/src/app/w/[workspaceId]/p/[projectId]/history/quiet-history.test.tsx (3 tests) 765ms
+   ✓ Quiet Frame project history (3)
+     ✓ filters another project, pages by authoritative cursor, and reads real version summaries on demand 461ms
+ ✓  web  apps/web/src/components/quiet-frame/delivery-publish.test.tsx (6 tests) 1554ms
+   ✓ Quiet Frame publish gates (6)
+     ✓ does not expose a fake direct publish action or P4 package before approval 343ms
+     ✓ creates a bounded handoff for an approved video and can revoke it 324ms
+     ✓ renders delivery channels and handoffs in English without Chinese interface text 309ms
+ ✓  web  apps/web/src/components/quiet-frame/delivery-analytics.test.tsx (4 tests) 684ms
+   ✓ Quiet Frame analytics data rendering (4)
+     ✓ keeps real performance visible when Finance is unavailable, including advanced learning tools 346ms
+     ✓ renders performance, the retention chart and advanced tools in English without Chinese interface text 305ms
+ ✓  web  apps/web/src/playback/PlaybackSurface.test.tsx (6 tests) 225ms
+ ✓  web  apps/web/src/app/dashboard.test.tsx (8 tests) 2387ms
+   ✓ Dashboard (8)
+     ✓ 项目为空：创建项目（自动复用/创建默认栏目） 320ms
+     ✓ 首页输入框（参照 Stitch）：素材剪辑带着想法进新建页；文章讲述要先贴文章；素材与文章作品都进共看片室 1048ms
+ ✓  web  apps/web/src/ui/VoiceCaptureControl.test.tsx (7 tests) 173ms
+ ✓  web  apps/web/src/ui/credits-billing.test.tsx (4 tests) 774ms
+ ✓  web  apps/web/src/playback/media-element-backend.test.tsx (8 tests) 15ms
+ ✓  web  apps/web/src/ui/TimelineBand.test.tsx (5 tests) 146ms
+ ✓  web  apps/web/src/ui/AnalyticsWorkspace.test.tsx (2 tests) 535ms
+   ✓ AnalyticsWorkspace（P14 Web 完成面） (2)
+     ✓ 缺失指标显示未知、场景归因声明相关性，学习操作不声称修改 Channel 413ms
+ ✓  web  apps/web/src/app/ui-tokens.test.tsx (5 tests) 113ms
+ ✓  web  apps/web/src/app/studio-identity.test.tsx (2 tests) 819ms
+   ✓ 我的形象与声音 (2)
+     ✓ 新建档案；有参考照片时显示声明，同意时带上声明版本、语言与"本人/已获授权" 653ms
+ ✓  web  apps/web/src/ui/CompareReplayPanel.test.tsx (4 tests) 96ms
+ ✓  web  apps/web/src/app/admin.test.tsx (5 tests) 649ms
+ ✓  web  apps/web/src/ui/timeline-band-projection.test.tsx (5 tests) 151ms
+ ✓  web  apps/web/src/ui/CanvasInteractionLayer.test.tsx (6 tests) 100ms
+ ✓  web  apps/web/src/app/studio-new.test.tsx (4 tests) 2777ms
+   ✓ 新建作品 (4)
+     ✓ 从素材开始：只发标题、画幅与语言 528ms
+     ✓ 从文章开始：必须贴文章；带上文章与"AI 配音讲述"的选择 1091ms
+     ✓ 从链接导入：服务端抓到的正文填进文章框给人核对；建工程时带上来源；抓不到时说明原因 1074ms
+ ✓  web  apps/web/src/ui/MonochromeSeriesChart.test.tsx (5 tests) 337ms
+ ✓  web  apps/web/src/studio/StudioTasks.test.tsx (3 tests) 266ms
+ ✓  web  apps/web/src/studio/studio.test.tsx (26 tests) 16070ms
+   ✓ V6-1c 共看片室 (26)
+     ✓ 空作品：放入素材的引导；没有试改时不请求预览 356ms
+     ✓ 快捷键：方向键逐帧 / Shift 按秒、Home/End、M 框选、/ 跟 AI 说、? 与按住 Ctrl 显示列表、Esc 收起；输入框里不接管 1409ms
+     ✓ 时间带：试改改动的位置来自服务端对照（只标内容有改动的片段）；缩放按钮与 + / - / 0 530ms
+     ✓ 指：点选时间带上的片段 → 对话带上指认的片段 593ms
+     ✓ V6-3 指画面与特效：特效开关显式修改项目规则；框出画面区域随对话发出；特效轨与特效片段单独标名 962ms
+     ✓ 风格（可选）：默认不选；选了风格和旋钮，这一轮对话带上策略包与取值 437ms
+     ✓ V6-6 从参考视频学风格：上传文件 + 粘贴链接 → 进度 → 测量结果卡（只列真实测量）→ 改说明 → 选用 4063ms
+     ✓ V6-6 学风格失败：按原因说明（平台链接未配置下载工具 → 提示下载后上传） 1366ms
+     ✓ AI 失败给出原因；进行中的一轮可以停止 435ms
+     ✓ V6-7/V6-8 报价卡：说明价格与预算；确认时带上看到的报价上限；放弃；生成开关显式修改项目规则 419ms
+     ✓ 中英切换：界面文案即时切换，Cookie 记住本设备的选择 489ms
+     ✓ 时间带触屏：两指捏合按档位缩放；第二根手指落下时取消单指选择（不跳播放头、不选区） 392ms
+     ✓ 任务结束就近提醒：看着进行中的素材处理完，任务按钮下方提示"完成"，点一下打开任务 2744ms
+ ✓  web  apps/web/src/lib/security-headers.test.ts (3 tests) 8ms
+ ✓  web  apps/web/src/studio/StudioRuleGroup.test.tsx (2 tests) 941ms
+   ✓ StudioRuleGroup (2)
+     ✓ Tab 落在第一个开启项；方向键循环移动、Home/End 到首尾；Space/Enter 切换 709ms
+ ✓  web  apps/web/src/app/project-layout.i18n.test.tsx (3 tests) 371ms
+ ✓  web  apps/web/src/lib/appearance.test.tsx (2 tests) 18ms
+ ✓  web  apps/web/src/ui/StateBlock.test.tsx (3 tests) 204ms
+ ✓  web  apps/web/src/studio/studio-waveform.test.ts (3 tests) 5ms
+ ✓  web  apps/web/src/components/quiet-frame/workspace-public.i18n.test.tsx (2 tests) 515ms
+   ✓ 欢迎页与设计系统页英文界面 (2)
+     ✓ 设计系统页与示例对话框为英文 350ms
+ ✓  web  apps/web/src/lib/client.test.tsx (1 test) 12ms
+ ✓  web  apps/web/src/app/sign-in/page.i18n.test.tsx (2 tests) 1315ms
+   ✓ 登录页英文界面 (2)
+     ✓ 登录失败时显示英文标题与重试 725ms
+     ✓ 需要二次验证时切换到英文动态验证码表单 588ms
+
+ Test Files  50 passed (50)
+      Tests  306 passed (306)
+   Start at  03:28:04
+   Duration  46.17s (environment 46%, tests 18%, setup 15%, import 14%, transform 6%)
+
+Environment   web  jsdom was created 50 times · 218.82s total, 46% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+STEP_EXIT test:web 0
+===== STEP test:motion =====
+
+> ancs@0.0.0 test:motion <repo>
+> vitest run --project motion
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  motion  apps/motion-worker/src/sandbox-hardening.test.ts (6 tests) 6ms
+ ✓  motion  apps/motion-worker/src/sandbox.test.ts (11 tests) 3473ms
+   ✓ 沙箱执行（隔离子进程） (5)
+     ✓ 无限循环 fixture：隔离子进程被硬超时 kill → TIMEOUT（宿主不受影响） 1517ms
+     ✓ 宿主在沙箱超时后仍可继续处理后续提交（无跨提交状态污染） 1357ms
+ ✓  motion  apps/motion-worker/src/validator.test.ts (8 tests) 1728ms
+   ✓ Motion 四道门禁（P07-02） (6)
+     ✓ 合法 Motion → APPROVED（四阶段全过；抽帧 3 帧、帧间输出不同、逐帧哈希） 437ms
+     ✓ 抽帧确定性：同代码同 fixture → 逐帧哈希一致（可复算证据） 503ms
+ ✓  motion  apps/motion-worker/src/effect-templates.test.ts (13 tests) 3038ms
+   ✓ 特效模板 × 四道门禁 (13)
+     ✓ burst → APPROVED，抽帧有变化 381ms
+
+ Test Files  4 passed (4)
+      Tests  38 passed (38)
+   Start at  03:28:51
+   Duration  8.16s (tests 53%, transform 30%, import 17%)
+
+STEP_EXIT test:motion 0
+===== STEP test:contract =====
+
+> ancs@0.0.0 test:contract <repo>
+> node scripts/planned-suite.mjs test:contract P03-07 "Provider Adapter 契约测试与 Mock 故障矩阵"
+
+[PLANNED] test:contract 尚未实现（计划阶段：P03-07）。
+  说明：Provider Adapter 契约测试与 Mock 故障矩阵
+  状态：不执行任何断言，不代表通过；实现后必须替换为真实套件（见 ANCS_Plan261004.md §11）。
+STEP_EXIT test:contract 0
+===== STEP test:integration =====
+
+> ancs@0.0.0 test:integration <repo>
+> vitest run --project integration
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  integration  packages/domain/src/agent-runtime.integration.test.ts (12 tests) 14703ms
+   ✓ V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型） (10)
+     ✓ 一轮初剪：上下文 → 读素材 → 草稿编辑（错误回给模型）→ 提案；采用前工程不变，采用后与草稿一致 1199ms
+     ✓ 续跑：限流失败后重试，从日志继续，已完成的模型调用不重复付费；按模型单价累计成本 329ms
+     ✓ 看素材：抽帧优先用就绪的低清代理，图像随工具结果交给模型；未装配抽帧时明确报不可用 455ms
+     ✓ 用户在轮次期间改过工程：草稿在最新版本上仍成立 → 提案建在最新版本上 410ms
+     ✓ 在试改上继续（V6-1c）：下一轮从未采用的试改出发，新提案取代它；没有再改则沿用；采用后的新一轮从头开始 934ms
+     ✓ 在试改上继续时用户先采用了原试改：只把本轮新增的改动建成新提案（基于采用后的版本） 670ms
+     ✓ 可选风格策略（V6 §6.6）：选用的策略与旋钮作为数据进入上下文；工具目录不变；未知策略/旋钮在建轮次前拒绝 311ms
+     ✓ 自检（V6 §6.4）：review_draft 按通用规则检查草稿并说明缺失的分析层；look_at_timeline 看到草稿在时间线上的画面 367ms
+   ✓ V6-4 批注式审片（真实 PostgreSQL，脚本模型） (2)
+     ✓ 标记 → 讨论（只给方案、不改时间线）→ 确定 → 一次执行 → 在试改上微调 → 采用；之后的标记开新一轮 1315ms
+     ✓ 撤回执行的试改 → 回到可改状态并说明；AI 没做改动如实说明；跨工作区/跨工程 404 616ms
+ ❯  integration  apps/worker/src/paid-generation.integration.test.ts (4 tests | 1 failed) 12601ms
+   ❯ V6-7 / V6-8 付费生成（真实 FFmpeg，脚本导演 + 测试替身供应商） (4)
+     ✓ 选区重绘：只报价 → 确认（预算预留）→ 生成一次 → 试改（裁切到选区）→ 结算；采用后框内变、框外不变 4578ms
+     ✓ 失败分支：未扣费 → 释放；结果不明 → 待对账（不重试、预留保持）；圈外被改如实标出；没报告费用按上限；放弃与过期 5219ms
+     × 数字人：身份档案 + 授权（只增不改）→ 报价检查语言与授权 → 有声画中画；执行前撤回授权 → 失败不扣费 1705ms
+     ✓ 进程协议：成功带费用 / 失败未扣费 / 崩溃 = 结果不明；子进程拿不到未声明的环境变量 592ms
+ ✓  integration  apps/worker/src/render-qa.integration.test.ts (2 tests) 156745ms
+   ✓ Final QA（P07-05 端到端） (2)
+     ✓ 渲染完成自动入队 QA → 独立复核通过 → READY + 报告落库（0 阻止项失败） 156064ms
+     ✓ FAIL 路径：产物缺失（QA 状态无产物）→ 报告 FAIL（ARTIFACTS_PRESENT 阻止）+ Render FAILED 582ms
+ ✓  integration  apps/worker/src/media-transcript.integration.test.ts (11 tests) 9528ms
+   ✓ N02-05 media transcripts (3)
+     ✓ persists ASR inference, keeps unknown speakers anonymous, and corrects only the selected segment 825ms
+     ✓ shows an actionable failed state when ASR is unavailable and can retry without changing the source 663ms
+     ✓ lets a ready pre-existing audio asset create its first transcript run 550ms
+   ✓ N02-06 semantic source-range search (1)
+     ✓ returns exact playable user and transcript ranges without inventing results or executing reference text 604ms
+   ✓ N02-10 unified media index evidence (1)
+     ✓ cross-queries measured, inferred, and user evidence by source PTS with complete capability states 1815ms
+   ✓ N02-11 progressive media analysis DAG (1)
+     ✓ keeps editing available after ASR cancellation and resumes an index stage from a persisted crash checkpoint 1654ms
+   ✓ N02-12 visual action and track evidence (1)
+     ✓ indexes action candidates, anonymous occluded tracks and searchable source ranges without naming people 487ms
+   ✓ N02-13 audio events, beats and audiovisual correlation (1)
+     ✓ keeps audio stream PTS, correlates applause with visual evidence, and preserves changing tempo without modifying source audio 561ms
+   ✓ N02-14 correction overlay and deletion authorization sync (1)
+     ✓ preserves a confirmed correction across reanalysis and tombstones every derived index before restore 1174ms
+   ✓ N02-15 shared range evidence cache (2)
+     ✓ reuses one authorized range bundle and separates permission contexts and analysis config 571ms
+     ✓ switching to a new source version only invalidates that version and keeps prior evidence intact 518ms
+ ✓  integration  packages/domain/src/edits.integration.test.ts (14 tests) 3132ms
+   ✓ 编辑事务（§4.6） (14)
+     ✓ update_scene：条件更新成功、双层 revision 递增、EditEvent 与 Outbox 同事务落库 410ms
+ ✓  integration  apps/worker/src/playback-snapshot.integration.test.ts (5 tests) 2562ms
+   ✓ N03-08 多轨媒体预览与真实合成（真实 FFmpeg 探测 + 真实数据库） (5)
+     ✓ 真实 MP4 解码检查：源区间/时长/音轨与探测结果一致，预览快照与合成计划同源同帧 664ms
+     ✓ 能力显式：未列出的能力不得视为支持；图形对象在 baseline 后端 fail-closed，切到服务端合成才允许 441ms
+     ✓ 隐藏视频轨被排除且显式列出；静音与独奏归一化后音频段的可听性正确 444ms
+     ✓ V5-M4：快照来自内核 RenderPlan——insert_clip 带出的关联音频片段进入音频段（旧投影静默丢弃）；planHash 只随渲染内容变化 549ms
+     ✓ fail-closed：空时间线 409 EMPTY_TIMELINE；源未就绪/缺校验和 409 SOURCE_NOT_PLAYABLE 381ms
+ ✓  integration  packages/domain/src/op-log.integration.test.ts (5 tests) 2734ms
+   ✓ V5-M2 操作日志权威与投影 (5)
+     ✓ 直接写入、内核操作、动画、锁、撤销/重做与版本恢复之后，日志折叠与投影表逐行一致 1043ms
+     ✓ 日志启用前已存在的组合行被写入基线；投影表被篡改可检出并按日志修复 443ms
+     ✓ 并发写入在日志中线性化；数据库层拒绝重复 revision 的编辑日志行 445ms
+     ✓ 引用边：替换来源关闭旧边、删除关闭边、撤销重新打开；历史引用仍阻止资产清理 311ms
+     ✓ delete_track 不再级联静默删除字幕与视觉对象（409），轨道清空后可删除 408ms
+ ✓  integration  apps/worker/src/reference-distill.integration.test.ts (3 tests) 5557ms
+   ✓ V6-6 蒸馏器（真实 FFmpeg 测量 + 本地链接） (3)
+     ✓ 上传的卡点视频 + 直接链接的慢节奏视频 → 一份风格：测量与真值一致，规则版说明 1851ms
+     ✓ 平台页面：没配置下载命令 → 明确失败提示上传；配置了下载命令 → 走命令；内网地址 → 拒绝 1114ms
+     ✓ 配置了模型：模型看测量与抽帧写说明，数值仍是测量值；编辑包的文字（版本 +1），内置预设不可改 1546ms
+ ✓  integration  apps/worker/src/render-execution.integration.test.ts (2 tests) 113424ms
+   ✓ Final 合成（P07-04 端到端） (2)
+     ✓ 创建渲染 → 任务入队 → 真实渲染 → 产物入存储 → QA（1920×1080/30fps/音轨/时长） 112759ms
+     ✓ 执行失败定性：Render=FAILED + 任务 FAILED_FINAL（不自动重试） 574ms
+ ✓  integration  apps/api/src/ops-auth.integration.test.ts (14 tests) 10131ms
+   ✓ N15-03 运营动作矩阵与 0053 作用域 (8)
+     ✓ 23 个旧路由都有封闭 action；显式平台 scope 可读总览，未知 action 默认拒绝 706ms
+     ✓ 旧 role grant 无 scope 不授权；错误角色、过期和撤销 scope 均拒绝 1981ms
+     ✓ 金额与租户 scope 决策：越界拒绝，界内高风险写仍需审批 482ms
+     ✓ 工单支持视图要求有限期角色 scope，不能使用永久 workspace scope 475ms
+     ✓ 无工单的 scope 不遮蔽同角色下后续有效工单 scope 476ms
+     ✓ 0053 INSERT/UPDATE/DELETE scope 即时增加 grantVersion，DB 拒绝非法环境与角色 317ms
+   ✓ N15-02 独立运营认证 (6)
+     ✓ 旧普通会话、enrollment 确认均不签发 ops cookie；重新登录完成 TOTP 才可进入 /admin 534ms
+     ✓ 旧名单、客户 Owner 和测试身份不能绕过独立运营受众 350ms
+     ✓ 撤销、退出、角色移除及 MFA 停用立即拒绝已有运营会话 2045ms
+     ✓ 空闲过期、敏感重验与错误验证码锁定按服务端状态执行 555ms
+     ✓ Native Bearer、错误 ops cookie 与绝对过期不能进入 /admin 487ms
+     ✓ 不同设备登录追加告警证据，TEST principal 不能进入生产，生产旧 Admin 读写均关闭 1106ms
+ ✓  integration  apps/api/src/assets-http.integration.test.ts (13 tests) 5604ms
+   ✓ 资产上传（HTTP / SDK，真实本地存储端点） (13)
+     ✓ 分片断点续传：跳过服务端已确认分片，流式合并后字节与校验和一致 446ms
+     ✓ 错误分片 checksum、跨租户 complete 与超过套餐存储额度均被拒绝 465ms
+     ✓ SDK 一体化上传：意图 → 直传 → 确认（真实探测）→ 下载 Signed URL 可取回原始字节 322ms
+     ✓ 转写 HTTP / SDK 读取按 workspace 隔离且无转写时返回明确空状态 465ms
+     ✓ 片段标签与搜索通过 SDK 往返，并在 HTTP 层保持 workspace 隔离 587ms
+     ✓ Trash：软删 → trashed 视图可见 → 下载 404 → 恢复；项目软删/恢复同理 427ms
+     ✓ 跨租户：他人 workspace 的资产不可确认/查看/取下载链接（404 抗枚举） 466ms
+     ✓ 撤销成员后旧索引 cursor 立即失效，响应禁止共享缓存，同内容不跨租户复用 581ms
+     ✓ 按服务端成员上下文复用范围证据并记录命中，跨租户无法读取缓存 488ms
+ ✓  integration  apps/worker/src/render-plan-conformance.integration.test.ts (1 test) 1877ms
+   ✓ V5-M4 一致性：baseline 播放投影 × FFmpeg 终渲染（真实 Postgres + 真实 FFmpeg 编解码） (1)
+     ✓ 两层视频（全画幅 + 缩放 0.5 置于左上）与带增益/声像的音频区域：逐帧源帧号相等，音频起点/增益/声像符合计划 1575ms
+ ✓  integration  packages/domain/src/workflow.integration.test.ts (10 tests) 1029ms
+ ✓  integration  apps/worker/src/recovery.integration.test.ts (11 tests) 1063ms
+ ✓  integration  apps/worker/src/preview-render.integration.test.ts (2 tests) 6354ms
+   ✓ 低清预览：时间窗缓存（真实 FFmpeg） (2)
+     ✓ 首次全部渲染、同计划去重；只改后半段 → 前半段复用；拼接与整片渲染逐帧一致 5340ms
+     ✓ 不支持的内容（后端缺能力）→ 预览失败并说明原因，不重试刷费用；失败的预览可再次请求 581ms
+stderr | packages/auth/src/auth.integration.test.ts > Web 会话（Better Auth） > 密码错误登录失败
+2026-10-17T10:35:19.695Z WARN [Better Auth]: Invalid password
+
+ ✓  integration  packages/auth/src/auth.integration.test.ts (15 tests) 5020ms
+   ✓ Web 会话（Better Auth） (4)
+     ✓ 会话过期后解析失败（过期被正确处理） 2490ms
+   ✓ 原生 PKCE 与令牌生命周期 (11)
+     ✓ Access Token 过期被拒（短生命周期） 814ms
+ ✓  integration  apps/api/src/clip-transform-edits.integration.test.ts (8 tests) 4949ms
+   ✓ N03-02 拆分／裁剪／移动／复制／替换源（HTTP + SDK） (8)
+     ✓ split_clip：两段范围守恒、右段为子片段、AV 关联片段同步切分 715ms
+     ✓ split_clip 负面：切点必须在片段内部（含序列起点/终点） 456ms
+     ✓ trim_clip：入出点裁剪保持 1:1 时长、AV 同步；越界与重叠被拒 609ms
+     ✓ move_clip：重定位与跨轨移动保持时长；轨类型/锁定/重叠/长度改变被拒 629ms
+     ✓ duplicate_clip：只复制时间线引用（同一 assetVersionId，不新增原件），AV 对一并复制 465ms
+     ✓ replace_clip_source：新源需时长匹配且可用；切换后既有渲染批准在 revision 维度失效 560ms
+     ✓ 绑定音频区域：移动时随片段平移，裁剪超出局部时钟时 fail-closed 490ms
+     ✓ undo/redo：拆分后逐事件撤销可完整恢复，重做按同一切分参数还原 682ms
+ ✓  integration  packages/domain/src/history.integration.test.ts (11 tests) 3691ms
+   ✓ 项目版本与整项目恢复（§23.2） (3)
+     ✓ 快照不可变：restore 只产生新 revision 与新版本，旧版本行与历史账本逐字节不变 578ms
+     ✓ 恢复的版本可再次恢复（快照互为参照，账本持续追加） 431ms
+     ✓ 恢复不存在的版本 → 404；跨项目 workspace 隔离（版本必须属于该项目） 469ms
+   ✓ 单 Scene 恢复（restore_scene：按 revision 重放） (2)
+     ✓ 重放到指定 revision（同 id、内容与锁状态一并恢复、产生新 revision） 361ms
+   ✓ Undo / Redo（§4.8：补偿事件 + LIFO + 新编辑结束重做分支） (4)
+     ✓ 链式撤销/重做：UNDO_/REDO_ 事件与 compensatesEventId 链路；新编辑结束重做分支 324ms
+     ✓ insert/delete/duplicate/split/reorder 的逆操作（Scene id 稳定复用） 602ms
+(node:14104) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ❯  integration  apps/worker/src/narration.integration.test.ts (3 tests | 3 failed) 1031ms
+   ❯ V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚本导演） (3)
+     × 从文章新建 → 讲述两段首尾相接、逐句字幕 → 编造数字被拒、文章数字通过 → 自检 → 采用后终渲染有声音有卡片 440ms
+     × 进程驱动（部署方接入任意供应商）：按协议逐句调用参考实现，拼成一条音频，句界精确、可解码 2ms
+     × 规则与能力：素材工程默认不允许合成语音；中文讲述被英文声音拒绝；没有文章时数据图解被拒；未配置引擎；移除讲述连同字幕 503ms
+ ✓  integration  apps/worker/src/effects.integration.test.ts (2 tests) 26857ms
+   ✓ V6-3 代码生成特效（真实渲染子进程 + FFmpeg，脚本导演） (2)
+     ✓ 规则拦截 → 显式开启 → 框选区域加特效 → 改参数重渲 → 采用后终渲染只改区域内像素 17762ms
+     ✓ AI 写特效代码：部署关闭时拒绝；开启后先过四道门禁——联网代码被拒（报告交还 AI）；非法时间作为工具错误交还；合法代码渲染成图层 8917ms
+ ✓  integration  apps/api/src/render.integration.test.ts (5 tests) 4660ms
+   ✓ Render Snapshot（P07-03） (5)
+     ✓ 创建渲染冻结输入：自动 FINAL_RENDER 版本 + narration + 资产版本 + 档位画幅 1056ms
+     ✓ **渲染中编辑当前项目不改变该次 Render 输入**（核心验收点） 751ms
+     ✓ 前置校验：空项目 → 409/422；跨工作区版本 → 404 1016ms
+     ✓ 状态机单向：QUEUED→RENDERING→QA→READY；非法迁移 409；审计事件递增 661ms
+     ✓ 隔离：跨租户创建/查询 → 404 812ms
+ ✓  integration  apps/worker/src/custom-motion.integration.test.ts (3 tests) 4706ms
+   ✓ Custom Motion 生成（P07-02 端到端） (3)
+     ✓ 合法 Motion → 四道门禁通过 → 代码/依赖/输入/产物版本落库（sha256 复核） 1401ms
+     ✓ 门禁拒绝 → 任务 FAILED_FINAL + **零组件行/零对象**（失败不能进入项目） 941ms
+     ✓ 组件版本不可变：同场景再次生成 → 新版本行（latestVersionNumber 递增） 2261ms
+ ✓  integration  apps/api/src/clip-precision-edits.integration.test.ts (8 tests) 5267ms
+   ✓ N03-03 精剪：ripple／roll／slip／slide 与 J/L cut（HTTP + SDK） (8)
+     ✓ slip：只平移源入出点，序列位置与时长不变；AV 关联片段同步滑移 649ms
+     ✓ slip 负面：滑移不得改变时长，且源必须可用 449ms
+     ✓ slide：位移由左右邻居吸收，合成总时长不变；无邻居/handle 不足被拒 538ms
+     ✓ roll：移动相邻剪辑点，左右两段合成不变，源入出点同步移动 460ms
+     ✓ ripple：掐头/去尾/删除都会收缝并逐段落事件报告位移，其他原语不隐式涟漪 661ms
+     ✓ ripple 负面：单轨收缝会破坏 AV 同步时 fail-closed；金额越界被拒 499ms
+     ✓ split_av_cut（J/L）：音频切点相对视频错开，切换处原音连续 515ms
+     ✓ undo/redo：四种精剪各自逐事件撤销可完整复原 1143ms
+ ✓  integration  apps/api/src/security-ops.integration.test.ts (5 tests) 4458ms
+   ✓ SaaS 安全运营（P09-05） (5)
+     ✓ 恶意文件扫描：EICAR 上传被拒（不落盘）+ 审计；干净文件正常落盘可取回 581ms
+     ✓ 旧运营直写在 AdminAction 接线前全部拒绝且不产生副作用 624ms
+     ✓ 旧支持授权直写关闭，未授权视图与跨工作区读取被拒绝且不留伪访问记录 531ms
+     ✓ 支持视图逐人、逐工单、逐工作区授权；其他运营者不能借同一 scope 横向访问 1319ms
+     ✓ 未完成安全投影的旧 Admin 列表拒绝，已审查的 Provider 聚合仍可读取 581ms
+ ✓  integration  apps/api/src/proposal-adoption.integration.test.ts (10 tests) 4856ms
+   ✓ N06-01／02／04 私有候选 → 确定性试改 → 原子采用（HTTP + SDK） (7)
+     ✓ 创建候选与试改都不改工程；试改用真实执行器，结果与采用一致 715ms
+     ✓ 29.97fps 序列：非整毫秒帧边界的试改返回精确区间而不是 422（代码审查 P0-1 回归） 392ms
+     ✓ 幂等采用：同一幂等键重放返回同一结果且不产生第二次写入 410ms
+     ✓ 采用绑定校验：版本过期、操作哈希不符、已丢弃都拒绝且确认版不变 483ms
+     ✓ 采用失败即失败：锁定目标导致执行失败时候选保持 OPEN 且不显示已采用 412ms
+     ✓ N06-02 整批原子：A 可执行、B 被锁 → 整批不采用，A 也不落地（不过滤掉 B 后伪成功） 450ms
+     ✓ 候选绑定选择锚点：锚点变化后采用被拒（指纹不符） 381ms
+   ✓ N06-04 局部试片缓存与依赖失效（HTTP + SDK） (3)
+     ✓ 同一依赖重复试改命中缓存（cached=true），不重复跑执行器也不重复写缓存 416ms
+     ✓ 素材版本依赖变化 → 依赖键变化、自然失效并重新计算 395ms
+     ✓ 显式失效与采用后清理：缓存不返回陈旧试片 453ms
+ ✓  integration  apps/api/src/team.integration.test.ts (5 tests) 4542ms
+   ✓ 团队与隐私（P09-04） (5)
+     ✓ 邀请生命周期：创建 → 我的待处理 → 邮箱不匹配 403 → 接受 → 重复接受 409 → 撤销的邀请不可接受 → 可重新邀请 1058ms
+     ✓ 席位（降级清晰超额）：新增/邀请被阻止（422）、存量成员保留、overCommitted 可见；接受时权威复查 977ms
+     ✓ 撤销成员后访问立即受限：下一请求 404（抗枚举）、Workspace 列表移除 486ms
+     ✓ 隐私档位：套餐门（FREE 明确 422）→ STUDIO 可设 PRIVATE → 降级不静默改写（overCommitted 含 privacyMode） 620ms
+     ✓ 角色管理：非 OWNER 不能授予 OWNER（成员/邀请两侧）；不得移除最后一名 OWNER 652ms
+ ✓  integration  apps/api/src/voice-clone.integration.test.ts (5 tests) 3807ms
+   ✓ Voice Clone（P10-02） (5)
+     ✓ 音质检测：干净样本 PASS；过短/削波 FAIL（保留可复核）；非 WAV → 422（不伪造检测） 1099ms
+     ✓ 未授权不提交：无 Consent → 422 且 **Provider 零调用**；Consent 确认后 Instant → READY 绑定身份；撤销后再次拒绝 622ms
+     ✓ Professional 训练失败可恢复：SUBMITTED → TRAINING → FAILED(retryable) → retry → READY 657ms
+     ✓ 生命周期三态可区分：退休（本地保留）→ 平台解绑（Provider 保留）→ Provider 删除（不可恢复） 559ms
+     ✓ 门槛与边界：无合格样本 422；BYOK 无连接 422；非法样本引用 404 500ms
+ ✓  integration  apps/api/src/events.integration.test.ts (7 tests) 3874ms
+   ✓ 事件游标与 SSE（§34） (5)
+     ✓ 游标快照 / cursor=0 全量重放 / 事件帧含 seq 与类型 497ms
+     ✓ 非法游标 → 400；游标超出 head → 409 CURSOR_AHEAD（附 headSeq 供刷新） 391ms
+     ✓ 断线重连能恢复状态：拉取 → 断开 → 新事件 → 带游标续传（不丢不重） 398ms
+     ✓ SSE 实时流：断线期间的编辑在重连后经 Last-Event-ID 续传补齐 501ms
+     ✓ 越权：非成员访问事件游标/列表/流 → 404 510ms
+   ✓ 通知（Outbox 消费者 + 持久化 inbox） (2)
+     ✓ 消费者：编辑后为其他成员生成未读通知（不通知发起人；未读合并）；标记已读 779ms
+     ✓ 越权：他人通知不可读（404）；消费者重复运行不重复派发 447ms
+ ✓  integration  apps/api/src/publications.integration.test.ts (6 tests) 4025ms
+   ✓ 发布核心（P13-01） (6)
+     ✓ N02-07：冻结版本使用到期素材时，新发布在调用 Provider 前被阻止 616ms
+     ✓ 未批准版本不能发布：无批准 → 409；manifest 漂移 → 409；输出资产不属于该版本 → 422 904ms
+     ✓ 批准后发布成功；**重复请求只形成一个逻辑发布**（deduped=true；不重发） 520ms
+     ✓ 对账以 Provider 为准（不自动重发）；能力分级：无 DIRECT_PUBLISH → 422；未注册平台 → 501 452ms
+     ✓ P14-01 采集发布表现：保存采样口径、缺失指标为 null；授权撤销后停止调用 595ms
+     ✓ P14-04/05 Finance Pack：六类产物冻结许可证与模板版本，缺失值拒绝且跨租户不可枚举 600ms
+ ✓  integration  apps/api/src/clip-edits.integration.test.ts (8 tests) 4517ms
+   ✓ N03-01 插入／覆盖／追加（HTTP + SDK） (8)
+     ✓ INSERT：新片段落位并涟漪右移后续片段，源范围与既有内容不变，序列时长不变 730ms
+     ✓ INSERT：插入点落在片段内部时切分该片段，左段留位、右段右移，不产生重叠 377ms
+     ✓ OVERWRITE：覆盖区间内整体删除／尾部裁切／内部切分，源范围同步对齐 612ms
+     ✓ APPEND：追加到目标轨道末端，既有片段与间隙不变 333ms
+     ✓ 负面路径：轨道锁定与片段锁定分别拒绝（409 EDIT_IMPACT_LOCKED / CLIP_LOCKED） 509ms
+     ✓ 负面路径：源未就绪/缺校验和/源范围越界被拒绝，且不产生部分写入 500ms
+     ✓ 纯素材项目（无 NarrativePlan）：插入片段引用 READY 源版本并可取到真实播放字节 384ms
+     ✓ 插入写入事件日志，undo 逐个事件反演后可完整恢复到插入前状态 718ms
+ ✓  integration  apps/api/src/clip-track-edits.integration.test.ts (8 tests) 5283ms
+   ✓ N03-04 多轨、AV 链接与轨道控制（HTTP + SDK） (8)
+     ✓ create_track／move_track：位置占用自动让位，重排后 position 连续可排序 645ms
+     ✓ update_track：关闭一轨只影响该轨（静音/隐藏/独奏/锁定状态进入投影，其他轨与片段不变） 501ms
+     ✓ update_track 改 position：按重排语义落位且可撤销（V5-M1 修复：旧实现唯一索引冲突 500） 631ms
+     ✓ set_sequence_duration（V6-1 成片长度）：延长后可插到原终点之后；缩短越过内容 409；撤销/重做按事件恢复 677ms
+     ✓ delete_track：非空轨默认拒绝；MOVE_CLIPS 迁走片段后删除并重排位置 506ms
+     ✓ set_av_link：链接需一视频一音频且时长相等；解链后视频 trim 不误裁音轨；undo 恢复关联 902ms
+     ✓ 同步锁决定涟漪联动范围：只收本轨 + 同步锁轨道，破坏声画同步的收缝 fail-closed 615ms
+     ✓ 解链后单轨涟漪不再要求跨轨（同步锁未开也不得隐式联动别人） 430ms
+ ✓  integration  apps/api/src/output-enhancements.integration.test.ts (4 tests) 3697ms
+   ✓ 输出增强包（P10-05） (4)
+     ✓ 主路径：与已批准正式版本绑定；章节/编码参数/来源/署名/封面逐项一致；描述可溯源 1188ms
+     ✓ 无封面产物 → 明确 warning（不假称有封面）；缺署名文本 → warning（不编造署名） 758ms
+     ✓ 一致性失败：章节超出正式成片时长 → 422 CONSISTENCY_VIOLATION（不静默修正） 701ms
+     ✓ 未批准 → 409 NOT_APPROVED（发布物只能来自已批准正式版本） 665ms
+ ✓  integration  apps/api/src/edits.integration.test.ts (5 tests) 3111ms
+   ✓ 编辑事务（HTTP / SDK） (5)
+     ✓ AC-03：同幂等键重放返回原结果，EditEvent 不重复 519ms
+     ✓ §4.6 同 Scene 并发：HTTP 竞争恰一个成功，409 携带刷新信息 362ms
+     ✓ N01-07 SDK 透传对象锁；无 sceneId 的重排仍执行间接影响检查 430ms
+     ✓ N01-09 SDK 往返权威工程状态和事件，保留新字段并拒绝未知 schema 与越权读取 1178ms
+ ✓  integration  apps/api/src/proposal-rebase.integration.test.ts (8 tests) 3828ms
+   ✓ N06-03 影响集、陈旧提案与受控 rebase（HTTP + SDK） (8)
+     ✓ 创建候选即记录读写集与具体写目标（对象 + 维度） 502ms
+     ✓ 两端改不同片段：无竞争 → 受控 rebase 后仍可原子采用 661ms
+     ✓ 改同对象同维度：报告冲突并拒绝 rebase，且绝不以最新 revision 强覆盖 451ms
+     ✓ 同对象不同维度：不构成竞争，可受控合并 458ms
+     ✓ 间接影响可检测：涟漪位移到的片段同样计入冲突 405ms
+     ✓ 源素材绑定变化 → 必须重新审核，不得 rebase 318ms
+     ✓ 绑定锚点指纹变化 → 必须重新审核 351ms
+     ✓ 已在最新 revision：rebase 为幂等空操作（不写库、不推进计数） 339ms
+ ✓  integration  apps/api/src/selection-anchor.integration.test.ts (8 tests) 3533ms
+   ✓ N04-09 SelectionAnchor 归一与旧 Attention 兼容（HTTP + SDK） (4)
+     ✓ 保存/读回一致且不改工程；重复保存产生新锚点修订；指纹稳定 560ms
+     ✓ 旧 inline 选择经适配器解析一次：场景/素材范围都能变成规范锚点且时间走有理时基 325ms
+     ✓ 负面：跨项目目标 422、跨租户读取 404、帧哈希不能当身份 422 606ms
+     ✓ 重映射：目标消失 → FAILED，重复素材引用 → AMBIGUOUS（附候选证据），源版本换代 → STALE 433ms
+   ✓ N04-10 刷新/嵌套/时序变更后的锚点自动恢复（HTTP + SDK） (4)
+     ✓ FOLLOW_OBJECT：片段移动后时间选择按位移跟随，且刷新幂等不重复追加修订 320ms
+     ✓ FOLLOW_SOURCE：片段修边后时间选择经源映射重投影到新序列区间 312ms
+     ✓ 嵌套失效：父序列缺失时恢复为 PARTIAL 并写明原因（不静默当作有效） 321ms
+(node:756) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓  integration  apps/api/src/studio.integration.test.ts (4 tests) 3206ms
+   ✓ V6-1c 共看片室（HTTP + SDK） (4)
+     ✓ 新建工程 → 工作台状态：序列/轨道/会话就绪，只列用户素材，理解进度按处理器聚合 522ms
+     ✓ 撤销这次修改：一批事件一组撤销，之后可逐条重做；无可撤销 409；VIEWER 403；跨工作区 404 1220ms
+     ✓ 从文章新建（V6-5）：图文工程，文章存进简报；配音按新建时的选择；没有文章不能单独选配音 377ms
+     ✓ 制作规则开关（V6-3）：默认关闭程序化特效；编辑者显式开关；VIEWER 403；跨工作区 404；空修改被拒 749ms
+ ✓  integration  apps/api/src/approval.integration.test.ts (3 tests) 3182ms
+   ✓ 审批与受控导出（P07-06） (3)
+     ✓ 未批准不能导出（409）；批准绑定 manifestHash → 导出四件签名 URL，**下载字节与 Manifest 一致** 1168ms
+     ✓ 批准后 manifest 变化 → 409 APPROVAL_STALE（需重新审批）；重新批准恢复导出 715ms
+     ✓ 驳回后不能导出；非 READY 不可审批；跨租户 404 937ms
+ ✓  integration  apps/api/src/master-narration.integration.test.ts (5 tests) 3008ms
+   ✓ Master Narration 与 Alignment（P06-03） (5)
+     ✓ 逐段合成 → 拼接（WAV + Asset）→ 全局 Alignment（绝对时间轴）与 cues 652ms
+     ✓ 局部重建：改一句话 → 仅该段重新合成（TTS +1），其余段命中缓存且对齐更新 546ms
+     ✓ 无时间戳且未配置对齐器 → 501 TIMESTAMPS_UNAVAILABLE（不接受按字数估计） 394ms
+     ✓ Provider 无时间戳 + 配置 AlignmentProvider → alignmentMethod=ALIGNMENT_PROVIDER 576ms
+     ✓ 未绑定声音身份 → 409 VOICE_IDENTITY_REQUIRED；跨租户 → 404 479ms
+ ✓  integration  apps/worker/src/media-probe.integration.test.ts (5 tests) 3526ms
+   ✓ N02-02 media probe worker (5)
+     ✓ upload confirmation and probe job are atomic; real VFR probe makes the asset READY 576ms
+     ✓ V6-1: a byte-identical upload reuses the probe result, copies duration, and schedules its own analysis runs 533ms
+     ✓ corrupt MP4 signature is not marked usable and the immutable original remains available for recovery 305ms
+     ✓ generates a VFR editing proxy, preserves the source and rebuilds a missing derivative 994ms
+     ✓ builds a paginated source-time index and keeps playable media intact when a rebuild fails 1026ms
+ ✓  integration  apps/api/src/clip-caption-edits.integration.test.ts (6 tests) 3893ms
+   ✓ N03-07 字幕与转写驱动剪辑（HTTP + SDK） (6)
+     ✓ update_caption 只改字幕：片段与音轨零变化；空文案与越界被拒 756ms
+     ✓ split_caption 断句：词条切分、文本按词重建，否定词与数字逐字保留 401ms
+     ✓ cut_caption_range：CAPTION_ONLY 只删词改文案（时间线零变化），与 CUT_CONTENT 明确区分 435ms
+     ✓ cut_caption_range CUT_CONTENT：片段收缝、字幕跟随左移、跨切口字幕裁剪删词、越界与包含他条被拒 666ms
+     ✓ CUT_CONTENT 收缝尊重锁：被剪/被平移的片段锁住对应维度 → 409 且零写入（V5-M1 修复） 457ms
+     ✓ undo/redo：断句与剪内容都可逐条撤销回源状态；SRT/VTT 输出反映编辑结果 836ms
+ ✓  integration  apps/api/src/packs.integration.test.ts (3 tests) 2784ms
+   ✓ Pack 运行时（P11-03） (3)
+     ✓ 官方 Pack 幂等安装 + 启用（权益白名单）+ 绑定（版本锁定）+ analyze 闸门链 812ms
+     ✓ 权益白名单：FREE 套餐（packs:[]）下启用 → 403（PACK_NOT_ENABLED）；analyze 同样 403 610ms
+     ✓ 受限上下文能力门控：未声明 read_content_core 的 Pack → ctx.data.core=null 且 atoms 空 621ms
+ ✓  integration  apps/api/src/multilingual.integration.test.ts (3 tests) 2610ms
+   ✓ 多语言（P12-04） (3)
+     ✓ 翻译 + 重新合成：新语言 Master（全新时间戳）；词典替换生效；引用逐块回链；作业落库 896ms
+     ✓ 数字不一致 fail-closed：Mock 抹掉数字 → 422 NUMBERS_CHANGED；不落库、不合成 636ms
+     ✓ 词典 kind 门与源旁白闸门：非法 kind → 422；无源 Master → 409 SOURCE_NARRATION_MISSING 727ms
+ ✓  integration  apps/api/src/mixdown.integration.test.ts (4 tests) 2675ms
+   ✓ 字幕与混音（P06-06） (4)
+     ✓ 字幕由 Alignment 派生：SRT/VTT 时间码与文本逐项对应；样式覆盖生效 668ms
+     ✓ 混音计划：旁白区间来自 cues；音乐轨含淡入淡出 + ducking；**不调用 TTS** 482ms
+     ✓ 无重叠双人声：NARRATION 轨在客户端契约与**服务端**双层被拒 475ms
+     ✓ 未生成 Master → 409；跨租户 → 404 693ms
+ ✓  integration  apps/api/src/clip-mix-edits.integration.test.ts (4 tests) 2919ms
+   ✓ N03-06 基础混音与原声保护（HTTP + SDK） (4)
+     ✓ 增益只改相应区域：其他区域与轨道不动，源素材与源音不变（非破坏） 706ms
+     ✓ 混音计划 fail-closed：会削波 → 422；全部静音/未独奏 → 409；正常混音给出余量 574ms
+     ✓ 原声保护：改动源时钟的编辑被拒，增益/淡入淡出仍允许（语言内容未改） 571ms
+     ✓ 基础 crossfade：相邻区域铺等功率淡入淡出；不相邻/时长越界被拒；撤销恢复源音参数 727ms
+ ✓  integration  apps/api/src/narrative.integration.test.ts (5 tests) 2445ms
+   ✓ Narrative 生成（P04-03） (5)
+     ✓ 合法输出：结构化计划落库（章节/旁白/事实引用/估计时长）；版本 revision=1 471ms
+     ✓ 有限修复：可修复输出（未知字段/折算/缺省）自动规整并记录；不可修复 → 422（最多 2 次调用） 306ms
+     ✓ 锁定文字保留：再生成后锁定旁白逐字不变；模型改写被回滚、丢失被补回 345ms
+     ✓ 编辑旁白块：锁定后修改文本 → 409；解锁后可改且时长重估；跨租户 404；VIEWER 403 710ms
+ ✓  integration  apps/api/src/podcast.integration.test.ts (3 tests) 2563ms
+   ✓ Podcast（P12-05） (3)
+     ✓ 生成：视觉指涉句移除+逐句披露；PODCAST 变体全新 Master（**不进视频主链**）；章节=真实 cue；元数据/署名完整 913ms
+     ✓ validate 篡改可复现：章节时间戳改写 → CHAPTERS_MISMATCH；脚本再注入视觉指涉 → VISUAL_REFERENCE_PRESENT 700ms
+     ✓ 闸门：无源 Master → 409 PODCAST_SOURCE_MISSING；全视觉块 → 422 NO_AUDIO_CONTENT 597ms
+ ✓  integration  apps/api/src/proposal-partial-adoption.integration.test.ts (5 tests) 2710ms
+   ✓ N06-05 采用、继续微调、拒绝与部分采用（HTTP + SDK） (5)
+     ✓ 音画配对闭包：只选画面那半边 → 自动并入音频侧，作用范围如实回报 804ms
+     ✓ 引用闭包：只选依赖创建结果的操作 → 自动并入创建操作 430ms
+     ✓ 闭包覆盖全部操作 → COMMITTED；部分采用后不能再采用（防重复写入） 459ms
+     ✓ 非法选择集（越界下标）→ 422 PROPOSAL_PARTIAL_SCOPE_INVALID，零写入 346ms
+     ✓ 操作哈希不符 → 409（部分采用也要确认"看到的就是这一份"） 318ms
+ ✓  integration  apps/api/src/assets.integration.test.ts (14 tests) 2539ms
+   ✓ 资产上传链路（§26.1：意图 → 直传 → 确认） (10)
+     ✓ 确认后 Ready：真实探测大小/SHA-256/尺寸；版本不可变；下载 URL 带 TTL 380ms
+ ✓  integration  apps/api/src/proposal-lifecycle.integration.test.ts (5 tests) 2468ms
+   ✓ N06-06 提案替代、取消与晚到结果隔离（HTTP + SDK） (5)
+     ✓ 新指令取代同谱系旧候选；旧代际晚到产物被隔离，仍只展示最新意图 600ms
+     ✓ 无谱系的候选互不取代（都保持 OPEN） 346ms
+     ✓ 取消：标记 CANCELLED 且保留已有结果；取消后回调不改变 acceptedRevision 515ms
+     ✓ 孤儿产物隔离：代际陈旧 → bound=false（不自动绑定） 314ms
+     ✓ 隔离产物按保留策略清理；已绑定产物保留为候选结果证据 346ms
+ ✓  integration  apps/api/src/agent.integration.test.ts (2 tests) 2759ms
+   ✓ AI 导演 HTTP 面（V6-1a） (2)
+     ✓ 说一句话 → 202 → Worker 推进 → 回应 + 提案 → 采用后时间线落地；工具目录可见；幂等与并发 1362ms
+     ✓ 未配置导演模型 → 轮次明确失败；取消进行中的轮次；VIEWER 403；跨工作区 404 1042ms
+ ✓  integration  apps/api/src/ai-edit.integration.test.ts (5 tests) 2908ms
+   ✓ AI Edit（P05-06） (5)
+     ✓ 生成计划不落库：项目 revision 与场景不变；计划结构完整（before/after/impact/rationale） 663ms
+     ✓ Apply：计划经统一编辑协议提交（revision 条件）→ 变更生效；随后可撤销 607ms
+     ✓ 锁定场景：操作被剔除并告警（绝不自动解锁）；全部被剔除 → 422 NO_CHANGES 474ms
+     ✓ 非法计划：引用不存在场景 → 422；不可解析输出 → 重试一次后成功（attempts=2） 400ms
+     ✓ 整批不提交：一项非法操作（引用被删除的场景）→ 应用报错且数据库无变化 402ms
+ ✓  integration  apps/api/src/admin-support-grants-scope.integration.test.ts (2 tests) 2771ms
+   ✓ N15-03 ticket-scoped support grant list (2)
+     ✓ filters workspace, beneficiary and ticket before LIMIT; returns only safe metadata 455ms
+     ✓ denies SUPPORT_L2 without a matching finite scope 326ms
+ ✓  integration  apps/api/src/credits.integration.test.ts (3 tests) 2044ms
+   ✓ Credits 商业化（P09-03） (3)
+     ✓ 充值：网页跳转不入账；事件入账一次（重复事件余额不变）；对账一致 472ms
+     ✓ 旧管理写入口拒绝赠送与退款；账本服务保持追加和退款幂等 557ms
+ ✓  integration  apps/api/src/clip-transform-params.integration.test.ts (5 tests) 3192ms
+   ✓ N03-05 可编辑变换与基础关键帧（HTTP + SDK） (5)
+     ✓ 变换/裁切/透明度是参数化修改：不重生成镜头、不新增 Scene，旧片段缺省即旧语义 660ms
+     ✓ 关键帧（线性/保持）写入后读回一致，并可用于变换属性路径 512ms
+     ✓ 裁切/旋转前后命中坐标可检验（同一纯函数供预览与命中检测） 487ms
+     ✓ 负面路径：空裁切、越界缩放/透明度被拒且无部分写入 490ms
+     ✓ 拆分/复制继承变换参数，undo 逐事件恢复参数 704ms
+ ✓  integration  apps/api/src/evidence.integration.test.ts (6 tests) 2574ms
+   ✓ 证据与数据（P04-02） (6)
+     ✓ 抽取：Claim 带 Citation（块+字符区间+引文）与数值归一；可追溯链完整 452ms
+     ✓ 可追溯链：Citation → Source（URL/内容哈希）可解析；跨项目来源被拒 353ms
+     ✓ fact 类 Claim 必须有来源；锁定后拒绝修改（§8.2） 338ms
+     ✓ 缺数据不会自动生成虚构数列：降级阶梯 + 数据集绑定门控 371ms
+     ✓ 越权：跨租户不可读写 Claim/Dataset（404） 457ms
+ ✓  integration  apps/api/src/social-visual.integration.test.ts (3 tests) 2626ms
+   ✓ Social Visual Pack（P12-02） (3)
+     ✓ generate：页序（封面→图表→信息图→来源页）、平台尺寸、图表可追溯、署名、长文本拆页 902ms
+     ✓ validate 篡改可复现：页序/尺寸/署名/图表可追溯/文字预算逐项报错 622ms
+     ✓ 闸门与窗口：未 analyze → 409；素材偏薄时页数/图表缺口以 warning 披露（不冒充达标） 764ms
+ ✓  integration  apps/api/src/shorts-pack.integration.test.ts (3 tests) 2310ms
+   ✓ Shorts Pack 完整链路（P12-01） (3)
+     ✓ generate 产出 9:16 派生 Graph（Hook/字幕/来源卡）；**原长视频不被修改** 792ms
+     ✓ validate：自产产物通过（无 error）；篡改安全区/来源后明确报错（可复现） 603ms
+     ✓ 闸门：未 analyze 即 generate → 409 ANALYZE_REQUIRED；跨项目产物 validate → 404 574ms
+stderr | apps/api/src/document-import.integration.test.ts > 文档导入（P10-01） > PDF：文本层提取 + 缺页逐页记录；**扫描件（无文本层）→ 422 SCANNED_PDF_NO_TEXT（不伪造成功）**
+Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+
+stderr | apps/api/src/document-import.integration.test.ts > 文档导入（P10-01） > PDF：文本层提取 + 缺页逐页记录；**扫描件（无文本层）→ 422 SCANNED_PDF_NO_TEXT（不伪造成功）**
+Warning: Indexing all PDF objects
+
+ ✓  integration  apps/api/src/document-import.integration.test.ts (5 tests) 3566ms
+   ✓ 文档导入（P10-01） (5)
+     ✓ Markdown：GFM 表格保留（columns/rows）+ 标题/列表/引用 + 出处（内容寻址 URN + 哈希） 506ms
+     ✓ DOCX：表格保留；嵌入图片明确警告；dc:title 作为标题提示 363ms
+     ✓ PDF：文本层提取 + 缺页逐页记录；**扫描件（无文本层）→ 422 SCANNED_PDF_NO_TEXT（不伪造成功）** 1632ms
+     ✓ Newsletter：.eml（multipart → text/html；附件列明不提取）与 .html 导出件 307ms
+     ✓ 安全与错误处理：EICAR 文档 → 422（未解析）+ 审计；不支持的扩展名 → 415；空文件 → 400 384ms
+ ✓  integration  apps/api/src/speech-plan.integration.test.ts (3 tests) 2317ms
+   ✓ Speech Director（P04-06） (3)
+     ✓ 供应商无关 SpeechPlan：角色/停顿/强调/发音覆盖 + **Provider 私有参数零泄漏** 605ms
+     ✓ 风格版本化：SpeechProfile 更新 → 计划引用新版本与新语速；锁定旁白逐字使用 496ms
+     ✓ 请求覆盖：显式指定身份与风格档案（source=REQUEST）；跨租户 404 877ms
+ ✓  integration  apps/api/src/text-pack.integration.test.ts (3 tests) 2405ms
+   ✓ Text Pack（P12-03） (3)
+     ✓ generate：Thread 装条（逐字引用）+ 短文/文案 + Newsletter 分节；引用可重建 840ms
+     ✓ validate 篡改可复现：引用改写 / 无来源引文 / 超限 / 顺序错乱逐项报错 588ms
+     ✓ 长度冲突不改文字：单句超过单条上限 → 该形态列入 unavailableFormats 并说明原因 632ms
+(node:30960) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓  integration  apps/api/src/content.integration.test.ts (6 tests) 3116ms
+   ✓ 输入归一化（P04-01） (5)
+     ✓ URL 文章 → ContentDocument + Source（快照哈希）；块落库可读回 433ms
+     ✓ Sources 编辑（仅元数据）：可改标题/备注；内容与哈希不可改；跨租户 404；VIEWER 403 617ms
+     ✓ 错误信封形状符合契约（HTTP 层 {error:{code,message,requestId,details}}） 484ms
+   ✓ 从链接导入文章（V6 文章讲述的起点） (1)
+     ✓ 编辑者：抓取并抽正文给人核对（不写库）；查看者 403；内网地址被拦；跨工作区 404 686ms
+ ✓  integration  apps/api/src/search-exports.integration.test.ts (3 tests) 2648ms
+   ✓ 搜索与导出（P10-06） (3)
+     ✓ 搜索：跨实体命中且**租户内 + 排除软删**（废弃项目/已删资产/他租户不出现）；Component 来自目录；过短 400 1153ms
+     ✓ Graph 导出：可移植 JSON（引用式资产）；**无存储键/Secret/URL**；来源自包含；废弃项目 409 577ms
+     ✓ 原素材 Bundle：缺权素材明确列出（许可限制/渲染产物）；签名 URL 真实可下载且 sha 一致；**无存储键/Secret** 552ms
+ ✓  integration  apps/api/src/render-qa.integration.test.ts (3 tests) 3254ms
+   ✓ Final QA HTTP/SDK（P07-05） (3)
+     ✓ 渲染前预检：完整项目 → 无阻止项（内容检查来自当前项目状态） 1082ms
+     ✓ 缺 Master Narration → 预检阻止项失败（不在渲染后才发现） 550ms
+     ✓ QA 触发守卫（非 QA 状态 409）与报告读取（未 QA → null）；跨租户 404 1166ms
+ ✓  integration  apps/api/src/content-protection.integration.test.ts (4 tests) 2713ms
+   ✓ N06-07 已确认内容保护与回归指纹（HTTP + SDK） (4)
+     ✓ 三轮修改后早先认可的内容仍引用相同资产与参数（UNCHANGED） 930ms
+     ✓ 意外移位阻止自动采用：本批附带改动受保护对象 → 409 且零写入 657ms
+     ✓ 显式目标的变化不算范围外：该改的能改 470ms
+ ✓  integration  apps/api/src/plans.integration.test.ts (3 tests) 2435ms
+   ✓ 套餐权益（P09-01） (3)
+     ✓ 目录种子幂等 + 版本化不可变：追加新版本，旧版本行内容不变 366ms
+     ✓ 指派套餐：订阅 append-only（旧行 supersededAt，历史保留；账本行数不变） 533ms
+     ✓ 额度强制执行：FREE 套餐下 栏目/身份/BYOK/4K 均被明确阻止（422/403 + reason） 730ms
+ ✓  integration  apps/api/src/range-edit-ai.integration.test.ts (5 tests) 2618ms
+   ✓ N03-09 范围编辑的最小 AI 入口（HTTP + SDK + Mock LLM） (5)
+     ✓ 「去掉前面废话但保留原音」产出可执行裁剪；未 Apply 不改工程；Apply 后片段真的被裁剪且原声保留 755ms
+     ✓ 不虚构素材：引用不存在片段的操作进入 outOfScope，且不产生可执行计划 354ms
+     ✓ 允许操作之外的操作被明确拒绝并说明原因（不静默丢弃、不整批失败） 350ms
+     ✓ 负面：选中片段不属于该序列 → 422；规划器不可用 → 501 fail-closed 423ms
+     ✓ N06-07 总时长守卫：「其他别动」下变长的计划必须先解释或改等长方案 339ms
+ ✓  integration  apps/api/src/director.integration.test.ts (4 tests) 2346ms
+   ✓ Director（P04-05） (4)
+     ✓ 规划输出：章节标题结构场景 + 图表绑定 + 语音能力 + Provider 未核验诚实阻止 555ms
+     ✓ 应用：验证后原子生效（锁定旁白 → 锁定场景；绑定与旁白保留）；重复应用幂等；非空项目 409 528ms
+     ✓ 预算规则：预算耗尽 → 计划 BLOCKER，应用 402（不得先扣费/先应用） 422ms
+     ✓ 隔离与反枚举：跨租户/未知计划 → 404 482ms
+ ✓  integration  apps/api/src/voice-session.integration.test.ts (7 tests) 2979ms
+   ✓ N05-01 实时语音会话（HTTP + SDK） (7)
+     ✓ 创建会话：短期凭证 + 显式能力，响应不含任何 Provider Key/Secret；无权限用户不能创建 622ms
+     ✓ partial 只写会话草稿：工程 revision 与 edit_events 全程不变；封存才产出 IntentRevision 440ms
+     ✓ 代际隔离与状态门：旧代际/序号倒退/过期/撤销的会话都不能继续执行项目操作 384ms
+     ✓ V5-M3 短期凭证真正被校验：只有签发它的会话可用，伪造/串用 401，撤销 409；凭证不能用于其他端点 316ms
+ ✓  integration  apps/api/src/atoms.integration.test.ts (3 tests) 1873ms
+   ✓ Atom / Recipe / Fit（P11-02） (3)
+     ✓ Atom 追溯：合法创建（claim 引用）与悬空引用 422；列表携带来源 604ms
+     ✓ Recipe：官方种子幂等（三渠道、需求为数据）；Fit：有数字 Atom → RECOMMENDED；空内容 → NOT_RECOMMENDED（200 + BLOCKING） 500ms
+     ✓ Fit OPTIONAL 与 BLOCKING 边界：CAROUSEL 素材薄 → OPTIONAL；YOUTUBE_EXPLAINER 事实不足 → NOT_RECOMMENDED；迁移后 digest 随评估输出 425ms
+ ✓  integration  apps/api/src/content-core.integration.test.ts (4 tests) 2205ms
+   ✓ Content Core 迁移（P11-01） (4)
+     ✓ 迁移一致：claims/sources 1:1（逐条对照）；facts = fact 事实性子集；relations 不推断；原文档保留 592ms
+     ✓ 幂等：输入未变重跑 → reused=true（同一行同一 migratedAt）；state 实时计数对照 437ms
+     ✓ 原始侧漂移可发现：迁移后新增声明 → state 对照不一致；重跑重建（reused=false、计数更新） 471ms
+     ✓ 空项目 → 422 NOTHING_TO_MIGRATE（无可迁移对象） 360ms
+ ✓  integration  apps/api/src/retention.integration.test.ts (12 tests) 2891ms
+   ✓ Trash（软删 / 恢复 / 隔离） (5)
+     ✓ 软删除后默认列表不可见（可经 trashed 视图查询），恢复期内可恢复且读写恢复 374ms
+     ✓ Trash 到期：项目整体硬删（含场景/版本/事件），其资产与对象一并清理 308ms
+     ✓ 可重入：清理中断后重跑收敛、**重跑不误删**（第二次全零，其他租户数据完好） 333ms
+     ✓ 引用保护：Scene 绑定与项目版本快照阻止硬删；解绑/快照清理后收敛 332ms
+ ✓  integration  apps/realtime/src/gateway.integration.test.ts (5 tests) 1822ms
+   ✓ V6-2 Realtime Gateway (5)
+     ✓ 等不到后半句：到时交出；关麦时还在说的一句也交出 460ms
+     ✓ AI 语音回应（Issue #9）：只按 id 念本作品这一轮的回应；边合成边下发；用户开口立即中止；stop-speaking 中止；别的作品的轮次不念 724ms
+ ✓  integration  apps/api/src/proposal-trial-cache.integration.test.ts (4 tests) 1973ms
+   ✓ N06-04 收口：TTL / 容量 / 保留清理 / 可观测（HTTP + SDK + 真实数据库） (4)
+     ✓ 过期试片不再命中（TTL 兜底），并计入 stats.expired 548ms
+     ✓ 容量上限：超出按最旧淘汰，只保留最新 N 行 491ms
+     ✓ 保留清理：retention sweep 清掉过期试片并计入报告 345ms
+ ✓  integration  apps/api/src/admin-storage-scope.integration.test.ts (1 test) 2059ms
+   ✓ Admin storage scoped projection (1)
+     ✓ returns only A aggregates and rejects B, platform-only, no-scope, and missing-workspace reads 571ms
+ ✓  integration  apps/api/src/admin.integration.test.ts (3 tests) 1887ms
+   ✓ 最小运营（P08-02） (3)
+     ✓ 角色分离：普通用户（含 OWNER）→ 404 反枚举；未认证 → 401；管理员可访问 566ms
+ ✓  integration  apps/api/src/cms.integration.test.ts (3 tests) 1933ms
+   ✓ CMS 输入（P13-06） (3)
+     ✓ HTML 直供：机器建项目 + 摄取；**同一事件重放 deduped=true 不重复建项目**；正文变化 → 同项目新来源版本（旧文档保留） 556ms
+     ✓ URL 路径（抓取器）：同 URL 重放 deduped（hash 基于内容字节）；首次建项目 408ms
+     ✓ P13-07 回写目标 API：Secret 只回掩码；私网 URL 拒绝；跨租户反枚举 614ms
+ ✓  integration  apps/api/src/custom-motion.integration.test.ts (3 tests) 1655ms
+   ✓ Custom Motion HTTP/SDK（P07-02） (3)
+     ✓ 发起生成 → 任务入队；同参数重复提交 → 去重复用（双击只提交一次） 493ms
+     ✓ 非 CUSTOM_MOTION 场景 → 422（不冒充标准组件） 328ms
+     ✓ 隔离：跨租户发起/查询 → 404 479ms
+ ✓  integration  apps/api/src/credentials.integration.test.ts (5 tests) 1602ms
+   ✓ HTTP/SDK：密钥不外泄与跨租户隔离（REQ-51-06 收尾） (2)
+     ✓ 创建/读取/轮换/测试/撤销：响应均无 Secret；能力不足（VIEWER）403；跨租户 404 且无法使用 811ms
+ ✓  integration  apps/api/src/proposal-compare.integration.test.ts (3 tests) 1730ms
+   ✓ N06-08 A/B 比较与差异标记（HTTP + SDK） (3)
+     ✓ 与当前确认版对照：标出内容变化与未变片段，并回带实际素材版本 608ms
+     ✓ 片段数/时长不同：按内容锚点对齐（相同锚点不错位） 373ms
+     ✓ 候选之间 A/B 对照：同样回带两侧实际素材版本，且不改工程 399ms
+ ✓  integration  apps/api/src/platforms.integration.test.ts (3 tests) 1615ms
+   ✓ 其他平台能力矩阵（P13-03） (3)
+     ✓ 生效能力为空 → 核心闸门 fail-closed（各平台一致拒绝；无远端调用） 587ms
+     ✓ 能力分级经错误透出：P1（TIKTOK）与 P4（X/抖音）的 tier 语义在响应中可区分 479ms
+ ✓  integration  apps/api/src/admin-projects-scope.integration.test.ts (1 test) 1573ms
+   ✓ Admin projects scoped projection (1)
+     ✓ filters in SQL before LIMIT and returns only the safe workspace summary 393ms
+ ✓  integration  apps/api/src/admin-jobs-scope.integration.test.ts (1 test) 1446ms
+   ✓ Admin jobs scoped projection (1)
+     ✓ filters in SQL before LIMIT, returns only safe fields, and denies missing or wrong workspace scope 406ms
+ ✓  integration  apps/api/src/p04-exit.integration.test.ts (2 tests) 1586ms
+   ✓ P04 阶段退出条件（真实文章 → 可解释/可编辑/来源完整的 Scene Graph） (2)
+     ✓ 全链路端到端：文章 → 文档/抽取 → 叙事 → 视觉 → 导演 → 应用 → 图 → 编辑 → 撤销 791ms
+     ✓ 降级路径同样来源完整：数据不足的数值/图表语义绝不产生伪造图表 463ms
+ ✓  integration  apps/worker/src/mock-provider.integration.test.ts (7 tests) 866ms
+ ✓  integration  apps/worker/src/fish-heygen.integration.test.ts (4 tests) 1682ms
+   ✓ Fish Audio 与 HeyGen 适配器（本地替身服务，协议契约） (4)
+     ✓ Fish 讲述：逐句合成、带密钥与模型、语速交给供应商；拼成 WAV、句界精确；错误不含密钥 341ms
+     ✓ HeyGen 数字人：你的声音 → 上传 → 生成 → 轮询 → 下载；经执行器得到有声视频，任务 id 如实交回 398ms
+     ✓ HeyGen 失败分类：超出报价时长不提交；生成失败不扣费；明确拒绝不扣费；提交时连接中断 = 结果不明 559ms
+stderr | apps/api/src/auth.integration.test.ts > Web 会话（HTTP） > 密码错误 → 401（统一信封，不泄漏原因细节）
+2026-10-17T10:41:42.965Z WARN [Better Auth]: Invalid password
+
+ ✓  integration  apps/api/src/auth.integration.test.ts (10 tests) 1506ms
+ ✓  integration  apps/api/src/payments.integration.test.ts (3 tests) 1497ms
+   ✓ 订阅收款（P09-02；脚本化渠道验证事件矩阵） (3)
+     ✓ 结账返回渠道 URL（**网页返回不入账**）；事件驱动：成功→ACTIVE+订阅、失败→PAST_DUE、续费→ACTIVE、取消→回落默认套餐 540ms
+     ✓ 重复与乱序：同 eventId 不重复生效；早于水位的事件被忽略并审计；伪造签名 401 345ms
+ ✓  integration  apps/api/src/catalog.integration.test.ts (4 tests) 863ms
+   ✓ Provider Catalog（P03-03） (4)
+     ✓ HTTP/SDK：目录读取与能力筛选（workspace:read）；跨租户 404 441ms
+(node:31612) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓  integration  apps/api/src/generations.integration.test.ts (2 tests) 2140ms
+   ✓ V6-7 / V6-8 HTTP：身份档案与付费生成确认 (2)
+     ✓ 身份档案：参考照片、授权（当前声明版本）与撤回；VIEWER 403；跨工作区 404 848ms
+     ✓ 付费生成确认：只有编辑者能确认；未设预算 409；确认 → 进行中 + "确认生成"一轮；放弃；跨工作区 404 951ms
+ ✓  integration  apps/api/src/lineage.integration.test.ts (3 tests) 2345ms
+   ✓ 派生血缘（P11-04） (3)
+     ✓ analyze 追加 PLAN 行（含 digest 快照）；重复 analyze → 两行（只追加，不改写） 760ms
+     ✓ 更新 Core → 旧行 stale=true（提示过期，行与状态不变）；重新 analyze 产生新 digest 行 647ms
+     ✓ 批准不因过期被覆盖：approve → 更新核心（stale=true）→ 行仍 APPROVED；重复 approve 409 590ms
+ ✓  integration  apps/api/src/history.integration.test.ts (4 tests) 2357ms
+   ✓ 历史与恢复（HTTP / SDK） (4)
+     ✓ 版本快照：手动建立 / 列表 / 详情（含快照本体）；恢复后旧版本与旧事件不变 638ms
+     ✓ Undo/Redo（SDK）：补偿链路、重做栈空 409、新编辑结束重做分支 465ms
+     ✓ 角色边界：VIEWER 可读版本列表（200），不可建立版本/撤销（403 含 requiredCapability） 488ms
+     ✓ 非成员访问版本与撤销端点 → 404（抗枚举） 427ms
+ ✓  integration  apps/api/src/visual-grammar.integration.test.ts (4 tests) 1929ms
+   ✓ Visual Grammar（P04-04） (4)
+     ✓ 每个旁白块得到允许类型；图表语义绑定可追溯数据集（data_source_ids） 490ms
+     ✓ 数据不足受控降级：仅 synthetic 数据集 → 不绑定图表，降级为 QUOTE/SOURCE_CARD 并附原因 338ms
+     ✓ 隔离与反枚举：跨租户/未知计划 → 404 463ms
+stdout | apps/worker/src/congestion.integration.test.ts > 队列拥塞（P08-04） > 50 个任务：全部执行且恰好一次（attempts=1；无重复认领）
+[congestion] 50 任务串行执行 1153ms（≈43.4 任务/秒）
+
+ ✓  integration  apps/worker/src/congestion.integration.test.ts (2 tests) 1887ms
+   ✓ 队列拥塞（P08-04） (2)
+     ✓ 50 个任务：全部执行且恰好一次（attempts=1；无重复认领） 1688ms
+ ✓  integration  apps/api/src/youtube.integration.test.ts (3 tests) 2029ms
+   ✓ YouTube Provider（P13-02） (3)
+     ✓ 发布：上传 + 元数据（标题/描述/AIGC 披露逐字）+ 排期字段；状态回填远端引用 650ms
+     ✓ **超时恢复不重复创建**：上传后响应超时 → FAILED（无 remoteId）→ reconcile 按幂等键回查采纳 → PUBLISHED；重复请求 deduped（远端恰一份上传） 515ms
+     ✓ 平台限制校验：标题超 100 字符 → validate 拒绝（FAILED + PROVIDER_VALIDATION_FAILED）；scheduledAt 记录（排期能力） 524ms
+ ✓  integration  apps/api/src/scene-generation.integration.test.ts (4 tests) 1992ms
+   ✓ 显式生成动作（P06-05 非凭据部分） (4)
+     ✓ N01-02 纯素材模式在 Provider 路由和任务创建前拒绝新画面 444ms
+     ✓ 能力缺失（未核验目录）：生成被明确阻止（501），不排队空任务；双击只提交一次（去重） 398ms
+     ✓ AI Video 边界（§14.4）：数据/证据类场景 → 422；非素材类场景 → 422 350ms
+     ✓ 隔离：跨租户提交/未知场景 → 404 448ms
+ ✓  integration  apps/api/src/results-http.integration.test.ts (2 tests) 1696ms
+   ✓ Webhook 端点（P03-06 HTTP） (2)
+     ✓ 有效签名 → 200 且回收生效；伪造签名 → 401 信封且无副作用；重复 eventId → 幂等 ack 356ms
+     ✓ 人工回收端点：与回调共用服务（generation:run）；跨租户 404；VIEWER 403 961ms
+ ✓  integration  apps/api/src/jobs.integration.test.ts (7 tests) 1638ms
+   ✓ 任务 API / SDK（含越权） (1)
+     ✓ SDK：详情/列表/取消；跨租户 404；VIEWER 取消 403（generation:run） 690ms
+ ✓  integration  apps/api/src/stock.integration.test.ts (3 tests) 1393ms
+   ✓ 素材搜索/获取（P10-03） (3)
+     ✓ 搜索：许可状态随结果返回（可用/无许可/缺署名三类；usableOnly 过滤） 386ms
+     ✓ 未装配搜索 Provider → 501 fail-closed；Runway 骨架：任何调用明确失败（不冒充接入） 368ms
+ ✓  integration  apps/worker/src/cms-writeback.integration.test.ts (4 tests) 1620ms
+   ✓ CMS 回写（P13-07） (4)
+     ✓ READY 同事务调度；签名发送成功；Secret 不回显且密文落库 336ms
+     ✓ 四次可重试失败后最终失败；人工重发复用 deliveryId 并成功 473ms
+     ✓ 3xx 为最终失败；非 CMS Render 不创建回写任务 437ms
+ ✓  integration  apps/worker/src/gemini-media.integration.test.ts (3 tests) 2591ms
+   ✓ Gemini 讲述配音 (1)
+     ✓ 逐句合成：预置声音名、裸 PCM → WAV、语速由 FFmpeg 调整、句界精确 538ms
+   ✓ Veo 生成镜头 (2)
+     ✓ 按档位提交 → 轮询 → 下载（跳转后不带密钥）→ 统一到项目画布与帧率、保留声音 1429ms
+ ✓  integration  packages/domain/src/edit-trial.integration.test.ts (9 tests) 2276ms
+   ✓ V5-M2 试改引擎：内核内存执行 ≡ 事务内执行再回滚 (9)
+     ✓ 等价：split_clip（含新片段） 385ms
+ ✓  integration  apps/worker/src/composition-final-render.integration.test.ts (4 tests) 3427ms
+   ✓ 素材工程终渲染工作流（真实 PostgreSQL + 对象存储 + FFmpeg） (4)
+     ✓ 冻结 → 渲染 → 技术 QA：产物落自有存储、哈希可复核、QA 从存储读回真实输出；同一幂等键不重复发起 1394ms
+     ✓ 不支持的需求（图形对象）：冻结时 501，运行失败且没有任何产物 498ms
+     ✓ 工程在发起后又被改：冻结时 409 REVISION_CHANGED（不导出用户没看过的版本） 500ms
+     ✓ 冻结源字节被篡改：渲染步骤不可重试失败（完整性优先），不产生产物 719ms
+ ✓  integration  apps/api/src/p3p4.integration.test.ts (2 tests) 1748ms
+   ✓ P3/P4 体验（P13-04） (2)
+     ✓ Send to Draft：状态记 DRAFT（**不显示为 Published**）+ 导入说明；无 UPLOAD_DRAFT 能力平台明确拒绝 742ms
+     ✓ P4 Export Package（抖音）：视频+文案+披露+平台清单，**末步由用户完成**；未批准不能打包；非 P4 平台拒绝 657ms
+ ✓  integration  apps/api/src/native-fallback.integration.test.ts (2 tests) 1528ms
+   ✓ Native Fallback（P06-07） (2)
+     ✓ 任务引用可见 → 外部产物上传（READY，资产保留来源/授权）→ 回绑 → 列出已回绑状态 676ms
+     ✓ 拒绝路径：跨工作区资产 → 404；未 READY 资产 → 409；跨租户任务引用 → 404 494ms
+ ✓  integration  apps/api/src/final-renders.integration.test.ts (3 tests) 2174ms
+   ✓ 素材工程终渲染 HTTP 面（V6-0） (3)
+     ✓ 发起 → 幂等回放同一运行 → 列表/详情 → 取消（CANCEL_REQUESTED） 549ms
+     ✓ 超 1080p 画布按 4K 权益判定：FREE → 422，且不创建运行 480ms
+     ✓ 权限与隔离：VIEWER 可读不可发起（403）；跨工作区 404；不存在的序列 404 774ms
+ ✓  integration  packages/providers/queue-bullmq/src/queue-e2e.integration.test.ts (3 tests) 3324ms
+   ✓ BullMQ 端到端（真实 Redis） (3)
+     ✓ 适配器投递 → Worker 消费（消息只含任务 ID 与路由） 879ms
+     ✓ "Worker 未运行/崩溃"期间消息持久在 Redis；恢复的 Worker 仍能消费（不丢任务） 838ms
+     ✓ 多 Worker 竞争：每条消息恰好被消费一次（无重复副作用） 1542ms
+ ✓  integration  apps/api/src/handoffs.integration.test.ts (3 tests) 2984ms
+   ✓ Handoff（P13-05） (3)
+     ✓ 创建/领取/取消全链：Artifact 绑定校验、PENDING→CLAIMED、REVOKED 不可领取 611ms
+     ✓ 过期访问失败：TTL 1s → isExpired=true；claim → 410 HANDOFF_EXPIRED 1539ms
+     ✓ 跨租户访问失败：另一项目的 handoff → 404（反枚举） 482ms
+ ✓  integration  apps/api/src/results.integration.test.ts (7 tests) 1238ms
+ ✓  integration  packages/domain/src/projects.integration.test.ts (9 tests) 1292ms
+ ✓  integration  packages/domain/src/media-sources.integration.test.ts (3 tests) 1057ms
+   ✓ N01-10 MediaSource and ClipInstance authority (3)
+     ✓ maps multiple clip instances to one immutable source and updates derivative state without changing source facts 362ms
+     ✓ fails closed for lossy legacy projection, invalid proxy output and cross-tenant derivatives 327ms
+ ✓  integration  packages/domain/src/composition-objects.integration.test.ts (3 tests) 1038ms
+   ✓ N01-04 normalized composition objects (3)
+     ✓ keeps a component object id stable while moving it and binds versioned effects and keyframes 421ms
+ ✓  integration  packages/domain/src/edit-operation-v2.integration.test.ts (3 tests) 1092ms
+   ✓ N01-11 Edit Operation v2 compiler (3)
+     ✓ produces identical canonical edits for GUI, shortcut and Agent and executes them through one transaction path 513ms
+ ✓  integration  apps/worker/src/runway-media.integration.test.ts (2 tests) 3005ms
+   ✓ Runway 选区重绘 (2)
+     ✓ 原片压成小体积（长边 ≤ 1280、无声）以 data URI 提交；比例 1280:720；成片下载不带密钥并统一到 1920×1080 / 30 fps 1453ms
+     ✓ 原片压缩后仍超过上限 / 不是选区重绘 / 没有原片 = 不提交、不扣费；内容审核拦下 = 不扣费并带任务 id 610ms
+ ✓  integration  apps/worker/src/source-media-indexer-process.integration.test.ts (3 tests) 1957ms
+   ✓ N02-04 ffmpeg media indexer (3)
+     ✓ creates real thumbnails, waveform peaks, source-time shots and measured quality markers 731ms
+     ✓ records measured black-frame and silence ranges without inventing a quality score 830ms
+     ✓ waveform peaks follow loudness: a -6 dBFS tone reads about 500, silence reads 0 393ms
+ ✓  integration  apps/api/src/sdk-workflow.integration.test.ts (5 tests) 1940ms
+   ✓ SDK 工作流（Cookie 会话） (4)
+     ✓ 登录 → 建租户 → 建栏目 → 改样式（旧快照不变）→ 身份/风格读写 → 列表 532ms
+     ✓ 同键同 body 但不同资源路径：409，而不是把另一个工作区的结果回放过来（V5-M0 / 审查 P1-2） 312ms
+ ✓  integration  packages/domain/src/composition-history.integration.test.ts (4 tests) 1996ms
+   ✓ N01-08 normalized composition history (4)
+     ✓ undoes and redoes source trims, keyframes and audio parameters with stable ids 723ms
+     ✓ undoes and redoes an object lock without rewriting its original event 400ms
+     ✓ restores the full normalized snapshot and its object locks transactionally 491ms
+(node:22888) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓  integration  apps/api/src/review.integration.test.ts (2 tests) 2282ms
+   ✓ V6-4 批注式审片（HTTP + SDK） (2)
+     ✓ 标记 → 讨论发起 → 确定 → 全部执行（202）→ 执行期间批注锁定；VIEWER 只读；跨工作区 404 1397ms
+     ✓ 删除批注；不改了 / 重新打开 499ms
+ ✓  integration  apps/worker/src/ark-media.integration.test.ts (3 tests) 2328ms
+   ✓ Seedance 生成镜头 (3)
+     ✓ 3 秒的镜头按 5 秒档位提交、4:5 画布取 3:4；下载不带密钥；统一到项目画布与帧率并保留声音 1676ms
+ ✓  integration  apps/worker/src/footage-vision.integration.test.ts (3 tests) 3098ms
+   ✓ 素材抽帧（真实 FFmpeg） (1)
+     ✓ 按时间取 JPEG、宽度不超过上限、缓存复用源文件；越过素材末尾明确失败 886ms
+   ✓ 视觉理解分析器（真实 FFmpeg + 脚本视觉模型） (2)
+     ✓ 按时长均匀取样、分批带图、逐帧说明写成 VISUAL_EVENT（覆盖取样间隔） 807ms
+     ✓ 坏批次重试一次后成功；连续两次不可用则整次失败（不悄悄缺数据） 726ms
+ ✓  integration  apps/api/src/workspace-features.integration.test.ts (1 test) 1151ms
+   ✓ N00-05 workspace release controls (1)
+     ✓ defaults off, records opt-in without bypassing G0, preserves existing project reads, and isolates tenants 660ms
+ ✓  integration  apps/api/src/projects.integration.test.ts (2 tests) 1222ms
+   ✓ Project / Scene 工作流（SDK 驱动） (2)
+     ✓ 创建 Channel → Project（快照 v1）→ 追加场景 → 组装合法 Graph；改 Channel 后旧项目不变 608ms
+ ✓  integration  packages/domain/src/composition-migration.integration.test.ts (2 tests) 1155ms
+   ✓ N01-05 legacy composition migration (2)
+     ✓ retries an interrupted backfill, preserves legacy goldens and cuts old writes over once complete 623ms
+     ✓ never exposes another workspace migration or projection 441ms
+ ✓  integration  apps/api/src/storage-fault.integration.test.ts (1 test) 842ms
+   ✓ 存储故障语义（P08-04） (1)
+     ✓ 对象缺失：确认上传明确失败（不静默 READY）；下载 404（受控失败） 451ms
+ ✓  integration  packages/domain/src/composition.integration.test.ts (3 tests) 1041ms
+   ✓ N01-03 normalized Sequence / Track / Clip (3)
+     ✓ reuses one source in different ranges and allows overlap across tracks with AV grouping and parent references 370ms
+ ✓  integration  packages/domain/src/channels.integration.test.ts (5 tests) 806ms
+ ✓  integration  packages/domain/src/creator.integration.test.ts (5 tests) 632ms
+ ✓  integration  apps/api/src/strategy-distill.integration.test.ts (1 test) 1289ms
+   ✓ V6-6 从参考视频学风格（HTTP + SDK） (1)
+     ✓ 发起与查询、幂等重放、权限与跨工作区、输入校验、内置预设不可改 917ms
+ ✓  integration  packages/db/src/transactions.test.ts (5 tests) 183ms
+ ✓  integration  apps/worker/src/startup-guards.integration.test.ts (4 tests) 9194ms
+   ✓ V5-M3 入口装配守卫 (4)
+     ✓ Worker：ANCS_ASR_DRIVER=deepgram 缺 DEEPGRAM_API_KEY → 启动失败（不回退 Mock） 1891ms
+     ✓ Worker：配置 Deepgram 后作为真实 ASR 驱动装配（单轮执行后正常退出），密钥不出现在任何输出 2528ms
+     ✓ Worker：生产缺显式存储签名密钥与凭据密钥 → 一次列出全部问题 1890ms
+     ✓ API：生产进程装配 Mock 驱动且未显式许可 → 启动失败并列出 Mock 驱动 2879ms
+ ✓  integration  apps/api/src/appearance.integration.test.ts (2 tests) 921ms
+ ✓  integration  apps/worker/src/source-media-transcoder-process.integration.test.ts (2 tests) 857ms
+   ✓ ffmpeg media proxy transcoder (2)
+     ✓ creates a browser proxy and exact start/middle/end VFR PTS mapping 477ms
+     ✓ conforms 5.1 PCM audio to a 48 kHz stereo editing proxy 373ms
+ ✓  integration  apps/worker/src/source-media-probe-process.integration.test.ts (3 tests) 906ms
+   ✓ ffmpeg source media probe (3)
+     ✓ preserves display rotation and reports six-channel audio layout 415ms
+ ✓  integration  apps/api/src/billing.integration.test.ts (7 tests) 709ms
+ ✓  integration  apps/worker/src/runner.integration.test.ts (2 tests) 313ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL   integration  apps/worker/src/narration.integration.test.ts > V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚本导演） > 从文章新建 → 讲述两段首尾相接、逐句字幕 → 编造数字被拒、文章数字通过 → 自检 → 采用后终渲染有声音有卡片
+AssertionError: {"message":"{\"error\":\"speech synthesis failed: ffmpeg exited with 3015096584: Error opening input file flite=textfile='C\\\\:\\\\\\\\Users\\\\\\\\14564\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\ancs-narration-tC6ULU\\\\\\\\sentence-0.txt':voice=slt.\\r Error opening input files: Filter not found\",\"reason\":\"NARRATION_SYNTHESIS_FAILED\"}: expected true to be false // Object.is equality"}: expected { …(20) } to match object { status: 'COMPLETED' }
+(27 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "COMPLETED",
++   "status": "FAILED",
+  }
+
+ ❯ apps/worker/src/narration.integration.test.ts:194:46
+    192|       },
+    193|     ]), 'Make a short explainer from my article.');
+    194|     expect(turn, JSON.stringify(turn.error)).toMatchObject({ status: '…
+       |                                              ^
+    195|     expect(turn.proposalId).not.toBeNull();
+    196|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL   integration  apps/worker/src/narration.integration.test.ts > V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚本导演） > 进程驱动（部署方接入任意供应商）：按协议逐句调用参考实现，拼成一条音频，句界精确、可解码
+AssertionError: expected { implementation: 'REAL', …(3) } to match object { implementation: 'REAL', …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "engine": "process:node",
++   "engine": "process:node.exe",
+    "implementation": "REAL",
+  }
+
+ ❯ apps/worker/src/narration.integration.test.ts:261:25
+    259|       probe,
+    260|     });
+    261|     expect(synthesizer).toMatchObject({ implementation: 'REAL', engine…
+       |                         ^
+    262|     const output = await synthesizer.synthesize({ sentences: ['First s…
+    263|     expect(output.probe).toMatchObject({ status: 'READY', streams: [ex…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL   integration  apps/worker/src/narration.integration.test.ts > V6-5 文章 → 讲述 + 图解（真实 flite + 渲染 + FFmpeg，脚本导演） > 规则与能力：素材工程默认不允许合成语音；中文讲述被英文声音拒绝；没有文章时数据图解被拒；未配置引擎；移除讲述连同字幕
+AssertionError: {"message":"{\"error\":\"speech synthesis failed: ffmpeg exited with 3015096584: Error opening input file flite=textfile='C\\\\:\\\\\\\\Users\\\\\\\\14564\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\ancs-narration-fCODyZ\\\\\\\\sentence-0.txt':voice=slt.\\r Error opening input files: Filter not found\",\"reason\":\"NARRATION_SYNTHESIS_FAILED\"}: expected true to be false // Object.is equality"}: expected { …(20) } to match object { status: 'COMPLETED' }
+(27 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "status": "COMPLETED",
++   "status": "FAILED",
+  }
+
+ ❯ apps/worker/src/narration.integration.test.ts:318:56
+    316|       },
+    317|     ]), '用中文讲一遍');
+    318|     expect(languages, JSON.stringify(languages.error)).toMatchObject({…
+       |                                                        ^
+    319|
+    320|     const unconfigured = await runTurn(ids, new ScriptedModel([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL   integration  apps/worker/src/paid-generation.integration.test.ts > V6-7 / V6-8 付费生成（真实 FFmpeg，脚本导演 + 测试替身供应商） > 数字人：身份档案 + 授权（只增不改）→ 报价检查语言与授权 → 有声画中画；执行前撤回授权 → 失败不扣费
+AssertionError: expected 'FAILED' to be 'SUCCEEDED' // Object.is equality
+
+Expected: "SUCCEEDED"
+Received: "FAILED"
+
+ ❯ apps/worker/src/paid-generation.integration.test.ts:388:52
+    386|     const accepted = await accept(f, quoted.generation!.id, quoted.gen…
+    387|     const turnRow = (await handle.db.select().from(agentTurns).where(e…
+    388|     expect(await drive(f, turnRow.workflowRunId!)).toBe('SUCCEEDED');
+       |                                                    ^
+    389|     const done = (await handle.db.select().from(generationRequests).wh…
+    390|     expect(done.status).toBe('SUCCEEDED');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed | 132 passed (134)
+      Tests  4 failed | 623 passed (627)
+   Start at  03:29:01
+   Duration  939.32s (tests 72%, import 27%, transform 1%)
+
+ ELIFECYCLE  Command failed with exit code 1.
+STEP_EXIT test:integration 1
+===== STEP test:e2e =====
+
+> ancs@0.0.0 test:e2e <repo>
+> node scripts/planned-suite.mjs test:e2e P05-P08 "创建项目→导入→叙事→分镜→编辑→预览→mock 终渲染→历史恢复"
+
+[PLANNED] test:e2e 尚未实现（计划阶段：P05-P08）。
+  说明：创建项目→导入→叙事→分镜→编辑→预览→mock 终渲染→历史恢复
+  状态：不执行任何断言，不代表通过；实现后必须替换为真实套件（见 ANCS_Plan261004.md §11）。
+STEP_EXIT test:e2e 0
+===== STEP test:security =====
+
+> ancs@0.0.0 test:security <repo>
+> vitest run --project security
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  security  apps/api/src/tenant-isolation.security.test.ts (7 tests) 3352ms
+   ✓ 租户隔离（AC-01：跨租户一律拒绝） (7)
+     ✓ A 不能读写 B 的 Workspace：全部 404（与不存在不可区分） 429ms
+     ✓ 列表隔离：只看到自己参与的 Workspace 381ms
+     ✓ 角色边界：VIEWER 可读不可写（403 含 requiredCapability），撤销后立即 404 443ms
+     ✓ 业务资源同样受租户隔离：Channel / CreatorIdentity / SpeechProfile 跨租户全 404 507ms
+     ✓ Project / Scene 跨租户全拒绝（AC-01 资源维度扩充） 574ms
+     ✓ 成员管理规则（HTTP）：重复添加 409；最后 OWNER 降级 409；ADMIN 不能授予 OWNER 403 588ms
+ ✓  security  apps/api/src/assets.security.test.ts (4 tests) 2424ms
+   ✓ 资产安全（§51：cross-workspace / Signed URL scope / credential isolation） (4)
+     ✓ 跨租户：非成员全 404；VIEWER 可读不可写（403 含 requiredCapability=asset:manage） 893ms
+     ✓ 跨租户删除/恢复：他人 Trash 操作一律 404（抗枚举，不泄漏存在性） 510ms
+     ✓ Provider credential isolation：所有资产响应与错误信封不含签名材料或对象 URL 358ms
+ ✓  security  packages/auth/src/rbac.security.test.ts (9 tests) 2098ms
+   ✓ Workspace 服务与统一授权入口 (7)
+     ✓ 权限边界：非 OWNER 不得授予或修改 OWNER 角色 301ms
+     ✓ 撤销成员后授权立即失效 351ms
+ ✓  security  apps/api/src/credentials.security.test.ts (2 tests) 1346ms
+   ✓ Provider 凭据隔离（§51 / §17.3 / §75） (2)
+     ✓ 跨 Workspace 的连接读取/测试/轮换/撤销/列表一律 404；错误信封无 Secret 材料 664ms
+ ✓  security  apps/api/src/ops-auth.security.test.ts (2 tests) 5ms
+
+ Test Files  5 passed (5)
+      Tests  24 passed (24)
+   Start at  03:44:42
+   Duration  25.16s (import 48%, tests 38%, transform 14%)
+
+STEP_EXIT test:security 0
+===== STEP test:render =====
+
+> ancs@0.0.0 test:render <repo>
+> vitest run --project render
+
+
+ RUN  v5.0.3 <repo>
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 生成预览静帧 PNG（frame 0 与 frame 45）
+[render] 预览静帧：<repo>\.artifacts\p00-03\preview-frame-0.png（43276 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 生成预览静帧 PNG（frame 0 与 frame 45）
+[render] 预览静帧：<repo>\.artifacts\p00-03\preview-frame-45.png（69267 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 注册表组件渲染（P05-01）：ComponentDefinition → PNG；主题 tokens 改变像素输出
+[render] 注册表组件静帧（theme）：<repo>\.artifacts\p00-03\registry-theme-dark.png（73547 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 注册表组件渲染（P05-01）：ComponentDefinition → PNG；主题 tokens 改变像素输出
+[render] 注册表组件静帧（theme）：<repo>\.artifacts\p00-03\registry-theme-magenta.png（60688 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG
+[render] 组件画廊（normal）：<repo>\.artifacts\p00-03\gallery-normal.png（194200 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG
+[render] 组件画廊（longText）：<repo>\.artifacts\p00-03\gallery-longtext.png（313553 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG
+[render] 组件画廊（empty）：<repo>\.artifacts\p00-03\gallery-empty.png（126869 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG
+[render] 组件画廊（extreme）：<repo>\.artifacts\p00-03\gallery-extreme.png（175860 bytes）
+
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG
+[render] 组件画廊（boundary）：<repo>\.artifacts\p00-03\gallery-boundary.png（118286 bytes）
+
+ ✓  render  apps/render-worker/src/effect-render.test.ts (2 tests) 15963ms
+   ✓ 特效图层渲染（真实浏览器 + FFmpeg） (2)
+     ✓ 透明背景 + 浏览器能力被遮蔽：中间是红块（遮蔽生效），四角完全透明 5039ms
+     ✓ 模板（闪光点）：同一代码/参数/种子逐帧确定；有透明区也有画到的像素 10913ms
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 扩展组件画廊（P10-04 渲染证据）：14 类 × 正常变体 → PNG
+[render] 扩展组件画廊（P10-04）：<repo>\.artifacts\p00-03\gallery-extended.png（137774 bytes）
+
+ ✓  render  apps/render-worker/src/executor.test.ts (1 test) 29663ms
+   ✓ executeRenderSpec（真实渲染） (1)
+     ✓ 画面 + 旁白/BGM 音轨 + 字幕烧录 → MP4 1280×720/30fps/音轨/时长正确；SRT/VTT/Manifest 产物齐全 29647ms
+stdout | apps/render-worker/src/render.test.ts > Remotion 服务端渲染（标准 Scene：BigNumberScene） > 渲染 MP4 并通过元数据校验（1920×1080 / 3s / 30fps）
+[render] 成片：<repo>\.artifacts\p00-03\big-number-scene.mp4（126957 bytes）
+
+ ✓  render  apps/render-worker/src/render.test.ts (5 tests) 35397ms
+   ✓ Remotion 服务端渲染（标准 Scene：BigNumberScene） (5)
+     ✓ 生成预览静帧 PNG（frame 0 与 frame 45） 3554ms
+     ✓ 注册表组件渲染（P05-01）：ComponentDefinition → PNG；主题 tokens 改变像素输出 3738ms
+     ✓ 组件画廊（P05-02 渲染证据）：20 组件 × 五类变体 → 5 张 PNG 9689ms
+     ✓ 扩展组件画廊（P10-04 渲染证据）：14 类 × 正常变体 → PNG 2368ms
+     ✓ 渲染 MP4 并通过元数据校验（1920×1080 / 3s / 30fps） 12878ms
+
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+   Start at  03:45:09
+   Duration  36.08s (tests 88%, transform 6%, import 5%)
+
+STEP_EXIT test:render 0
+===== STEP test:golden =====
+
+> ancs@0.0.0 test:golden <repo>
+> vitest run --project golden
+
+
+ RUN  v5.0.3 <repo>
+
+ ✓  golden  packages/testing/src/negative.test.ts (8 tests) 5ms
+ ✓  golden  packages/testing/src/golden.test.ts (7 tests) 39ms
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+   Start at  03:45:46
+   Duration  1.64s (transform 64%, import 35%, tests 1%)
+
+STEP_EXIT test:golden 0

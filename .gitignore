@@ -35,3 +35,6 @@ tmp/
 dump.rdb
 provider-smoke-output/
 infra/production.env
+
+# 本地对象存储（开发/部署数据，不进仓库）
+.storage/

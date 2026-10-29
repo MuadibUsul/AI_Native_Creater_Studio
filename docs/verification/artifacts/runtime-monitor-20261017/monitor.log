@@ -1,0 +1,78 @@
+2026-10-17T08:54:38.206Z monitor started
+2026-10-17T08:54:38.212Z monitor listening on 127.0.0.1:3999
+2026-10-17T08:56:54.747Z monitor started
+2026-10-17T08:56:54.752Z monitor listening on 127.0.0.1:3999
+2026-10-17T08:57:05.830Z browser error/console.error http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_eaed00be-979e-458e-885f-e5a396350531 monitor-selftest (injected by monitoring setup)
+2026-10-17T08:58:54.819Z event warning/http api   404 
+2026-10-17T08:59:21.036Z browser warning/ui.alert http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/new Please enter a title
+2026-10-17T08:59:36.129Z monitor started
+2026-10-17T08:59:36.135Z monitor listening on 127.0.0.1:3999
+2026-10-17T09:03:03.825Z browser error/fetch-network http://localhost:3001/api/v1/health TypeError: Failed to fetch
+2026-10-17T09:04:21.260Z event error/health health  http://127.0.0.1:3000/  web unreachable: TypeError: fetch failed
+2026-10-17T09:04:36.270Z event error/health health  http://127.0.0.1:3000/  web unreachable: TypeError: fetch failed
+2026-10-17T09:04:51.281Z event error/health health  http://127.0.0.1:3000/  web unreachable: TypeError: fetch failed
+2026-10-17T09:05:07.647Z monitor started
+2026-10-17T09:05:07.652Z monitor listening on 127.0.0.1:3999
+2026-10-17T09:26:15.039Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:26:15.039Z event warning/text api    (Use `node --trace-warnings ...` to show where the warning was created)
+2026-10-17T09:26:15.040Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:26:15.040Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:26:15.040Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:26:18.059Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 派发：enqueued=1 failed=0
+2026-10-17T09:28:08.947Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_9499c094-01d8-4969-a9d5-bb98d024ca20/confirm [Error: 
+2026-10-17T09:28:08.948Z event error/text web    [Error: socket hang up] { code: 'ECONNRESET' }
+2026-10-17T09:28:13.294Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 1 处上传失败：Upload failed
+2026-10-17T09:28:16.016Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:28:16.016Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:28:55.393Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:29:00.440Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:30:58.247Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_b3428d8f-993b-4abb-a864-f6807733a0a8 → failed
+2026-10-17T09:30:58.247Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_876b9296-4a34-4ffa-a42c-58c37987e220 → failed
+2026-10-17T09:30:58.247Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_e6ba0005-ed7e-49d0-b022-7c252bc9bc9f → failed
+2026-10-17T09:31:56.638Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:31:56.639Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:31:59.663Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_cc0cfc3a-26b7-49e6-b406-8750091c32a1/confirm [Error: 
+2026-10-17T09:31:59.663Z event error/text web    [Error: socket hang up] { code: 'ECONNRESET' }
+2026-10-17T09:32:02.693Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 2 处上传失败：Upload failed | Upload failed
+2026-10-17T09:32:24.876Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:32:28.903Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:33:00.123Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:33:00.124Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:33:14.248Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_f374f376-e8db-412e-a516-58c947571987/confirm [Error: 
+2026-10-17T09:33:14.248Z event error/text web    [Error: socket hang up] { code: 'ECONNRESET' }
+2026-10-17T09:33:18.277Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 3 处上传失败：Upload failed | Upload failed | Upload failed
+2026-10-17T09:34:58.050Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:34:58.050Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:35:13.185Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_71be20e6-7ad6-4029-a50f-dcc3041529a9/confirm [Error: 
+2026-10-17T09:35:13.185Z event error/text web    [Error: socket hang up] { code: 'ECONNRESET' }
+2026-10-17T09:35:17.212Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:35:18.220Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 4 处上传失败：Upload failed | Upload failed | Upload failed | Upload failed
+2026-10-17T09:35:20.235Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:37:58.485Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:37:58.485Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:38:14.621Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:38:16.642Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:38:17.652Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_746dc2d4-b330-457b-a56b-77dbc01c6773/confirm [Error: 
+2026-10-17T09:38:17.652Z event error/text web    [Error: socket hang up] { code: 'ECONNRESET' }
+2026-10-17T09:38:18.662Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 5 处上传失败：Upload failed | Upload failed | Upload failed | Upload failed | Upload failed
+2026-10-17T09:38:48.931Z event error/text web    Failed to proxy http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_e92c0c7b-7429-421e-bb6f-4c828966d631/confirm [Error: 
+2026-10-17T09:38:52.965Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 6 处上传失败：Upload failed | Upload failed | Upload failed | Upload failed | Upload failed | Upload failed
+2026-10-17T09:39:10.096Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 派发：enqueued=1 failed=0
+2026-10-17T09:44:25.006Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_85c86511-4ed6-4bd9-87e8-ef4715a53599 → failed
+2026-10-17T09:44:25.077Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_d7b0cda3-a70d-4b0f-87a1-d5b5eb038356 → failed
+2026-10-17T09:44:25.923Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_2bb34617-4cde-444c-8c70-c71d22086c13 → failed
+2026-10-17T09:46:44.162Z browser error/ui.failure-text http://localhost:3000/w/ws_f4737068-108b-46ca-8370-66d3e537cfda/studio/prj_b3034d78-a65a-48d1-80ab-9fa82cda7059 6 处上传失败：上传失败 | 上传失败 | 上传失败 | 上传失败 | 上传失败 | 上传失败
+2026-10-17T09:46:48.151Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 派发：enqueued=1 failed=0
+2026-10-17T09:51:45.612Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:51:45.612Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [WriteStream]. MaxListeners is 10. Use emitter
+2026-10-17T09:52:05.786Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 finish listeners added to [WriteStream]. MaxListeners is 10. Use emitte
+2026-10-17T09:52:10.844Z event warning/text api    (node:26380) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 end listeners added to [WriteStream]. MaxListeners is 10. Use emitter.s
+2026-10-17T09:54:11.785Z event error/log api    unhandled error
+2026-10-17T09:54:11.785Z event error/http api POST /api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_71be20e6-7ad6-4029-a50f-dcc3041529a9/confirm 500 
+2026-10-17T09:54:11.786Z browser error/fetch http://localhost:3001/api/v1/workspaces/ws_f4737068-108b-46ca-8370-66d3e537cfda/assets/ast_71be20e6-7ad6-4029-a50f-dcc3041529a9/confirm 
+2026-10-17T09:54:40.343Z monitor started
+2026-10-17T09:54:40.349Z monitor listening on 127.0.0.1:3999
+2026-10-17T09:58:03.057Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_95e66c60-879a-4def-89bf-3437e760278a → failed
+2026-10-17T09:58:03.057Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_aaf89b03-18c6-4c49-babb-243b4bf7d20e → failed
+2026-10-17T10:00:18.101Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_89161257-c563-4617-b7a1-bcc19702d6b6 → failed
+2026-10-17T10:15:12.930Z event error/text worker    [worker DESKTOP-GF6UCPB-33612] 完成 job_7a4b99f3-4089-432d-ba64-e2e8e2a9cc45 → failed
