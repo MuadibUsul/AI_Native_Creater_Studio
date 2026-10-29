@@ -74,3 +74,32 @@ impeccable's CLI (context loader, concept roll, comp gates, detector) did not ru
 - The hero conversation and every studio reply are scripted.
 - Project names, dates, the AI spend figure and the quote amount in the prototype are examples, labelled.
 - The invite form sends nothing; it says so.
+
+## Revision 2: new identity, and the website learns from linear.app
+
+Owner's asks, in order: "that icon is so bad, I want a new VI series"; "website design like linear.app"; then "keep the old feel and learn linear.app". Answers given: keep the name Kinora; explore the **Subtitles** concept; apply it to the pages.
+
+### Identity (vi.html, brand/)
+
+- Mark: two subtitle lines, a long white line (you) over a shorter amber line (Kinora answering). 64 unit grid, 7u lines, 44u and 28u, 6u gap.
+- App icon: the lines in the lower third of a projection black tile, so the tile reads as a screen. Favicon: a heavier centred cut below 32px.
+- Wordmark: "kinora" outlined from Geist SemiBold at −4% tracking; the dot of the i is a short amber line.
+- Explored and set aside: the lines split into words (reads as Morse code, and the round amber dot makes a face).
+- Not changed: the product's real brand files (`apps/web/src/brand/brand.tsx`, `apps/web/public/icons/*`, `docs/brand/*`) and the launch trailer, which still show the previous K mark.
+
+### What the website took from Linear, and what it kept
+
+Taken: a full width header with a hairline under it; left aligned medium weight headlines (500, −2.2%); statements that start white and continue in grey; a product window as the hero image; a three column row divided by hairlines; feature blocks with the heading left, a grey paragraph right and a large product panel below; hairlines between every band; a four column footer.
+
+Kept (the old feel): projection black and the warm house, tungsten type, amber only for Kinora's voice, real footage, subtitles, the interactive trial with Keep and Undo, the tagline lit word by word.
+
+Not taken: Linear's cool blue black, Inter, customer logos (Kinora has none yet), and its marketing claims.
+
+The first design is preserved as `index-v1.html`.
+
+### Skill rules that gave way to the owner's words
+
+| Rule | Source | Call |
+|---|---|---|
+| Floating pill navigation | landing-page-design B7 | Replaced by Linear's full width header; the owner asked to learn from Linear. |
+| Headline weight | earlier build used 600 | 500, as Linear sets its headlines. |

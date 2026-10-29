@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="media/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
@@ -92,6 +93,7 @@ kbd { font-family: var(--mono); font-size: 12px; line-height: 16px; padding: 0 v
 }
 .side-brand { display: flex; align-items: center; gap: var(--s-75); padding: var(--s-50) var(--s-75); text-decoration: none; border-radius: var(--r); }
 .side-brand img { width: 24px; height: 24px; }
+.side-brand img.lockup { width: auto; height: 20px; }
 .side-brand span { font-size: 18px; line-height: 28px; font-weight: 600; letter-spacing: -0.04em; }
 .ws { display: flex; align-items: center; gap: var(--s-75); width: 100%; padding: var(--s-75); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); cursor: pointer; text-align: left; transition: background-color 300ms var(--ease); }
 .ws:hover { background: var(--raise); }
@@ -318,7 +320,7 @@ kbd { font-family: var(--mono); font-size: 12px; line-height: 16px; padding: 0 v
 <!-- ================= HOME ================= -->
 <div class="view home" id="view-home" data-screen-label="Home">
   <aside class="side" aria-label="Workspace">
-    <a class="side-brand" href="index.html" aria-label="Kinora"><img src="media/kinora-mark.svg" alt="" width="24" height="24"><span>kinora</span></a>
+    <a class="side-brand" href="index.html"><img class="lockup" src="media/kinora-lockup.svg" alt="Kinora" width="122" height="20"></a>
     <button class="ws" type="button" data-soon><b>M</b><span data-i18n="ws">My studio</span><svg class="i" aria-hidden="true"><use href="#i-caret-down"></use></svg></button>
     <div>
       <h2 data-i18n="side.space">Workspace</h2>

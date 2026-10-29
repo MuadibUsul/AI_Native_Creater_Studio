@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kinora</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Kinora is the video editor that listens. Drop in footage or paste an article, say what to change and point at the picture. Every change arrives as a trial you keep or undo.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kinora, the editor that listens">
+<meta property="og:description" content="Say what to change, point at the picture, and keep only the changes you like.">
+<meta property="og:image" content="media/aurora-scope.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="media/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Screening room: the footage is the only light; Kinora speaks in subtitles. Bands alternate screen black and the warm house. */
+:root {
+  color-scheme: dark;
+  --screen: #000000;
+  --house: #131209;
+  --panel: #181818;
+  --raise: #1f1f1f;
+  --raise-2: #272727;
+  --line: #313131;
+  --text: #f2ede4;
+  --text-2: #b3ada2;
+  --text-3: #8a857c;
+  --amber: #f2c14e;
+  --amber-ink: #1a1405;
+  --alert: #ff8a7a;
+  --veil: rgba(0, 0, 0, 0.72);
+  --nav-glass: rgba(19, 18, 9, 0.72);
+  --font: "Geist", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --s-25: 2px; --s-50: 4px; --s-75: 8px; --s-100: 12px; --s-200: 16px; --s-300: 24px; --s-400: 32px;
+  --s-500: 40px; --s-600: 48px; --s-700: 64px; --s-800: 80px; --s-900: 96px;
+  --r-sm: 2px; --r: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-2xl: 16px; --r-full: 9999px;
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 768px) {
+  :root { --gutter: max(32px, env(safe-area-inset-left, 0px)); --gutter-r: max(32px, env(safe-area-inset-right, 0px)); }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: var(--s-900); }
+body {
+  margin: 0;
+  background: var(--screen);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px; line-height: 24px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  caret-color: var(--amber);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--screen); }
+::selection { background: var(--amber); color: var(--amber-ink); }
+html { scrollbar-color: var(--line) var(--screen); scrollbar-width: thin; }
+img, video { display: block; max-width: 100%; }
+a { color: inherit; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--r); }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; letter-spacing: -0.02em; }
+p { margin: 0; text-wrap: pretty; }
+:lang(zh) p, :lang(zh) .lede, :lang(zh) dd { line-height: 1.75; }
+.i { width: 20px; height: 20px; fill: currentColor; flex: none; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.band { padding-block: var(--s-700); }
+.band--house { background: var(--house); }
+@media (min-width: 1024px) { .band { padding-block: var(--s-900); } }
+.wrap { max-width: calc(1200px + 64px); margin-inline: auto; padding-left: var(--gutter); padding-right: var(--gutter-r); }
+
+.skip { position: fixed; left: var(--s-200); top: calc(env(safe-area-inset-top, 0px) + var(--s-200)); z-index: 60; padding: var(--s-75) var(--s-100); background: var(--text); color: var(--screen); border-radius: var(--r-lg); font-weight: 600; transform: translateY(-200%); transition: transform 300ms var(--ease); }
+.skip:focus-visible { transform: none; }
+
+/* ---------- navigation ---------- */
+.nav {
+  position: fixed; z-index: 40; left: 50%; top: calc(env(safe-area-inset-top, 0px) + var(--s-200));
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: var(--s-75);
+  padding: var(--s-75);
+  max-width: calc(100% - 32px);
+  background: var(--nav-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(120%); backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid var(--line); border-radius: var(--r-xl);
+}
+.brand { display: inline-flex; align-items: center; gap: var(--s-75); padding: var(--s-50) var(--s-75); border-radius: var(--r); text-decoration: none; }
+.brand img { width: 24px; height: 24px; }
+.brand span { font-weight: 600; font-size: 18px; line-height: 28px; letter-spacing: -0.04em; }
+.nav-links { display: none; gap: var(--s-50); margin: 0; padding: 0; list-style: none; }
+.nav-links a { display: block; padding: var(--s-75) var(--s-100); border-radius: var(--r); font-size: 14px; line-height: 20px; color: var(--text-2); text-decoration: none; transition: color 300ms var(--ease), background-color 300ms var(--ease); }
+.nav-links a:hover { color: var(--text); background: var(--raise); }
+.nav-links a[aria-current="true"] { color: var(--text); background: var(--raise-2); }
+.lang { display: none; align-items: center; gap: var(--s-50); padding: var(--s-75) var(--s-100); border: 0; background: none; border-radius: var(--r); font-size: 14px; line-height: 20px; color: var(--text-2); cursor: pointer; transition: color 300ms var(--ease), background-color 300ms var(--ease); }
+.lang:hover { color: var(--text); background: var(--raise); }
+.lang .i { width: 16px; height: 16px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-75);
+  padding: var(--s-75) var(--s-100); min-height: 40px;
+  border: 1px solid transparent; border-radius: var(--r-lg);
+  font-size: 16px; line-height: 24px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background-color 300ms var(--ease), color 300ms var(--ease), border-color 300ms var(--ease), transform 300ms var(--ease);
+}
+.btn:active { transform: scale(0.98); }
+.btn--primary { background: var(--text); color: var(--screen); }
+.btn--primary:hover { background: #ffffff; }
+.btn--quiet { background: var(--raise); color: var(--text); border-color: var(--line); }
+.btn--quiet:hover { background: var(--raise-2); }
+.btn--sm { font-size: 14px; line-height: 20px; min-height: 36px; padding: var(--s-75) var(--s-100); border-radius: var(--r); }
+.menu-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 0; background: none; border-radius: var(--r); cursor: pointer; }
+.menu-btn:hover { background: var(--raise); }
+.burger { position: relative; width: 18px; height: 12px; }
+.burger::before, .burger::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 1px; background: var(--text); transition: transform 500ms var(--ease); }
+.burger::before { top: 1px; }
+.burger::after { bottom: 1px; }
+.menu-btn[aria-expanded="true"] .burger::before { transform: translateY(4px) rotate(45deg); }
+.menu-btn[aria-expanded="true"] .burger::after { transform: translateY(-5px) rotate(-45deg); }
+@media (max-width: 479px) { .nav > .btn { display: none; } }
+@media (min-width: 900px) {
+  .nav-links, .lang { display: flex; }
+  .menu-btn { display: none; }
+}
+
+.menu {
+  position: fixed; inset: 0; z-index: 30;
+  padding: calc(env(safe-area-inset-top, 0px) + var(--s-900)) var(--gutter-r) calc(env(safe-area-inset-bottom, 0px) + var(--s-400)) var(--gutter);
+  background: rgba(19, 18, 9, 0.94);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  display: flex; flex-direction: column; gap: var(--s-300);
+  opacity: 0; visibility: hidden; transition: opacity 300ms var(--ease), visibility 0s linear 300ms;
+}
+.menu.is-open { opacity: 1; visibility: visible; transition: opacity 300ms var(--ease); }
+.menu ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-75); }
+.menu li { opacity: 0; transform: translateY(24px); transition: opacity 500ms var(--ease), transform 500ms var(--ease); }
+.menu.is-open li { opacity: 1; transform: none; }
+.menu a { display: block; padding: var(--s-75) 0; font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: -0.02em; text-decoration: none; }
+.menu .lang { display: inline-flex; align-self: flex-start; padding-inline: 0; font-size: 16px; line-height: 24px; }
+
+/* ---------- hero ---------- */
+.hero { padding-top: var(--s-900); padding-bottom: var(--s-700); }
+.hero-band { display: grid; gap: var(--s-300); align-items: end; }
+.hero h1 {
+  font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.03em; max-width: 680px;
+  color: var(--text);
+  background: linear-gradient(90deg, #ffffff, #9b9b9b); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.lede { font-size: 16px; line-height: 24px; color: var(--text-2); max-width: 680px; }
+.hero-copy { display: grid; gap: var(--s-300); }
+.hero-act { display: grid; gap: var(--s-100); max-width: 520px; }
+.hero-act .invite { gap: var(--s-50); }
+@media (min-width: 768px) {
+  .hero { padding-top: var(--s-900); }
+  .hero h1 { font-size: 48px; line-height: 48px; }
+  .lede { font-size: 18px; line-height: 28px; }
+}
+@media (min-width: 1024px) {
+  .hero-band { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-800); }
+  .hero h1 { font-size: 60px; line-height: 60px; }
+}
+
+.invite { display: grid; gap: var(--s-75); }
+.invite-row { display: flex; gap: var(--s-75); padding: var(--s-50); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); transition: border-color 300ms var(--ease); }
+.invite-row:focus-within { border-color: var(--text-3); }
+.invite-row.has-error { border-color: var(--alert); }
+.invite input {
+  flex: 1 1 auto; min-width: 0; padding: var(--s-75) var(--s-100); border: 0; background: none; border-radius: var(--r-lg);
+  font-size: 16px; line-height: 24px;
+}
+.invite input::placeholder { color: var(--text-3); }
+.invite input:focus-visible { outline: none; }
+.invite .btn { border-radius: var(--r-lg); }
+.invite-note { min-height: 20px; font-size: 14px; line-height: 20px; color: var(--text-2); }
+.invite-note.is-error { color: var(--alert); }
+.proof-line { display: flex; flex-wrap: wrap; gap: var(--s-75) var(--s-200); font-size: 14px; line-height: 20px; color: var(--text-2); }
+.proof-line span { display: inline-flex; align-items: center; gap: var(--s-75); }
+.proof-line .i { width: 16px; height: 16px; color: var(--text-3); }
+@media (max-width: 479px) {
+  .invite-row { flex-direction: column; }
+  .invite .btn { min-height: 44px; }
+}
+
+/* the screening: a 2.39:1 picture with subtitles, a trial chip and a clip strip */
+.screening { position: relative; margin-top: var(--s-400); margin-bottom: 0; margin-inline: calc(-1 * var(--gutter)) calc(-1 * var(--gutter-r)); }
+@media (min-width: 768px) { .screening { margin-inline: 0; } }
+.picture {
+  position: relative; overflow: hidden; background: var(--screen);
+  aspect-ratio: 1280 / 536; max-width: 100%;
+  touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none;
+}
+.picture-inner { position: absolute; inset: 0; transform-origin: 52% 36%; transition: transform 2400ms var(--ease); }
+.picture-inner.is-pushed { transform: scale(1.12); }
+.picture video, .picture-inner > img { width: 100%; height: 100%; object-fit: cover; }
+.frame-box { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.frame-box rect { fill: none; stroke: var(--text); stroke-width: 2; stroke-dasharray: 8 6; vector-effect: non-scaling-stroke; }
+.frame-box.is-drawing rect { animation: draw 700ms var(--ease) both; }
+@keyframes draw { from { stroke-dashoffset: 400; opacity: 0; } to { stroke-dashoffset: 0; opacity: 1; } }
+.here-tag { position: absolute; padding: var(--s-25) var(--s-75); background: var(--text); color: var(--screen); border-radius: var(--r); font-size: 12px; line-height: 16px; font-weight: 600; transform: translateY(-100%); margin-top: -4px; pointer-events: none; }
+.subs { position: absolute; left: 50%; bottom: 8%; width: min(86%, 760px); transform: translateX(-50%); display: grid; justify-items: center; gap: var(--s-75); text-align: center; pointer-events: none; }
+.sub {
+  display: inline; padding: var(--s-25) var(--s-75);
+  background: var(--veil); -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  font-size: 14px; line-height: 24px; font-weight: 500; letter-spacing: 0;
+  opacity: 0; transform: translateY(8px); transition: opacity 300ms var(--ease), transform 300ms var(--ease);
+}
+.sub.is-on { opacity: 1; transform: none; }
+.sub--you { color: var(--text); }
+.sub--k { color: var(--amber); }
+.sub .w { opacity: 0.25; transition: opacity 200ms var(--ease); }
+.sub .w.is-said { opacity: 1; }
+@media (min-width: 768px) { .sub { font-size: 20px; line-height: 32px; padding: var(--s-25) var(--s-100); } }
+.thinking { display: inline-flex; align-items: center; gap: var(--s-75); padding: var(--s-25) var(--s-75); background: var(--veil); color: var(--amber); font-size: 12px; line-height: 16px; opacity: 0; transition: opacity 300ms var(--ease); }
+.thinking.is-on { opacity: 1; }
+.thinking::before { content: ""; width: 6px; height: 6px; border-radius: var(--r-full); background: var(--amber); animation: pulse 1200ms var(--ease) infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+.chip-row { position: absolute; left: var(--s-200); top: var(--s-200); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-75); opacity: 0; transform: translateY(-8px); transition: opacity 300ms var(--ease), transform 300ms var(--ease); }
+.chip-row.is-on { opacity: 1; transform: none; }
+.trial-chip { display: inline-flex; align-items: center; gap: var(--s-75); padding: var(--s-50) var(--s-100); background: var(--veil); border: 1px solid var(--amber); color: var(--amber); border-radius: var(--r-full); font-size: 12px; line-height: 16px; font-weight: 600; }
+.trial-chip.is-kept { border-color: var(--text); color: var(--text); }
+.chip-btn { display: inline-flex; align-items: center; gap: var(--s-50); min-height: 32px; padding: var(--s-50) var(--s-100); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--veil); font-size: 12px; line-height: 16px; font-weight: 600; cursor: pointer; transition: background-color 300ms var(--ease), transform 300ms var(--ease); }
+.chip-btn:hover { background: var(--raise-2); }
+.chip-btn:active { transform: scale(0.98); }
+.chip-btn--keep { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); }
+.chip-btn--keep:hover { background: #f6d27a; }
+.chip-btn .i { width: 14px; height: 14px; }
+.demo-tag { position: absolute; right: var(--s-200); top: var(--s-200); padding: var(--s-25) var(--s-75); background: var(--veil); color: var(--text-2); font-size: 12px; line-height: 16px; border-radius: var(--r); pointer-events: none; }
+@media (max-width: 639px) {
+  .picture { aspect-ratio: 4 / 3; }
+  .demo-tag { display: none; }
+  .hint, .trial-range b { display: none; }
+  .chip-row { position: static; transform: none; padding: var(--s-100) var(--gutter-r) 0 var(--gutter); }
+  .chip-row:not(.is-on) { visibility: hidden; }
+  .chip-btn { min-height: 44px; }
+  .subs { bottom: 6%; width: 92%; }
+}
+
+.strip-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-75) var(--s-200); padding: var(--s-100) var(--gutter-r) 0 var(--gutter); font-size: 12px; line-height: 16px; color: var(--text-2); }
+@media (min-width: 768px) { .strip-bar { padding-inline: 0; } }
+.legend { display: flex; gap: var(--s-200); }
+.legend span { display: inline-flex; align-items: center; gap: var(--s-75); }
+.legend span::before { content: ""; width: 8px; height: 8px; border-radius: var(--r-full); background: var(--text); }
+.legend span.k::before { background: var(--amber); }
+.strip-tools { display: flex; align-items: center; gap: var(--s-200); white-space: nowrap; }
+.hint { color: var(--text-3); }
+.link-btn { display: inline-flex; align-items: center; gap: var(--s-50); padding: var(--s-50) var(--s-75); border: 0; background: none; border-radius: var(--r); color: var(--text-2); font-size: 12px; line-height: 16px; cursor: pointer; transition: color 300ms var(--ease), background-color 300ms var(--ease); }
+.link-btn:hover { color: var(--text); background: var(--raise); }
+.link-btn .i { width: 14px; height: 14px; }
+.strip { position: relative; display: flex; gap: var(--s-25); height: 40px; margin-top: var(--s-75); padding-inline: var(--gutter) var(--gutter-r); }
+@media (min-width: 768px) { .strip { padding-inline: 0; } }
+.clip { position: relative; flex: 6 1 0; min-width: 0; overflow: hidden; background: var(--panel) center / cover no-repeat; border-radius: var(--r-sm); transition: flex-grow 600ms var(--ease); }
+.clip::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.clip span { position: absolute; left: var(--s-75); top: 50%; transform: translateY(-50%); z-index: 1; font-size: 12px; line-height: 16px; color: var(--text-2); white-space: nowrap; }
+.clip.is-long { flex-grow: 8; }
+.trial-range { position: absolute; top: 0; bottom: 0; right: 0; width: 25%; z-index: 2; border: 2px solid var(--amber); border-radius: var(--r-sm); opacity: 0; transition: opacity 300ms var(--ease), background-color 300ms var(--ease); display: flex; align-items: center; justify-content: flex-end; padding-right: var(--s-75); }
+.trial-range.is-on { opacity: 1; }
+.trial-range.is-kept { background: rgba(242, 193, 78, 0.22); }
+.trial-range b { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--amber); }
+.playhead { position: absolute; top: -4px; bottom: -4px; left: 0; width: 2px; background: var(--text); z-index: 3; pointer-events: none; }
+
+/* ---------- shift: the same edit two ways ---------- */
+.section-head { display: grid; gap: var(--s-200); max-width: 760px; }
+.section-head h2 { font-size: 30px; line-height: 36px; }
+.section-head p { color: var(--text-2); font-size: 16px; line-height: 24px; }
+@media (min-width: 768px) {
+  .section-head h2 { font-size: 36px; line-height: 40px; }
+  .section-head p { font-size: 18px; line-height: 28px; }
+}
+.two-ways { display: grid; gap: var(--s-400); margin-top: var(--s-600); }
+@media (min-width: 900px) { .two-ways { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-700); align-items: start; } }
+.way h3 { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-2); letter-spacing: 0; }
+.steps-manual { list-style: none; margin: var(--s-200) 0 0; padding: 0; display: grid; gap: var(--s-25); counter-reset: manual; }
+.steps-manual li { counter-increment: manual; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--s-100); padding: var(--s-100) var(--s-200); background: var(--panel); border-radius: var(--r-sm); color: var(--text-2); font-size: 14px; line-height: 20px; }
+.steps-manual li::before { content: counter(manual); font-family: var(--mono); color: var(--text-3); }
+.said { margin-top: var(--s-200); padding: var(--s-400); background: var(--screen); border-radius: var(--r-sm); display: grid; gap: var(--s-300); }
+.said p { font-size: 24px; line-height: 32px; font-weight: 500; color: var(--text); letter-spacing: -0.01em; }
+.said small { display: inline-flex; align-items: center; gap: var(--s-75); font-size: 14px; line-height: 20px; color: var(--text-2); }
+.said small .i { width: 16px; height: 16px; }
+@media (min-width: 768px) { .said p { font-size: 30px; line-height: 36px; } }
+
+/* ---------- scenes: sticky screen + five outcomes ---------- */
+.scenes-grid { display: grid; gap: var(--s-400); margin-top: var(--s-600); }
+.scene-screen { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 88px); z-index: 2; align-self: start; }
+.scene-stage { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; background: var(--screen); outline: 1px solid var(--line); outline-offset: -1px; }
+.state { position: absolute; inset: 0; opacity: 0; transition: opacity 600ms var(--ease); }
+.state.is-active { opacity: 1; }
+.state video, .state > img { width: 100%; height: 100%; object-fit: cover; }
+.state-tag { position: absolute; right: var(--s-100); top: var(--s-100); padding: var(--s-25) var(--s-75); background: var(--veil); color: var(--text-2); font-size: 12px; line-height: 16px; border-radius: var(--r); }
+.ui-chip { position: absolute; display: inline-flex; align-items: center; gap: var(--s-75); padding: var(--s-50) var(--s-100); background: var(--veil); border: 1px solid var(--amber); color: var(--amber); border-radius: var(--r-full); font-size: 12px; line-height: 16px; font-weight: 600; }
+.ui-fake-btns { position: absolute; display: flex; gap: var(--s-75); }
+.ui-fake-btns span { display: inline-flex; align-items: center; padding: var(--s-50) var(--s-100); border-radius: var(--r-full); background: var(--veil); border: 1px solid var(--line); font-size: 12px; line-height: 16px; font-weight: 600; }
+.ui-fake-btns span:first-child { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+.ui-sub { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); width: 84%; text-align: center; }
+.ui-sub span { padding: var(--s-25) var(--s-75); background: var(--veil); color: var(--amber); font-size: 14px; line-height: 24px; font-weight: 500; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.ui-box { position: absolute; border: 2px dashed var(--text); }
+.ui-box b { position: absolute; left: -2px; top: -24px; padding: var(--s-25) var(--s-75); background: var(--text); color: var(--screen); font-size: 12px; line-height: 16px; border-radius: var(--r); }
+.ui-mark { position: absolute; left: 0; right: 0; bottom: 0; height: 28px; display: flex; gap: var(--s-25); padding: var(--s-50); background: rgba(0, 0, 0, 0.6); }
+.ui-mark i { flex: 1; background: var(--raise-2); border-radius: var(--r-sm); }
+.ui-mark i.at { position: relative; outline: 2px solid var(--text); }
+
+.chapters { position: absolute; inset: 0; padding: var(--s-200); display: grid; align-content: start; gap: var(--s-75); background: var(--panel); }
+.chapters header { display: flex; justify-content: space-between; gap: var(--s-200); font-size: 14px; line-height: 20px; color: var(--text-2); }
+.chapters header strong { color: var(--text); font-weight: 600; }
+.chap { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: var(--s-100); padding: var(--s-50); background: var(--raise); border-radius: var(--r); font-size: 12px; line-height: 16px; }
+.chap img { width: 48px; height: 27px; object-fit: cover; border-radius: var(--r-sm); }
+.chap .meta { min-width: 0; display: grid; gap: var(--s-25); }
+.chap .meta b { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chap .meta span { color: var(--text-3); }
+.chap .st { display: inline-flex; align-items: center; gap: var(--s-50); color: var(--text-2); white-space: nowrap; }
+.chap .st .i { width: 14px; height: 14px; }
+.chap .st.fail { color: var(--alert); }
+.chap .st.redo { color: var(--amber); }
+.bar { width: 64px; height: 4px; background: var(--raise-2); border-radius: var(--r-full); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--text-2); border-radius: var(--r-full); }
+@media (max-width: 479px) { .chapters .chap:nth-child(n + 6) { display: none; } }
+
+.article-ui { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-200); padding: var(--s-200); background: var(--panel); }
+.article-ui .doc { display: grid; align-content: start; gap: var(--s-100); padding: var(--s-200); background: var(--raise); border-radius: var(--r); font-size: 12px; line-height: 20px; color: var(--text-2); }
+.article-ui .doc b { color: var(--text); font-size: 14px; line-height: 20px; }
+.article-ui mark { background: none; color: var(--text); text-decoration: underline 2px var(--amber); text-underline-offset: 3px; }
+.article-ui .cards { display: grid; align-content: start; gap: var(--s-75); }
+.dcard { padding: var(--s-100); background: var(--screen); border: 1px solid var(--line); border-radius: var(--r); display: grid; gap: var(--s-25); }
+.dcard strong { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.02em; }
+.dcard span { font-size: 12px; line-height: 16px; color: var(--text-2); }
+.dcard em { font-style: normal; font-size: 12px; line-height: 16px; color: var(--text-3); }
+.dcard.is-out { opacity: 0.55; border-style: dashed; }
+.dcard.is-out strong { text-decoration: line-through 2px var(--alert); }
+.dcard.is-out em { color: var(--alert); }
+@media (max-width: 479px) {
+  .article-ui { grid-template-columns: minmax(0, 1fr); padding: var(--s-75); gap: var(--s-75); }
+  .article-ui .doc { display: none; }
+  .dcard strong { font-size: 18px; line-height: 28px; }
+}
+
+.quote { position: absolute; right: var(--s-200); bottom: var(--s-200); width: min(280px, 70%); display: grid; gap: var(--s-75); padding: var(--s-200); background: rgba(24, 24, 24, 0.94); border: 1px solid var(--line); border-radius: var(--r-xl); font-size: 12px; line-height: 16px; color: var(--text-2); }
+.quote b { font-size: 14px; line-height: 20px; color: var(--text); font-weight: 600; }
+.quote .price { font-size: 24px; line-height: 32px; color: var(--text); font-weight: 600; }
+.quote .ui-fake-btns { position: static; }
+.cap { position: absolute; left: var(--s-200); top: var(--s-200); display: grid; gap: var(--s-50); padding: var(--s-75) var(--s-100); background: var(--veil); border-radius: var(--r-lg); font-size: 12px; line-height: 16px; color: var(--text-2); }
+.cap .bar { width: 160px; }
+.cap .bar i { background: var(--text); }
+@media (max-width: 479px) {
+  .quote { right: var(--s-75); bottom: var(--s-75); padding: var(--s-100); gap: var(--s-50); }
+  .quote .price { font-size: 18px; line-height: 28px; }
+  .cap { left: var(--s-75); top: var(--s-75); }
+  .cap .bar { width: 96px; }
+}
+
+.outcomes { list-style: none; margin: 0; padding: 0; display: grid; }
+.outcome { padding-block: var(--s-400); display: grid; gap: var(--s-100); border-top: 1px solid var(--line); }
+.outcome:first-child { border-top: 0; }
+.outcome h3 { font-size: 20px; line-height: 28px; transition: color 300ms var(--ease); }
+.outcome p { color: var(--text-2); font-size: 16px; line-height: 24px; max-width: 520px; }
+@media (max-width: 1023px) {
+  .scenes-grid { margin-top: 0; gap: var(--s-300); }
+  .scene-screen { top: 0; padding-top: calc(env(safe-area-inset-top, 0px) + var(--s-800)); background: var(--screen); margin-inline: calc(-1 * var(--gutter)) calc(-1 * var(--gutter-r)); }
+  .outcome { min-height: 56vh; align-content: start; }
+}
+@media (min-width: 1024px) {
+  .scenes-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-800); }
+  .scene-screen { top: calc(env(safe-area-inset-top, 0px) + 120px); }
+  .outcome { min-height: 64vh; align-content: center; border-top: 0; }
+  .outcome h3 { font-size: 24px; line-height: 32px; color: var(--text-3); }
+  .outcome.is-active h3 { color: var(--text); }
+  .outcome p { font-size: 18px; line-height: 28px; }
+}
+
+/* ---------- tagline reveal ---------- */
+.tagline p { max-width: 680px; font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+.tagline .w { color: rgba(242, 237, 228, 0.3); transition: color 600ms var(--ease); }
+.tagline .w.is-lit { color: var(--text); }
+.tagline .w.is-lit.k { color: var(--amber); }
+@media (min-width: 768px) { .tagline p { font-size: 48px; line-height: 48px; } }
+
+/* ---------- how it works ---------- */
+.how-list { list-style: none; margin: var(--s-600) 0 0; padding: 0; display: grid; gap: var(--s-600); }
+@media (min-width: 900px) { .how-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-400); } }
+.how-item { display: grid; gap: var(--s-200); align-content: start; }
+.how-frame { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; background: var(--panel); }
+.how-frame > img { width: 100%; height: 100%; object-fit: cover; }
+.how-item h3 { display: flex; align-items: baseline; gap: var(--s-100); font-size: 20px; line-height: 28px; }
+.how-item h3 .n { font-family: var(--mono); font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-3); }
+.how-item p { color: var(--text-2); }
+.brief-ui { position: absolute; inset: 0; padding: var(--s-200); display: grid; align-content: center; gap: var(--s-100); }
+.brief-ui .line { padding: var(--s-100); background: var(--raise); border: 1px solid var(--line); border-radius: var(--r-lg); font-size: 14px; line-height: 20px; color: var(--text); }
+.brief-ui .thumbs { display: flex; gap: var(--s-75); }
+.brief-ui .thumbs img { width: 30%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-sm); }
+.cut-strip { position: absolute; left: var(--s-200); right: var(--s-200); bottom: var(--s-200); height: 24px; display: flex; gap: var(--s-25); }
+.cut-strip i { background: rgba(242, 237, 228, 0.85); border-radius: var(--r-sm); }
+.ai-label { position: absolute; left: var(--s-100); top: var(--s-100); padding: var(--s-25) var(--s-75); background: rgba(0, 0, 0, 0.55); color: #ffffff; font-size: 12px; line-height: 16px; }
+.spec { position: absolute; right: var(--s-100); bottom: var(--s-100); padding: var(--s-25) var(--s-75); background: var(--veil); color: var(--text-2); font-size: 12px; line-height: 16px; border-radius: var(--r); }
+
+/* ---------- proof ---------- */
+.proof-grid { display: grid; gap: var(--s-400); }
+@media (min-width: 1024px) { .proof-grid { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: var(--s-700); align-items: center; } }
+.proof-grid video { width: 100%; aspect-ratio: 16 / 9; background: var(--screen); }
+.fine { margin-top: var(--s-200); font-size: 14px; line-height: 20px; color: var(--text-3); }
+
+/* ---------- questions ---------- */
+.faq-grid { display: grid; gap: var(--s-400); }
+@media (min-width: 1024px) { .faq-grid { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: var(--s-700); } .faq-grid .section-head { position: sticky; top: 120px; align-self: start; } }
+.faq-list { display: grid; }
+.faq-list details { border-top: 1px solid var(--line); }
+.faq-list details:last-child { border-bottom: 1px solid var(--line); }
+.faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: var(--s-200); padding: var(--s-300) 0; cursor: pointer; list-style: none; font-size: 18px; line-height: 28px; font-weight: 500; border-radius: var(--r); }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary .i { width: 20px; height: 20px; color: var(--text-2); transition: transform 500ms var(--ease); }
+.faq-list details[open] summary .i { transform: rotate(45deg); }
+.faq-list summary:hover { color: #ffffff; }
+.faq-list dd, .faq-list .a { margin: 0; padding-bottom: var(--s-300); color: var(--text-2); max-width: 640px; }
+
+/* ---------- close ---------- */
+.close-grid { display: grid; gap: var(--s-400); }
+@media (min-width: 1024px) { .close-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--s-800); align-items: end; } }
+.close h2 { font-size: 36px; line-height: 40px; max-width: 680px; }
+@media (min-width: 768px) { .close h2 { font-size: 48px; line-height: 48px; } }
+.reassure { list-style: none; margin: var(--s-300) 0 0; padding: 0; display: grid; gap: var(--s-100); }
+.reassure li { display: flex; gap: var(--s-100); align-items: flex-start; color: var(--text-2); font-size: 14px; line-height: 20px; }
+.reassure .i { width: 20px; height: 20px; color: var(--text); }
+
+/* ---------- footer ---------- */
+.foot { padding-block: var(--s-600) calc(env(safe-area-inset-bottom, 0px) + var(--s-600)); border-top: 1px solid var(--line); }
+.foot-grid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-300); align-items: center; }
+.foot-links { display: flex; flex-wrap: wrap; gap: var(--s-75) var(--s-300); margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 20px; color: var(--text-2); }
+.foot-links a { text-decoration: none; }
+.foot-links a:hover { color: var(--text); text-decoration: underline; }
+.soon { color: var(--text-3); cursor: not-allowed; }
+.foot small { font-size: 12px; line-height: 16px; color: var(--text-3); }
+.foot .lang { display: inline-flex; padding-inline: 0; }
+
+/* ---------- reveals: visible by default, lifted once only when scripted ---------- */
+.reveal.pre { transform: translateY(32px); }
+.reveal.in { transform: none; transition: transform 700ms var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+  .picture-inner { transition: none; }
+}
+</style>
+</head>
+<body>
+<svg class="sprite" data-sprite aria-hidden="true" focusable="false"><!-- Phosphor Icons (regular), MIT --><defs><symbol id="i-arrow-clockwise" viewBox="0 0 256 256"><path d="M240,56v48a8,8,0,0,1-8,8H184a8,8,0,0,1,0-16H211.4L184.81,71.64l-.25-.24a80,80,0,1,0-1.67,114.78,8,8,0,0,1,11,11.63A95.44,95.44,0,0,1,128,224h-1.32A96,96,0,1,1,195.75,60L224,85.8V56a8,8,0,1,1,16,0Z"/></symbol><symbol id="i-arrow-counter-clockwise" viewBox="0 0 256 256"><path d="M224,128a96,96,0,0,1-94.71,96H128A95.38,95.38,0,0,1,62.1,197.8a8,8,0,0,1,11-11.63A80,80,0,1,0,71.43,71.39a3.07,3.07,0,0,1-.26.25L44.59,96H72a8,8,0,0,1,0,16H24a8,8,0,0,1-8-8V56a8,8,0,0,1,16,0V85.8L60.25,60A96,96,0,0,1,224,128Z"/></symbol><symbol id="i-check" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></symbol><symbol id="i-globe" viewBox="0 0 256 256"><path d="M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"/></symbol><symbol id="i-microphone" viewBox="0 0 256 256"><path d="M128,176a48.05,48.05,0,0,0,48-48V64a48,48,0,0,0-96,0v64A48.05,48.05,0,0,0,128,176ZM96,64a32,32,0,0,1,64,0v64a32,32,0,0,1-64,0Zm40,143.6V240a8,8,0,0,1-16,0V207.6A80.11,80.11,0,0,1,48,128a8,8,0,0,1,16,0,64,64,0,0,0,128,0,8,8,0,0,1,16,0A80.11,80.11,0,0,1,136,207.6Z"/></symbol><symbol id="i-plus" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"/></symbol><symbol id="i-selection" viewBox="0 0 256 256"><path d="M152,40a8,8,0,0,1-8,8H112a8,8,0,0,1,0-16h32A8,8,0,0,1,152,40Zm-8,168H112a8,8,0,0,0,0,16h32a8,8,0,0,0,0-16ZM208,32H184a8,8,0,0,0,0,16h24V72a8,8,0,0,0,16,0V48A16,16,0,0,0,208,32Zm8,72a8,8,0,0,0-8,8v32a8,8,0,0,0,16,0V112A8,8,0,0,0,216,104Zm0,72a8,8,0,0,0-8,8v24H184a8,8,0,0,0,0,16h24a16,16,0,0,0,16-16V184A8,8,0,0,0,216,176ZM40,152a8,8,0,0,0,8-8V112a8,8,0,0,0-16,0v32A8,8,0,0,0,40,152Zm32,56H48V184a8,8,0,0,0-16,0v24a16,16,0,0,0,16,16H72a8,8,0,0,0,0-16ZM72,32H48A16,16,0,0,0,32,48V72a8,8,0,0,0,16,0V48H72a8,8,0,0,0,0-16Z"/></symbol><symbol id="i-ticket" viewBox="0 0 256 256"><path d="M232,104a8,8,0,0,0,8-8V64a16,16,0,0,0-16-16H32A16,16,0,0,0,16,64V96a8,8,0,0,0,8,8,24,24,0,0,1,0,48,8,8,0,0,0-8,8v32a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V160a8,8,0,0,0-8-8,24,24,0,0,1,0-48ZM32,167.2a40,40,0,0,0,0-78.4V64H88V192H32Zm192,0V192H104V64H224V88.8a40,40,0,0,0,0,78.4Z"/></symbol></defs></svg>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="#top" aria-label="Kinora home"><img src="media/kinora-mark.svg" alt="" width="24" height="24"><span>kinora</span></a>
+  <ul class="nav-links">
+    <li><a href="#what" data-spy="what" data-i18n="nav.what">What it does</a></li>
+    <li><a href="#how" data-spy="how" data-i18n="nav.how">How it works</a></li>
+    <li><a href="#faq" data-spy="faq" data-i18n="nav.faq">Questions</a></li>
+  </ul>
+  <button class="lang" type="button" data-lang-toggle><svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg><span data-i18n="lang.other">中文</span></button>
+  <a class="btn btn--primary btn--sm" href="#invite" data-i18n="nav.cta">Request an invite</a>
+  <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu" data-i18n-aria="nav.menu" aria-label="Menu"><span class="burger" aria-hidden="true"></span></button>
+</nav>
+
+<div class="menu" id="menu" aria-hidden="true">
+  <ul>
+    <li><a href="#what" data-i18n="nav.what">What it does</a></li>
+    <li><a href="#how" data-i18n="nav.how">How it works</a></li>
+    <li><a href="#faq" data-i18n="nav.faq">Questions</a></li>
+    <li><a href="#invite" data-i18n="nav.cta">Request an invite</a></li>
+  </ul>
+  <button class="lang" type="button" data-lang-toggle><svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg><span data-i18n="lang.other">中文</span></button>
+</div>
+
+<main id="main">
+  <section class="hero" id="top" data-screen-label="Hero">
+    <div class="wrap">
+      <div class="hero-band">
+        <div class="hero-copy">
+          <h1 data-i18n="hero.title">Edit your video<br>by talking to it.</h1>
+          <p class="lede" data-i18n="hero.lede">Drop in footage or paste an article and Kinora cuts a first version. Say what to change, point at the picture, and keep only the changes you like.</p>
+        </div>
+        <div class="hero-act">
+          <form class="invite" novalidate data-invite>
+            <label class="sr" for="email-top" data-i18n="form.label">Email address</label>
+            <div class="invite-row">
+              <input id="email-top" name="email" type="email" autocomplete="email" inputmode="email" placeholder="name@example.com" aria-describedby="note-top" required>
+              <button class="btn btn--primary" type="submit" data-i18n="form.cta">Request an invite</button>
+            </div>
+            <p class="invite-note" id="note-top" aria-live="polite"></p>
+          </form>
+          <p class="proof-line"><span><svg class="i" aria-hidden="true"><use href="#i-ticket"></use></svg><span data-i18n="hero.proof1">Invite only beta</span></span><span><svg class="i" aria-hidden="true"><use href="#i-microphone"></use></svg><span data-i18n="hero.proof2">Speak English or Chinese</span></span></p>
+        </div>
+      </div>
+
+      <figure class="screening" aria-labelledby="demo-caption">
+        <div class="picture" data-picture>
+          <div class="picture-inner" data-push>
+            <video data-hero-video poster="media/aurora-scope.jpg" muted loop playsinline autoplay preload="auto"><source src="media/aurora-scope.mp4" type='video/mp4; codecs="avc1.640028"'><source src="media/aurora-scope.webm" type='video/webm; codecs="vp9"'></video>
+            <svg class="frame-box" data-box hidden viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="30" y="16" width="44" height="40"></rect></svg>
+          </div>
+          <span class="here-tag" data-here hidden data-i18n="demo.here">here</span>
+          <span class="demo-tag" data-i18n="demo.tag">Demo footage drawn in code · scripted replies</span>
+          <div class="subs" aria-live="polite">
+            <span class="thinking" data-thinking></span>
+            <p><span class="sub sub--you" data-sub-you></span></p>
+            <p><span class="sub sub--k" data-sub-k></span></p>
+          </div>
+        </div>
+        <div class="chip-row" data-chips aria-live="polite">
+            <span class="trial-chip" data-trial-chip><span data-trial-label>Trial · not kept yet</span></span>
+            <button class="chip-btn chip-btn--keep" type="button" data-keep><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="demo.keep">Keep</span></button>
+            <button class="chip-btn" type="button" data-undo><svg class="i" aria-hidden="true"><use href="#i-arrow-counter-clockwise"></use></svg><span data-i18n="demo.undo">Undo</span></button>
+          </div>
+        <div class="strip-bar">
+          <div class="legend"><span data-i18n="demo.you">You</span><span class="k">Kinora</span></div>
+          <div class="strip-tools">
+            <span class="hint" data-i18n="demo.hint">Drag on the picture to point at something</span>
+            <span class="mono" data-timecode>00:00:00:00 / 00:00:18:00</span>
+            <button class="link-btn" type="button" data-replay><svg class="i" aria-hidden="true"><use href="#i-arrow-clockwise"></use></svg><span data-i18n="demo.replay">Replay</span></button>
+          </div>
+        </div>
+        <div class="strip" aria-hidden="true">
+          <div class="clip" data-clip-aurora style="background-image: url(media/aurora.jpg)"><span>aurora.mp4</span><div class="trial-range" data-range><b>+2.0 s</b></div><i class="playhead" data-playhead></i></div>
+          <div class="clip" style="background-image: url(media/road.jpg)"><span>road.mp4</span></div>
+          <div class="clip" style="background-image: url(media/coast.jpg)"><span>coast.mp4</span></div>
+        </div>
+        <figcaption class="sr" id="demo-caption" data-i18n="demo.caption">Interactive demo: a person asks Kinora to hold on the aurora and push in on a framed area, and Kinora answers with a trial you can keep or undo. Drag on the picture to point at something yourself.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band band--house" id="why" data-screen-label="Two ways">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 data-i18n="why.title">Editing software asks you to learn it first.</h2>
+        <p data-i18n="why.body">Tracks, keyframes, export presets. Most of the time goes into finding the right control. Kinora starts from what you want to happen and finds the controls for you.</p>
+      </div>
+      <div class="two-ways">
+        <div class="way">
+          <h3 data-i18n="why.manual">The same change in a timeline editor</h3>
+          <ol class="steps-manual">
+            <li data-i18n="why.m1">Select the aurora clip</li>
+            <li data-i18n="why.m2">Drag its out point from 00:00:04:00 to 00:00:06:00</li>
+            <li data-i18n="why.m3">Add a scale keyframe at 100%</li>
+            <li data-i18n="why.m4">Add a scale keyframe at 112% two seconds later</li>
+            <li data-i18n="why.m5">Set both keyframes to ease in</li>
+          </ol>
+        </div>
+        <div class="way">
+          <h3 data-i18n="why.kinora">In Kinora</h3>
+          <div class="said">
+            <p data-i18n="why.said">“Hold on the aurora a little longer, and push in slowly here.”</p>
+            <small><svg class="i" aria-hidden="true"><use href="#i-selection"></use></svg><span data-i18n="why.saidnote">Said while framing an area of the picture</span></small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="what" data-screen-label="What it does">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 data-i18n="what.title">You direct. Kinora does the cutting.</h2>
+      </div>
+      <div class="scenes-grid">
+        <div class="scene-screen">
+          <div class="scene-stage" aria-hidden="true">
+            <div class="state is-active" data-state="0">
+              <video poster="media/aurora.jpg" muted loop playsinline preload="metadata"><source src="media/aurora.mp4" type='video/mp4; codecs="avc1.640028"'><source src="media/aurora.webm" type='video/webm; codecs="vp9"'></video>
+              <div class="ui-box" style="left: 22%; top: 12%; width: 42%; height: 40%"><b data-i18n="demo.here">here</b></div>
+              <div class="ui-mark"><i></i><i></i><i class="at"></i><i></i><i></i><i></i></div>
+              <span class="state-tag mono">00:00:03:12</span>
+            </div>
+            <div class="state" data-state="1">
+              <video poster="media/coast.jpg" muted loop playsinline preload="none"><source src="media/coast.mp4" type='video/mp4; codecs="avc1.640028"'><source src="media/coast.webm" type='video/webm; codecs="vp9"'></video>
+              <span class="ui-chip" style="left: 16px; top: 16px" data-i18n="s2.chip">Trial · not kept yet</span>
+              <div class="ui-fake-btns" style="left: 16px; top: 52px"><span data-i18n="demo.keep">Keep</span><span data-i18n="demo.undo">Undo</span></div>
+              <div class="ui-sub"><span data-i18n="s2.sub">Trial ready. The film now opens on the sunrise.</span></div>
+            </div>
+            <div class="state" data-state="2">
+              <div class="chapters">
+                <header><strong data-i18n="s3.title">Coastline launch film</strong><span data-i18n="s3.meta">58 minutes of footage · example</span></header>
+                <div class="chap"><img src="media/road.jpg" alt=""><div class="meta"><b data-i18n="s3.c1">1 · Arrival</b><span class="mono">00:00–09:12</span></div><span class="st"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="s3.done">Cut</span></span></div>
+                <div class="chap"><img src="media/coast.jpg" alt=""><div class="meta"><b data-i18n="s3.c2">2 · Harbour at dawn</b><span class="mono">09:12–17:40</span></div><span class="st"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="s3.done">Cut</span></span></div>
+                <div class="chap"><img src="media/waterfall.jpg" alt=""><div class="meta"><b data-i18n="s3.c3">3 · The climb</b><span class="mono">17:40–29:05</span></div><span class="st redo"><svg class="i" aria-hidden="true"><use href="#i-arrow-clockwise"></use></svg><span data-i18n="s3.redo">Redoing</span></span></div>
+                <div class="chap"><img src="media/aurora.jpg" alt=""><div class="meta"><b data-i18n="s3.c4">4 · Night sky</b><span class="mono">29:05–41:30</span></div><span class="st"><span class="bar"><i style="width: 64%"></i></span></span></div>
+                <div class="chap"><img src="media/road.jpg" alt=""><div class="meta"><b data-i18n="s3.c5">5 · Night drive</b><span class="mono">41:30–50:02</span></div><span class="st"><span class="bar"><i style="width: 38%"></i></span></span></div>
+                <div class="chap"><img src="media/coast.jpg" alt=""><div class="meta"><b data-i18n="s3.c6">6 · Coming home</b><span class="mono">50:02–58:00</span></div><span class="st"><span class="bar"><i style="width: 12%"></i></span></span></div>
+              </div>
+            </div>
+            <div class="state" data-state="3">
+              <div class="article-ui">
+                <div class="doc">
+                  <b data-i18n="s4.doc">Why fresh water is scarce</b>
+                  <span data-i18n="s4.p1">Water covers about <mark>71 percent</mark> of the Earth. Only <mark>2.5 percent</mark> of it is fresh water, and most of that is frozen in ice caps and glaciers.</span>
+                </div>
+                <div class="cards">
+                  <div class="dcard"><strong>71%</strong><span data-i18n="s4.c1">of the Earth is covered by water</span><em data-i18n="s4.src1">From paragraph 1 of your article</em></div>
+                  <div class="dcard"><strong>2.5%</strong><span data-i18n="s4.c2">of that water is fresh</span><em data-i18n="s4.src1">From paragraph 1 of your article</em></div>
+                  <div class="dcard is-out"><strong>96%</strong><span data-i18n="s4.c3">of water is in the oceans</span><em data-i18n="s4.out">Not in your article, so it stays off screen</em></div>
+                </div>
+              </div>
+            </div>
+            <div class="state" data-state="4">
+              <video poster="media/waterfall.jpg" muted loop playsinline preload="none"><source src="media/waterfall.mp4" type='video/mp4; codecs="avc1.640028"'><source src="media/waterfall.webm" type='video/webm; codecs="vp9"'></video>
+              <div class="cap"><span data-i18n="s5.cap">AI spend this month · example</span><span class="mono">$3.17 / $20.00</span><span class="bar"><i style="width: 16%"></i></span></div>
+              <div class="quote">
+                <b data-i18n="s5.title">Generated shot · 4 seconds</b>
+                <span class="price mono">$0.48</span>
+                <span data-i18n="s5.note">Example quote. Runs once after you approve, with no automatic retry.</span>
+                <div class="ui-fake-btns"><span data-i18n="s5.ok">Approve</span><span data-i18n="s5.skip">Skip</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ol class="outcomes">
+          <li class="outcome is-active" data-outcome="0"><h3 data-i18n="o1.t">Point instead of hunting</h3><p data-i18n="o1.p">Say “here” while you mark a moment or drag a box on the picture. Kinora knows the frame and the area you mean.</p></li>
+          <li class="outcome" data-outcome="1"><h3 data-i18n="o2.t">Every change is a trial</h3><p data-i18n="o2.p">Each change plays as a preview first, and you keep it or undo it. Your footage is never overwritten, and every step stays in the history.</p></li>
+          <li class="outcome" data-outcome="2"><h3 data-i18n="o3.t">Long footage, cut in chapters</h3><p data-i18n="o3.p">Hand over an hour of footage and Kinora plans it as chapters, then cuts them side by side. If one chapter comes out wrong, redo just that one.</p></li>
+          <li class="outcome" data-outcome="3"><h3 data-i18n="o4.t">Articles become narrated videos</h3><p data-i18n="o4.p">Paste an article and get narration, captions and diagram cards. A number only goes on screen if it appears in your article.</p></li>
+          <li class="outcome" data-outcome="4"><h3 data-i18n="o5.t">You decide what gets spent</h3><p data-i18n="o5.p">Generated shots come with a quote and run only after you approve. They never retry on their own, and a monthly cap stops AI spending.</p></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band--house tagline" data-screen-label="Tagline">
+    <div class="wrap">
+      <p data-tagline></p>
+    </div>
+  </section>
+
+  <section class="band" id="how" data-screen-label="How it works">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 data-i18n="how.title">From one sentence to a finished cut</h2>
+      </div>
+      <ol class="how-list">
+        <li class="how-item">
+          <div class="how-frame" aria-hidden="true">
+            <div class="brief-ui">
+              <div class="line" data-i18n="how.brief">A 60 second road trip film, upbeat, open on the aurora.</div>
+              <div class="thumbs"><img src="media/aurora.jpg" alt=""><img src="media/road.jpg" alt=""><img src="media/coast.jpg" alt=""></div>
+            </div>
+          </div>
+          <h3><span class="n">1</span><span data-i18n="how.t1">Brief it</span></h3>
+          <p data-i18n="how.p1">Type or say what the video is for, how long it should run and how it should feel. Add footage, an article or a link.</p>
+        </li>
+        <li class="how-item">
+          <div class="how-frame" aria-hidden="true">
+            <img src="media/road.jpg" alt="">
+            <div class="cut-strip"><i style="flex: 3"></i><i style="flex: 5"></i><i style="flex: 2"></i><i style="flex: 4"></i><i style="flex: 3"></i></div>
+          </div>
+          <h3><span class="n">2</span><span data-i18n="how.t2">It cuts a first version</span></h3>
+          <p data-i18n="how.p2">Kinora watches the footage, plans the scenes and cuts them, then checks its own work against your brief.</p>
+        </li>
+        <li class="how-item">
+          <div class="how-frame" aria-hidden="true">
+            <img src="media/coast.jpg" alt="">
+            <span class="ai-label" data-i18n="how.label">AI generated</span>
+            <span class="spec mono">1080p · 16:9</span>
+          </div>
+          <h3><span class="n">3</span><span data-i18n="how.t3">You steer, then export</span></h3>
+          <p data-i18n="how.p3">Talk and point until it is right, then export. Parts made by AI carry a visible label, which a growing number of markets require.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band band--house" id="proof" data-screen-label="Trailer">
+    <div class="wrap proof-grid">
+      <div class="section-head reveal">
+        <h2 data-i18n="proof.title">Fifty seconds of the real build</h2>
+        <p data-i18n="proof.body">Every screen in this film is the current build running in a browser. The footage is drawn in code, and in this preview the editor's replies and speech recognition are scripted.</p>
+      </div>
+      <video poster="media/trailer-poster.jpg" controls playsinline preload="none" data-i18n-aria="proof.aria" aria-label="Kinora launch trailer, 50 seconds"><source src="media/trailer-540.mp4" type='video/mp4; codecs="avc1.640028, mp4a.40.2"'><source src="media/trailer-540.webm" type='video/webm; codecs="vp9, opus"'></video>
+    </div>
+  </section>
+
+  <section class="band" id="faq" data-screen-label="Questions">
+    <div class="wrap faq-grid">
+      <div class="section-head reveal">
+        <h2 data-i18n="faq.title">Questions</h2>
+        <p data-i18n="faq.body">If yours is not here, ask it when you request an invite.</p>
+      </div>
+      <div class="faq-list">
+        <details><summary><span data-i18n="q1">What do I need to start?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a1">Footage from your phone or camera, an article, or a link to one. You can also start with a sentence and add footage later.</p></details>
+        <details><summary><span data-i18n="q2">Which languages can I speak?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a2">English and Chinese, by voice or by typing.</p></details>
+        <details><summary><span data-i18n="q3">Will Kinora change my original footage?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a3">No. Your files stay as they are. Every change is a trial on the edit, and the history lets you step back to any earlier version.</p></details>
+        <details><summary><span data-i18n="q4">Will viewers know AI was involved?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a4">When a video contains generated material, such as a narration voice, a generated shot or an effect, the export carries a visible label and a label in the file metadata.</p></details>
+        <details><summary><span data-i18n="q5">Can it handle long footage?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a5">Yes. Long footage is split into chapters that are cut at the same time, and you can redo one chapter without touching the others.</p></details>
+        <details><summary><span data-i18n="q6">Can it learn my style?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a6">If you want it to. Show it a reference video and Kinora measures its pacing and cuts into a style it can follow. Without one, it judges from your footage.</p></details>
+        <details><summary><span data-i18n="q7">Can I review a cut on my phone?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a7">Yes. Open the review page on your phone, mark a moment or an area and leave a note. Kinora turns each note into a trial.</p></details>
+        <details><summary><span data-i18n="q8">How much does it cost?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a8">Plans are not priced yet. During the beta a monthly cap stops AI spending, and anything paid, like a generated shot, shows a quote before it runs.</p></details>
+        <details><summary><span data-i18n="q9">Who can join the beta?</span><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></summary><p class="a" data-i18n="a9">The beta is invite only. Leave your email and we send an invite when a seat opens.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band--house close" id="invite" data-screen-label="Invite">
+    <div class="wrap close-grid">
+      <h2 class="reveal" data-i18n="close.title">Bring the footage you have been meaning to edit.</h2>
+      <div>
+        <form class="invite" novalidate data-invite>
+          <label class="sr" for="email-end" data-i18n="form.label">Email address</label>
+          <div class="invite-row">
+            <input id="email-end" name="email" type="email" autocomplete="email" inputmode="email" placeholder="name@example.com" aria-describedby="note-end" required>
+            <button class="btn btn--primary" type="submit" data-i18n="form.cta">Request an invite</button>
+          </div>
+          <p class="invite-note" id="note-end" aria-live="polite"></p>
+        </form>
+        <ul class="reassure">
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="close.r1">Nothing paid runs without a quote you approve.</span></li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="close.r2">Your original footage is never overwritten.</span></li>
+          <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span data-i18n="close.r3">A monthly cap stops AI spending.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <a class="brand" href="#top" aria-label="Kinora home"><img src="media/kinora-mark.svg" alt="" width="24" height="24"><span>kinora</span></a>
+    <ul class="foot-links">
+      <li><a href="#what" data-i18n="nav.what">What it does</a></li>
+      <li><a href="#how" data-i18n="nav.how">How it works</a></li>
+      <li><a href="#faq" data-i18n="nav.faq">Questions</a></li>
+      <li><a href="app.html" data-i18n="foot.app">Studio prototype</a></li>
+      <li><span class="soon" aria-disabled="true" data-i18n="foot.privacy">Privacy (at launch)</span></li>
+      <li><span class="soon" aria-disabled="true" data-i18n="foot.terms">Terms (at launch)</span></li>
+    </ul>
+    <button class="lang" type="button" data-lang-toggle><svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg><span data-i18n="lang.other">中文</span></button>
+    <small data-i18n="foot.c">© 2026 Kinora. The editor that listens.</small>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- copy ---------- */
+  var ZH = {
+    'skip': '跳到正文',
+    'nav.what': '能做什么', 'nav.how': '怎么用', 'nav.faq': '常见问题', 'nav.cta': '申请邀请', 'nav.menu': '菜单',
+    'lang.other': 'EN',
+    'hero.title': '对着视频说，<br>它就替你剪。',
+    'hero.lede': '放入素材或贴一篇文章，Kinora 先剪出第一版。说出想改什么、指着画面，喜欢的改动才留下。',
+    'form.label': '邮箱地址', 'form.cta': '申请内测邀请',
+    'hero.proof1': '仅限受邀内测', 'hero.proof2': '说中文或英文都行',
+    'demo.here': '这里', 'demo.tag': '演示画面由代码绘制 · 回复为脚本', 'demo.keep': '就这样', 'demo.undo': '撤回',
+    'demo.you': '你', 'demo.hint': '在画面上拖一下，指给它看', 'demo.replay': '重播', 'demo.caption': '互动演示：有人请 Kinora 让极光多停一会儿、往框出的区域推近，Kinora 给出一个可以留下或撤回的试改。你也可以在画面上拖一下，自己指给它看。',
+    'why.title': '剪辑软件总要你先学会它。',
+    'why.body': '轨道、关键帧、导出参数，大部分时间花在找按钮上。Kinora 从你想要的效果出发，替你找到该动哪里。',
+    'why.manual': '同一个改动，在时间线剪辑软件里', 'why.m1': '选中极光片段', 'why.m2': '把出点从 00:00:04:00 拖到 00:00:06:00',
+    'why.m3': '在 100% 处加一个缩放关键帧', 'why.m4': '两秒后在 112% 处再加一个', 'why.m5': '把两个关键帧都设成缓入',
+    'why.kinora': '在 Kinora 里', 'why.said': '“极光这里多停一会儿，往这块慢慢推近。”', 'why.saidnote': '一边说，一边在画面上框出一块',
+    'what.title': '你来导演，Kinora 来剪。',
+    's2.chip': '试改 · 还没采用', 's2.sub': '试改好了：开场换成日出。',
+    's3.title': '海岸线发布片', 's3.meta': '58 分钟素材 · 示例', 's3.c1': '1 · 抵达', 's3.c2': '2 · 清晨的港口', 's3.c3': '3 · 登山',
+    's3.c4': '4 · 夜空', 's3.c5': '5 · 夜路', 's3.c6': '6 · 回家', 's3.done': '已剪好', 's3.redo': '重做中',
+    's4.doc': '为什么淡水稀缺', 's4.p1': '水覆盖了地球约 <mark>71%</mark> 的表面，其中只有 <mark>2.5%</mark> 是淡水，而且大部分冻在冰盖和冰川里。',
+    's4.c1': '的地球表面被水覆盖', 's4.c2': '的水是淡水', 's4.c3': '的水在海洋里', 's4.src1': '出自你文章的第 1 段', 's4.out': '文章里没有，所以不上屏',
+    's5.cap': '本月 AI 花费 · 示例', 's5.title': '生成镜头 · 4 秒', 's5.note': '示例报价。你同意后运行一次，失败不会自动重试。', 's5.ok': '同意', 's5.skip': '跳过',
+    'o1.t': '指一下，不用找', 'o1.p': '说“这里”的同时，在时间带上点一下，或在画面上框一块。Kinora 知道你指的是哪一帧、哪一块。',
+    'o2.t': '每处改动都是试改', 'o2.p': '改动先以预览播放，留下还是撤回由你决定。原素材不会被覆盖，每一步都记在历史里。',
+    'o3.t': '长素材，按章节并行剪', 'o3.p': '交给它一小时素材，Kinora 先分好章节，再同时开剪。哪一章不满意，只重做那一章。',
+    'o4.t': '文章变成讲解视频', 'o4.p': '贴一篇文章，得到配音、字幕和图解卡片。屏幕上的数字必须出自你的文章。',
+    'o5.t': '花多少钱由你定', 'o5.p': '生成镜头先报价，你同意后才运行，失败也不会自动重试；每月 AI 花费有上限，到了就停。',
+    'how.title': '从一句话到成片', 'how.brief': '60 秒公路旅行短片，节奏轻快，开场是极光。',
+    'how.t1': '交代一句', 'how.p1': '写下或说出这条视频给谁看、多长、什么感觉。放入素材、文章或链接。',
+    'how.t2': '它先剪一版', 'how.p2': 'Kinora 看完素材，排好场景剪出来，再对照你的要求自检一遍。',
+    'how.t3': '你来调，然后导出', 'how.p3': '边说边指，改到满意就导出。AI 生成的部分会带上可见标识，越来越多的地区要求这样做。', 'how.label': 'AI生成',
+    'proof.title': '50 秒，真实的产品画面', 'proof.body': '片中每个界面都是当前版本在浏览器里真实运行的画面。素材由代码绘制；这个预览里，剪辑师的回复和语音识别是脚本。', 'proof.aria': 'Kinora 发布预告片，50 秒',
+    'faq.title': '常见问题', 'faq.body': '没找到你的问题？申请邀请时一并写给我们。',
+    'q1': '开始需要准备什么？', 'a1': '手机或相机拍的素材、一篇文章，或文章链接都可以。也可以先说一句想法，之后再放素材。',
+    'q2': '可以说哪些语言？', 'a2': '中文和英文，说话或打字都行。',
+    'q3': '会改动我的原素材吗？', 'a3': '不会。原文件保持原样；每处改动都只是对剪辑的试改，历史里可以退回任何一步。',
+    'q4': '观众会知道用了 AI 吗？', 'a4': '成片里有生成内容时（例如配音、生成镜头或特效），导出文件会带可见标识，文件元数据里也会写明。',
+    'q5': '长素材能处理吗？', 'a5': '能。长素材会分成章节同时剪，某一章可以单独重做，不影响其他章节。',
+    'q6': '能学我的风格吗？', 'a6': '可以选用。给它一条参考视频，Kinora 会量出节奏和剪法，整理成可以照着剪的风格；不选时它按素材自己判断。',
+    'q7': '能在手机上审片吗？', 'a7': '能。手机打开审片页，点一个时刻或框一块画面，留下意见；Kinora 会把每条意见变成试改。',
+    'q8': '怎么收费？', 'a8': '套餐价格还没定。内测期间每月 AI 花费有上限，生成镜头这类付费操作都会先报价，你同意后才运行。',
+    'q9': '谁能参加内测？', 'a9': '内测仅限受邀。留下邮箱，有名额时我们会发邀请。',
+    'close.title': '把一直没剪的素材带来。', 'close.r1': '付费操作都先报价，你同意才运行。', 'close.r2': '原素材永远不会被覆盖。', 'close.r3': '每月 AI 花费有上限，到了就停。',
+    'foot.app': '工作台原型', 'foot.privacy': '隐私政策（上线时发布）', 'foot.terms': '服务条款（上线时发布）', 'foot.c': '© 2026 Kinora · 会听话的剪辑师'
+  };
+  var LINES = {
+    en: {
+      you: 'Hold on the aurora a little longer, and push in slowly here.',
+      k: 'Trial ready. The aurora holds 2 seconds longer, with a slow push in on the area you framed.',
+      thinking: 'Cutting a trial…',
+      trial: 'Trial · not kept yet', kept: 'Kept',
+      afterKeep: 'Kept. You can still step back in the history.',
+      afterUndo: 'Undone. The shot is back to how it was.',
+      pointed: function (tc) { return 'Got it: this area at ' + tc + '. Tell me what to change there.'; },
+      sayLabel: 'You said: ', kLabel: 'Kinora: ',
+      tagline: [['The', 'editor', 'that', 'listens.'], ['You', 'say', 'it,', 'it', 'cuts,'], ['and', 'nothing', 'stays'], ['until', 'you', 'say', 'yes.']],
+      taglineAria: 'The editor that listens. You say it, it cuts, and nothing stays until you say yes.',
+      formEmpty: 'Enter your email address, like name@example.com.',
+      formBad: 'That email address looks incomplete. Check it and try again.',
+      formOk: function (e) { return 'Design preview, so nothing was sent. The live page adds ' + e + ' to the invite list.'; }
+    },
+    zh: {
+      you: '极光这里多停一会儿，往这块慢慢推近。',
+      k: '试改好了：极光多停 2 秒，并往你框的地方慢慢推近。',
+      thinking: '正在剪试改…',
+      trial: '试改 · 还没采用', kept: '已采用',
+      afterKeep: '已采用。随时可以在历史里退回。',
+      afterUndo: '已撤回，画面回到原样。',
+      pointed: function (tc) { return '收到：' + tc + ' 的这块区域。说说这里要怎么改。'; },
+      sayLabel: '你说：', kLabel: 'Kinora：',
+      tagline: [['会', '听', '话', '的', '剪', '辑', '师', '。'], ['你', '说', '，', '它', '剪', '；'], ['你', '点', '头', '，', '才', '算', '数', '。']],
+      taglineAria: '会听话的剪辑师。你说，它剪；你点头，才算数。',
+      formEmpty: '请填写邮箱地址，例如 name@example.com。',
+      formBad: '这个邮箱地址好像不完整，请检查后再试。',
+      formOk: function (e) { return '这是设计预览，没有真的发送。正式页面会把 ' + e + ' 加入邀请名单。'; }
+    }
+  };
+
+  var EN = {}, ENATTR = {};
+  var lang = 'en';
+  function store(get, value) { try { if (get) return localStorage.getItem('kinora-lang'); localStorage.setItem('kinora-lang', value); } catch (e) { return null; } return null; }
+
+  function harvest() {
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { var k = el.getAttribute('data-i18n'); if (!(k in EN)) EN[k] = el.innerHTML; });
+    document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { var k = el.getAttribute('data-i18n-aria'); if (!(k in ENATTR)) ENATTR[k] = el.getAttribute('aria-label'); });
+  }
+  function setLang(next) {
+    lang = next;
+    document.documentElement.lang = next === 'zh' ? 'zh-Hans' : 'en';
+    var dict = next === 'zh' ? ZH : EN;
+    document.querySelectorAll('[data-i18n]').forEach(function (el) { var k = el.getAttribute('data-i18n'); var v = dict[k]; if (v === undefined) v = EN[k]; if (v !== undefined) el.innerHTML = v; });
+    document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { var k = el.getAttribute('data-i18n-aria'); var v = next === 'zh' ? ZH[k] : ENATTR[k]; if (v) el.setAttribute('aria-label', v); });
+    document.querySelectorAll('[data-lang-toggle]').forEach(function (b) { b.setAttribute('aria-label', next === 'zh' ? 'Switch to English' : '切换到中文'); });
+    buildTagline();
+    scene.relabel();
+    store(false, next);
+  }
+
+  /* ---------- nav: menu, scroll spy ---------- */
+  var menuBtn = document.querySelector('.menu-btn');
+  var menu = document.getElementById('menu');
+  function openMenu(open) {
+    menuBtn.setAttribute('aria-expanded', String(open));
+    menu.classList.toggle('is-open', open);
+    menu.setAttribute('aria-hidden', String(!open));
+    menu.querySelectorAll('li').forEach(function (li, i) { li.style.transitionDelay = open ? Math.min(i * 60, 400) + 'ms' : '0ms'; });
+    document.body.style.overflow = open ? 'hidden' : '';
+  }
+  menuBtn.addEventListener('click', function () { openMenu(menuBtn.getAttribute('aria-expanded') !== 'true'); });
+  menu.addEventListener('click', function (e) { if (e.target.closest('a')) openMenu(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu.classList.contains('is-open')) { openMenu(false); menuBtn.focus(); } });
+  document.querySelectorAll('[data-lang-toggle]').forEach(function (b) { b.addEventListener('click', function () { setLang(lang === 'zh' ? 'en' : 'zh'); }); });
+
+  if ('IntersectionObserver' in window) {
+    var spyLinks = document.querySelectorAll('[data-spy]');
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        spyLinks.forEach(function (a) { if (a.getAttribute('data-spy') === en.target.id) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    ['what', 'how', 'faq', 'top', 'why', 'proof', 'invite'].forEach(function (id) { var s = document.getElementById(id); if (s) spy.observe(s); });
+  }
+
+  /* ---------- reveals: only things below the first screen, once ---------- */
+  if ('IntersectionObserver' in window && !reduce) {
+    var rev = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); rev.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -10% 0px' });
+    document.querySelectorAll('.reveal').forEach(function (el) {
+      if (el.getBoundingClientRect().top > window.innerHeight) { el.classList.add('pre'); rev.observe(el); }
+    });
+  }
+
+  /* ---------- tagline: words light like a subtitle being spoken ---------- */
+  var tag = document.querySelector('[data-tagline]');
+  var tagObs = null;
+  function buildTagline() {
+    var t = LINES[lang];
+    tag.innerHTML = '';
+    var said = document.createElement('span'); said.className = 'sr'; said.textContent = t.taglineAria; tag.appendChild(said);
+    var idx = 0;
+    t.tagline.forEach(function (line, li) {
+      line.forEach(function (word, wi) {
+        var s = document.createElement('span');
+        s.className = 'w' + (li === 0 ? ' k' : '');
+        s.setAttribute('aria-hidden', 'true');
+        s.textContent = word;
+        s.dataset.i = String(idx++);
+        tag.appendChild(s);
+        if (lang === 'en' && wi < line.length - 1) tag.appendChild(document.createTextNode(' '));
+      });
+      if (li < t.tagline.length - 1) tag.appendChild(document.createElement('br'));
+    });
+    var words = tag.querySelectorAll('.w');
+    if (reduce || !('IntersectionObserver' in window)) { words.forEach(function (w) { w.classList.add('is-lit'); }); return; }
+    if (tagObs) tagObs.disconnect();
+    tagObs = new IntersectionObserver(function (entries) {
+      var hits = entries.filter(function (e) { return e.isIntersecting; }).map(function (e) { return e.target; });
+      hits.sort(function (a, b) { return Number(a.dataset.i) - Number(b.dataset.i); });
+      hits.forEach(function (w, n) { w.style.transitionDelay = (n * 70) + 'ms'; w.classList.add('is-lit'); tagObs.unobserve(w); });
+    }, { rootMargin: '0px 0px -38% 0px' });
+    words.forEach(function (w) { tagObs.observe(w); });
+  }
+
+  /* ---------- benefits: the sticky screen follows the outcome in view ---------- */
+  var states = document.querySelectorAll('[data-state]');
+  var outcomes = document.querySelectorAll('[data-outcome]');
+  function activate(n) {
+    states.forEach(function (s) {
+      var on = s.getAttribute('data-state') === String(n);
+      s.classList.toggle('is-active', on);
+      var v = s.querySelector('video');
+      if (v) { if (on && !reduce) { v.preload = 'auto'; var p = v.play(); if (p && p.catch) p.catch(function () {}); } else { v.pause(); } }
+    });
+    outcomes.forEach(function (o) { o.classList.toggle('is-active', o.getAttribute('data-outcome') === String(n)); });
+  }
+  if ('IntersectionObserver' in window) {
+    var oo = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) activate(en.target.getAttribute('data-outcome')); });
+    }, { rootMargin: '-50% 0px -45% 0px' });
+    outcomes.forEach(function (o) { oo.observe(o); });
+  }
+
+  /* ---------- hero scene ---------- */
+  var scene = (function () {
+    var pic = document.querySelector('[data-picture]');
+    var push = document.querySelector('[data-push]');
+    var video = document.querySelector('[data-hero-video]');
+    var box = document.querySelector('[data-box]');
+    var rect = box.querySelector('rect');
+    var here = document.querySelector('[data-here]');
+    var subYou = document.querySelector('[data-sub-you]');
+    var subK = document.querySelector('[data-sub-k]');
+    var thinking = document.querySelector('[data-thinking]');
+    var chips = document.querySelector('[data-chips]');
+    var chip = document.querySelector('[data-trial-chip]');
+    var chipLabel = document.querySelector('[data-trial-label]');
+    var keep = document.querySelector('[data-keep]');
+    var undo = document.querySelector('[data-undo]');
+    var range = document.querySelector('[data-range]');
+    var auroraClip = document.querySelector('[data-clip-aurora]');
+    var playhead = document.querySelector('[data-playhead]');
+    var timecode = document.querySelector('[data-timecode]');
+    var timers = [];
+    var phase = 'idle';
+    var boxRect = { x: 30, y: 16, w: 44, h: 40 };
+    var total = 18;
+
+    function later(fn, ms) { timers.push(setTimeout(fn, reduce ? 0 : ms)); }
+    function clear() { timers.forEach(clearTimeout); timers = []; }
+    function tc(sec) {
+      var f = Math.floor((sec % 1) * 30), s = Math.floor(sec) % 60, m = Math.floor(sec / 60) % 60;
+      function p(n) { return (n < 10 ? '0' : '') + n; }
+      return '00:' + p(m) + ':' + p(s) + ':' + p(f);
+    }
+    function setBox(r, animate) {
+      boxRect = r;
+      rect.setAttribute('x', r.x); rect.setAttribute('y', r.y); rect.setAttribute('width', r.w); rect.setAttribute('height', r.h);
+      push.style.transformOrigin = (r.x + r.w / 2) + '% ' + (r.y + r.h / 2) + '%';
+      box.hidden = false;
+      box.classList.remove('is-drawing');
+      if (animate && !reduce) { void box.getBoundingClientRect(); box.classList.add('is-drawing'); }
+      placeHere();
+    }
+    function placeHere() {
+      here.hidden = box.hidden;
+      if (box.hidden) return;
+      var scale = push.classList.contains('is-pushed') ? 1.12 : 1;
+      var ox = boxRect.x + boxRect.w / 2, oy = boxRect.y + boxRect.h / 2;
+      var left = ox + (boxRect.x - ox) * scale, top = oy + (boxRect.y - oy) * scale;
+      here.style.left = Math.max(0, left) + '%';
+      here.style.top = Math.max(4, top) + '%';
+    }
+    function say(el, text, label, words) {
+      el.innerHTML = '';
+      var sr = document.createElement('span'); sr.className = 'sr'; sr.textContent = label; el.appendChild(sr);
+      if (words && !reduce) {
+        var parts = lang === 'zh' ? Array.from(text) : text.split(' ');
+        parts.forEach(function (w, i) {
+          var s = document.createElement('span'); s.className = 'w'; s.textContent = w + (lang === 'zh' || i === parts.length - 1 ? '' : ' ');
+          el.appendChild(s);
+          later(function () { s.classList.add('is-said'); }, 300 + i * (lang === 'zh' ? 90 : 160));
+        });
+        el.classList.add('is-on');
+        return 300 + parts.length * (lang === 'zh' ? 90 : 160);
+      }
+      el.appendChild(document.createTextNode(text));
+      el.classList.add('is-on');
+      return 0;
+    }
+    function hide(el) { el.classList.remove('is-on'); }
+    function setTotal(n) { total = n; }
+
+    function reset() {
+      clear();
+      phase = 'idle';
+      hide(subYou); hide(subK); thinking.classList.remove('is-on');
+      chips.classList.remove('is-on');
+      chip.classList.remove('is-kept');
+      keep.hidden = false; undo.hidden = false;
+      push.classList.remove('is-pushed');
+      box.hidden = true; here.hidden = true;
+      range.classList.remove('is-on', 'is-kept');
+      auroraClip.classList.remove('is-long');
+      setTotal(18);
+    }
+    function run() {
+      reset();
+      var t = LINES[lang];
+      later(function () {
+        var d = say(subYou, t.you, t.sayLabel, true);
+        later(function () { setBox({ x: 30, y: 16, w: 44, h: 40 }, true); }, Math.max(400, d - 600));
+        later(function () { thinking.textContent = t.thinking; thinking.classList.add('is-on'); }, d + 500);
+        later(function () {
+          thinking.classList.remove('is-on');
+          hide(subYou);
+          say(subK, t.k, t.kLabel, false);
+          chipLabel.textContent = t.trial;
+          chips.classList.add('is-on');
+          push.classList.add('is-pushed');
+          placeHere();
+          range.classList.add('is-on');
+          phase = 'trial';
+        }, d + 1900);
+      }, 500);
+    }
+    function decide(kept) {
+      if (phase !== 'trial') return;
+      clear();
+      var t = LINES[lang];
+      phase = kept ? 'kept' : 'undone';
+      keep.hidden = true; undo.hidden = true;
+      if (kept) {
+        chip.classList.add('is-kept'); chipLabel.textContent = t.kept;
+        range.classList.add('is-kept'); auroraClip.classList.add('is-long'); setTotal(20);
+        say(subK, t.afterKeep, t.kLabel, false);
+      } else {
+        chips.classList.remove('is-on');
+        push.classList.remove('is-pushed');
+        range.classList.remove('is-on');
+        box.hidden = true; here.hidden = true;
+        say(subK, t.afterUndo, t.kLabel, false);
+      }
+    }
+    keep.addEventListener('click', function () { decide(true); });
+    undo.addEventListener('click', function () { decide(false); });
+    document.querySelector('[data-replay]').addEventListener('click', run);
+
+    /* point yourself: drag a box on the picture */
+    var start = null;
+    function pct(e) {
+      var r = pic.getBoundingClientRect();
+      return { x: Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100)), y: Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100)) };
+    }
+    pic.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('button')) return;
+      start = pct(e);
+      pic.setPointerCapture(e.pointerId);
+    });
+    pic.addEventListener('pointermove', function (e) {
+      if (!start) return;
+      var p = pct(e);
+      if (Math.abs(p.x - start.x) < 2 && Math.abs(p.y - start.y) < 2) return;
+      if (phase !== 'pointing') {
+        clear(); phase = 'pointing';
+        push.classList.remove('is-pushed'); chips.classList.remove('is-on'); range.classList.remove('is-on');
+        hide(subYou); hide(subK); thinking.classList.remove('is-on');
+      }
+      setBox({ x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) }, false);
+    });
+    function endDrag() {
+      if (!start) return;
+      start = null;
+      if (phase !== 'pointing') return;
+      var t = LINES[lang];
+      say(subK, t.pointed(tc(video.currentTime || 0)), t.kLabel, false);
+      phase = 'pointed';
+    }
+    pic.addEventListener('pointerup', endDrag);
+    pic.addEventListener('pointercancel', endDrag);
+
+    function tick() {
+      var cur = video.currentTime || 0;
+      var dur = video.duration || 6;
+      timecode.textContent = tc(cur) + ' / ' + tc(total);
+      playhead.style.left = Math.min(100, cur / dur * 100) + '%';
+      requestAnimationFrame(tick);
+    }
+    if (reduce) { video.removeAttribute('autoplay'); video.pause(); }
+    requestAnimationFrame(tick);
+
+    return {
+      run: run,
+      relabel: function () {
+        var t = LINES[lang];
+        if (phase === 'trial') { chipLabel.textContent = t.trial; say(subK, t.k, t.kLabel, false); }
+        else if (phase === 'kept') { chipLabel.textContent = t.kept; say(subK, t.afterKeep, t.kLabel, false); }
+        else if (phase === 'undone') { say(subK, t.afterUndo, t.kLabel, false); }
+        else if (phase === 'pointed') { say(subK, t.pointed(tc(video.currentTime || 0)), t.kLabel, false); }
+        else if (phase === 'idle') { run(); }
+      }
+    };
+  })();
+
+  /* ---------- invite forms ---------- */
+  document.querySelectorAll('[data-invite]').forEach(function (form) {
+    var input = form.querySelector('input');
+    var note = form.querySelector('.invite-note');
+    var row = form.querySelector('.invite-row');
+    function fail(msg) { note.textContent = msg; note.classList.add('is-error'); row.classList.add('has-error'); input.setAttribute('aria-invalid', 'true'); input.focus(); }
+    input.addEventListener('input', function () { if (row.classList.contains('has-error')) { note.textContent = ''; note.classList.remove('is-error'); row.classList.remove('has-error'); input.removeAttribute('aria-invalid'); } });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var t = LINES[lang];
+      var v = input.value.trim();
+      if (!v) return fail(t.formEmpty);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return fail(t.formBad);
+      note.classList.remove('is-error'); row.classList.remove('has-error'); input.removeAttribute('aria-invalid');
+      note.textContent = t.formOk(v);
+    });
+  });
+
+  /* ---------- start ---------- */
+  harvest();
+  var saved = store(true);
+  var initial = saved === 'zh' || saved === 'en' ? saved : ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+  if (initial === 'zh') setLang('zh'); else { buildTagline(); scene.run(); }
+})();
+</script>
+</body>
+</html>
