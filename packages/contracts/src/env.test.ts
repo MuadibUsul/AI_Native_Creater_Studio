@@ -219,6 +219,17 @@ describe('V5-M3 配置统一：生产密钥分层、旧变量名、Worker 数值
     expect(crossCheckWorkerEnv(slowHeartbeat.value!).map((issue) => issue.variable)).toEqual(['ANCS_WORKER_HEARTBEAT_MS']);
   });
 
+  it('V6-10 S4 任务槽：缺省 1；上下界校验；必须少于数据库连接池', () => {
+    expect(validateEnv(workerEnvSchema, validApiEnv).value).toMatchObject({ ANCS_WORKER_SLOTS: 1 });
+    expect(validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_SLOTS: '0' }).issues.map((issue) => issue.variable)).toEqual(['ANCS_WORKER_SLOTS']);
+    const four = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_SLOTS: '4' });
+    expect(crossCheckWorkerEnv(four.value!)).toEqual([]);
+    const five = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_SLOTS: '5' });
+    expect(crossCheckWorkerEnv(five.value!).map((issue) => issue.variable)).toEqual(['ANCS_WORKER_SLOTS']);
+    const pooled = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_WORKER_SLOTS: '8', ANCS_DB_POOL_MAX: '12' });
+    expect(crossCheckWorkerEnv(pooled.value!)).toEqual([]);
+  });
+
   it('V6-5/V6-7/V6-8 Fish Audio、HeyGen 与视频生成：缺密钥/缺声音/缺报价依据 → 启动失败；报价依据只接受真实实现', () => {
     const fish = validateEnv(workerEnvSchema, { ...validApiEnv, ANCS_NARRATION_DRIVER: 'fish' });
     expect(crossCheckWorkerEnv(fish.value!).map((issue) => issue.variable)).toEqual(['FISH_AUDIO_API_KEY', 'ANCS_NARRATION_VOICES_JSON']);

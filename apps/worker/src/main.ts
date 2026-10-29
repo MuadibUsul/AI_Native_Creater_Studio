@@ -8,7 +8,7 @@ import { ElorianAgentModel } from '@ancs/providers-elorian';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type Job, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -17,6 +17,7 @@ import { createFfmpegReferenceAnalyzer } from './reference-analyzer-process.js';
 import { createReferenceFetcher } from './reference-fetcher.js';
 import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
+import { runJobSlots } from './slots.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
@@ -352,7 +353,7 @@ const registry: JobHandlerRegistry =
 let stopping = false;
 const stop = (signal: string): void => {
   stopping = true;
-  console.log(`[worker ${workerId}] 收到 ${signal}，当前任务完成后退出。`);
+  console.log(`[worker ${workerId}] 收到 ${signal}，进行中的任务完成后退出。`);
 };
 process.on('SIGINT', () => {
   stop('SIGINT');
@@ -361,8 +362,8 @@ process.on('SIGTERM', () => {
   stop('SIGTERM');
 });
 
-async function tick(): Promise<number> {
-  // 1) 维护（可重入）：租约回收（崩溃恢复）→ 重试退避推进 → 孤儿依赖检查 → Outbox 派发
+/** 维护（可重入）：租约回收（崩溃恢复）→ 重试退避推进 → 孤儿依赖检查 → Outbox 派发 */
+async function maintain(): Promise<void> {
   const tickReport = await runMaintenanceTick(deps, { limit: 50 });
   if (tickReport.leases.requeued > 0) {
     console.log(`[worker ${workerId}] 租约回收：${String(tickReport.leases.requeued)}（需对账 ${String(tickReport.leases.needsReconciliation)}）`);
@@ -375,49 +376,49 @@ async function tick(): Promise<number> {
   if (tickReport.dispatch.enqueued > 0 || tickReport.dispatch.failed > 0) {
     console.log(`[worker ${workerId}] 派发：enqueued=${String(tickReport.dispatch.enqueued)} failed=${String(tickReport.dispatch.failed)}`);
   }
-
-  // 2) 认领并执行
-  let executed = 0;
-  for (;;) {
-    if (stopping) break;
-    const claimed = await claimJob(deps, { workerId, leaseSeconds, types: registry.types() });
-    if (claimed === null) break;
-    console.log(`[worker ${workerId}] 认领 ${claimed.id}（${claimed.type}，attempt ${String(claimed.attempts)}）`);
-    const outcome = await executeJob(
-      deps,
-      registry,
-      {
-        workerId,
-        leaseSeconds,
-        heartbeatIntervalMs,
-        onPhase: (phase) => {
-          if (crashAt !== '' && crashAt === phase) {
-            console.error(`[worker ${workerId}] 故障注入：在 ${phase} 阶段退出（模拟 Worker 崩溃）`);
-            process.exit(86);
-          }
-        },
-      },
-      claimed,
-    );
-    console.log(`[worker ${workerId}] 完成 ${claimed.id} → ${outcome}`);
-    executed += 1;
-    if (once) break;
-  }
-  return executed;
 }
 
+async function claim(): Promise<Job | null> {
+  const claimed = await claimJob(deps, { workerId, leaseSeconds, types: registry.types() });
+  if (claimed !== null) console.log(`[worker ${workerId}] 认领 ${claimed.id}（${claimed.type}，attempt ${String(claimed.attempts)}）`);
+  return claimed;
+}
+
+async function execute(claimed: Job): Promise<void> {
+  const outcome = await executeJob(
+    deps,
+    registry,
+    {
+      workerId,
+      leaseSeconds,
+      heartbeatIntervalMs,
+      onPhase: (phase) => {
+        if (crashAt !== '' && crashAt === phase) {
+          console.error(`[worker ${workerId}] 故障注入：在 ${phase} 阶段退出（模拟 Worker 崩溃）`);
+          process.exit(86);
+        }
+      },
+    },
+    claimed,
+  );
+  console.log(`[worker ${workerId}] 完成 ${claimed.id} → ${outcome}`);
+}
+
+// 任务槽（V6-10 S4）：同时执行至多 slots 个任务；一次性运行只执行一个
+const slots = once ? 1 : config.ANCS_WORKER_SLOTS;
+if (slots > 1) console.log(`[worker ${workerId}] 任务槽 ${String(slots)}`);
+
 try {
-  let total = 0;
-  if (once) {
-    total += await tick();
-  } else {
-    while (!stopping) {
-      total += await tick();
-      if (stopping) break;
-      await new Promise((resolve) => setTimeout(resolve, tickIntervalMs));
-    }
-  }
-  console.log(JSON.stringify({ workerId, database: redactDatabaseUrl(databaseUrl), executed: total }));
+  const report = await runJobSlots({
+    slots,
+    pollMs: tickIntervalMs,
+    claim,
+    execute,
+    maintain,
+    stopping: () => stopping,
+    ...(once ? { limit: 1, untilIdle: true } : {}),
+  });
+  console.log(JSON.stringify({ workerId, database: redactDatabaseUrl(databaseUrl), executed: report.executed, ...(slots > 1 ? { slots, peak: report.peak } : {}) }));
   await deps.queue?.close?.();
   await handle.close();
   process.exit(0);

@@ -75,6 +75,7 @@ pnpm build            # TS → dist（API/Worker 以构建产物运行：apps/ap
 | `ANCS_LEGACY_PIPELINE` | 生产 `off`，其余 `mock` | 旧 V4 流水线（脚本 / 分镜的叙事生成、旧配音、声音克隆、素材搜索、Mock 分发）。它只有测试替身：`off` 不装配，相关端点 501，`/api/v1/capabilities` 报告 `legacyPipeline: off`，Web 隐藏旧入口、旧页面引导到共看片室；V6 共看片室、文章、自主制作不依赖它 |
 | `ANCS_ALLOW_MOCK_PROVIDERS` | 不允许 | **生产进程**装配任何 Mock/脚本化驱动必须显式设 `1`，否则启动失败；装配清单经 `/api/v1/capabilities` 的 `providers` 报告。生产缺省已不装配 Mock（旧流水线 off），正常部署不需要它 |
 | `ANCS_WORKER_TICK_MS` / `ANCS_WORKER_LEASE_SECONDS` / `ANCS_WORKER_HEARTBEAT_MS` | `1000` / `60` / 租约的 1/3 | 带上下界校验（非法值启动失败）；心跳必须短于租约 |
+| `ANCS_WORKER_SLOTS`（Worker） | `1` | 任务槽：同一个 Worker 同时执行几个任务（1–32）。长素材分章时，每一章占一个槽、大部分时间在等模型，调大它就能让一个 Worker 同时剪几章；建议设为分章资源池（缺省 3）+ 1，父运行轮询也要一个槽。渲染、转码等耗 CPU 的任务同样占槽，按机器核数取值。必须少于 `ANCS_DB_POOL_MAX`（缺省 5），否则启动失败 |
 | `ANCS_REFERENCE_FETCH_CMD`（Worker） | 未配置 | V6-6 学风格：平台页面链接的下载命令，必须含 `{url}` 与 `{output}`；未配置时只支持上传与直接视频链接 |
 | `ANCS_REFERENCE_MAX_MB`（Worker） | `1024` | V6-6 学风格：单条参考视频下载上限（MB） |
 | `ANCS_NARRATION_DRIVER`（Worker） | 未配置 | V6-5 讲述配音：`flite`（本地英文）、`fish`（Fish Audio，需 `FISH_AUDIO_API_KEY` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_FISH_AUDIO_MODEL`）、`gemini`（Gemini TTS，需 `GEMINI_API_KEY`，可选 `ANCS_GEMINI_TTS_MODEL`、`ANCS_NARRATION_VOICES_JSON`）或 `process`（需 `ANCS_NARRATION_EXECUTABLE` 与 `ANCS_NARRATION_VOICES_JSON`，可选 `ANCS_NARRATION_ARGS_JSON`） |
