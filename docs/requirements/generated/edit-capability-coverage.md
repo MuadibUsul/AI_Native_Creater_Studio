@@ -33,7 +33,7 @@
 | `add_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | LINEAR_AND_HOLD_INTERPOLATION_ONLY | N11-01 |
 | `update_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | LINEAR_AND_HOLD_INTERPOLATION_ONLY | N11-01 |
 | `remove_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | FINAL_KEYFRAME_REQUIRES_BINDING_REMOVAL | N11-01 |
-| `create_track` | NATIVE | `create_track` | KERNEL | 1 | 3 | PLANNED | — | — |
+| `create_track` | NATIVE | `create_track` | KERNEL | 2 | 3 | PLANNED | — | — |
 | `move_track` | NATIVE | `move_track` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `delete_track` | NATIVE | `delete_track` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 3 | PLANNED | — | — |
