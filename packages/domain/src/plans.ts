@@ -23,6 +23,7 @@ import {
 import { assetVersions, channels, creatorIdentities, customMotionComponentVersions, plans, workspaceMembers, workspaceSubscriptions, workspaces } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { deploymentPolicy } from './deployment-policy.js';
+import { inOrder } from './in-order.js';
 
 /**
  * 套餐与权益服务（P09-01 / 规范 §73、§35—36、§31）。
@@ -218,15 +219,16 @@ async function loadUsage(deps: DomainDeps, workspaceId: string): Promise<Entitle
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
-  const [storageRows, seatsRows, channelRows, identityRows, motionRows] = await Promise.all([
-    deps.db
+  // 常在事务里调用（建工程、签授权等）：同一连接上的查询必须串行，见 in-order.ts
+  const [storageRows, seatsRows, channelRows, identityRows, motionRows] = await inOrder([
+    () => deps.db
       .select({ total: sql<number>`coalesce(sum(${assetVersions.sizeBytes}), 0)` })
       .from(assetVersions)
       .where(and(eq(assetVersions.workspaceId, workspaceId), isNull(assetVersions.deletedAt))),
-    deps.db.select({ total: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId)),
-    deps.db.select({ total: count() }).from(channels).where(eq(channels.workspaceId, workspaceId)),
-    deps.db.select({ total: count() }).from(creatorIdentities).where(eq(creatorIdentities.workspaceId, workspaceId)),
-    deps.db
+    () => deps.db.select({ total: count() }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId)),
+    () => deps.db.select({ total: count() }).from(channels).where(eq(channels.workspaceId, workspaceId)),
+    () => deps.db.select({ total: count() }).from(creatorIdentities).where(eq(creatorIdentities.workspaceId, workspaceId)),
+    () => deps.db
       .select({ total: count() })
       .from(customMotionComponentVersions)
       .where(and(eq(customMotionComponentVersions.workspaceId, workspaceId), gte(customMotionComponentVersions.createdAt, monthStart))),

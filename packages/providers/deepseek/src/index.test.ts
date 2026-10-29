@@ -52,6 +52,44 @@ describe('DeepSeek director adapter', () => {
     expect(response.model).toBe('deepseek-flash');
   });
 
+  it('V7 B1: sends only the newest images; older ones become a note, so steps without new images use the configured model', async () => {
+    const frame = { mediaType: 'image/jpeg' as const, data: 'YQ==' };
+    const call = (id: string): AgentModelRequest['messages'][number] => ({ role: 'assistant', content: [{ type: 'opaque', provider: 'deepseek', payload: 'think' }, { type: 'tool_use', id, name: 'look_at_footage', input: {} }] });
+    const result = (id: string, images: number): AgentModelRequest['messages'][number] => ({ role: 'user', content: [{ type: 'tool_result', toolUseId: id, content: `result ${id}`, isError: false, ...(images ? { images: Array.from({ length: images }, () => frame) } : {}) }] });
+    const afterLook: AgentModelRequest['messages'] = [...request.messages, call('call_1'), result('call_1', 2)];
+    const afterRead = [...afterLook, call('call_2'), result('call_2', 0)];
+    const afterSecondLook = [...afterRead, call('call_3'), result('call_3', 1)];
+    const sent: { model: string; images: number; body: string }[] = [];
+    const model = new DeepSeekAgentModel({ apiKey: TEST_API_KEY, fetch: async (_url, init) => {
+      const body = String(init?.body);
+      const parsed = JSON.parse(body) as { model: string };
+      sent.push({ model: parsed.model, images: body.split('"type":"image_url"').length - 1, body });
+      return Response.json({ ...completion, model: parsed.model });
+    } });
+    for (const messages of [afterLook, afterRead, afterSecondLook]) await model.respond({ ...request, messages });
+
+    // 刚看到的图照常发给支持图片的 Flash；之后没有新图的一步回到配置的模型，旧图换成说明
+    expect(sent.map(({ model: used, images }) => [used, images])).toEqual([['deepseek-flash', 2], ['deepseek-v4-pro', 0], ['deepseek-flash', 1]]);
+    expect(sent[1]!.body).toContain('Images from tool result call_1 (2) were shown in an earlier step and are omitted now');
+    expect(sent[2]!.body).toContain('Images from tool result call_1 (2) were shown');
+    expect(sent[2]!.body).toContain('Images from tool result call_3:');
+    // 旧消息在之后每一步的投影都相同：请求只由轮次日志决定，前缀缓存在图片换成说明之后保持可用
+    const earlier = toDeepSeekMessages(afterRead);
+    expect(toDeepSeekMessages(afterSecondLook).slice(0, earlier.length)).toEqual(earlier);
+    // 工具结果与调用 id 的配对、推理内容的回放不受影响
+    expect(earlier.filter((message) => message.role === 'tool').map((message) => message.tool_call_id)).toEqual(['call_1', 'call_2']);
+    expect(earlier.filter((message) => message.role === 'assistant').every((message) => message.reasoning_content === 'think')).toBe(true);
+  });
+
+  it('V7 B2: a loop reminder after the tool results is sent as user text right after the tool messages', () => {
+    const replay = toDeepSeekMessages([
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'call_9', name: 'get_timeline', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', toolUseId: 'call_9', content: '{}', isError: false }, { type: 'text', text: 'You are repeating the exact same tool call.' }] },
+    ]);
+    expect(replay.map((message) => message.role)).toEqual(['assistant', 'tool', 'user']);
+    expect(replay[2]).toEqual({ role: 'user', content: 'You are repeating the exact same tool call.' });
+  });
+
   it.each([[401, 'AUTH'], [402, 'AUTH'], [429, 'RATE_LIMITED'], [503, 'OVERLOADED'], [500, 'TRANSIENT'], [400, 'BAD_REQUEST']])('classifies HTTP %s without reflecting credentials or retrying', async (status, kind) => {
     let calls = 0;
     const model = new DeepSeekAgentModel({ apiKey: TEST_API_KEY, fetch: async () => { calls++; return new Response('test-only-placeholder', { status: Number(status) }); } });

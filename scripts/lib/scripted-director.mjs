@@ -7,8 +7,11 @@
 // 请求里要求付费生成时（V6-7/V6-8）：先 list_generation_options，再 quote_generation（只报价），回复里说清价格、等你确认——
 // 框了画面区域说"重绘/换成" → 选区重绘；说"数字人/我出镜" → 用已授权的身份档案出镜（引号里的话就是讲稿）；说"生成一个镜头" → 生成镜头。
 // 交给 AI 剪完（V6-9，上下文里有 autonomous_production）：写制作计划 → 每条素材取 3 秒拼成第一版 → 自检与节奏 → 交付说明。
+// 分章（V6-10，交代里有 phase）：定计划时每条素材一章；剪一章时放这一章场景的素材；通看收尾时自检后交付。
+// 验收可以让某几章故意失败（failChapters，按章名）、让每章慢一点（chapterDelayMs），用来看逐章进度与只重做一章。
 // 用于在没有模型密钥时验证界面、服务端与评测框架的闭环；真实剪辑与特效质量要用真实模型评测。
 import { randomUUID } from 'node:crypto';
+import { AgentModelFailure } from '../../packages/contracts/dist/index.js';
 
 const tag = (text, name) => {
   const match = text.match(new RegExp(`<${name}>\\n([\\s\\S]*?)\\n</${name}>`));
@@ -30,6 +33,13 @@ export class ScriptedDirector {
   model = 'scripted-director';
   calls = 0;
 
+  /** @param {{ failChapters?: string[]; chapterDelayMs?: number }} [options] */
+  constructor(options = {}) {
+    /** 这些章名的章剪不成（验收用；清空后重做就能剪成） */
+    this.failChapters = new Set(options.failChapters ?? []);
+    this.chapterDelayMs = options.chapterDelayMs ?? 0;
+  }
+
   async respond(request) {
     this.calls += 1;
     const first = request.messages[0];
@@ -40,6 +50,7 @@ export class ScriptedDirector {
     const startTimeline = JSON.parse(tag(text, 'timeline') ?? '{}');
     if (article !== null && (startTimeline.clips ?? []).length === 0) return this.#articleStep(request, article, zh);
     const autonomous = JSON.parse(tag(text, 'autonomous_production') ?? 'null');
+    if (autonomous !== null && typeof autonomous.phase === 'string') return this.#chapterStep(request, text, zh, autonomous);
     if (autonomous !== null) return this.#autonomousStep(request, text, zh, autonomous);
     const last = request.messages.at(-1);
     const results = last.content.filter((block) => block.type === 'tool_result');
@@ -207,6 +218,42 @@ export class ScriptedDirector {
     return this.#reply(zh
       ? `剪好了第一版：${items.map((item) => item.name).join(' → ')}，各取 3 秒，共 ${String(items.length * 3)} 秒。这是测试替身，按素材顺序拼接，没有判断内容。`
       : `First cut done: ${items.map((item) => item.name).join(' → ')}, 3 seconds each, ${String(items.length * 3)} seconds in total. This is a test double that joins the footage in order without judging the content.`);
+  }
+
+  /** V6-10 分章的三个阶段：定计划（每条素材一章）→ 剪一章 → 通看收尾 */
+  async #chapterStep(request, text, zh, autonomous) {
+    const done = new Set(request.messages.flatMap((message) => message.content.filter((block) => block.type === 'tool_use').map((block) => block.name)));
+    const tool = (...uses) => ({ model: this.model, content: uses.map(([name, input]) => ({ type: 'tool_use', id: `tu_${randomUUID()}`, name, input })), stopReason: 'tool_use', usage });
+    if (autonomous.phase === 'PLAN_CHAPTERS') {
+      if (done.has('plan_production')) return this.#reply(zh ? '按素材分章，每条素材一章。' : 'One chapter per clip.');
+      const footage = JSON.parse(tag(text, 'footage') ?? '[]');
+      const items = (Array.isArray(footage) ? footage : footage.footage ?? []).filter((item) => item.kind === 'video').sort((a, b) => a.name.localeCompare(b.name));
+      const goal = String(autonomous.goal ?? '').split('\n')[0].slice(0, 120) || (zh ? '一条视频' : 'A video');
+      return tool(['plan_production', {
+        blueprint: { logline: goal, structure: items.map((item) => item.name).join(' → '), targetDurationSeconds: autonomous.targetDurationSeconds ?? null },
+        scenes: items.map((item, index) => ({
+          id: `scene_${String(index + 1)}`, title: item.name.slice(0, 80), goal: zh ? '这一段' : 'This part',
+          window: { start: String(index * 3), end: String(index * 3 + 3) }, sources: [{ footageId: item.footageId, from: '0.5', to: '3.5' }],
+        })),
+      }]);
+    }
+    if (autonomous.phase === 'CUT_CHAPTER') {
+      const chapter = autonomous.chapter ?? {};
+      if (this.chapterDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.chapterDelayMs));
+      if (this.failChapters.has(chapter.title)) throw new AgentModelFailure('BAD_REQUEST', 'the director model returned an error for this chapter (scripted test failure)');
+      if (!done.has('edit_timeline')) {
+        const source = chapter.scene?.sources?.[0];
+        if (source === undefined) return this.#reply(zh ? '这一章没有素材。' : 'This chapter has no footage.');
+        return tool(['edit_timeline', { operations: [{ op: 'place_clip', footageId: source.footageId, sourceStart: source.from, sourceEnd: source.to }, { op: 'fit_length' }] }]);
+      }
+      return this.#reply(zh ? `第 ${String(chapter.number)} 章剪好了。` : `Chapter ${String(chapter.number)} is cut.`);
+    }
+    if (!done.has('review_draft')) return tool(['review_draft', {}]);
+    const missing = (autonomous.chapters ?? []).filter((chapter) => chapter.status !== 'SUCCEEDED').map((chapter) => chapter.title);
+    if (autonomous.redo === true) return this.#reply(zh ? '重做的这一章放回了原来的位置，接缝看过了。' : 'The redone chapter is back in its place; the joins look fine.');
+    return this.#reply(missing.length === 0
+      ? (zh ? '各章拼好了，接缝看过了。' : 'The chapters are joined and the seams checked.')
+      : (zh ? `其余各章拼好了；没剪成：${missing.join('、')}。` : `The other chapters are joined; not cut: ${missing.join(', ')}.`));
   }
 
   /** 文章第一版：按已经做过的工具调用推进（讲述 → 图解卡 → 自检 → 回复）。 */

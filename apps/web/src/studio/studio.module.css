@@ -586,8 +586,19 @@
 .autonomyFacts ul { margin: 2px 0 0; padding-left: 1.1em; }
 .autonomyFacts li { overflow-wrap: anywhere; }
 .autonomyNote { white-space: pre-wrap; color: var(--ui-fg-primary); }
+/* V6-10 分章：一章一行；圆点实心 = 完成，空心 = 排队，闪烁 = 剪辑中，描边加粗 = 没剪成 */
+.autonomyChapters { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--ui-type-metadata); font-variant-numeric: tabular-nums; }
+.autonomyChapter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--ui-space-2); color: var(--ui-fg-secondary); overflow-wrap: anywhere; }
+.autonomyChapter > strong { font-weight: 500; color: var(--ui-fg-primary); }
+.autonomyChapterMark { flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--ui-fg-secondary); background: var(--ui-fg-secondary); }
+.autonomyChapter[data-status='PENDING'] .autonomyChapterMark { background: transparent; }
+.autonomyChapter[data-status='RUNNING'] .autonomyChapterMark { animation: autonomyPulse 1.6s var(--ui-ease-standard) infinite; }
+.autonomyChapter[data-status='FAILED'] .autonomyChapterMark, .autonomyChapter[data-status='CANCELLED'] .autonomyChapterMark { background: transparent; border-color: var(--ui-fg-primary); border-width: 2px; }
+.autonomyChapter[data-status='FAILED'] { color: var(--ui-fg-primary); }
+.autonomyChapterProblem { color: var(--ui-fg-secondary); }
+.autonomyRemaining { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--ui-border-subtle); }
 .autonomyEntry { display: flex; flex-direction: column; gap: var(--ui-space-3); padding: var(--ui-space-4); border: 1px solid var(--ui-border-subtle); border-radius: 16px; background: var(--ui-bg-subtle); }
-@media (prefers-reduced-motion: reduce) { .autonomyPulse { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .autonomyPulse, .autonomyChapter[data-status='RUNNING'] .autonomyChapterMark { animation: none; } }
 @media (max-width: 640px) {
   .autonomyRow { grid-template-columns: minmax(0, 1fr); }
   .autonomyBackdrop { align-items: flex-end; padding: 0; }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import {
   AGENT_ERROR_REASONS,
   AgentModelFailure,
@@ -316,7 +316,8 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     ]);
     const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看海边那段的画面' } });
     expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
-    expect(sampled.map((call) => call.storageKey)).toEqual([`proxies/${proxyVersionId}.mp4`, `v6-1a/${f.sunset}.mp4`]);
+    // 两次看画面在同一步里并行执行（V7 B3），抽帧的先后不固定
+    expect(sampled.map((call) => call.storageKey).sort()).toEqual([`proxies/${proxyVersionId}.mp4`, `v6-1a/${f.sunset}.mp4`].sort());
     expect(sampled.every((call) => call.maxWidth === 512)).toBe(true);
     // 图像进入日志（重试时原样回放）
     const logged = await handle.db.select().from(agentTurnMessages).where(eq(agentTurnMessages.turnId, turn.id));
@@ -502,6 +503,71 @@ describe('V6-1a 通用导演 Agent 运行时（真实 PostgreSQL，脚本模型�
     const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
     expect(done.toolCalls.map((call) => call.name)).toEqual(['edit_timeline', 'review_draft', 'look_at_timeline']);
     expect(done.toolCalls[1]!.summary).toBe('review: 2 warnings, 1 notes');
+  });
+
+  it('V7 B2 重复调用提醒（裁决 0022）：同样参数连续第 3 次调用，提醒追加在本步工具结果之后并写进日志；调用照常执行', async () => {
+    const f = await fixture();
+    const look = (id: string) => () => reply([{ type: 'tool_use', id, name: 'get_timeline', input: {} }], 'tool_use');
+    const reminderOf = (request: AgentModelRequest) => lastMessage(request).content.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+    const model = new ScriptedModel([
+      look('g1'), look('g2'), look('g3'),
+      (request) => reply([{ type: 'text', text: reminderOf(request).length > 0 ? '不再重复。' : '没有提醒。' }], 'end_turn'),
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看时间线' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!)).toBe('SUCCEEDED');
+    // 第 2、3 次请求没有提醒；第 4 次请求里，提醒排在第 3 个工具结果之后
+    expect(model.requests.slice(1).map(reminderOf).map((text) => text.startsWith('You are repeating the exact same tool call'))).toEqual([false, false, true]);
+    const lastContent = lastMessage(model.requests[3]!).content;
+    expect(lastContent.map((block) => block.type)).toEqual(['tool_result', 'text']);
+    expect(toolResults(model.requests[3]!)[0]).toMatchObject({ toolUseId: 'g3', isError: false });
+    // 提醒写进日志，之后的请求原样带着它（只追加，不改历史）
+    const logged = await handle.db.select().from(agentTurnMessages).where(eq(agentTurnMessages.turnId, turn.id)).orderBy(asc(agentTurnMessages.seq));
+    expect(logged.at(-2)?.content).toEqual(lastContent);
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    expect(done.toolCalls.map((call) => call.name)).toEqual(['get_timeline', 'get_timeline', 'get_timeline']);
+    expect(done.reply).toBe('不再重复。');
+  });
+
+  it('V7 B3 并行只读（裁决 0022）：同一步里相邻的只读调用并行执行，结果按模型给出的顺序；修改前后的读取各自看到当时的草稿', async () => {
+    const f = await fixture();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const frames: AgentFrameSampler = {
+      sample: async (input) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        inFlight -= 1;
+        return input.times.map(() => ({ mediaType: 'image/jpeg' as const, data: '/9j/4AAQ' }));
+      },
+    };
+    const clipsIn = (content: string) => (JSON.parse(content) as { clips: unknown[] }).clips.length;
+    const model = new ScriptedModel([
+      () => reply([
+        { type: 'tool_use', id: 'l1', name: 'look_at_footage', input: { footageId: f.beach, times: ['1'] } },
+        { type: 'tool_use', id: 'l2', name: 'look_at_footage', input: { footageId: f.sunset, times: ['1'] } },
+        { type: 'tool_use', id: 'l3', name: 'look_at_footage', input: { footageId: f.beach, times: ['2'] } },
+      ], 'tool_use'),
+      (request) => {
+        expect(toolResults(request).map((result) => [result.toolUseId, result.isError, result.images?.length])).toEqual([['l1', false, 1], ['l2', false, 1], ['l3', false, 1]]);
+        return reply([
+          { type: 'tool_use', id: 't1', name: 'get_timeline', input: {} },
+          { type: 'tool_use', id: 'e1', name: 'edit_timeline', input: { operations: [{ op: 'place_clip', footageId: f.sunset, sourceStart: '0', sourceEnd: '2' }] } },
+          { type: 'tool_use', id: 't2', name: 'get_timeline', input: {} },
+        ], 'tool_use');
+      },
+      (request) => {
+        const [before, edit, after] = toolResults(request);
+        expect(edit).toMatchObject({ toolUseId: 'e1', isError: false });
+        expect([clipsIn(before!.content), clipsIn(after!.content)]).toEqual([0, 1]);
+        return reply([{ type: 'text', text: '好了。' }], 'end_turn');
+      },
+    ]);
+    const turn = await startAgentTurn(deps(), { workspaceId: f.workspaceId, sessionId: f.session.id, request: { message: '看看三段' } });
+    expect(await drive(model, f.workspaceId, turn.workflowRunId!, undefined, frames)).toBe('SUCCEEDED');
+    expect(maxInFlight).toBe(3);
+    const done = await getAgentTurn(deps(), { workspaceId: f.workspaceId, turnId: turn.id });
+    expect(done.toolCalls.map((call) => call.name)).toEqual(['look_at_footage', 'look_at_footage', 'look_at_footage', 'get_timeline', 'edit_timeline', 'get_timeline']);
   });
 });
 

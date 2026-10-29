@@ -158,6 +158,29 @@ describe('AnthropicAgentModel（真实 SDK × 本地假服务）', () => {
     expect(messages[2]).toEqual({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_9', content: [{ type: 'text', text: '{"frames":1}' }, imageBlock], is_error: false }] });
   });
 
+  it('历史只追加、原样重发：后一步请求的前缀与前一步完全相同（含旧图与思考块；思考块绑定之前的对话，改写会让它失效）', async () => {
+    const fake = await startFake((_request, response) => { sse(response, thinkingThenToolUse); });
+    const model = new AnthropicAgentModel({ apiKey: FAKE_KEY, model: 'claude-opus-5-5', baseURL: fake.baseURL, maxRetries: 0 });
+    const image = { mediaType: 'image/jpeg' as const, data: '/9j/4AAQSkZJRg==' };
+    const first = await model.respond(baseRequest);
+    const afterLook: AgentModelRequest['messages'] = [
+      ...baseRequest.messages,
+      { role: 'assistant', content: first.content },
+      { role: 'user', content: [{ type: 'tool_result', toolUseId: 'toolu_1', content: '{"frames":2}', isError: false, images: [image, image] }] },
+    ];
+    const second = await model.respond({ ...baseRequest, messages: afterLook });
+    await model.respond({
+      ...baseRequest,
+      messages: [...afterLook, { role: 'assistant', content: second.content }, { role: 'user', content: [{ type: 'tool_result', toolUseId: 'toolu_1', content: '{"clips":3}', isError: false }] }],
+    });
+    const [, looked, later] = fake.requests.map((request) => request.body);
+    // 与 DeepSeek 不同（V7 B1）：Claude 适配器不替换旧图，旧图与签名思考块原样留在前缀里
+    expect(later?.messages?.slice(0, looked?.messages?.length)).toEqual(looked?.messages);
+    expect(JSON.stringify(later?.messages)).toContain('"signature":"sig-abc"');
+    expect(JSON.stringify(later?.messages).split('"type":"image"').length - 1).toBe(2);
+    expect([later?.system, later?.tools]).toEqual([looked?.system, looked?.tools]);
+  });
+
   it('拒绝回放其他供应商的 opaque 块', async () => {
     const fake = await startFake((_request, response) => { sse(response, thinkingThenToolUse); });
     const model = new AnthropicAgentModel({ apiKey: FAKE_KEY, model: 'claude-opus-5-5', baseURL: fake.baseURL, maxRetries: 0 });

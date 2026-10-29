@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, resolveTestDatabaseUrl, runMigrations } from '../../packages/db/dist/index.js';
 import { createAuth, createInternalUser, DEFAULT_NATIVE_TOKEN_CONFIG, DEFAULT_OPS_SESSION_POLICY } from '../../packages/auth/dist/index.js';
-import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousChapterWorkflow, autonomousProductionWorkflow, autonomousProductionWorkflowV1, claimJob, compositionFinalRenderWorkflow, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick } from '../../packages/domain/dist/index.js';
 import { buildServer } from '../../apps/api/dist/server.js';
 import { createStorageDeps } from '../../apps/api/dist/plugins/storage.js';
 import { createAdminDeps } from '../../apps/api/dist/plugins/admin.js';
@@ -125,6 +125,13 @@ export async function startStudioEnv(options) {
     provider: options.generation.provider ?? createScriptedGenerationProvider({ ...(options.generation.behavior === undefined ? {} : { behavior: options.generation.behavior }) }),
     storage, probe,
   });
+  const autonomousPorts = {
+    model: options.director,
+    frames: createStorageFrameSampler({ storage }),
+    footageWait: { pollSeconds: 2 },
+    chapters: { pollSeconds: 2, ...options.chapters },
+    ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
+  };
   const workflowRegistry = new WorkflowRegistry()
     .register(compositionFinalRenderWorkflow({ executor: createFfmpegRenderPlanExecutor(), outputProbe: probe }))
     .register(agentTurnWorkflow({
@@ -137,13 +144,10 @@ export async function startStudioEnv(options) {
       ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
       ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
     }))
-    // V6-9：自主制作（同一个导演与工具；等素材的轮询间隔缩短到 2 秒，方便验收）
-    .register(autonomousProductionWorkflow({
-      model: options.director,
-      frames: createStorageFrameSampler({ storage }),
-      footageWait: { pollSeconds: 2 },
-      ...(options.narration === undefined ? {} : { narration: { synthesizer: options.narration.synthesizer?.(probe) ?? createFliteNarrationSynthesizer({ probe }) } }),
-    }))
+    // V6-9 / V6-10：自主制作（同一个导演与工具；等素材与分章的轮询间隔缩短到 2 秒，方便验收；options.chapters 可调分章门槛）
+    .register(autonomousProductionWorkflow(autonomousPorts))
+    .register(autonomousProductionWorkflowV1(autonomousPorts))
+    .register(autonomousChapterWorkflow(autonomousPorts))
     // V6-6：蒸馏器（真实 FFmpeg 测量；options.distill = { model?, allowPrivateNetwork?, downloadCommand? }）
     .register(referenceDistillWorkflow({
       analyzer: createFfmpegReferenceAnalyzer(),

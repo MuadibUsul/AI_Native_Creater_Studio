@@ -249,7 +249,7 @@ describe('V6-1c 共看片室', () => {
   it('V6-9 交给 AI 剪完：还没剪时画布给出入口，打开设置签署并开始；进行中时进度卡在对话里、可停下，画布不再给入口', async () => {
     const policy = { approval: 'ASK_EACH', budgetMicros: null, perGenerationMicros: null, allowOwnLikeness: false, maxRetriesPerTask: 2, signature: null };
     const active = {
-      id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', goal: '60 秒冰岛自驾', targetDurationSeconds: 60, strategyPackId: null, approval: 'ASK_EACH', policyVersion: 1,
+      id: 'aut_1', projectId: 'prj_1', status: 'DIRECTING', mode: 'SINGLE', chapters: [], redoOf: null, goal: '60 秒冰岛自驾', targetDurationSeconds: 60, strategyPackId: null, approval: 'ASK_EACH', policyVersion: 1,
       budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_9', workflowRunId: 'wfr_9', proposalId: null, adoptedRevision: null,
       progress: { steps: 3, lastStep: '计划：4 场', lastTool: 'plan_production' }, report: null, error: null,
       createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
@@ -281,7 +281,7 @@ describe('V6-1c 共看片室', () => {
 
   it('V6-9 交给 AI 剪完：看到试改后 AI 按授权自己采用 → 版本变化时重读提案，画面换成当前版本（不再为已采用的提案请求预览）', async () => {
     const run = {
-      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', mode: 'SINGLE', chapters: [], redoOf: null, goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
       budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
       progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
       createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,
@@ -309,7 +309,7 @@ describe('V6-1c 共看片室', () => {
 
   it('V6-9 交给 AI 剪完：试改刚出来 AI 就按授权采用了（这边还没轮询到新版本）→ 试改预览被拒不算失败，马上重读提案与工作台', async () => {
     const run = {
-      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
+      id: 'aut_1', projectId: 'prj_1', status: 'CHECKING', mode: 'SINGLE', chapters: [], redoOf: null, goal: '12 秒冰岛预告', targetDurationSeconds: 15, strategyPackId: null, approval: 'AUTO_SAFE', policyVersion: 1,
       budgetMicros: 2_000_000, modelCapMicros: 1_800_000, locale: 'zh-CN', turnId: 'agt_1', workflowRunId: 'wfr_1', proposalId: 'prp_1', adoptedRevision: null,
       progress: { steps: 4, lastStep: '自检', lastTool: 'review_draft' }, report: null, error: null,
       createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:01:00.000Z', completedAt: null,

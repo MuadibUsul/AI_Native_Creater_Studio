@@ -396,6 +396,8 @@ export const workerEnvSchema = z.object({
   ANCS_WORKER_TICK_MS: z.coerce.number().int().min(50, 'ANCS_WORKER_TICK_MS ≥ 50').max(60_000, 'ANCS_WORKER_TICK_MS ≤ 60000').default(1000),
   ANCS_WORKER_LEASE_SECONDS: z.coerce.number().int().min(5, 'ANCS_WORKER_LEASE_SECONDS ≥ 5').max(3600, 'ANCS_WORKER_LEASE_SECONDS ≤ 3600').default(60),
   ANCS_WORKER_HEARTBEAT_MS: z.coerce.number().int().min(100, 'ANCS_WORKER_HEARTBEAT_MS ≥ 100').optional(),
+  /** 任务槽（V6-10 S4）：同一个 Worker 同时执行几个任务；缺省 1（串行） */
+  ANCS_WORKER_SLOTS: z.coerce.number().int().min(1, 'ANCS_WORKER_SLOTS ≥ 1').max(32, 'ANCS_WORKER_SLOTS ≤ 32').default(1),
   /** 故障注入（P03-02 演练）：在关键阶段退出进程 */
   ANCS_WORKER_CRASH_AT: z.string().optional(),
   ANCS_FFMPEG_PATH: nonEmpty('ANCS_FFMPEG_PATH').optional(),
@@ -470,7 +472,7 @@ export const workerEnvSchema = z.object({
    * Veo 生成镜头（ANCS_VEO_OFFER_JSON）。只在 Worker 进程内存中使用，只放请求头。
    */
   GEMINI_API_KEY: z.string().min(16, 'GEMINI_API_KEY 过短').optional(),
-  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，含图像历史时用 deepseek-flash） */
+  /** 导演模型 id（anthropic: claude-opus-5-5；gemini: gemini-flash-latest；deepseek: deepseek-v4-pro，这一步带新图时用 deepseek-flash） */
   ANCS_AGENT_MODEL: nonEmpty('ANCS_AGENT_MODEL').optional(),
   /**
    * V6-3：AI 当场写特效代码（缺省 disabled = 只用模板库）。部署方按评测结果开启；开启后代码仍须过四道门禁才渲染。
@@ -653,6 +655,10 @@ export function crossCheckWorkerEnv(value: WorkerEnv): EnvIssue[] {
   }
   if (value.ANCS_WORKER_HEARTBEAT_MS !== undefined && value.ANCS_WORKER_HEARTBEAT_MS >= value.ANCS_WORKER_LEASE_SECONDS * 1000) {
     issues.push({ variable: 'ANCS_WORKER_HEARTBEAT_MS', message: '心跳间隔必须小于租约时长（否则租约会在两次心跳之间过期）' });
+  }
+  // 每个槽在写库时占一个连接（事务里还可能再取一个）；另需留给心跳与维护。缺省连接池 5。
+  if (value.ANCS_WORKER_SLOTS >= (value.ANCS_DB_POOL_MAX ?? 5)) {
+    issues.push({ variable: 'ANCS_WORKER_SLOTS', message: `任务槽必须少于数据库连接池（ANCS_DB_POOL_MAX，缺省 5）：当前 ${String(value.ANCS_WORKER_SLOTS)} 个槽，请调大连接池或减少槽数` });
   }
   return issues;
 }

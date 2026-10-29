@@ -3070,8 +3070,17 @@ export {
   autonomousRunSchema,
   AUTONOMOUS_RUN_ERROR_REASONS,
   AUTONOMOUS_UNMET_CODES,
+  AUTONOMOUS_CHAPTER_WORKFLOW,
+  AUTONOMOUS_CHAPTER_WORKFLOW_VERSION,
+  AUTONOMOUS_RUN_MODES,
+  autonomousRunModeSchema,
+  AUTONOMOUS_CHAPTER_STATUSES,
+  autonomousChapterStatusSchema,
+  autonomousChapterSchema,
+  autonomousReportChapterSchema,
+  autonomousRedoOfSchema,
 } from './autonomous-run.js';
-export type { AutonomousRunStatus, StartAutonomousRunRequest, AutonomousReport, AutonomousRun } from './autonomous-run.js';
+export type { AutonomousRunStatus, StartAutonomousRunRequest, AutonomousReport, AutonomousRun, AutonomousRunMode, AutonomousChapter, AutonomousChapterStatus, AutonomousRedoOf } from './autonomous-run.js';
 
 // 限流存储端口（内存 / Redis 共享）
 export { retryAfterSeconds } from './rate-limit.js';

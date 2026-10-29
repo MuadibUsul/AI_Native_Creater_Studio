@@ -13,7 +13,7 @@ import type { Messages } from '@/i18n/messages';
 import { QuietIcon } from '@/ui/QuietIcon';
 import { StudioCanvas, type CanvasMode, type UploadProgress } from './StudioCanvas';
 import { StudioConversation } from './StudioConversation';
-import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive } from './StudioAutonomy';
+import { StudioAutonomyCard, StudioAutonomyDialog, autonomousRunActive, autonomyRedoErrorKey } from './StudioAutonomy';
 import { ArticleBoardFrame, FootageBoardFrame, PlanBoardFrame } from './StudioBoardFrames';
 import { presenceOf, totalFootageSeconds } from './editor-presence';
 import { StudioGenerationCards, visibleGenerations } from './StudioGenerationCards';
@@ -125,6 +125,20 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   const cancelAutonomy = useMutation({
     mutationFn: (runId: string) => client.autonomy.cancelRun(workspaceId, projectId, runId, { idempotencyKey: `autonomy-cancel-${runId}` }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
+  // V6-10：只重做没剪成的那一章（新的一次运行；卡片随工作台状态切到它）
+  const redoChapter = useMutation({
+    mutationFn: (input: { runId: string; chapterId: string }) =>
+      client.autonomy.redoChapter(workspaceId, projectId, input.runId, input.chapterId, { idempotencyKey: `autonomy-redo-${globalThis.crypto.randomUUID()}` }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: studioKeys.state(workspaceId, projectId) }),
+  });
+  // 这次是重做某一章：读最初那次分章运行，卡片列出其余没剪成的章（最近一次运行变了或结束了就重读：哪些章已经补上会变）
+  const rootRunId = autonomousRun?.redoOf?.runId ?? null;
+  const rootRun = useQuery({
+    queryKey: [...studioKeys.autonomousRun(workspaceId, projectId, rootRunId ?? ''), autonomousRun?.id ?? '', autonomousRun?.status ?? ''],
+    queryFn: () => client.autonomy.getRun(workspaceId, projectId, rootRunId!),
+    enabled: rootRunId !== null && !autonomyActive,
+    retry: false,
   });
   // 画面理解失败或因本月 AI 额度暂停 → 再理解一次（额度仍用完时服务端 402，说明额度与恢复日期）
   const [visualRetryError, setVisualRetryError] = useState<{ assetId: string; message: string } | null>(null);
@@ -824,6 +838,10 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
             stopping={cancelAutonomy.isPending}
             error={cancelAutonomy.isError ? messages.autonomy.card.stopFailed : null}
             onStop={() => cancelAutonomy.mutate(autonomousRun.id)}
+            rootRun={rootRunId === null ? null : rootRun.data ?? null}
+            onRedo={(runId, chapterId) => redoChapter.mutate({ runId, chapterId })}
+            redoing={redoChapter.isPending ? redoChapter.variables.chapterId : null}
+            redoError={redoChapter.isError ? messages.autonomy.card.redoErrors[autonomyRedoErrorKey(redoChapter.error)] : null}
           />
         ) : null}
         generationCards={(

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { autonomousRunSchema, autonomyPolicySchema, errorEnvelopeSchema, opaqueIdSchema, productionPlanSchema, signAutonomyRequestSchema, startAutonomousRunRequestSchema } from '@ancs/contracts';
-import { cancelAutonomousRun, getAutonomousRun, getLatestProductionPlan, getProjectAutonomy, listAutonomousRuns, revokeProjectAutonomy, signProjectAutonomy, startAutonomousRun, type DomainDeps } from '@ancs/domain';
+import { cancelAutonomousRun, getAutonomousRun, getLatestProductionPlan, getProjectAutonomy, listAutonomousRuns, redoAutonomousChapter, revokeProjectAutonomy, signProjectAutonomy, startAutonomousRun, type DomainDeps } from '@ancs/domain';
 import type { AuthDeps } from '../plugins/auth.js';
 
 /**
@@ -13,12 +13,14 @@ import type { AuthDeps } from '../plugins/auth.js';
  * - GET    /workspaces/:id/projects/:projectId/production-plan：最新一版制作计划（蓝图、场景契约、剪辑意图；没有为 null）；
  * - POST   /workspaces/:id/projects/:projectId/autonomous-runs：开始自主制作（必须已签署授权；同一工程只有一个进行中的运行；幂等键 → 同一运行）；
  * - GET    /workspaces/:id/projects/:projectId/autonomous-runs[/:runId]：运行列表（新的在前）/ 单个运行（进度、交付报告）；
- * - POST   /workspaces/:id/projects/:projectId/autonomous-runs/:runId/cancel：停止（在步骤边界生效）。
+ * - POST   /workspaces/:id/projects/:projectId/autonomous-runs/:runId/cancel：停止（在步骤边界生效）；
+ * - POST   /workspaces/:id/projects/:projectId/autonomous-runs/:runId/chapters/:chapterId/redo：只重做没剪成的那一章（V6-10 S5，新的一次运行；幂等键 → 同一运行）。
  * 鉴权：读 project:read，签署与撤回 project:write；跨工作区 → 404（反枚举）。
  */
 
 const projectParams = z.object({ id: opaqueIdSchema, projectId: opaqueIdSchema });
 const runParams = projectParams.extend({ runId: opaqueIdSchema });
+const chapterParams = runParams.extend({ chapterId: opaqueIdSchema });
 const ERROR_RESPONSES = { 401: errorEnvelopeSchema, 402: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 422: errorEnvelopeSchema };
 
 export function registerAutonomyRoutes(app: FastifyInstance, deps: AuthDeps): void {
@@ -77,6 +79,18 @@ export function registerAutonomyRoutes(app: FastifyInstance, deps: AuthDeps): vo
   }, async (request) => {
     await app.requireWorkspace(request, request.params.id, 'project:write');
     return cancelAutonomousRun(domain, { workspaceId: request.params.id, projectId: request.params.projectId, runId: request.params.runId });
+  });
+
+  typed.post('/workspaces/:id/projects/:projectId/autonomous-runs/:runId/chapters/:chapterId/redo', {
+    schema: { tags: ['projects'], summary: '只重做没剪成的那一章：新的一次运行，只剪这一章，放回它在成片里的位置，再通看收尾、按档位交付（同样核对授权与预算）', params: chapterParams, response: { 202: autonomousRunSchema, ...ERROR_RESPONSES } },
+  }, async (request, reply) => {
+    const { context } = await app.requireWorkspace(request, request.params.id, 'project:write');
+    const idempotencyKey = request.headers['idempotency-key'];
+    const run = await redoAutonomousChapter(domain, {
+      workspaceId: request.params.id, projectId: request.params.projectId, runId: request.params.runId, chapterId: request.params.chapterId, createdBy: context.userId,
+      idempotencyKey: typeof idempotencyKey === 'string' && idempotencyKey !== '' ? `${context.userId}:${idempotencyKey}` : null,
+    });
+    return reply.code(202).send(run);
   });
 
   typed.delete('/workspaces/:id/projects/:projectId/autonomy', {

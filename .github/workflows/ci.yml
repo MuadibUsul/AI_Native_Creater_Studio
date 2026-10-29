@@ -70,11 +70,13 @@ jobs:
       - name: Install FFmpeg
         # 真实媒体链路（探测/索引/转码、播放快照的真实解码校验）需要 ffmpeg/ffprobe；
         # unit 套件按仓库定义保持"无外部依赖"，因此这些用例归入 integration 套件。
+        # 含 AI 生成内容的终渲染要画显式标识（GB 45438），需要一款中文字体；与 Worker 镜像（Dockerfile）同用 fonts-noto-cjk。
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
           ffmpeg -version | head -1
           ffprobe -version | head -1
+          fc-list ':lang=zh-cn' file | grep -q . || { echo "no Chinese font visible to fontconfig" >&2; exit 1; }
 
       - name: Start S3-compatible storage (SeaweedFS)
         # S3 驱动的集成测试需要一个会校验 SigV4 签名（含预签名 URL）的真实 S3 兼容服务；服务容器无法传启动参数，故用 docker run

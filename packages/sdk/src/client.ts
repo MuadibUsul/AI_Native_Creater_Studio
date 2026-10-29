@@ -1540,6 +1540,8 @@ export interface AncsClient {
     listRuns(workspaceId: string, projectId: string): Promise<AutonomousRun[]>;
     getRun(workspaceId: string, projectId: string, runId: string): Promise<AutonomousRun>;
     cancelRun(workspaceId: string, projectId: string, runId: string, options?: MutationOptions): Promise<AutonomousRun>;
+    /** V6-10：只重做没剪成的那一章（202，新的一次运行）；幂等键 → 同一运行 */
+    redoChapter(workspaceId: string, projectId: string, runId: string, chapterId: string, options?: MutationOptions): Promise<AutonomousRun>;
   };
   /** V6-7/V6-8：付费生成（AI 报价 → 用户确认 → 预留预算 → 生成一次 → 放进试改 → 结算） */
   generations: {
@@ -3231,6 +3233,8 @@ export function createClient(options: ClientOptions): AncsClient {
       getRun: (workspaceId, projectId, runId) => request('GET', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}`, autonomousRunSchema),
       cancelRun: (workspaceId, projectId, runId, mutation) =>
         request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}/cancel`, autonomousRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
+      redoChapter: (workspaceId, projectId, runId, chapterId, mutation) =>
+        request('POST', `/api/v1/workspaces/${workspaceId}/projects/${projectId}/autonomous-runs/${runId}/chapters/${chapterId}/redo`, autonomousRunSchema, { idempotencyKey: mutation?.idempotencyKey }),
     },
     generations: {
       list: async (workspaceId, projectId) =>

@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { createDb, dbPoolOptionsFromEnv, redactDatabaseUrl } from '@ancs/db';
-import { WorkflowRegistry, agentTurnWorkflow, autonomousProductionWorkflow, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
+import { WorkflowRegistry, agentTurnWorkflow, autonomousChapterWorkflow, autonomousProductionWorkflow, autonomousProductionWorkflowV1, claimJob, compositionFinalRenderWorkflow, configureDeploymentPolicy, modelIsPriced, paidGenerationWorkflow, referenceDistillWorkflow, runMaintenanceTick, unconfiguredAgentModel } from '@ancs/domain';
 import { AnthropicAgentModel } from '@ancs/providers-anthropic';
 import { DEEPSEEK_IMAGE_MODEL, DeepSeekAgentModel } from '@ancs/providers-deepseek';
 import { ElorianAgentModel } from '@ancs/providers-elorian';
 import { GeminiAgentModel, createGeminiSpeech, createGeminiVeo } from '@ancs/providers-gemini';
 import { createSeedance } from '@ancs/providers-ark';
 import { createRunwayAleph } from '@ancs/providers-runway';
-import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type ProviderInventoryEntry } from '@ancs/contracts';
+import { checkProviderInventory, crossCheckWorkerEnv, formatEnvFailure, generationOfferSchema, mergeModelPrices, narrationVoiceSchema, parseModelPriceOverrides, resolveAiMonthlyCapMicros, validateEnv, workerEnvSchema, type EnvIssue, type Job, type ProviderInventoryEntry } from '@ancs/contracts';
 import { createDefaultRegistry, type JobHandlerRegistry } from './handlers.js';
 import { createProcessRenderExecutor } from './render-executor-process.js';
 import { createProcessMotionValidator } from './motion-validator-process.js';
@@ -17,6 +17,7 @@ import { createFfmpegReferenceAnalyzer } from './reference-analyzer-process.js';
 import { createReferenceFetcher } from './reference-fetcher.js';
 import { createProcessMediaProbe } from './media-probe-process.js';
 import { executeJob } from './runner.js';
+import { runJobSlots } from './slots.js';
 import { createDomainDeps } from './domain.js';
 import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
 import { createFliteNarrationSynthesizer, createProcessNarrationSynthesizer } from './narration-synthesizer-process.js';
@@ -290,6 +291,13 @@ const effectPorts = config.ANCS_DISABLE_RENDER === '1' ? undefined : {
 };
 // V5-M4：工作流定义（素材工程终渲染：FFmpeg 媒体图后端 + 真实输出探测）。不依赖 Remotion/Chromium，
 // 因此 ANCS_DISABLE_RENDER 不影响它；FFmpeg 缺失时推进会显式失败（工作流运行 FAILED，带错误）。
+/** 自主制作的端口（v2、v1 与分章子运行共用） */
+const autonomousPorts = {
+  model: agentModel,
+  frames: frameSampler,
+  ...(effectPorts === undefined ? {} : { effects: effectPorts }),
+  ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
+};
 const workflowRegistry = new WorkflowRegistry()
   .register(compositionFinalRenderWorkflow({
     executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
@@ -305,13 +313,11 @@ const workflowRegistry = new WorkflowRegistry()
     ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
     ...(generationExecutor === undefined ? {} : { generation: { offers: () => generationExecutor.offers() } }),
   }))
-  // V6-9：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 → 导演 → 自检 → 按审批档位采用 → 交付报告
-  .register(autonomousProductionWorkflow({
-    model: agentModel,
-    frames: frameSampler,
-    ...(effectPorts === undefined ? {} : { effects: effectPorts }),
-    ...(narrationSynthesizer === undefined ? {} : { narration: { synthesizer: narrationSynthesizer } }),
-  }))
+  // V6-9 / V6-10：自主制作（裁决 0020）：同一个通用导演 + 同一套工具；等素材 →（素材够长时：定计划 → 分章并行 → 拼装）
+  // → 导演 / 通看收尾 → 自检 → 按审批档位采用 → 交付报告。v1 留给升级前开始的运行走完；每章是一个子运行
+  .register(autonomousProductionWorkflow(autonomousPorts))
+  .register(autonomousProductionWorkflowV1(autonomousPorts))
+  .register(autonomousChapterWorkflow(autonomousPorts))
   // V6-6：蒸馏器（参考视频 → 剪辑 DNA → 策略包）。测量只用 FFmpeg；配置了导演模型才用模型写说明（否则按统计规则）；
   // 平台链接需要 ANCS_REFERENCE_FETCH_CMD（没配置时明确提示改为上传文件）
   .register(referenceDistillWorkflow({
@@ -347,7 +353,7 @@ const registry: JobHandlerRegistry =
 let stopping = false;
 const stop = (signal: string): void => {
   stopping = true;
-  console.log(`[worker ${workerId}] 收到 ${signal}，当前任务完成后退出。`);
+  console.log(`[worker ${workerId}] 收到 ${signal}，进行中的任务完成后退出。`);
 };
 process.on('SIGINT', () => {
   stop('SIGINT');
@@ -356,8 +362,8 @@ process.on('SIGTERM', () => {
   stop('SIGTERM');
 });
 
-async function tick(): Promise<number> {
-  // 1) 维护（可重入）：租约回收（崩溃恢复）→ 重试退避推进 → 孤儿依赖检查 → Outbox 派发
+/** 维护（可重入）：租约回收（崩溃恢复）→ 重试退避推进 → 孤儿依赖检查 → Outbox 派发 */
+async function maintain(): Promise<void> {
   const tickReport = await runMaintenanceTick(deps, { limit: 50 });
   if (tickReport.leases.requeued > 0) {
     console.log(`[worker ${workerId}] 租约回收：${String(tickReport.leases.requeued)}（需对账 ${String(tickReport.leases.needsReconciliation)}）`);
@@ -370,49 +376,49 @@ async function tick(): Promise<number> {
   if (tickReport.dispatch.enqueued > 0 || tickReport.dispatch.failed > 0) {
     console.log(`[worker ${workerId}] 派发：enqueued=${String(tickReport.dispatch.enqueued)} failed=${String(tickReport.dispatch.failed)}`);
   }
-
-  // 2) 认领并执行
-  let executed = 0;
-  for (;;) {
-    if (stopping) break;
-    const claimed = await claimJob(deps, { workerId, leaseSeconds, types: registry.types() });
-    if (claimed === null) break;
-    console.log(`[worker ${workerId}] 认领 ${claimed.id}（${claimed.type}，attempt ${String(claimed.attempts)}）`);
-    const outcome = await executeJob(
-      deps,
-      registry,
-      {
-        workerId,
-        leaseSeconds,
-        heartbeatIntervalMs,
-        onPhase: (phase) => {
-          if (crashAt !== '' && crashAt === phase) {
-            console.error(`[worker ${workerId}] 故障注入：在 ${phase} 阶段退出（模拟 Worker 崩溃）`);
-            process.exit(86);
-          }
-        },
-      },
-      claimed,
-    );
-    console.log(`[worker ${workerId}] 完成 ${claimed.id} → ${outcome}`);
-    executed += 1;
-    if (once) break;
-  }
-  return executed;
 }
 
+async function claim(): Promise<Job | null> {
+  const claimed = await claimJob(deps, { workerId, leaseSeconds, types: registry.types() });
+  if (claimed !== null) console.log(`[worker ${workerId}] 认领 ${claimed.id}（${claimed.type}，attempt ${String(claimed.attempts)}）`);
+  return claimed;
+}
+
+async function execute(claimed: Job): Promise<void> {
+  const outcome = await executeJob(
+    deps,
+    registry,
+    {
+      workerId,
+      leaseSeconds,
+      heartbeatIntervalMs,
+      onPhase: (phase) => {
+        if (crashAt !== '' && crashAt === phase) {
+          console.error(`[worker ${workerId}] 故障注入：在 ${phase} 阶段退出（模拟 Worker 崩溃）`);
+          process.exit(86);
+        }
+      },
+    },
+    claimed,
+  );
+  console.log(`[worker ${workerId}] 完成 ${claimed.id} → ${outcome}`);
+}
+
+// 任务槽（V6-10 S4）：同时执行至多 slots 个任务；一次性运行只执行一个
+const slots = once ? 1 : config.ANCS_WORKER_SLOTS;
+if (slots > 1) console.log(`[worker ${workerId}] 任务槽 ${String(slots)}`);
+
 try {
-  let total = 0;
-  if (once) {
-    total += await tick();
-  } else {
-    while (!stopping) {
-      total += await tick();
-      if (stopping) break;
-      await new Promise((resolve) => setTimeout(resolve, tickIntervalMs));
-    }
-  }
-  console.log(JSON.stringify({ workerId, database: redactDatabaseUrl(databaseUrl), executed: total }));
+  const report = await runJobSlots({
+    slots,
+    pollMs: tickIntervalMs,
+    claim,
+    execute,
+    maintain,
+    stopping: () => stopping,
+    ...(once ? { limit: 1, untilIdle: true } : {}),
+  });
+  console.log(JSON.stringify({ workerId, database: redactDatabaseUrl(databaseUrl), executed: report.executed, ...(slots > 1 ? { slots, peak: report.peak } : {}) }));
   await deps.queue?.close?.();
   await handle.close();
   process.exit(0);

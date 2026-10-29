@@ -9,9 +9,9 @@
 
 | 源操作 | 解析 | 规范操作 | 执行方 | 内核单测 | 集成测试 | 金样 | 限制 | 负责任务 |
 |---|---|---|---|---|---|---|---|---|
-| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 11 | PLANNED | — | — |
+| `insert_clip` | NATIVE | `insert_clip` | KERNEL | 2 | 12 | PLANNED | — | — |
 | `delete_clip` | NATIVE | `delete_clip` | KERNEL | 1 | 2 | PLANNED | — | — |
-| `move_clip` | NATIVE | `move_clip` | KERNEL | 1 | 6 | PLANNED | — | — |
+| `move_clip` | NATIVE | `move_clip` | KERNEL | 2 | 6 | PLANNED | — | — |
 | `trim_clip` | NATIVE | `trim_clip` | KERNEL | 1 | 12 | PLANNED | — | — |
 | `split_clip` | NATIVE | `split_clip` | KERNEL | 1 | 5 | PLANNED | — | — |
 | `duplicate_clip` | NATIVE | `duplicate_clip` | KERNEL | 1 | 1 | PLANNED | — | — |
@@ -33,7 +33,7 @@
 | `add_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | LINEAR_AND_HOLD_INTERPOLATION_ONLY | N11-01 |
 | `update_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | LINEAR_AND_HOLD_INTERPOLATION_ONLY | N11-01 |
 | `remove_keyframe` | COMPILED_ALIAS | `update_animation` | DOMAIN | 0 | 4 | PLANNED | FINAL_KEYFRAME_REQUIRES_BINDING_REMOVAL | N11-01 |
-| `create_track` | NATIVE | `create_track` | KERNEL | 1 | 3 | PLANNED | — | — |
+| `create_track` | NATIVE | `create_track` | KERNEL | 2 | 3 | PLANNED | — | — |
 | `move_track` | NATIVE | `move_track` | KERNEL | 1 | 1 | PLANNED | — | — |
 | `delete_track` | NATIVE | `delete_track` | KERNEL | 1 | 2 | PLANNED | — | — |
 | `set_sequence_duration` | NATIVE | `set_sequence_duration` | KERNEL | 1 | 3 | PLANNED | — | — |

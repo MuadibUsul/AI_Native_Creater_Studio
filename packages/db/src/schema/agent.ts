@@ -72,7 +72,7 @@ export const agentTurns = pgTable(
     index('agent_turns_session_idx').on(table.sessionId, table.createdAt),
     index('agent_turns_review_note_idx').on(table.reviewNoteId, table.createdAt),
     index('agent_turns_workspace_created_idx').on(table.workspaceId, table.createdAt),
-    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW','GENERATE','AUTONOMOUS')`),
+    check('agent_turns_purpose_ck', sql`${table.purpose} in ('EDIT','DISCUSS_NOTE','APPLY_REVIEW','GENERATE','AUTONOMOUS','AUTONOMOUS_PLAN','AUTONOMOUS_CHAPTER')`),
     check('agent_turns_status_ck', sql`${table.status} in ('RUNNING','COMPLETED','FAILED','CANCELLED')`),
     check('agent_turns_cost_ck', sql`${table.costMicros} >= 0 and ${table.unpricedCalls} >= 0`),
   ],

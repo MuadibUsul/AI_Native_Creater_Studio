@@ -9,6 +9,8 @@
 export * from './timeline/types.js';
 export { applyTimelineOperation, applyKernelResult } from './timeline/apply.js';
 export { CLIP_IDENTITY_MAPPING } from './timeline/support.js';
+export { CHAPTER_ASSEMBLY_ERROR_REASONS, assembleChapters } from './timeline/assemble.js';
+export type { AssembledChapter, ChapterAssembly, ChapterAssemblyRequest } from './timeline/assemble.js';
 export { compileRenderPlan, renderPlanHash, unsupportedRenderRequirements, assertRenderPlanSupported, requirementsForDelivery, renderRangesOverlap } from './render/compile.js';
 export { audioOnlyRenderPlan, renderPlanWindows, sliceRenderPlanVideo } from './render/slice.js';
 export type { RenderPlanInput, RenderSourceFacts } from './render/compile.js';

@@ -37,10 +37,12 @@ import {
   type StartAgentTurnRequest,
   type WorkflowErrorClass,
 } from '@ancs/contracts';
-import { agentSessions, agentTurnMessages, agentTurns, autonomousRuns, projectSequences, projects, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
+import { agentSessions, agentTurnMessages, agentTurns, autonomousChapters, autonomousRuns, projects, projectSequences, proposals, reviewNotes, reviewRounds, workflowRuns, workflowSteps } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
+import { repeatToolReminder } from './agent-repeat-reminder.js';
 import { AGENT_SYSTEM_PROMPT, compileAgentContext } from './agent-prompt.js';
-import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext } from './agent-tools.js';
+import { agentTimelineViewOf, defaultAgentToolCatalog, simulateAgentDraft, type AgentTimelineView, type AgentToolCatalog, type AgentToolContext, type AgentToolDefinition, type AgentToolOutcome } from './agent-tools.js';
+import { READ_TOOL_CONCURRENCY, mapLimited, runReadTool } from './agent-tool-exec.js';
 import { articleContextView, projectArticle } from './agent-article.js';
 import { compactPlanView, getLatestProductionPlan } from './production-plan.js';
 import { createProposalBranch, supersedeProposal } from './proposals.js';
@@ -620,46 +622,73 @@ export async function runAgentTurnLoop(
 
     const results: AgentContentBlock[] = [];
     const calls: { name: string; ok: boolean; summary: string }[] = [];
-    for (const use of toolUses) {
+    // V7 B3（裁决 0022）：相邻的只读调用并行执行，结果仍按模型给出的顺序；其余调用一次一个（它们会改草稿或建资产）
+    let reads: { index: number; use: (typeof toolUses)[number]; tool: AgentToolDefinition<unknown>; input: unknown }[] = [];
+    const record = (index: number, use: (typeof toolUses)[number], outcome: AgentToolOutcome): void => {
+      if (outcome.draftOperations !== undefined && !outcome.isError) draft = outcome.draftOperations;
+      if (outcome.baseRevision !== undefined && !outcome.isError) baseRevision = outcome.baseRevision;
+      results[index] = {
+        type: 'tool_result', toolUseId: use.id, content: outcome.content, isError: outcome.isError,
+        ...(outcome.images === undefined || outcome.images.length === 0 ? {} : { images: outcome.images }),
+      };
+      calls[index] = { name: use.name, ok: !outcome.isError, summary: outcome.summary.slice(0, 500) };
+    };
+    const flushReads = async (): Promise<void> => {
+      if (reads.length === 0) return;
+      const batch = reads;
+      reads = [];
+      const context = toolContext(draft);
+      const outcomes = await mapLimited(batch.map(({ tool, input }) => () => runReadTool(tool, context, input)), READ_TOOL_CONCURRENCY);
+      batch.forEach(({ index, use }, position) => { record(index, use, outcomes[position]!); });
+    };
+    for (const [index, use] of toolUses.entries()) {
       if (last.stopReason === 'max_tokens') {
         // 输入可能被截断：不执行，要求模型分批重发（协议要求每个 tool_use 都有结果）
-        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'your output was cut off before this tool input was complete; resend it in smaller batches' }), isError: true });
-        calls.push({ name: use.name, ok: false, summary: 'input truncated' });
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'your output was cut off before this tool input was complete; resend it in smaller batches' }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'input truncated' };
         continue;
       }
       const tool = catalog.get(use.name);
       if (tool === undefined) {
-        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: `unknown tool ${use.name}` }), isError: true });
-        calls.push({ name: use.name, ok: false, summary: 'unknown tool' });
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: `unknown tool ${use.name}` }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'unknown tool' };
         continue;
       }
       if (turn.purpose === 'DISCUSS_NOTE' && tool.descriptor.effect !== 'READ') {
         // 讨论批注只定方案：改动在用户确定全部批注后一次执行（工具目录不变，只是这一步不执行）
-        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'this turn discusses one review note: describe the fix you propose instead of changing anything; the agreed fixes are applied together later' }), isError: true });
-        calls.push({ name: use.name, ok: false, summary: 'discussion only: not applied' });
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'this turn discusses one review note: describe the fix you propose instead of changing anything; the agreed fixes are applied together later' }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'discussion only: not applied' };
         continue;
       }
-      if (turn.purpose === 'AUTONOMOUS' && tool.descriptor.effect === 'GENERATE') {
+      if (turn.purpose === 'AUTONOMOUS_PLAN' && (tool.descriptor.effect === 'DRAFT_EDIT' || tool.descriptor.effect === 'GENERATE')) {
+        // V6-10 分章前的规划：只读与写计划；各章随后在各自的子序列上剪（工具目录不变，只是这一步不执行）
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'this step only plans the chapters: write the plan with plan_production; each chapter is cut separately afterwards' }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'planning only: not applied' };
+        continue;
+      }
+      if ((turn.purpose === 'AUTONOMOUS' || turn.purpose === 'AUTONOMOUS_CHAPTER') && tool.descriptor.effect === 'GENERATE') {
         // 自主制作（V6-9）不调用付费生成：报价需要用户确认，而用户不在场（裁决 0020 第 3 条）
-        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'paid generation is not available in an autonomous run; use the footage, edits, effects and cards' }), isError: true });
-        calls.push({ name: use.name, ok: false, summary: 'not available in an autonomous run' });
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'paid generation is not available in an autonomous run; use the footage, edits, effects and cards' }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'not available in an autonomous run' };
         continue;
       }
       const parsed = tool.input.safeParse(use.input);
       if (!parsed.success) {
-        results.push({ type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'invalid input', issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join('.'), message: issue.message })) }), isError: true });
-        calls.push({ name: use.name, ok: false, summary: 'invalid input' });
+        results[index] = { type: 'tool_result', toolUseId: use.id, content: JSON.stringify({ error: 'invalid input', issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join('.'), message: issue.message })) }), isError: true };
+        calls[index] = { name: use.name, ok: false, summary: 'invalid input' };
         continue;
       }
-      const outcome = await tool.run(toolContext(draft), parsed.data);
-      if (outcome.draftOperations !== undefined && !outcome.isError) draft = outcome.draftOperations;
-      if (outcome.baseRevision !== undefined && !outcome.isError) baseRevision = outcome.baseRevision;
-      results.push({
-        type: 'tool_result', toolUseId: use.id, content: outcome.content, isError: outcome.isError,
-        ...(outcome.images === undefined || outcome.images.length === 0 ? {} : { images: outcome.images }),
-      });
-      calls.push({ name: use.name, ok: !outcome.isError, summary: outcome.summary.slice(0, 500) });
+      if (tool.descriptor.effect === 'READ') {
+        reads.push({ index, use, tool, input: parsed.data });
+        continue;
+      }
+      await flushReads();
+      record(index, use, await tool.run(toolContext(draft), parsed.data));
     }
+    await flushReads();
+    // V7 B2（裁决 0022）：连续用同样参数调用同一工具时，在本步工具结果之后追加提醒；只提醒、不拦截，计数只看轮次日志
+    const reminder = repeatToolReminder(log);
+    if (reminder !== null) results.push({ type: 'text', text: reminder });
     const seq = last.seq + 1;
     const current = turn;
     turn = await deps.db.transaction(async (tx) => {
@@ -686,7 +715,8 @@ async function finishTurn(deps: DomainDeps, turn: TurnRow, draft: EditOperation[
   if (unchangedTrial) {
     // 本轮没有在试改上再改：沿用原试改（仍由用户采用或撤回）
     proposalId = continued.id;
-  } else if (operations.length > 0) {
+  } else if (operations.length > 0 && turn.purpose !== 'AUTONOMOUS_CHAPTER' && turn.purpose !== 'AUTONOMOUS_PLAN') {
+    // V6-10：一章的草稿交给拼装（留在轮次上），不单独建提案
     const create = (baseProjectRevision: number) => createProposalBranch(deps, {
       workspaceId: turn.workspaceId,
       projectId: turn.projectId,
@@ -757,6 +787,10 @@ export async function createAutonomousTurn(deps: DomainDeps, input: {
   strategyPackId: string | null;
   strategyKnobs: Record<string, string>;
   createdBy: string | null;
+  /** V6-10：分章前的规划、一章，或（缺省）自主制作的那一轮 */
+  purpose?: 'AUTONOMOUS' | 'AUTONOMOUS_PLAN' | 'AUTONOMOUS_CHAPTER';
+  /** V6-10 通看收尾：从拼装好的草稿开始（基于给定的工程版本） */
+  draft?: { baseRevision: number; operations: EditOperation[] };
 }): Promise<AgentTurn> {
   return deps.db.transaction(async (tx) => {
     const sessionRows = await tx.select().from(agentSessions)
@@ -779,13 +813,13 @@ export async function createAutonomousTurn(deps: DomainDeps, input: {
       workspaceId: input.workspaceId,
       projectId: session.projectId,
       workflowRunId: input.workflowRunId,
-      purpose: 'AUTONOMOUS',
+      purpose: input.purpose ?? 'AUTONOMOUS',
       message: input.message.slice(0, 4000),
       pointer: agentPointerSchema.parse({}),
       strategyPackId: input.strategyPackId,
       strategyKnobs: input.strategyKnobs,
-      baseRevision: project[0].revision,
-      draftOperations: [],
+      baseRevision: input.draft?.baseRevision ?? project[0].revision,
+      draftOperations: input.draft?.operations ?? [],
       continuesProposalId: null,
       usage: ZERO_USAGE,
       createdBy: input.createdBy,
@@ -795,22 +829,79 @@ export async function createAutonomousTurn(deps: DomainDeps, input: {
   });
 }
 
-/** 自主制作那一轮的交代：需求、目标时长、档位、总预算与本次可用的模型花费上限（美元）。 */
+/**
+ * 自主制作那一轮的交代：需求、目标时长、档位、总预算与本次可用的模型花费上限（美元）。
+ * V6-10 分章时多一个 phase：定计划（PLAN_CHAPTERS）、剪一章（CUT_CHAPTER，带本章的场景契约与整部的蓝图）、
+ * 通看收尾（FINISH_CHAPTERS，带各章拼进去的位置）。同一个通用导演，只是交代不同，不按视频类型分支。
+ */
 async function autonomousContextOf(deps: DomainDeps, turn: TurnRow): Promise<Record<string, unknown> | null> {
-  const rows = await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.turnId, turn.id)).limit(1);
-  const run = rows[0];
-  if (run === undefined) return null;
   const usd = (micros: number): string => (micros / 1_000_000).toFixed(2);
-  const capMicros = run.modelCapMicros;
-  return {
+  const base = (run: typeof autonomousRuns.$inferSelect, capMicros: number | null) => ({
     goal: run.goal,
     targetDurationSeconds: run.targetDurationSeconds,
     approval: run.approval,
     budgetUsd: usd(run.budgetMicros),
     ...(typeof capMicros === 'number' ? { modelBudgetForThisRunUsd: usd(capMicros) } : {}),
-    note: run.approval === 'ASK_EACH'
-      ? 'The result stays a trial edit for the person to adopt.'
-      : 'If your draft passes the automatic checks, it becomes the current version of the video (the person can still undo it).',
+  });
+  if (turn.purpose === 'AUTONOMOUS_PLAN') {
+    const run = turn.workflowRunId === null ? undefined : (await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.workflowRunId, turn.workflowRunId)).limit(1))[0];
+    if (run === undefined) return null;
+    return {
+      ...base(run, null),
+      phase: 'PLAN_CHAPTERS',
+      instructions: 'The footage is long, so the film is made in chapters. In this step only plan: call plan_production with the scenes in film order. Each scene is one chapter covering one contiguous part of the story, with its footage ranges in sources and its approximate length in window. Use 2 to 12 scenes. Do not edit the timeline now: each chapter is cut separately afterwards, then the chapters are joined in order and the whole film is reviewed once more.',
+    };
+  }
+  if (turn.purpose === 'AUTONOMOUS_CHAPTER') {
+    const chapter = (await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.turnId, turn.id)).limit(1))[0];
+    const run = chapter === undefined ? undefined : (await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.id, chapter.runId)).limit(1))[0];
+    if (chapter === undefined || run === undefined) return null;
+    // 重做一章时，整部的章节按最初那次运行列出
+    const familyRunId = (run.redoOf as { runId?: string } | null)?.runId ?? run.id;
+    const siblings = await deps.db.select({ index: autonomousChapters.index, title: autonomousChapters.title }).from(autonomousChapters).where(eq(autonomousChapters.runId, familyRunId)).orderBy(asc(autonomousChapters.index));
+    const plan = await getLatestProductionPlan(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId });
+    const scene = plan?.scenes.find((item) => item.id === chapter.sceneId) ?? null;
+    return {
+      ...base(run, chapter.budgetMicros),
+      phase: 'CUT_CHAPTER',
+      chapter: { number: chapter.index + 1, of: siblings.length, title: chapter.title, scene },
+      film: plan === null ? null : { logline: plan.blueprint.logline, structure: plan.blueprint.structure, pacing: plan.blueprint.pacing, styleNotes: plan.blueprint.styleNotes, chapters: siblings.map((item) => item.title) },
+      instructions: 'Cut only this chapter, on this timeline, starting at 0 seconds. Use the footage in the scene sources first and keep the length close to the scene window. Do not add an opening or ending for the whole film. When you finish, the chapters are joined in order and the whole film is reviewed once more.',
+    };
+  }
+  const rows = await deps.db.select().from(autonomousRuns).where(eq(autonomousRuns.turnId, turn.id)).limit(1);
+  const run = rows[0];
+  if (run === undefined) return null;
+  const note = run.approval === 'ASK_EACH'
+    ? 'The result stays a trial edit for the person to adopt.'
+    : 'If your draft passes the automatic checks, it becomes the current version of the video (the person can still undo it).';
+  if (run.mode !== 'CHAPTERS') return { ...base(run, run.modelCapMicros), note };
+  const chapters = await deps.db.select().from(autonomousChapters).where(eq(autonomousChapters.runId, run.id)).orderBy(asc(autonomousChapters.index));
+  const outputs = run.workflowRunId === null ? {} : ((await deps.db.select({ context: workflowRuns.context }).from(workflowRuns).where(eq(workflowRuns.id, run.workflowRunId)).limit(1))[0]?.context ?? {}) as Record<string, unknown>;
+  const assembled = (outputs['assemble'] ?? {}) as { placements?: Record<string, [string, string]>; placedAtEnd?: string[] };
+  const placements = assembled.placements ?? {};
+  const placedAtEnd = new Set(assembled.placedAtEnd ?? []);
+  const chapterView = chapters.map((chapter) => ({
+    number: chapter.index + 1, title: chapter.title, status: chapter.status, at: placements[chapter.id] ?? null,
+    ...(placedAtEnd.has(chapter.id) ? { placedAtEnd: true } : {}),
+    ...(chapter.error === null ? {} : { problem: (chapter.error as { message?: unknown }).message ?? null }),
+  }));
+  if (run.redoOf !== null) {
+    return {
+      ...base(run, run.modelCapMicros),
+      note,
+      phase: 'FINISH_CHAPTERS',
+      redo: true,
+      chapters: chapterView,
+      instructions: 'One chapter was missing from the delivered film, so it was cut again on its own and inserted at the listed position, after the chapter before it (or at the end of the film if its place could not be found, marked placedAtEnd). Review the joins on both sides of that chapter with review_draft and fix the seams. Leave the rest of the film as it is. If it was placed at the end, say so in your delivery note so the person can move it.',
+    };
+  }
+  return {
+    ...base(run, run.modelCapMicros),
+    note,
+    phase: 'FINISH_CHAPTERS',
+    chapters: chapterView,
+    instructions: 'The chapters were cut separately and joined into this draft in plan order (each chapter at the listed position). Review the whole film: run review_draft, look at the joins between chapters, the opening and the ending, and fix seams, repeats and the overall length. Do not rebuild chapters that work. If a chapter is missing, cover the gap in the story as well as the footage allows and say so in your delivery note.',
   };
 }
 
@@ -833,7 +924,7 @@ async function compileTurnContext(
   const { view: timeline } = await agentTimelineViewOf(context, state, session.sequenceId);
   const article = await projectArticle(deps, turn.projectId);
   const plan = await getLatestProductionPlan(deps, { workspaceId: turn.workspaceId, projectId: turn.projectId });
-  const autonomous = turn.purpose === 'AUTONOMOUS' ? await autonomousContextOf(deps, turn) : null;
+  const autonomous = turn.purpose === 'AUTONOMOUS' || turn.purpose === 'AUTONOMOUS_PLAN' || turn.purpose === 'AUTONOMOUS_CHAPTER' ? await autonomousContextOf(deps, turn) : null;
   const catalog = ports.catalog ?? defaultAgentToolCatalog();
   const footageTool = catalog.get('list_footage');
   const footage = footageTool === undefined ? null : JSON.parse((await footageTool.run(context, {})).content) as unknown;

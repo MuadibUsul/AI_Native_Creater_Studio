@@ -9,15 +9,31 @@ import { approvalTierSchema } from './autonomy.js';
  * - 运行经工作流 AUTONOMOUS_PRODUCTION 执行（外部 / 付费调用只经工作流）；同一工程同一时刻只有一个进行中的运行；
  * - V6-9 的自主制作不调用付费生成；导演模型的花费计入签署的总预算（硬上限）；
  * - 交付报告如实写出：用了哪些原片、哪些是生成内容、自检发现、节奏偏差、没满足的约束、实际花费（含未定价的调用）。
+ * - V6-10（`docs/V06/milestones/V6-10.md`）：素材够长时分章——先定计划，各章在自己的子序列上并行剪，
+ *   再拼进主序列、通看收尾；一章没剪成不挡其它章，报告逐章写明。之后可以只重做没剪成的那一章（S5）。
  */
 
 export const AUTONOMOUS_PRODUCTION_WORKFLOW = 'AUTONOMOUS_PRODUCTION';
-export const AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION = 1;
+/** 2 = V6-10 分章（v1 的运行按 v1 的定义走完：Worker 两个版本都注册） */
+export const AUTONOMOUS_PRODUCTION_WORKFLOW_VERSION = 2;
+/** V6-10：一章一个子运行（同一个通用导演，在本章的子序列上剪） */
+export const AUTONOMOUS_CHAPTER_WORKFLOW = 'AUTONOMOUS_CHAPTER';
+export const AUTONOMOUS_CHAPTER_WORKFLOW_VERSION = 1;
 
-export const AUTONOMOUS_RUN_STATUSES = ['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING', 'DELIVERED', 'NEEDS_REVIEW', 'FAILED', 'CANCELLED'] as const;
+/** PLANNING 分章前定计划；CUTTING_CHAPTERS 各章在剪（只出现在分章模式） */
+export const AUTONOMOUS_RUN_STATUSES = ['WAITING_FOR_FOOTAGE', 'PLANNING', 'CUTTING_CHAPTERS', 'DIRECTING', 'CHECKING', 'DELIVERED', 'NEEDS_REVIEW', 'FAILED', 'CANCELLED'] as const;
 export const autonomousRunStatusSchema = z.enum(AUTONOMOUS_RUN_STATUSES);
 export type AutonomousRunStatus = z.infer<typeof autonomousRunStatusSchema>;
-export const AUTONOMOUS_RUN_ACTIVE_STATUSES = ['WAITING_FOR_FOOTAGE', 'DIRECTING', 'CHECKING'] as const satisfies readonly AutonomousRunStatus[];
+export const AUTONOMOUS_RUN_ACTIVE_STATUSES = ['WAITING_FOR_FOOTAGE', 'PLANNING', 'CUTTING_CHAPTERS', 'DIRECTING', 'CHECKING'] as const satisfies readonly AutonomousRunStatus[];
+
+/** SINGLE 一轮导演剪完（V6-9）；CHAPTERS 分章（只按可用素材总时长决定，不按视频类型） */
+export const AUTONOMOUS_RUN_MODES = ['SINGLE', 'CHAPTERS'] as const;
+export const autonomousRunModeSchema = z.enum(AUTONOMOUS_RUN_MODES);
+export type AutonomousRunMode = z.infer<typeof autonomousRunModeSchema>;
+
+export const AUTONOMOUS_CHAPTER_STATUSES = ['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED'] as const;
+export const autonomousChapterStatusSchema = z.enum(AUTONOMOUS_CHAPTER_STATUSES);
+export type AutonomousChapterStatus = z.infer<typeof autonomousChapterStatusSchema>;
 
 export const startAutonomousRunRequestSchema = z.object({
   /** 一句话需求（成片目标、受众、平台、风格……） */
@@ -38,8 +54,20 @@ const secondsPairSchema = z.tuple([z.string().max(20), z.string().max(20)]);
  * 交付报告里"没满足 / 要留意"的代码：
  * TARGET_DURATION 成片时长与目标相差超过 20%（detail "目标秒数/实际秒数"）；NO_FOOTAGE_USED 成片里没有用到原片；
  * BUDGET_REACHED 模型花费到了本次上限；ITERATION_LIMIT 步骤用完；UNPRICED_MODEL 导演模型没有价格表、花费无法核算。
+ * CHAPTER_NOT_ASSEMBLED 有章没拼进成片（detail 章名）；CHAPTER_PLACED_AT_END 重做的章找不到原来的位置，放在了成片末尾（detail 章名）。
  */
-export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'MONTHLY_AI_LIMIT', 'ITERATION_LIMIT', 'UNPRICED_MODEL'] as const;
+export const AUTONOMOUS_UNMET_CODES = ['TARGET_DURATION', 'NO_FOOTAGE_USED', 'BUDGET_REACHED', 'MONTHLY_AI_LIMIT', 'ITERATION_LIMIT', 'UNPRICED_MODEL', 'CHAPTER_NOT_ASSEMBLED', 'CHAPTER_PLACED_AT_END'] as const;
+
+/** V6-10：一章的结果。ASSEMBLED 拼进了成片；EMPTY 剪完但没有内容；FAILED 没剪成或拼不进去（reason 写原因） */
+export const autonomousReportChapterSchema = z.object({
+  sceneId: z.string().max(40),
+  title: z.string().max(80),
+  outcome: z.enum(['ASSEMBLED', 'EMPTY', 'FAILED']),
+  /** 在成片里的位置（秒，拼装时的位置；之后的通看收尾可能再调整） */
+  placement: secondsPairSchema.nullable(),
+  reason: z.string().max(300).nullable(),
+  costMicros: z.number().int().nonnegative(),
+}).strict();
 
 export const autonomousReportSchema = z.object({
   /** ADOPTED 已采用为作品当前版本；TRIAL 保留为试改等你看；NO_CHANGES 没有改动；FAILED 没能完成 */
@@ -74,13 +102,54 @@ export const autonomousReportSchema = z.object({
   /** 没能满足的约束或要留意的情况（界面按代码翻译；detail 是数值或原文） */
   unmet: z.array(z.object({ code: z.enum(AUTONOMOUS_UNMET_CODES), detail: z.string().max(300) }).strict()).max(20),
   cost: z.object({ spentMicros: z.number().int().nonnegative(), budgetMicros: z.number().int().nonnegative().nullable(), unpricedCalls: z.number().int().nonnegative() }).strict(),
+  /** V6-10 分章时逐章的结果（按成片顺序）；一轮剪完时为空 */
+  chapters: z.array(autonomousReportChapterSchema).max(12).default([]),
 }).strict();
 export type AutonomousReport = z.infer<typeof autonomousReportSchema>;
+
+/** V6-10：分章模式下的一章（进行中也可见：卡片逐章显示进度） */
+export const autonomousChapterSchema = z.object({
+  id: opaqueIdSchema,
+  index: z.number().int().nonnegative(),
+  sceneId: z.string().max(40),
+  title: z.string().max(80),
+  status: autonomousChapterStatusSchema,
+  attempts: z.number().int().nonnegative(),
+  /** 分到这一章的模型花费上限与已花（美元微单位） */
+  budgetMicros: z.number().int().nonnegative(),
+  costMicros: z.number().int().nonnegative(),
+  /** 进行中：已做的步骤数与最近一步 */
+  progress: z.object({ steps: z.number().int().nonnegative(), lastStep: z.string().max(500).nullable() }).strict(),
+  error: z.object({ reason: z.string().max(80), message: z.string().max(300) }).strict().nullable(),
+  /** S5：没剪成的章后来由哪次重做补上了（那次重做的运行 id）；没有为 null */
+  redoneByRunId: opaqueIdSchema.nullable(),
+  startedAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+}).strict();
+export type AutonomousChapter = z.infer<typeof autonomousChapterSchema>;
+
+/**
+ * V6-10 S5：只重做没剪成的那一章。重做是新的一次运行：不再定计划，只剪这一章，再放回它在成片里的位置
+ * （前一章之后；找不到就放在末尾并在报告里写明），然后照常通看收尾、按档位交付。
+ * runId / chapterId 指最初那次分章运行与它里面没剪成的那一章（重做的重做也指回最初那次）。
+ */
+export const autonomousRedoOfSchema = z.object({
+  runId: opaqueIdSchema,
+  chapterId: opaqueIdSchema,
+  index: z.number().int().nonnegative(),
+  title: z.string().max(80),
+}).strict();
+export type AutonomousRedoOf = z.infer<typeof autonomousRedoOfSchema>;
 
 export const autonomousRunSchema = z.object({
   id: opaqueIdSchema,
   projectId: opaqueIdSchema,
   status: autonomousRunStatusSchema,
+  mode: autonomousRunModeSchema,
+  /** 分章模式的各章（按成片顺序）；一轮剪完时为空 */
+  chapters: z.array(autonomousChapterSchema).max(12),
+  /** 重做某一章的运行：重做的是哪次运行的哪一章；普通运行为 null */
+  redoOf: autonomousRedoOfSchema.nullable(),
   goal: z.string(),
   targetDurationSeconds: z.number().int().nullable(),
   strategyPackId: opaqueIdSchema.nullable(),
@@ -114,4 +183,8 @@ export const AUTONOMOUS_RUN_ERROR_REASONS = {
   NO_FOOTAGE: 'AUTONOMOUS_NO_FOOTAGE',
   /** 用户正在和 AI 说话，等了太久这一轮还没结束 */
   SESSION_BUSY: 'AUTONOMOUS_SESSION_BUSY',
+  /** 这一章不能重做：不是没剪成的章、运行还没结束、不是分章运行、已经重做过，或计划里找不到这一章的场景 */
+  CHAPTER_NOT_REDOABLE: 'AUTONOMOUS_CHAPTER_NOT_REDOABLE',
+  /** 这次交付的成片还是试改、没有采用：先采用（或放弃）它，再重做没剪成的章 */
+  REDO_NEEDS_ADOPTION: 'AUTONOMOUS_REDO_NEEDS_ADOPTION',
 } as const;

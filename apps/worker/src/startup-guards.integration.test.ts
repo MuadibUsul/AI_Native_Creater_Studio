@@ -62,6 +62,13 @@ describe('V5-M3 入口装配守卫', () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain(fakeDeepgramKey);
   });
 
+  it('Worker：任务槽不少于数据库连接池 → 启动失败（V6-10 S4）', async () => {
+    const result = await run(workerEntry, { ...baseEnv(), ANCS_DISABLE_RENDER: '1', ANCS_WORKER_SLOTS: '5' });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('ANCS_WORKER_SLOTS');
+    expect(result.stderr).toContain('ANCS_DB_POOL_MAX');
+  });
+
   it('Worker：生产缺显式存储签名密钥与凭据密钥 → 一次列出全部问题', async () => {
     const result = await run(workerEntry, { ...baseEnv(), NODE_ENV: 'production', ANCS_DISABLE_RENDER: '1' });
     expect(result.code).toBe(1);
