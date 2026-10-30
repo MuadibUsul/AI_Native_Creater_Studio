@@ -1,0 +1,270 @@
+
+> ancs@0.0.0 typecheck <repo>
+> pnpm -r run typecheck
+
+Scope: 33 of 34 workspace projects
+packages/arch-check typecheck$ tsc -p tsconfig.json --noEmit
+packages/db typecheck$ tsc -p tsconfig.json --noEmit
+packages/time typecheck$ tsc -p tsconfig.json --noEmit
+packages/time typecheck: Done
+packages/arch-check typecheck: Done
+packages/db typecheck: Done
+packages/contracts typecheck$ tsc -p tsconfig.json --noEmit
+packages/contracts typecheck: Done
+packages/auth typecheck$ tsc -p tsconfig.json --noEmit
+packages/kernel typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/anthropic typecheck$ tsc -p tsconfig.json --noEmit
+packages/extensions typecheck$ tsc -p tsconfig.json --noEmit
+packages/extensions typecheck: Done
+packages/providers/ark typecheck$ tsc -p tsconfig.json --noEmit
+packages/kernel typecheck: Done
+.../providers/credential-vault-local typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/anthropic typecheck: Done
+packages/providers/deepseek typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/ark typecheck: Done
+packages/providers/document-extract typecheck$ tsc -p tsconfig.json --noEmit
+.../providers/credential-vault-local typecheck: Done
+packages/providers/gemini typecheck$ tsc -p tsconfig.json --noEmit
+packages/auth typecheck: Done
+packages/providers/malware-heuristic typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/deepseek typecheck: Done
+packages/providers/mock-llm typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/gemini typecheck: Done
+packages/providers/mock-payments typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/document-extract typecheck: Done
+packages/providers/mock-provider typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/malware-heuristic typecheck: Done
+packages/providers/queue-bullmq typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/mock-llm typecheck: Done
+packages/providers/runway typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/mock-payments typecheck: Done
+packages/providers/storage-local typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/mock-provider typecheck: Done
+packages/providers/youtube typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/runway typecheck: Done
+packages/scene-components typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/queue-bullmq typecheck: Done
+packages/sdk typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/storage-local typecheck: Done
+packages/testing typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/youtube typecheck: Done
+packages/scene-components typecheck: Done
+packages/testing typecheck: Done
+packages/sdk typecheck: Done
+packages/domain typecheck$ tsc -p tsconfig.json --noEmit
+packages/remotion-core typecheck$ tsc -p tsconfig.json --noEmit
+packages/remotion-core typecheck: Done
+packages/domain typecheck: Done
+apps/realtime typecheck$ tsc -p tsconfig.json --noEmit
+apps/motion-worker typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/mock-tts typecheck$ tsc -p tsconfig.json --noEmit
+apps/web typecheck$ tsc -p tsconfig.json --noEmit
+packages/providers/mock-tts typecheck: Done
+apps/motion-worker typecheck: Done
+apps/realtime typecheck: Done
+apps/web typecheck: Done
+apps/api typecheck$ tsc -p tsconfig.json --noEmit
+apps/render-worker typecheck$ tsc -p tsconfig.json
+apps/worker typecheck$ tsc -p tsconfig.json --noEmit
+apps/worker typecheck: Done
+apps/render-worker typecheck: Done
+apps/api typecheck: Done
+
+> ancs@0.0.0 build <repo>
+> pnpm -r run build
+
+Scope: 33 of 34 workspace projects
+packages/db build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/arch-check build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/time build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/db build: > @ancs/db@0.0.0 clean <repo>\packages\db
+packages/db build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/arch-check build: > @ancs/arch-check@0.0.0 clean <repo>\packages\arch-check
+packages/arch-check build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/time build: > @ancs/time@0.0.0 clean <repo>\packages\time
+packages/time build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/time build: Done
+packages/arch-check build: Done
+packages/db build: Done
+packages/contracts build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/contracts build: > @ancs/contracts@0.0.0 clean <repo>\packages\contracts
+packages/contracts build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/contracts build: Done
+packages/auth build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/extensions build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/kernel build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/anthropic build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/extensions build: > @ancs/extensions@0.0.0 clean <repo>\packages\extensions
+packages/extensions build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/anthropic build: > @ancs/providers-anthropic@0.0.0 clean <repo>\packages\providers\anthropic
+packages/providers/anthropic build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/auth build: > @ancs/auth@0.0.0 clean <repo>\packages\auth
+packages/auth build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/kernel build: > @ancs/kernel@0.0.0 clean <repo>\packages\kernel
+packages/kernel build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/kernel build: Done
+packages/providers/ark build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/extensions build: Done
+.../providers/credential-vault-local build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/anthropic build: Done
+packages/providers/deepseek build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/ark build: > @ancs/providers-ark@0.0.0 clean <repo>\packages\providers\ark
+packages/providers/ark build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+.../providers/credential-vault-local build: > @ancs/providers-credential-vault-local@0.0.0 clean <repo>\packages\providers\credential-vault-local
+.../providers/credential-vault-local build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/deepseek build: > @ancs/providers-deepseek@0.0.0 clean <repo>\packages\providers\deepseek
+packages/providers/deepseek build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/auth build: Done
+packages/providers/document-extract build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/document-extract build: > @ancs/providers-document-extract@0.0.0 clean <repo>\packages\providers\document-extract
+packages/providers/document-extract build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+.../providers/credential-vault-local build: Done
+packages/providers/gemini build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/ark build: Done
+packages/providers/malware-heuristic build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/deepseek build: Done
+packages/providers/gemini build: > @ancs/providers-gemini@0.0.0 clean <repo>\packages\providers\gemini
+packages/providers/gemini build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-llm build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/malware-heuristic build: > @ancs/providers-malware-heuristic@0.0.0 clean <repo>\packages\providers\malware-heuristic
+packages/providers/malware-heuristic build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-llm build: > @ancs/providers-mock-llm@0.0.0 clean <repo>\packages\providers\mock-llm
+packages/providers/mock-llm build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/document-extract build: Done
+packages/providers/mock-payments build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/mock-payments build: > @ancs/providers-mock-payments@0.0.0 clean <repo>\packages\providers\mock-payments
+packages/providers/mock-payments build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/malware-heuristic build: Done
+packages/providers/mock-provider build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/gemini build: Done
+packages/providers/queue-bullmq build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/mock-provider build: > @ancs/providers-mock-provider@0.0.0 clean <repo>\packages\providers\mock-provider
+packages/providers/mock-provider build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/queue-bullmq build: > @ancs/providers-queue-bullmq@0.0.0 clean <repo>\packages\providers\queue-bullmq
+packages/providers/queue-bullmq build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-llm build: Done
+packages/providers/runway build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/runway build: > @ancs/providers-runway@0.0.0 clean <repo>\packages\providers\runway
+packages/providers/runway build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-payments build: Done
+packages/providers/storage-local build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/storage-local build: > @ancs/providers-storage-local@0.0.0 clean <repo>\packages\providers\storage-local
+packages/providers/storage-local build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-provider build: Done
+packages/providers/youtube build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/queue-bullmq build: Done
+packages/scene-components build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/providers/youtube build: > @ancs/providers-youtube@0.0.0 clean <repo>\packages\providers\youtube
+packages/providers/youtube build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/scene-components build: > @ancs/scene-components@0.0.0 clean <repo>\packages\scene-components
+packages/scene-components build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/runway build: Done
+packages/sdk build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/sdk build: > @ancs/sdk@0.0.0 clean <repo>\packages\sdk
+packages/sdk build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/storage-local build: Done
+packages/testing build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/testing build: > @ancs/testing@0.0.0 clean <repo>\packages\testing
+packages/testing build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/youtube build: Done
+packages/scene-components build: Done
+packages/testing build: Done
+packages/sdk build: Done
+packages/domain build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/remotion-core build$ pnpm run clean && tsc -p tsconfig.build.json
+packages/remotion-core build: > @ancs/remotion-core@0.0.0 clean <repo>\packages\remotion-core
+packages/remotion-core build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/domain build: > @ancs/domain@0.0.0 clean <repo>\packages\domain
+packages/domain build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/remotion-core build: Done
+packages/domain build: Done
+apps/realtime build$ pnpm run clean && tsc -p tsconfig.build.json
+apps/web build$ next build
+packages/providers/mock-tts build$ pnpm run clean && tsc -p tsconfig.build.json
+apps/realtime build: > @ancs/realtime@0.0.0 clean <repo>\apps\realtime
+apps/realtime build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+packages/providers/mock-tts build: > @ancs/providers-mock-tts@0.0.0 clean <repo>\packages\providers\mock-tts
+packages/providers/mock-tts build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+apps/web build:    ▲ Next.js 15.5.27
+apps/web build:    Creating an optimized production build ...
+apps/realtime build: Done
+packages/providers/mock-tts build: Done
+apps/web build:  ✓ Compiled successfully in 10.1s
+apps/web build:    Linting and checking validity of types ...
+apps/web build:  ⚠ The Next.js plugin was not detected in your ESLint configuration. See https://nextjs.org/docs/app/api-reference/config/eslint#migrating-existing-config
+apps/web build:    Collecting page data ...
+apps/web build:    Generating static pages (0/9) ...
+apps/web build:    Generating static pages (2/9) 
+apps/web build:    Generating static pages (4/9) 
+apps/web build:    Generating static pages (6/9) 
+apps/web build:  ✓ Generating static pages (9/9)
+apps/web build:    Finalizing page optimization ...
+apps/web build:    Collecting build traces ...
+apps/web build: Route (app)                                             Size  First Load JS
+apps/web build: ┌ ƒ /                                                4.28 kB         307 kB
+apps/web build: ├ ƒ /_not-found                                        998 B         107 kB
+apps/web build: ├ ƒ /admin                                            5.5 kB         297 kB
+apps/web build: ├ ƒ /design-system                                     183 B         304 kB
+apps/web build: ├ ○ /manifest.webmanifest                              127 B         107 kB
+apps/web build: ├ ƒ /sign-in                                         2.59 kB         289 kB
+apps/web build: ├ ƒ /w/[workspaceId]/assets                            298 B         316 kB
+apps/web build: ├ ƒ /w/[workspaceId]/billing                         3.94 kB         296 kB
+apps/web build: ├ ƒ /w/[workspaceId]/extensions                      2.75 kB         295 kB
+apps/web build: ├ ƒ /w/[workspaceId]/identity                        6.68 kB         299 kB
+apps/web build: ├ ƒ /w/[workspaceId]/new                             6.71 kB         302 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/analytics         9.76 kB         305 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/assets              308 B         316 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/editor              275 B         429 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/editor/[sceneId]    316 B         429 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/history            5.6 kB         298 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/publish           7.92 kB         303 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/render            8.26 kB         304 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/script            5.68 kB         301 kB
+apps/web build: ├ ƒ /w/[workspaceId]/p/[projectId]/storyboard          277 B         429 kB
+apps/web build: ├ ƒ /w/[workspaceId]/review/[projectId]              7.13 kB         312 kB
+apps/web build: ├ ƒ /w/[workspaceId]/settings                        5.18 kB         308 kB
+apps/web build: ├ ƒ /w/[workspaceId]/studio/[projectId]              27.6 kB         332 kB
+apps/web build: ├ ƒ /w/[workspaceId]/studio/identity                 6.63 kB         302 kB
+apps/web build: ├ ƒ /w/[workspaceId]/studio/new                      5.65 kB         301 kB
+apps/web build: ├ ƒ /w/[workspaceId]/team                             3.9 kB         296 kB
+apps/web build: └ ƒ /welcome                                           183 B         304 kB
+apps/web build: + First Load JS shared by all                         106 kB
+apps/web build:   ├ chunks/0a003f92-06fd390f95a56aac.js              54.2 kB
+apps/web build:   ├ chunks/1454-589957988bdf7535.js                  50.1 kB
+apps/web build:   └ other shared chunks (total)                      2.09 kB
+apps/web build: ○  (Static)   prerendered as static content
+apps/web build: ƒ  (Dynamic)  server-rendered on demand
+apps/web build: Done
+apps/worker build$ pnpm run clean && tsc -p tsconfig.build.json
+apps/api build$ pnpm run clean && tsc -p tsconfig.build.json
+apps/worker build: > @ancs/worker@0.0.0 clean <repo>\apps\worker
+apps/worker build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+apps/api build: > @ancs/api@0.0.0 clean <repo>\apps\api
+apps/api build: > node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+apps/worker build: Done
+apps/api build: Done
+
+> ancs@0.0.0 arch:check <repo>
+> pnpm --filter @ancs/arch-check run check
+
+
+> @ancs/arch-check@0.0.0 check <repo>\packages\arch-check
+> pnpm run build && node dist/cli.js ../..
+
+
+> @ancs/arch-check@0.0.0 build <repo>\packages\arch-check
+> pnpm run clean && tsc -p tsconfig.build.json
+
+
+> @ancs/arch-check@0.0.0 clean <repo>\packages\arch-check
+> node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})"
+
+[arch-check] 根目录：<repo>
+[arch-check] 扫描到 33 个 workspace 包：apps/api, apps/motion-worker, apps/realtime, apps/render-worker, apps/web, apps/worker, packages/arch-check, packages/auth, packages/contracts, packages/db, packages/domain, packages/extensions, packages/kernel, packages/providers/anthropic, packages/providers/ark, packages/providers/credential-vault-local, packages/providers/deepseek, packages/providers/document-extract, packages/providers/gemini, packages/providers/malware-heuristic, packages/providers/mock-llm, packages/providers/mock-payments, packages/providers/mock-provider, packages/providers/mock-tts, packages/providers/queue-bullmq, packages/providers/runway, packages/providers/storage-local, packages/providers/youtube, packages/remotion-core, packages/scene-components, packages/sdk, packages/testing, packages/time
+[arch-check] 纯核心源码（R10）：16 个文件；投影写入检查（R11）：685 个文件；业务包环境读取（R12）：312 个文件
+[arch-check] 依赖方向与纯核心检查通过（R1—R12）。
+
+> ancs@0.0.0 capabilities:check <repo>
+> node scripts/capability-ledger.mjs --check
+
+[capabilities] 覆盖账本与源一致；原生声明规则通过（NATIVE 24）。

@@ -102,8 +102,21 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
       if (video) {
         const intervalSeconds = Math.max(2, Math.ceil(total / 100_000));
         const pattern = join(input.outputDirectory, 'thumb-%06d.jpg');
-        const thumbnails = await run({ executable: ffmpegPath, args: ['-nostdin', '-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath, '-map', '0:v:0', '-vf', `fps=1/${String(intervalSeconds)},scale=320:-2:flags=lanczos`, '-frames:v', '100', '-q:v', '4', pattern], timeoutMs, maxOutputBytes });
-        if (thumbnails.code !== 0) throw new Error('缩略图生成失败');
+        // 一次解码分三路：缩略图、镜头边界（showinfo 打出 pts_time）、黑场（blackdetect 打出 black_start/black_end）。
+        // 此前三遍各解码一次全分辨率原片，30 秒 4K HEVC 要 76 秒；合成一遍 42 秒，三路结果与分开跑逐字节相同。
+        const pass = await run({
+          executable: ffmpegPath,
+          args: [
+            '-nostdin', '-hide_banner', '-nostats', '-y', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath,
+            '-filter_complex', `[0:v:0]split=3[t][s][b];[t]fps=1/${String(intervalSeconds)},scale=320:-2:flags=lanczos[thumbs];[s]select='gt(scene,0.3)',showinfo[cuts];[b]blackdetect=d=0.5:pix_th=0.10[black]`,
+            '-map', '[thumbs]', '-frames:v', '100', '-q:v', '4', pattern,
+            '-map', '[cuts]', '-f', 'null', '-',
+            '-map', '[black]', '-f', 'null', '-',
+          ],
+          timeoutMs,
+          maxOutputBytes,
+        });
+        if (pass.code !== 0) throw new Error('画面索引失败（缩略图、镜头边界、黑场）');
         const names = (await readdir(input.outputDirectory)).filter((name) => /^thumb-\d{6}\.jpg$/.test(name)).sort();
         names.forEach((name, ordinal) => {
           const start = clampMs(ordinal * intervalSeconds * 1000, total);
@@ -111,9 +124,7 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
           entries.push({ kind: 'THUMBNAIL', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: 1000, payload: { sourceStartMs: start, sourceEndMs: end }, localFilename: name });
         });
 
-        const detected = await run({ executable: ffmpegPath, args: ['-nostdin', '-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath, '-map', '0:v:0', '-vf', "select='gt(scene,0.3)',showinfo", '-an', '-f', 'null', '-'], timeoutMs, maxOutputBytes });
-        if (detected.code !== 0) throw new Error('镜头边界检测失败');
-        const boundaries = [0, ...Array.from(detected.stderr.matchAll(/pts_time:([0-9.]+)/g), (match) => clampMs(Number(match[1]) * 1000, total)), total]
+        const boundaries = [0, ...Array.from(pass.stderr.matchAll(/pts_time:([0-9.]+)/g), (match) => clampMs(Number(match[1]) * 1000, total)), total]
           .filter((value, index, all) => Number.isFinite(value) && (index === 0 || value - all[index - 1]! >= 250));
         for (let ordinal = 0; ordinal < boundaries.length - 1; ordinal += 1) {
           const start = boundaries[ordinal]!;
@@ -121,10 +132,8 @@ export function createFfmpegMediaIndexer(options: FfmpegMediaIndexerOptions = {}
           if (end <= start) continue;
           entries.push({ kind: 'SHOT', ordinal, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: ordinal === 0 ? 1000 : 700, payload: { sourceStartMs: start, sourceEndMs: end, transitionType: ordinal === 0 ? 'START' : 'CUT', detectionBasis: 'FFMPEG_SCENE_SCORE_GT_0_3', errorMarginMs: 250 }, localFilename: null });
         }
-        const black = await run({ executable: ffmpegPath, args: ['-nostdin', '-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath, '-map', '0:v:0', '-vf', 'blackdetect=d=0.5:pix_th=0.10', '-an', '-f', 'null', '-'], timeoutMs, maxOutputBytes });
-        if (black.code !== 0) throw new Error('黑场检测失败');
         let qualityOrdinal = 0;
-        for (const match of black.stderr.matchAll(/black_start:([0-9.]+)\s+black_end:([0-9.]+)/g)) {
+        for (const match of pass.stderr.matchAll(/black_start:([0-9.]+)\s+black_end:([0-9.]+)/g)) {
           const start = clampMs(Number(match[1]) * 1000, total); const end = clampMs(Number(match[2]) * 1000, total);
           entries.push({ kind: 'QUALITY', ordinal: qualityOrdinal++, sourceStartPts: ticksAt(start, video), sourceEndPts: ticksAt(end, video), timeBase: baseOf(video), streamId: `video:${String(video.index)}`, confidencePermille: 900, payload: { sourceStartMs: start, sourceEndMs: end, marker: 'BLACK_FRAME', detectionBasis: 'FFMPEG_BLACKDETECT' }, localFilename: null });
         }

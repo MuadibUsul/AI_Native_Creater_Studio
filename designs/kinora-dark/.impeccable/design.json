@@ -1,0 +1,85 @@
+{
+  "name": "Kinora dark cinematic",
+  "revision": 2,
+  "source": "built pages in designs/kinora-dark",
+  "color": {
+    "screen": "#000000",
+    "house": "#131209",
+    "panel": "#181818",
+    "raise": "#1F1F1F",
+    "raise2": "#272727",
+    "line": "#313131",
+    "hair": "rgba(242,237,228,0.08)",
+    "hair2": "rgba(242,237,228,0.14)",
+    "text": "#F2EDE4",
+    "text2": "#B3ADA2",
+    "text3": "#8A857C",
+    "amber": "#F2C14E",
+    "amberInk": "#1A1405",
+    "alert": "#FF8A7A",
+    "veil": "rgba(0,0,0,0.72)",
+    "inkLight": "#0B0B0A",
+    "amberOnLight": "#A87512"
+  },
+  "font": {
+    "sans": "Geist",
+    "mono": "Geist Mono",
+    "cjk": "Noto Sans SC",
+    "headingWeight": 500,
+    "headingTracking": "-0.022em"
+  },
+  "typeScale": {
+    "12": 16,
+    "14": 20,
+    "16": 24,
+    "18": 28,
+    "20": 28,
+    "24": 32,
+    "30": 36,
+    "36": 40,
+    "48": 48,
+    "60": 60
+  },
+  "space": [
+    0,
+    2,
+    4,
+    8,
+    12,
+    16,
+    24,
+    32,
+    40,
+    48,
+    64,
+    80,
+    96
+  ],
+  "radius": {
+    "sm": 2,
+    "default": 4,
+    "md": 6,
+    "lg": 8,
+    "xl": 12,
+    "2xl": 16,
+    "full": 9999
+  },
+  "motion": {
+    "ease": "cubic-bezier(0.22, 1, 0.36, 1)",
+    "fast": 300,
+    "move": 600,
+    "trial": 2400
+  },
+  "mark": {
+    "grid": 64,
+    "line": 7,
+    "you": 44,
+    "kinora": 28,
+    "gap": 6,
+    "clear": 7,
+    "colors": {
+      "you": "#F2EDE4",
+      "kinora": "#F2C14E"
+    }
+  }
+}

@@ -1900,7 +1900,7 @@ export {
   objectProbeSchema,
   storageKeySchema,
 } from './storage.js';
-export type { SignedUrlPurpose, UploadTarget, DownloadTarget, ObjectProbe, ObjectStorageAdapter } from './storage.js';
+export type { SignedUrlPurpose, UploadTarget, DownloadTarget, ObjectProbe, ComposedObject, ObjectStorageAdapter } from './storage.js';
 export { sniffMimeType, mimeMatches, probeImageDimensions, probeWavDurationMs, ASSET_MIME_ALLOWLIST } from './mime-sniff.js';
 
 // 扩展架构契约（P01-06 / §92）

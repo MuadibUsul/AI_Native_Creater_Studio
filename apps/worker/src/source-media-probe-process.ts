@@ -18,6 +18,14 @@ export interface FfmpegSourceMediaProbeOptions {
 export const DEFAULT_SOURCE_PROBE_TIMEOUT_MS = 5 * 60 * 1000;
 export const DEFAULT_SOURCE_PROBE_OUTPUT_BYTES = 8 * 1024 * 1024;
 
+/**
+ * 完整解码检查的时限随素材时长增长：在 timeoutMs 之外，每秒素材再给 2 秒（允许按半倍速解码）。
+ * 固定 5 分钟时，共享机器上 10 分钟的 4K HEVC 会解码超时，整段素材被判失败，永远不能用。
+ */
+export function decodeCheckTimeoutMs(baseTimeoutMs: number, mediaDurationMs: number | null): number {
+  return baseTimeoutMs + 2 * Math.max(0, mediaDurationMs ?? 0);
+}
+
 interface ProcessResult {
   code: number | null;
   signal: NodeJS.Signals | null;
@@ -126,10 +134,20 @@ function rotation(stream: Record<string, unknown>): number | null {
   return null;
 }
 
-function sampledPts(frames: unknown): { count: number; deltas: string[]; cadence: MediaStreamProbe['cadence'] } {
-  if (!Array.isArray(frames)) return { count: 0, deltas: [], cadence: 'UNKNOWN' };
-  const values = frames
-    .map((frame) => (frame && typeof frame === 'object' && !Array.isArray(frame) ? integerString((frame as Record<string, unknown>)['best_effort_timestamp']) : null))
+/**
+ * 前 120 秒视频包的显示时间戳（pts，缺失时取 dts）；容器标记为丢弃（flags 含 D，如编辑列表裁掉的包）的不计。
+ * 读包不解码：此前用 `-show_frames` 取解码后帧的时间戳，ffprobe 单线程解码，30 秒 4K HEVC 要 69 秒，
+ * 而包时间戳排序后与帧时间戳相同（契约字段本就叫 sampledPacketCount）。
+ */
+function sampledPts(packets: unknown): { count: number; deltas: string[]; cadence: MediaStreamProbe['cadence'] } {
+  if (!Array.isArray(packets)) return { count: 0, deltas: [], cadence: 'UNKNOWN' };
+  const values = packets
+    .map((packet) => {
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return null;
+      const fields = packet as Record<string, unknown>;
+      if (typeof fields['flags'] === 'string' && fields['flags'].includes('D')) return null;
+      return integerString(fields['pts']) ?? integerString(fields['dts']);
+    })
     .filter((value): value is string => value !== null)
     .map((value) => BigInt(value))
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -218,19 +236,19 @@ export function createFfmpegSourceMediaProbe(options: FfmpegSourceMediaProbeOpti
       );
       let pts = { count: 0, deltas: [] as string[], cadence: 'UNKNOWN' as MediaStreamProbe['cadence'] };
       if (videoIndex >= 0) {
-        const frameProbe = await runBoundedProcess({
+        const packetProbe = await runBoundedProcess({
           executable: ffprobePath,
           args: [
-            '-v', 'error', '-select_streams', 'v:0', '-read_intervals', '%+120', '-show_frames',
-            '-show_entries', 'frame=best_effort_timestamp', '-print_format', 'json', '-protocol_whitelist', 'file,pipe', input.filePath,
+            '-v', 'error', '-select_streams', 'v:0', '-read_intervals', '%+120', '-show_packets',
+            '-show_entries', 'packet=pts,dts,flags', '-print_format', 'json', '-protocol_whitelist', 'file,pipe', input.filePath,
           ],
           timeoutMs,
           maxOutputBytes,
         });
-        if (frameProbe.code === 0 && frameProbe.stdout.trim() !== '') {
+        if (packetProbe.code === 0 && packetProbe.stdout.trim() !== '') {
           try {
-            const frames = JSON.parse(frameProbe.stdout) as Record<string, unknown>;
-            pts = sampledPts(frames['frames']);
+            const packets = JSON.parse(packetProbe.stdout) as Record<string, unknown>;
+            pts = sampledPts(packets['packets']);
           } catch {
             pts = { count: 0, deltas: [], cadence: 'UNKNOWN' };
           }
@@ -272,14 +290,14 @@ export function createFfmpegSourceMediaProbe(options: FfmpegSourceMediaProbeOpti
       if (!streams.some((stream) => stream.type === 'VIDEO' || stream.type === 'AUDIO')) {
         return failedResult('NO_PLAYABLE_STREAMS', '文件中没有可解码的视频或音频流。');
       }
+      const rawFormat = parsed['format'];
+      const format = rawFormat && typeof rawFormat === 'object' && !Array.isArray(rawFormat) ? rawFormat as Record<string, unknown> : {};
       const decode = await runBoundedProcess({
         executable: ffmpegPath,
         args: ['-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file,pipe', '-i', input.filePath, '-map', '0:v?', '-map', '0:a?', '-f', 'null', '-'],
-        timeoutMs,
+        timeoutMs: decodeCheckTimeoutMs(timeoutMs, milliseconds(format['duration']) ?? Math.max(0, ...streams.map((stream) => stream.durationMs ?? 0))),
         maxOutputBytes,
       });
-      const rawFormat = parsed['format'];
-      const format = rawFormat && typeof rawFormat === 'object' && !Array.isArray(rawFormat) ? rawFormat as Record<string, unknown> : {};
       const formatNames = (nullableString(format['format_name']) ?? '').split(',').map((value) => value.trim()).filter(Boolean);
       if (decode.code !== 0) {
         const message = '完整解码失败，文件可能损坏或包含当前环境不支持的编码。';

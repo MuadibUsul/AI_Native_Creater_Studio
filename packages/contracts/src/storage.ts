@@ -42,6 +42,11 @@ export const objectProbeSchema = z.object({
 
 export type ObjectProbe = z.infer<typeof objectProbeSchema>;
 
+/** 分片合成结果：checksumSha256 为整文件 SHA-256（十六进制小写），实现没有经手字节时为 null。 */
+export interface ComposedObject {
+  checksumSha256: string | null;
+}
+
 /**
  * 存储适配器（本地磁盘见 packages/providers/storage-local；S3 兼容对象存储见 packages/providers/storage-s3）。
  * 服务层只依赖本接口（domain 不得依赖 providers/*，计划 §3.4）。
@@ -77,8 +82,10 @@ export interface ObjectStorageAdapter {
   /**
    * 将同一上传意图的分片按给定顺序合成为最终对象。实现必须流式复制，不能把所有分片
    * 同时读入内存；目标写入失败时不得暴露半成品对象。
+   * 复制途中读过全部字节的实现顺带返回整文件 SHA-256（确认上传时省去再读一遍整文件）；
+   * 在存储内部复制、不经手字节的实现返回 null，调用方再单独计算。
    */
-  composeObjects?(input: { sourceKeys: string[]; destinationKey: string }): Promise<void>;
+  composeObjects?(input: { sourceKeys: string[]; destinationKey: string }): Promise<ComposedObject>;
   /**
    * 在对象存储内部复制对象。重新链接原件使用此能力恢复既有不可变 AssetVersion 的
    * storage_key；实现必须先写临时对象再原子发布，不能把大文件读入 API 内存。

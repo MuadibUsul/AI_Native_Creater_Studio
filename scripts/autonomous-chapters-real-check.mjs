@@ -29,7 +29,7 @@ const model = process.env.ANCS_REAL_MODEL ?? (driver === 'deepseek' ? 'deepseek-
 const budgetUsd = Math.min(2, Math.max(0.2, Number(process.env.ANCS_REAL_BUDGET_USD ?? '1')));
 const budgetMicros = Math.round(budgetUsd * 1_000_000);
 const maxCalls = Math.min(150, Math.max(10, Number(process.env.ANCS_REAL_MAX_CALLS ?? '80')));
-const keyName = driver === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'ANTHROPIC_API_KEY';
+const keyName = driver === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'ANTHROPIC_API_KEY'; // secrets:check-ignore：只是环境变量名，不含凭据值
 const confirmed = process.argv.includes('--confirm-spend');
 const offline = process.argv.includes('--offline');
 

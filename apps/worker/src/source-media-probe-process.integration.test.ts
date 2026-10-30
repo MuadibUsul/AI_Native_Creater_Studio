@@ -6,7 +6,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createFfmpegSourceMediaProbe } from './source-media-probe-process.js';
+import { createFfmpegSourceMediaProbe, decodeCheckTimeoutMs } from './source-media-probe-process.js';
 
 const fixtures = resolve('packages/testing/fixtures/media-v04');
 let tempDir: string;
@@ -30,6 +30,28 @@ describe('ffmpeg source media probe', () => {
     expect(video?.cadence).toBe('VARIABLE');
     expect(video?.sampledPtsDeltaTicks).toEqual(expect.arrayContaining(['512', '1024']));
     expect(result.decodeCheck.status).toBe('PASSED');
+  });
+
+  it('samples cadence from packet timestamps and leaves out packets the container discards', { timeout: 30_000 }, async () => {
+    // 编辑列表裁掉开头 0.5 秒：头部的包标记为丢弃（flags 含 D），不计入采样
+    const trimmed = join(tempDir, 'edit-list-trim.mp4');
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const encoded = join(tempDir, 'edit-list-source.mp4');
+    await promisify(execFile)('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10:duration=3', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '30', '-pix_fmt', 'yuv420p', encoded]);
+    await promisify(execFile)('ffmpeg', ['-nostdin', '-v', 'error', '-y', '-ss', '0.5', '-i', encoded, '-c', 'copy', trimmed]);
+    const packets = JSON.parse((await promisify(execFile)('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_packets', '-show_entries', 'packet=flags', '-print_format', 'json', trimmed])).stdout) as { packets: { flags: string }[] };
+    const kept = packets.packets.filter((packet) => !packet.flags.includes('D')).length;
+    const result = await probe.probe({ filePath: trimmed, declaredMimeType: 'video/mp4' });
+    const video = result.streams.find((stream) => stream.type === 'VIDEO');
+    expect(video?.sampledPacketCount).toBe(kept);
+    expect(video?.cadence).toBe('CONSTANT');
+  });
+
+  it('gives the full decode check more time for longer media', () => {
+    expect(decodeCheckTimeoutMs(300_000, null)).toBe(300_000);
+    // 10 分钟素材：5 分钟基础 + 每秒 2 秒 = 25 分钟
+    expect(decodeCheckTimeoutMs(300_000, 600_000)).toBe(1_500_000);
   });
 
   it('preserves display rotation and reports six-channel audio layout', { timeout: 30_000 }, async () => {

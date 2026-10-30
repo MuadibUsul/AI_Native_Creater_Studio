@@ -608,6 +608,8 @@ const zhCN = {
       seconds: (value: string) => `${value} 秒`,
       uploading: (percent: number) => `上传 ${String(percent)}%`,
       uploadFailed: '上传失败',
+      /** 多个文件一次只传一个：排在后面的显示这一句 */
+      queued: '排队等待上传',
     },
     export: {
       title: '导出成片',
@@ -1305,6 +1307,7 @@ const en: Messages = {
       seconds: (value: string) => `${value}s`,
       uploading: (percent: number) => `Uploading ${String(percent)}%`,
       uploadFailed: 'Upload failed',
+      queued: 'Waiting to upload',
     },
     export: {
       title: 'Export',

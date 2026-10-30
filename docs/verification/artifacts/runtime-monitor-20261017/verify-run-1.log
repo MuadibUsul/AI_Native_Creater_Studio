@@ -1,0 +1,63 @@
+test db: postgres://***@localhost:55433/ancs_test
+
+> ancs@0.0.0 verify <repo>
+> node scripts/verify.mjs
+
+
+===== verify: pnpm run secrets:check =====
+
+> ancs@0.0.0 secrets:check <repo>
+> node scripts/check-secrets.mjs
+
+[secrets:check] 未发现疑似 Secret。
+
+===== verify: pnpm run spec:check =====
+
+> ancs@0.0.0 spec:check <repo>
+> node scripts/spec-check.mjs
+
+spec-check：219 项任务，VERIFIED 54，IN_PROGRESS 16
+spec-check 通过：依赖、证据文件与汇总统计一致。
+
+===== verify: pnpm run lint =====
+
+> ancs@0.0.0 lint <repo>
+> eslint .
+
+
+<repo>\.tmp-deepseek-browser.mjs
+   6:5    error  'completed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   7:171  error  Empty block statement                           no-empty
+  20:32   error  'document' is not defined                       no-undef
+  20:74   error  'document' is not defined                       no-undef
+  20:115  error  'document' is not defined                       no-undef
+  20:156  error  'document' is not defined                       no-undef
+
+<repo>\.tmp-monitor\watch.mjs
+   46:32  error  Unexpected control character(s) in regular expression: \x1b  no-control-regex
+  148:57  error  'AbortSignal' is not defined                                 no-undef
+
+✖ 8 problems (8 errors, 0 warnings)
+
+ ELIFECYCLE  Command failed with exit code 1.
+
+===== verify 汇总 =====
+ PASS  secrets:check
+ PASS  spec:check
+ FAIL  lint
+ SKIP  typecheck（前序步骤失败，未执行）
+ SKIP  build（前序步骤失败，未执行）
+ SKIP  arch:check（前序步骤失败，未执行）
+ SKIP  capabilities:check（前序步骤失败，未执行）
+ SKIP  test:unit（前序步骤失败，未执行）
+ SKIP  test:web（前序步骤失败，未执行）
+ SKIP  test:motion（前序步骤失败，未执行）
+ SKIP  test:contract（前序步骤失败，未执行）
+ SKIP  test:integration（前序步骤失败，未执行）
+ SKIP  test:e2e（前序步骤失败，未执行）
+ SKIP  test:security（前序步骤失败，未执行）
+ SKIP  test:render（前序步骤失败，未执行）
+ SKIP  test:golden（前序步骤失败，未执行）
+
+verify 失败：lint。已实现的套件必须全部通过；[PLANNED] 占位不代表通过。
+ ELIFECYCLE  Command failed with exit code 1.

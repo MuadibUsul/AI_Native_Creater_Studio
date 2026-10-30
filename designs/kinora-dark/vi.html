@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kinora Identity</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="media/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Identity board: the same screening room, laid out like a brand book with hairline plates. */
+:root {
+  color-scheme: dark;
+  --screen: #000000; --house: #131209; --panel: #181818; --raise: #1f1f1f; --raise-2: #272727; --line: #313131;
+  --hair: rgba(242, 237, 228, 0.08); --hair-2: rgba(242, 237, 228, 0.14);
+  --text: #f2ede4; --text-2: #b3ada2; --text-3: #8a857c; --amber: #f2c14e; --amber-ink: #1a1405; --ink: #0b0b0a; --amber-deep: #a87512; --alert: #ff8a7a;
+  --veil: rgba(0, 0, 0, 0.72);
+  --font: "Geist", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --cjk: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --s-50: 4px; --s-75: 8px; --s-100: 12px; --s-200: 16px; --s-300: 24px; --s-400: 32px; --s-600: 48px; --s-700: 64px; --s-800: 80px; --s-900: 96px;
+  --r: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-full: 9999px;
+  --gutter: max(16px, env(safe-area-inset-left, 0px)); --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 768px) { :root { --gutter: max(32px, env(safe-area-inset-left, 0px)); --gutter-r: max(32px, env(safe-area-inset-right, 0px)); } }
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--line) var(--screen); scrollbar-width: thin; }
+body { margin: 0; background: var(--screen); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 24px; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--screen); }
+::selection { background: var(--amber); color: var(--amber-ink); }
+img { display: block; max-width: 100%; }
+a { color: inherit; text-underline-offset: 4px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--r); }
+h1, h2, h3 { margin: 0; font-weight: 500; letter-spacing: -0.022em; text-wrap: balance; }
+p { margin: 0; text-wrap: pretty; }
+:lang(zh) p { line-height: 1.75; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-3); }
+.wrap { max-width: calc(1200px + 64px); margin-inline: auto; padding-left: var(--gutter); padding-right: var(--gutter-r); }
+.band { border-top: 1px solid var(--hair); padding-block: var(--s-800); }
+@media (min-width: 1024px) { .band { padding-block: var(--s-900); } }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; background: rgba(0, 0, 0, 0.72); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border-bottom: 1px solid var(--hair); }
+.top .wrap { height: 64px; display: flex; align-items: center; gap: var(--s-300); }
+.top img { height: 20px; width: auto; }
+.top nav { margin-left: auto; display: flex; gap: var(--s-50); align-items: center; }
+.top nav a, .lang { padding: var(--s-75) var(--s-100); border: 0; background: none; border-radius: var(--r-md); font-size: 14px; line-height: 20px; color: var(--text-2); text-decoration: none; cursor: pointer; transition: color 300ms var(--ease), background-color 300ms var(--ease); }
+.top nav a:hover, .lang:hover { color: var(--text); background: var(--raise); }
+@media (max-width: 639px) { .top nav a.hide-sm { display: none; } }
+
+.head { display: grid; gap: var(--s-200); margin-bottom: var(--s-600); }
+@media (min-width: 900px) { .head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-600); align-items: end; } }
+.head h2 { font-size: 30px; line-height: 36px; }
+@media (min-width: 768px) { .head h2 { font-size: 48px; line-height: 48px; } }
+.head p { color: var(--text-2); max-width: 480px; }
+
+/* cover */
+.cover { padding-block: var(--s-900); display: grid; gap: var(--s-600); }
+.cover-plate { position: relative; display: grid; place-items: center; gap: var(--s-400); padding: var(--s-900) var(--s-300); border: 1px solid var(--hair-2); border-radius: var(--r-xl); background: var(--screen); overflow: hidden; }
+.big-mark { width: min(320px, 70%); height: auto; }
+.big-mark rect { transform-box: fill-box; transform-origin: left center; }
+.big-mark.play rect.l1 { animation: line 500ms var(--ease) both; }
+.big-mark.play rect.l2 { animation: line 400ms var(--ease) 380ms both; }
+@keyframes line { from { transform: scaleX(0); opacity: 0.4; } to { transform: scaleX(1); opacity: 1; } }
+.cover-plate .word { width: min(360px, 72%); height: auto; }
+.cover-plate .tags { display: grid; gap: var(--s-50); text-align: center; }
+.cover-plate .tags span { font-size: 18px; line-height: 28px; color: var(--text-2); }
+.cover-plate .tags span:lang(zh), .zh { font-family: var(--cjk); }
+.replay { position: absolute; right: var(--s-200); bottom: var(--s-200); padding: var(--s-50) var(--s-100); border: 1px solid var(--hair-2); border-radius: var(--r-full); background: none; font-size: 12px; line-height: 16px; color: var(--text-2); cursor: pointer; }
+.replay:hover { color: var(--text); background: var(--raise); }
+.cover h1 { font-size: 36px; line-height: 40px; max-width: 900px; }
+.cover h1 .muted { color: var(--text-3); }
+@media (min-width: 768px) { .cover h1 { font-size: 48px; line-height: 48px; } }
+
+/* plates */
+.grid { display: grid; gap: var(--s-200); grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+.plate { display: grid; gap: var(--s-100); align-content: start; }
+.art { position: relative; aspect-ratio: 4 / 3; display: grid; place-items: center; border: 1px solid var(--hair-2); border-radius: var(--r-xl); background: var(--screen); overflow: hidden; }
+.art.house { background: var(--house); }
+.art.light { background: var(--text); border-color: transparent; }
+.art.panel { background: var(--panel); }
+.art img { width: 46%; height: auto; }
+.art img.wide { width: 70%; }
+.art img.mid { width: 52%; }
+.plate figcaption { display: grid; gap: var(--s-25); font-size: 14px; line-height: 20px; }
+.plate figcaption b { font-weight: 500; }
+.plate figcaption span { color: var(--text-3); font-size: 12px; line-height: 16px; }
+.plate figcaption .file { font-family: var(--mono); color: var(--text-3); font-size: 12px; line-height: 16px; }
+figure { margin: 0; }
+.verdict { display: inline-flex; align-items: center; gap: var(--s-50); width: max-content; padding: 0 var(--s-75); border-radius: var(--r-full); font-size: 12px; line-height: 20px; border: 1px solid var(--hair-2); color: var(--text-2); }
+.verdict.pick { border-color: var(--amber); color: var(--amber); }
+.verdict.no { color: var(--text-3); }
+
+/* construction */
+.build { display: grid; gap: var(--s-400); }
+@media (min-width: 900px) { .build { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: start; } }
+.build .diagram { border: 1px solid var(--hair-2); border-radius: var(--r-xl); background: var(--screen); padding: var(--s-300); }
+.build svg { width: 100%; height: auto; display: block; }
+.build svg .grid-l { stroke: rgba(242, 237, 228, 0.07); stroke-width: 0.06; }
+.build svg .guide { stroke: rgba(242, 237, 228, 0.45); stroke-width: 0.12; stroke-dasharray: 0.5 0.5; fill: none; }
+.build svg .dim { fill: var(--text-3); font: 1.5px var(--mono); }
+.build svg .clear { fill: none; stroke: var(--amber); stroke-width: 0.12; stroke-dasharray: 0.6 0.4; }
+.specs { list-style: none; margin: 0; padding: 0; display: grid; }
+.specs li { display: flex; justify-content: space-between; gap: var(--s-200); padding: var(--s-100) 0; border-top: 1px solid var(--hair); font-size: 14px; line-height: 20px; }
+.specs li:last-child { border-bottom: 1px solid var(--hair); }
+.specs li span:first-child { color: var(--text-2); }
+.specs li span:last-child { text-align: right; }
+
+/* icons */
+.icons { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-400); padding: var(--s-400); border: 1px solid var(--hair-2); border-radius: var(--r-xl); background: var(--house); }
+.icons figure { display: grid; gap: var(--s-75); justify-items: center; }
+.icons figcaption { font-family: var(--mono); font-size: 12px; line-height: 16px; color: var(--text-3); }
+.icons .r { border-radius: 22.5%; overflow: hidden; }
+.icons .adaptive { position: relative; width: 108px; height: 108px; border-radius: 50%; overflow: hidden; }
+.icons .adaptive img { width: 100%; height: 100%; }
+.icons .adaptive::after { content: ""; position: absolute; inset: 16.7%; border-radius: 50%; border: 1px dashed rgba(242, 193, 78, 0.6); }
+
+/* colour */
+.swatches { display: grid; gap: var(--s-200); grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
+.sw { display: grid; border: 1px solid var(--hair-2); border-radius: var(--r-xl); overflow: hidden; }
+.sw .chip { height: 112px; }
+.sw .info { display: grid; gap: var(--s-25); padding: var(--s-100) var(--s-200); background: var(--panel); font-size: 14px; line-height: 20px; }
+.sw .info b { font-weight: 500; }
+.sw .info span { font-size: 12px; line-height: 16px; color: var(--text-3); }
+.sw .info .mono { color: var(--text-2); }
+.ratio { margin-top: var(--s-300); display: flex; height: 40px; border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--hair-2); }
+.ratio i { display: block; }
+.ratio-key { display: flex; flex-wrap: wrap; gap: var(--s-100) var(--s-300); margin-top: var(--s-100); font-size: 12px; line-height: 16px; color: var(--text-3); }
+
+/* type */
+.type { display: grid; gap: var(--s-200); }
+.type .row { display: grid; gap: var(--s-100); padding: var(--s-300) 0; border-top: 1px solid var(--hair); }
+@media (min-width: 900px) { .type .row { grid-template-columns: 200px minmax(0, 1fr); align-items: baseline; } }
+.type .row > span { font-size: 12px; line-height: 16px; color: var(--text-3); font-family: var(--mono); }
+.t60 { font-size: 60px; line-height: 60px; font-weight: 500; letter-spacing: -0.03em; }
+.t36 { font-size: 36px; line-height: 40px; font-weight: 500; letter-spacing: -0.022em; }
+.t18 { font-size: 18px; line-height: 28px; color: var(--text-2); max-width: 640px; }
+.tmono { font-family: var(--mono); font-size: 20px; line-height: 28px; }
+.tzh { font-family: var(--cjk); font-size: 36px; line-height: 48px; font-weight: 500; }
+@media (max-width: 639px) { .t60 { font-size: 36px; line-height: 40px; } .t36, .tzh { font-size: 30px; line-height: 36px; } }
+
+/* voice */
+.voice { display: grid; gap: var(--s-400); }
+@media (min-width: 900px) { .voice { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: center; } }
+.still { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; border-radius: var(--r-xl); border: 1px solid var(--hair-2); }
+.still img { width: 100%; height: 100%; object-fit: cover; }
+.still .subs { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); width: 86%; display: grid; justify-items: center; gap: var(--s-75); text-align: center; }
+.still .subs span { padding: 2px var(--s-100); background: var(--veil); font-size: 18px; line-height: 28px; font-weight: 500; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+@media (max-width: 639px) { .still .subs span { font-size: 14px; line-height: 24px; } }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-200); }
+.rules li { display: grid; gap: var(--s-25); }
+.rules li b { font-weight: 500; }
+.rules li span { color: var(--text-2); font-size: 14px; line-height: 20px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: var(--r-full); margin-right: var(--s-75); vertical-align: 1px; }
+
+/* applications */
+.apps { display: grid; gap: var(--s-300); grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
+.app-art { position: relative; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; border-radius: var(--r-xl); border: 1px solid var(--hair-2); background: var(--screen); }
+.app-art > img.bg { width: 100%; height: 100%; object-fit: cover; }
+.endcard { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: var(--s-200); background: rgba(0, 0, 0, 0.62); text-align: center; }
+.endcard img { width: 44%; height: auto; }
+.endcard span { font-size: 16px; line-height: 24px; color: var(--text-2); }
+.ai-label { position: absolute; left: 3%; top: 4%; padding: 2px var(--s-75); background: rgba(0, 0, 0, 0.55); color: #ffffff; font-size: 14px; line-height: 20px; }
+.watermark { position: absolute; right: 3%; bottom: 5%; width: 9%; opacity: 0.55; }
+.social { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-300); align-items: center; padding: var(--s-300); }
+.social .avatar { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; }
+.social .post { aspect-ratio: 1; max-width: 220px; border-radius: var(--r-lg); background: var(--screen); border: 1px solid var(--hair-2); display: grid; align-content: space-between; padding: var(--s-200); }
+.social .post b { font-size: 20px; line-height: 28px; font-weight: 500; letter-spacing: -0.022em; }
+.social .post img { width: 40%; }
+.header-snip { display: grid; align-content: center; gap: var(--s-300); padding: var(--s-300); }
+.header-snip .bar { display: flex; align-items: center; gap: var(--s-200); padding: var(--s-100) var(--s-200); border: 1px solid var(--hair-2); border-radius: var(--r-lg); background: rgba(0, 0, 0, 0.72); font-size: 12px; line-height: 16px; color: var(--text-2); }
+.header-snip .bar img { height: 16px; width: auto; margin-right: auto; }
+.header-snip .bar span, .header-snip .bar b { white-space: nowrap; }
+.header-snip .bar b { padding: 2px var(--s-100); border-radius: var(--r-full); background: var(--text); color: var(--screen); font-weight: 500; }
+.header-snip .mail { padding: var(--s-200); border-radius: var(--r-lg); background: var(--text); color: var(--ink); display: grid; gap: var(--s-75); font-size: 14px; line-height: 20px; }
+.header-snip .mail img { height: 16px; width: auto; }
+.app-cap { margin-top: var(--s-100); font-size: 14px; line-height: 20px; }
+.app-cap span { display: block; font-size: 12px; line-height: 16px; color: var(--text-3); }
+
+/* misuse */
+.donts { display: grid; gap: var(--s-200); grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
+.dont .art { aspect-ratio: 1; }
+.dont .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(255, 138, 122, 0.9) 50%, transparent calc(50% + 1px)); pointer-events: none; }
+.dont .art svg { width: 52%; height: auto; }
+.dont figcaption { font-size: 14px; line-height: 20px; color: var(--text-2); }
+
+.files { list-style: none; margin: 0; padding: 0; columns: 2 260px; column-gap: var(--s-600); }
+.files li { break-inside: avoid; display: flex; justify-content: space-between; gap: var(--s-200); padding: var(--s-75) 0; border-top: 1px solid var(--hair); font-size: 14px; line-height: 20px; }
+.files li span:first-child { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+.files li span:last-child { color: var(--text-3); font-size: 12px; }
+.foot { border-top: 1px solid var(--hair); padding-block: var(--s-600) calc(env(safe-area-inset-bottom, 0px) + var(--s-600)); font-size: 12px; line-height: 16px; color: var(--text-3); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a href="index.html"><img src="brand/kinora-lockup.svg" alt="Kinora" width="122" height="20"></a>
+    <nav aria-label="Identity">
+      <a class="hide-sm" href="#logo" data-i18n="nav.logo">Logo</a>
+      <a class="hide-sm" href="#colour" data-i18n="nav.colour">Colour</a>
+      <a class="hide-sm" href="#use" data-i18n="nav.use">In use</a>
+      <a href="index.html" data-i18n="nav.site">Website</a>
+      <button class="lang" type="button" data-lang-toggle data-i18n="lang.other">中文</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="wrap cover" data-screen-label="Cover">
+    <div class="cover-plate">
+      <svg class="big-mark play" viewBox="10 22 44 20" role="img" aria-label="Kinora mark: a long white subtitle line over a shorter amber one"><rect class="l1" x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect class="l2" x="18" y="35" width="28" height="7" rx="3.5" fill="#F2C14E"></rect></svg>
+      <img class="word" src="brand/kinora-wordmark.svg" alt="kinora" width="2890" height="721">
+      <div class="tags"><span lang="en">The editor that listens.</span><span lang="zh-Hans">会听话的剪辑师。</span></div>
+      <button class="replay" type="button" data-replay data-i18n="replay">Replay the mark</button>
+    </div>
+    <h1><span data-i18n="idea.lead">Kinora answers in subtitles.</span> <span class="muted" data-i18n="idea.rest">The long white line is you. The shorter amber line is Kinora answering. The mark, the colours and the motion all come from that exchange.</span></h1>
+  </section>
+
+  <section class="band" id="explore" data-screen-label="Explorations">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="ex.t">Three ways to draw it</h2><p data-i18n="ex.p">All three keep the idea of two subtitle lines. They were drawn at app icon size and at 16 pixels before choosing.</p></div>
+      <div class="grid">
+        <figure class="plate"><div class="art"><img src="brand/explore-words.svg" alt=""></div><figcaption><span class="verdict no" data-i18n="ex.no">Set aside</span><b data-i18n="ex.a">Words</b><span data-i18n="ex.a.p">Each line split into words. At small sizes it reads as Morse code, and the round amber dot turns it into a face.</span></figcaption></figure>
+        <figure class="plate"><div class="art"><img src="brand/kinora-mark.svg" alt=""></div><figcaption><span class="verdict pick" data-i18n="ex.pick">Chosen: the mark</span><b data-i18n="ex.b">Two lines</b><span data-i18n="ex.b.p">One long white line and one shorter amber line, centred. Clear at every size, and the colours carry the meaning.</span></figcaption></figure>
+        <figure class="plate"><div class="art"><img class="wide" src="brand/kinora-app-icon-rounded.svg" alt="" style="width: 46%"></div><figcaption><span class="verdict pick" data-i18n="ex.pick2">Chosen: the app icon</span><b data-i18n="ex.c">Lower third</b><span data-i18n="ex.c.p">The same lines placed where subtitles sit. The black tile becomes a screen, so the icon cannot be mistaken for a menu.</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="logo" data-screen-label="Construction">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="c.t">Construction</h2><p data-i18n="c.p">Drawn on a 64 unit grid. The bars have round ends, so the mark sits comfortably next to Geist.</p></div>
+      <div class="build">
+        <div class="diagram">
+          <svg viewBox="-2 12 68 40" aria-hidden="true">
+            <g data-grid></g>
+            <rect class="clear" x="3" y="15" width="58" height="34" rx="1"></rect>
+            <rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect>
+            <rect x="18" y="35" width="28" height="7" rx="3.5" fill="#F2C14E"></rect>
+            <path class="guide" d="M10 18 V46 M54 18 V46 M18 32 V46 M46 32 V46 M6 22 H58 M6 29 H58 M6 35 H58 M6 42 H58"></path>
+            <text class="dim" x="28.5" y="20.5">44</text>
+            <text class="dim" x="29.5" y="47.5">28</text>
+            <text class="dim" x="56" y="26.2">7</text>
+            <text class="dim" x="56" y="33">6</text>
+            <text class="dim" x="56" y="39.2">7</text>
+            <text class="dim" x="4.2" y="14.6">7</text>
+          </svg>
+        </div>
+        <ul class="specs">
+          <li><span data-i18n="c.1">Line height</span><span class="mono">7u · radius 3.5u</span></li>
+          <li><span data-i18n="c.2">White line (you)</span><span class="mono">44u</span></li>
+          <li><span data-i18n="c.3">Amber line (Kinora)</span><span class="mono">28u · 7/11 of 44</span></li>
+          <li><span data-i18n="c.4">Gap between lines</span><span class="mono">6u</span></li>
+          <li><span data-i18n="c.5">Clear space</span><span class="mono">7u <span data-i18n="c.5b">on every side</span></span></li>
+          <li><span data-i18n="c.6">Smallest mark</span><span class="mono">16px · <span data-i18n="c.6b">favicon cut below 24px</span></span></li>
+          <li><span data-i18n="c.7">Smallest lockup</span><span class="mono">80px wide</span></li>
+          <li><span data-i18n="c.8">Wordmark</span><span><span class="mono">Geist SemiBold, −4%</span>; <span data-i18n="c.8b">the dot of the i is a short amber line</span></span></li>
+        </ul>
+      </div>
+
+      <div class="head" style="margin-top: var(--s-900)"><h2 data-i18n="l.t">Logo set</h2><p data-i18n="l.p">Use the lockup by default. Use the mark alone where the name is already on screen, like an app icon or a favicon.</p></div>
+      <div class="grid">
+        <figure class="plate"><div class="art"><img class="wide" src="brand/kinora-lockup.svg" alt="Kinora lockup"></div><figcaption><b data-i18n="l.1">Lockup</b><span class="file">brand/kinora-lockup.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art light"><img class="wide" src="brand/kinora-lockup-light.svg" alt="Kinora lockup on a light ground"></div><figcaption><b data-i18n="l.2">Lockup on light grounds</b><span class="file">brand/kinora-lockup-light.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art house"><img class="mid" src="brand/kinora-lockup-stacked.svg" alt="Stacked lockup"></div><figcaption><b data-i18n="l.3">Stacked lockup</b><span class="file">brand/kinora-lockup-stacked.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art"><img class="mid" src="brand/kinora-wordmark.svg" alt="Wordmark"></div><figcaption><b data-i18n="l.4">Wordmark</b><span class="file">brand/kinora-wordmark.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art panel"><img src="brand/kinora-mark.svg" alt="Mark"></div><figcaption><b data-i18n="l.5">Mark</b><span class="file">brand/kinora-mark.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art light"><img src="brand/kinora-mark-light.svg" alt="Mark on light"></div><figcaption><b data-i18n="l.6">Mark on light grounds</b><span class="file">brand/kinora-mark-light.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art house"><img src="brand/kinora-mark-mono-white.svg" alt="White mark"></div><figcaption><b data-i18n="l.7">One colour, white</b><span data-i18n="l.7p">For print and embossing; the line lengths still tell the two voices apart.</span><span class="file">brand/kinora-mark-mono-white.svg</span></figcaption></figure>
+        <figure class="plate"><div class="art light"><img src="brand/kinora-mark-mono-black.svg" alt="Black mark"></div><figcaption><b data-i18n="l.8">One colour, black</b><span class="file">brand/kinora-mark-mono-black.svg</span></figcaption></figure>
+      </div>
+
+      <div class="head" style="margin-top: var(--s-900)"><h2 data-i18n="i.t">App icon and favicon</h2><p data-i18n="i.p">The tile is projection black with the lines in the lower third. Below 32 pixels the favicon switches to a heavier, centred cut.</p></div>
+      <div class="icons">
+        <figure><img class="r" src="brand/app-icon-180.png" alt="App icon" width="180" height="180"><figcaption>180 · iOS</figcaption></figure>
+        <figure><div class="adaptive"><img src="brand/app-icon-192.png" alt="Android adaptive icon" width="108" height="108"></div><figcaption>108 · Android</figcaption></figure>
+        <figure><img class="r" src="brand/app-icon-192.png" alt="" width="64" height="64"><figcaption>64</figcaption></figure>
+        <figure><img src="brand/favicon.svg" alt="Favicon" width="32" height="32"><figcaption>32</figcaption></figure>
+        <figure><img src="brand/favicon-16.png" alt="Favicon at 16 pixels" width="16" height="16"><figcaption>16</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="colour" data-screen-label="Colour">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="col.t">Colour</h2><p data-i18n="col.p">A dark screening room. Amber is not decoration; it is reserved for Kinora's voice and for anything still on trial. Contrast is measured live in this page.</p></div>
+      <div class="swatches" data-swatches></div>
+      <div class="ratio" aria-hidden="true"><i style="flex: 62; background: #000000"></i><i style="flex: 22; background: #131209"></i><i style="flex: 8; background: #181818"></i><i style="flex: 6; background: #F2EDE4"></i><i style="flex: 2; background: #F2C14E"></i></div>
+      <div class="ratio-key"><span data-i18n="col.mix">A guide to the mix on a typical screen: mostly black and house, tungsten for type, a little amber.</span></div>
+    </div>
+  </section>
+
+  <section class="band" data-screen-label="Type">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="ty.t">Type</h2><p data-i18n="ty.p">One family. Geist for everything, Geist Mono only for timecode and amounts, Noto Sans SC for Chinese.</p></div>
+      <div class="type">
+        <div class="row"><span>Geist Medium · 60/60 · −3%</span><p class="t60" data-i18n="ty.1">Edit your video by talking to it.</p></div>
+        <div class="row"><span>Geist Medium · 36/40 · −2.2%</span><p class="t36" data-i18n="ty.2">You direct. Kinora does the cutting.</p></div>
+        <div class="row"><span>Geist Regular · 18/28</span><p class="t18" data-i18n="ty.3">Drop in footage or paste an article and Kinora cuts a first version. Say what to change, point at the picture, and keep only the changes you like.</p></div>
+        <div class="row"><span>Geist Mono · 20/28</span><p class="tmono">00:00:03:12 / 00:00:18:00 · $3.17</p></div>
+        <div class="row"><span>Noto Sans SC Medium · 36/48</span><p class="tzh" lang="zh-Hans">对着视频说，它就替你剪。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" data-screen-label="Voice">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="v.t">Two voices</h2><p data-i18n="v.p">Everywhere Kinora speaks (the product, the website, a trailer), the same rule holds.</p></div>
+      <div class="voice">
+        <div class="still"><img src="media/aurora.jpg" alt="" data-i18n-alt="v.alt"><div class="subs"><span style="color: #F2EDE4" data-i18n="v.you">Hold on the aurora a little longer.</span><span style="color: #F2C14E" data-i18n="v.k">Trial ready. Keep it or undo it.</span></div></div>
+        <ul class="rules">
+          <li><b><i class="dot" style="background: #F2EDE4"></i><span data-i18n="v.r1">White is you</span></b><span data-i18n="v.r1p">Your words, your bubbles, your framing box.</span></li>
+          <li><b><i class="dot" style="background: #F2C14E"></i><span data-i18n="v.r2">Amber is Kinora</span></b><span data-i18n="v.r2p">Its replies, its subtitles, and anything waiting for your yes.</span></li>
+          <li><b data-i18n="v.r3">Subtitles sit on a veil</b><span data-i18n="v.r3p">Black at 72% behind each line, 2 by 12 pixels of padding, never a glow.</span></li>
+          <li><b data-i18n="v.r4">Motion</b><span data-i18n="v.r4p">Lines draw in from the left on cubic-bezier(0.22, 1, 0.36, 1): white first, amber 380 ms later.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="use" data-screen-label="In use">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="u.t">In use</h2><p data-i18n="u.p">Real footage from the product's demo set; amounts and names are examples.</p></div>
+      <div class="apps">
+        <figure><div class="app-art"><img class="bg" src="media/coast.jpg" alt=""><div class="endcard"><img src="brand/kinora-lockup.svg" alt="Kinora"><span data-i18n="u.end">The editor that listens.</span></div></div><figcaption class="app-cap"><span data-i18n="u.1" style="display: inline; font-size: inherit; color: var(--text)">Video end card</span><span data-i18n="u.1p">Footage dimmed to 38%, lockup at 44% of the width.</span></figcaption></figure>
+        <figure><div class="app-art"><img class="bg" src="media/road.jpg" alt=""><span class="ai-label" data-i18n="u.ai">AI generated</span><img class="watermark" src="brand/kinora-mark.svg" alt=""></div><figcaption class="app-cap"><span data-i18n="u.2" style="display: inline; font-size: inherit; color: var(--text)">Export corner</span><span data-i18n="u.2p">The required AI label stays top left in the export language; the optional mark sits bottom right at 55%.</span></figcaption></figure>
+        <figure><div class="app-art house social"><img class="avatar" src="brand/app-icon-192.png" alt=""><div class="post"><img src="brand/kinora-mark.svg" alt=""><b data-i18n="u.post">Edit your video by talking to it.</b></div></div><figcaption class="app-cap"><span data-i18n="u.3" style="display: inline; font-size: inherit; color: var(--text)">Social avatar and post</span><span data-i18n="u.3p">The avatar uses the app icon; posts use the mark and a single sentence.</span></figcaption></figure>
+        <figure><div class="app-art header-snip"><div class="bar"><img src="brand/kinora-lockup.svg" alt="Kinora"><span data-i18n="u.h2">Questions</span><b data-i18n="u.h3">Request an invite</b></div><div class="mail"><img src="brand/kinora-lockup-light.svg" alt="Kinora"><span data-i18n="u.mail">Your invite to Kinora is ready.</span></div></div><figcaption class="app-cap"><span data-i18n="u.4" style="display: inline; font-size: inherit; color: var(--text)">Website header and email</span><span data-i18n="u.4p">Dark surfaces take the lockup; light surfaces, like email, take the light lockup.</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" data-screen-label="Misuse">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="m.t">Please don't</h2><p data-i18n="m.p">Each of these breaks the meaning of the two lines, not only the look.</p></div>
+      <div class="donts">
+        <figure class="dont"><div class="art"><svg viewBox="10 22 44 20"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2C14E"></rect><rect x="18" y="35" width="28" height="7" rx="3.5" fill="#F2EDE4"></rect></svg></div><figcaption data-i18n="m.1">Swap the colours. Kinora never speaks first.</figcaption></figure>
+        <figure class="dont"><div class="art"><svg viewBox="10 22 44 20"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect x="10" y="35" width="44" height="7" rx="3.5" fill="#F2C14E"></rect></svg></div><figcaption data-i18n="m.2">Make the lines equal. It becomes an equals sign.</figcaption></figure>
+        <figure class="dont"><div class="art"><svg viewBox="10 22 44 20"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect x="18" y="35" width="28" height="7" rx="3.5" fill="#7C5CFF"></rect></svg></div><figcaption data-i18n="m.3">Recolour the answer, for example in the old violet.</figcaption></figure>
+        <figure class="dont"><div class="art"><svg viewBox="10 22 44 20" style="filter: drop-shadow(0 0 3px #F2C14E)"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect x="18" y="35" width="28" height="7" rx="3.5" fill="#F2C14E"></rect></svg></div><figcaption data-i18n="m.4">Add glows, gradients or outlines.</figcaption></figure>
+        <figure class="dont"><div class="art"><svg viewBox="10 22 44 20" preserveAspectRatio="none" style="width: 70%; height: 22%"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect x="18" y="35" width="28" height="7" rx="3.5" fill="#F2C14E"></rect></svg></div><figcaption data-i18n="m.5">Stretch or squash it.</figcaption></figure>
+        <figure class="dont"><div class="art" style="background: url(media/waterfall.jpg) center / cover"><svg viewBox="10 22 44 20"><rect x="10" y="22" width="44" height="7" rx="3.5" fill="#F2EDE4"></rect><rect x="18" y="35" width="28" height="7" rx="3.5" fill="#F2C14E"></rect></svg></div><figcaption data-i18n="m.6">Place it on busy footage without the veil.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" data-screen-label="Files">
+    <div class="wrap">
+      <div class="head"><h2 data-i18n="f.t">Files</h2><p data-i18n="f.p">All in the repository under designs/kinora-dark/brand. The wordmark is outlined, so no font is needed to use it.</p></div>
+      <ul class="files">
+        <li><span>kinora-lockup.svg</span><span data-i18n="f.1">dark grounds</span></li>
+        <li><span>kinora-lockup-light.svg</span><span data-i18n="f.2">light grounds</span></li>
+        <li><span>kinora-lockup-stacked.svg</span><span data-i18n="f.3">square spaces</span></li>
+        <li><span>kinora-wordmark.svg</span><span data-i18n="f.4">name only</span></li>
+        <li><span>kinora-mark.svg</span><span data-i18n="f.5">mark, dark grounds</span></li>
+        <li><span>kinora-mark-light.svg</span><span data-i18n="f.6">mark, light grounds</span></li>
+        <li><span>kinora-mark-mono-*.svg</span><span data-i18n="f.7">one colour</span></li>
+        <li><span>kinora-mark-favicon.svg</span><span data-i18n="f.8">heavier cut, small sizes</span></li>
+        <li><span>kinora-app-icon.svg</span><span data-i18n="f.9">full bleed, the platform masks it</span></li>
+        <li><span>app-icon-1024/512/192/180.png</span><span data-i18n="f.10">stores and home screens</span></li>
+        <li><span>favicon.svg, favicon-32/16.png</span><span data-i18n="f.11">browser tabs</span></li>
+      </ul>
+    </div>
+  </section>
+</main>
+<footer class="foot"><div class="wrap"><span data-i18n="foot">Kinora identity, first edition, October 2026. The name is still a proposal waiting for a trademark check.</span></div></footer>
+
+<script>
+(function () {
+  'use strict';
+  var ZH = {
+    'nav.logo': '标志', 'nav.colour': '颜色', 'nav.use': '应用', 'nav.site': '官网', 'lang.other': 'EN', 'replay': '重播标志动画',
+    'idea.lead': 'Kinora 用字幕回答你。', 'idea.rest': '长长的白线是你，短一些的琥珀色线是 Kinora 的回答。标志、颜色和动效都来自这一来一回。',
+    'ex.t': '三种画法', 'ex.p': '三种都保留"两行字幕"的想法，都在应用图标尺寸和 16 像素下画过，再做选择。',
+    'ex.no': '放弃', 'ex.a': '分词', 'ex.a.p': '每行拆成几个词。小尺寸下像摩斯电码，圆形的琥珀色点还会让它看起来像一张脸。',
+    'ex.pick': '选用：标志', 'ex.b': '两条线', 'ex.b.p': '一条长白线、一条短一些的琥珀色线，居中。任何尺寸都清楚，颜色本身就带着含义。',
+    'ex.pick2': '选用：应用图标', 'ex.c': '下三分之一', 'ex.c.p': '同样的两条线，放在字幕通常出现的位置。黑色底块就成了屏幕，不会被误认为菜单图标。',
+    'c.t': '结构', 'c.p': '画在 64 单位网格上。两端是圆头，和 Geist 字体放在一起很协调。',
+    'c.1': '线条高度', 'c.2': '白线（你）', 'c.3': '琥珀色线（Kinora）', 'c.4': '两线间距', 'c.5': '安全留白', 'c.5b': '四周', 'c.6': '标志最小尺寸', 'c.6b': '24px 以下用小尺寸版', 'c.7': '组合标志最小尺寸', 'c.8': '文字标志', 'c.8b': 'i 上的点是一条短短的琥珀色线',
+    'l.t': '标志组', 'l.p': '默认用组合标志。名称已经出现在屏幕上时（比如应用图标、浏览器标签），单独用图形标志。',
+    'l.1': '组合标志', 'l.2': '浅色背景上的组合标志', 'l.3': '上下组合标志', 'l.4': '文字标志', 'l.5': '图形标志', 'l.6': '浅色背景上的图形标志', 'l.7': '单色，白', 'l.7p': '用于印刷和压印；两条线的长短仍能区分两种声音。', 'l.8': '单色，黑',
+    'i.t': '应用图标与网站图标', 'i.p': '底块是放映用的纯黑，两条线放在下三分之一处。32 像素以下换成更粗、居中的小尺寸版。',
+    'col.t': '颜色', 'col.p': '一间暗下来的放映厅。琥珀色不是装饰，只留给 Kinora 的声音和还在试改中的内容。下面的对比度在页面里实时计算。',
+    'col.mix': '典型界面的颜色占比参考：大部分是黑和场内暖黑，文字用钨丝白，琥珀色只占一点。',
+    'ty.t': '字体', 'ty.p': '只用一套字体：Geist 用于所有文字，Geist Mono 只用于时间码和金额，中文用 Noto Sans SC。',
+    'ty.1': '对着视频说，它就替你剪。', 'ty.2': '你来导演，Kinora 来剪。', 'ty.3': '放入素材或贴一篇文章，Kinora 先剪出第一版。说出想改什么、指着画面，喜欢的改动才留下。',
+    'v.t': '两种声音', 'v.p': '无论 Kinora 在哪里说话（产品、官网、预告片），都遵守同一条规则。', 'v.alt': '演示画面：极光',
+    'v.you': '极光这里多停一会儿。', 'v.k': '试改好了，留下还是撤回？',
+    'v.r1': '白色是你', 'v.r1p': '你说的话、你的对话气泡、你画的框。', 'v.r2': '琥珀色是 Kinora', 'v.r2p': '它的回复、它的字幕，以及一切等你点头的内容。',
+    'v.r3': '字幕垫在半透明黑底上', 'v.r3p': '每行后面是 72% 的黑色底，内边距 2×12 像素，不加任何发光。', 'v.r4': '动效', 'v.r4p': '线条从左向右画出，缓动曲线 cubic-bezier(0.22, 1, 0.36, 1)：先白线，380 毫秒后琥珀色线。',
+    'u.t': '应用', 'u.p': '画面来自产品的演示素材；金额和名称都是示例。', 'u.end': '会听话的剪辑师。',
+    'u.1': '视频片尾卡', 'u.1p': '画面压暗到 38%，组合标志占宽度的 44%。', 'u.ai': 'AI生成',
+    'u.2': '导出画面的角落', 'u.2p': '法规要求的 AI 标识固定在左上角，跟随导出语言；可选的标志放在右下角，透明度 55%。',
+    'u.3': '社交头像与帖子', 'u.3p': '头像用应用图标；帖子用图形标志加一句话。', 'u.post': '对着视频说，它就替你剪。',
+    'u.4': '官网顶栏与邮件', 'u.4p': '深色背景用组合标志；浅色背景（比如邮件）用浅色版组合标志。', 'u.h1': '怎么用', 'u.h2': '常见问题', 'u.h3': '申请邀请', 'u.mail': '你的 Kinora 邀请已经准备好了。',
+    'm.t': '请不要这样用', 'm.p': '下面每一种都会破坏两条线的含义，而不只是外观。',
+    'm.1': '交换颜色。Kinora 从不抢先说话。', 'm.2': '把两条线做成一样长，会变成等号。', 'm.3': '给回答换颜色，比如换成旧品牌的紫色。', 'm.4': '加发光、渐变或描边。', 'm.5': '拉伸或压扁。', 'm.6': '直接放在复杂画面上，不垫半透明底。',
+    'f.t': '文件', 'f.p': '都在仓库的 designs/kinora-dark/brand 目录下。文字标志已转为轮廓，使用时不需要安装字体。',
+    'f.1': '深色背景', 'f.2': '浅色背景', 'f.3': '方形空间', 'f.4': '只有名称', 'f.5': '图形标志，深色背景', 'f.6': '图形标志，浅色背景', 'f.7': '单色', 'f.8': '加粗版，小尺寸用', 'f.9': '满版，由系统加圆角', 'f.10': '应用商店与主屏幕', 'f.11': '浏览器标签',
+    'foot': 'Kinora 视觉识别，第一版，2026 年 10 月。名称仍是提案，待商标检索。'
+  };
+  var EN = {}, ENALT = {};
+  document.querySelectorAll('[data-i18n]').forEach(function (el) { EN[el.getAttribute('data-i18n')] = el.innerHTML; });
+  document.querySelectorAll('[data-i18n-alt]').forEach(function (el) { ENALT[el.getAttribute('data-i18n-alt')] = el.getAttribute('alt'); });
+  var lang = 'en';
+  function setLang(next) {
+    lang = next;
+    document.documentElement.lang = next === 'zh' ? 'zh-Hans' : 'en';
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var k = el.getAttribute('data-i18n'); var v = next === 'zh' && ZH[k] !== undefined ? ZH[k] : EN[k];
+      // keep nested captions: only text, unless the English source held markup
+      if (v !== undefined) el.innerHTML = v;
+    });
+    document.querySelectorAll('[data-i18n-alt]').forEach(function (el) { var k = el.getAttribute('data-i18n-alt'); el.setAttribute('alt', next === 'zh' ? ZH[k] : ENALT[k]); });
+    renderSwatches();
+    try { localStorage.setItem('kinora-lang', next); } catch (e) { /* optional */ }
+  }
+  document.querySelector('[data-lang-toggle]').addEventListener('click', function () { setLang(lang === 'zh' ? 'en' : 'zh'); });
+
+  /* contrast, computed here rather than written down */
+  function lum(hex) { var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+  function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  var SW = [
+    { hex: '#000000', en: ['Projection black', 'Screens, page ground'], zh: ['放映黑', '画面、页面底色'] },
+    { hex: '#131209', en: ['House', 'Rooms between screenings, panels'], zh: ['场内暖黑', '放映间隙、面板'] },
+    { hex: '#181818', en: ['Panel', 'Cards and inputs'], zh: ['面板灰', '卡片与输入框'] },
+    { hex: '#F2EDE4', en: ['Tungsten', 'Type and your voice'], zh: ['钨丝白', '文字，以及你的声音'] },
+    { hex: '#B3ADA2', en: ['Ash', 'Secondary type'], zh: ['灰烬色', '次要文字'] },
+    { hex: '#F2C14E', en: ['Subtitle amber', "Kinora's voice and trials only"], zh: ['字幕琥珀', '只用于 Kinora 的声音和试改'] },
+    { hex: '#A87512', en: ['Amber ink', 'Amber on light grounds'], zh: ['深琥珀', '浅色背景上的琥珀色'] },
+    { hex: '#0B0B0A', en: ['Ink', 'Type on light grounds'], zh: ['墨色', '浅色背景上的文字'] }
+  ];
+  function renderSwatches() {
+    var host = document.querySelector('[data-swatches]'); host.innerHTML = '';
+    SW.forEach(function (s) {
+      var t = s[lang] || s.en;
+      var onBlack = ratio(s.hex, '#000000'), onTung = ratio(s.hex, '#F2EDE4');
+      var d = document.createElement('div'); d.className = 'sw';
+      d.innerHTML = '<div class="chip" style="background:' + s.hex + '"></div><div class="info"><b></b><span class="mono"></span><span></span><span class="mono"></span></div>';
+      var info = d.querySelectorAll('.info > *');
+      info[0].textContent = t[0]; info[1].textContent = s.hex; info[2].textContent = t[1];
+      info[3].textContent = (lang === 'zh' ? '对黑 ' : 'on black ') + onBlack.toFixed(1) + ' · ' + (lang === 'zh' ? '对钨丝白 ' : 'on tungsten ') + onTung.toFixed(1);
+      host.appendChild(d);
+    });
+  }
+
+  /* construction grid */
+  var g = document.querySelector('[data-grid]'); var ns = 'http://www.w3.org/2000/svg';
+  for (var x = 0; x <= 64; x += 2) { var l = document.createElementNS(ns, 'line'); l.setAttribute('x1', x); l.setAttribute('x2', x); l.setAttribute('y1', 12); l.setAttribute('y2', 52); l.setAttribute('class', 'grid-l'); g.appendChild(l); }
+  for (var y = 12; y <= 52; y += 2) { var h = document.createElementNS(ns, 'line'); h.setAttribute('y1', y); h.setAttribute('y2', y); h.setAttribute('x1', 0); h.setAttribute('x2', 64); h.setAttribute('class', 'grid-l'); g.appendChild(h); }
+
+  var mark = document.querySelector('.big-mark');
+  document.querySelector('[data-replay]').addEventListener('click', function () { mark.classList.remove('play'); void mark.getBoundingClientRect(); mark.classList.add('play'); });
+
+  var saved = null; try { saved = localStorage.getItem('kinora-lang'); } catch (e) { saved = null; }
+  var initial = saved === 'zh' || saved === 'en' ? saved : ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en');
+  if (initial === 'zh') setLang('zh'); else renderSwatches();
+})();
+</script>
+</body>
+</html>

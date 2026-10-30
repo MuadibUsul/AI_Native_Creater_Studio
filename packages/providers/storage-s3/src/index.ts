@@ -24,6 +24,7 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
   MAX_SIGNED_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
+  type ComposedObject,
   type DownloadTarget,
   type ObjectProbe,
   type ObjectStorageAdapter,
@@ -260,7 +261,8 @@ export class S3ObjectStorage implements ObjectStorageAdapter {
     }).done();
   }
 
-  async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<void> {
+  /** 大分片在存储内部拷贝（不经手字节），所以不返回整文件校验和，由调用方另算。 */
+  async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<ComposedObject> {
     if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
     const probes = await Promise.all(input.sourceKeys.map((key) => this.probeObject(key)));
     const missing = input.sourceKeys.find((_, index) => !probes[index]!.exists);
@@ -268,7 +270,7 @@ export class S3ObjectStorage implements ObjectStorageAdapter {
     const sizes = probes.map((probe) => probe.sizeBytes);
     if (canComposeByPartCopy(sizes)) {
       await this.multipartCopy(input.destinationKey, null, input.sourceKeys.map((key) => ({ sourceKey: key, range: null })));
-      return;
+      return { checksumSha256: null };
     }
     // 小分片：流式读出各片再写入目标（lib-storage 分段上传，内存有界；失败时中止，不留半成品对象）
     const body = new PassThrough();
@@ -289,6 +291,7 @@ export class S3ObjectStorage implements ObjectStorageAdapter {
       await done.catch(() => undefined);
       throw error;
     }
+    return { checksumSha256: null };
   }
 
   async copyObject(input: { sourceKey: string; destinationKey: string }): Promise<void> {

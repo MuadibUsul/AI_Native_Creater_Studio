@@ -62,6 +62,8 @@ export interface UploadProgress {
   name: string;
   percent: number;
   failed: boolean;
+  /** 排在前一个文件后面、还没开始传 */
+  queued: boolean;
 }
 
 function parseRatio(aspectRatio: string): number {
@@ -232,7 +234,7 @@ export function StudioCanvas(props: {
       {props.uploads.map((upload) => (
         <div key={upload.id} className={styles['uploadRow']}>
           <strong title={upload.name}>{upload.name}</strong>
-          <span>{upload.failed ? messages.studio.footage.uploadFailed : messages.studio.footage.uploading(upload.percent)}</span>
+          <span>{upload.failed ? messages.studio.footage.uploadFailed : upload.queued ? messages.studio.footage.queued : messages.studio.footage.uploading(upload.percent)}</span>
         </div>
       ))}
     </div>

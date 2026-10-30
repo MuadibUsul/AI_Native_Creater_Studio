@@ -32,3 +32,21 @@ Floor: no kickers, side stripes, hard shadows, glyph icons or system display fac
 remaining: 5 (partial, accepted as an adaptation for 900px tall screens).
 
 disposition: fix (one partial item, accepted by the builder; the owner can ask for a shorter hero)
+
+## Revision 2 (new identity, structure learned from linear.app)
+
+Captures: desktop 1440 and phone 390, first viewport and full page, English and Chinese; interactions driven in a real browser (Keep, drag to point, redo a chapter, approve a quote, invite error).
+
+disposition: fix → resolved in the same pass
+
+- **evidence**: valid; full page captures from the top, every section present.
+- **fidelity** (no comp; against OWN-WORLD and the owner's "keep the old feel"): TYPE match (Geist 500 headlines); MATERIAL match (real footage, no imitation material); GROUND match (#000000 and #131209).
+- **material_fixes** found and fixed:
+  1. The decision card rendered empty (a helper overwrote its children). Fixed.
+  2. Elements hidden with the `hidden` attribute still showed where a class set `display`. Added a global `[hidden]` rule.
+  3. The framing box then vanished: SVG elements ignore the `.hidden` property. Switched to attribute calls.
+  4. "Example" tags overlapped panel contents. Gave them their own strip.
+  5. The trailer poster showed the old K logo. Replaced with a frame of the real interface.
+  6. The quote's approval line promised more than the product does ("charged only if it succeeds"); it now says the reserved amount is released if a run fails.
+- **open**: the launch trailer itself still contains the old logo (frames at 4 to 8 s and 46 to 50 s); a re-render with the new mark is a separate change.
+- **keep**: white for you, amber for Kinora; the product window as the hero.
