@@ -45,6 +45,30 @@ describe('N02-04 ffmpeg media indexer', () => {
       await rm(work, { recursive: true, force: true });
     }
   });
+  it('decodes once and still yields every thumbnail, the late cuts and the black frames', { timeout: 120_000 }, async () => {
+    const work = await mkdtemp(join(tmpdir(), 'ancs-indexer-one-pass-'));
+    const sourcePath = join(work, 'long-with-late-cut.mp4');
+    const output = join(work, 'index');
+    try {
+      // 230 秒测试图 → 2 秒黑场 → 20 秒彩条（共 252 秒，缩略图每 3 秒一张）：三路共用一次解码，切点与黑场都在片尾
+      await promisify(execFile)('ffmpeg', ['-nostdin', '-v', 'error', '-y',
+        '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=5:duration=230', '-f', 'lavfi', '-i', 'color=c=black:size=160x90:rate=5:duration=2',
+        '-f', 'lavfi', '-i', 'smptehdbars=size=160x90:rate=5:duration=20',
+        '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]', '-map', '[v]', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', sourcePath]);
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(output);
+      const probe = await createFfmpegSourceMediaProbe({ timeoutMs: 30_000 }).probe({ filePath: sourcePath, declaredMimeType: 'video/mp4' });
+      const result = await createFfmpegMediaIndexer({ timeoutMs: 60_000 }).index({ sourcePath, outputDirectory: output, sourceProbe: probe });
+      expect(result.entries.filter((entry) => entry.kind === 'THUMBNAIL')).toHaveLength(84);
+      const cuts = result.entries.filter((entry) => entry.kind === 'SHOT').map((entry) => entry.payload['sourceStartMs']);
+      expect(cuts).toEqual(expect.arrayContaining([230_000, 232_000]));
+      const black = result.entries.find((entry) => entry.kind === 'QUALITY' && entry.payload['marker'] === 'BLACK_FRAME');
+      expect(black?.payload).toMatchObject({ sourceStartMs: 230_000, sourceEndMs: 232_000 });
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
   it('waveform peaks follow loudness: a -6 dBFS tone reads about 500, silence reads 0', { timeout: 90_000 }, async () => {
     const work = await mkdtemp(join(tmpdir(), 'ancs-indexer-peaks-'));
     const sourcePath = join(work, 'tone-then-silence.wav');

@@ -49,7 +49,7 @@ export function StudioFootageDrawer(props: {
       <div className={styles['drawerBody']}>
         {pending.map((upload) => (
           <div key={upload.id} className={styles['footageItem']}>
-            <div className={styles['footageName']}><strong title={upload.name}>{upload.name}</strong><span className="small muted">{upload.failed ? t.uploadFailed : t.uploading(upload.percent)}</span></div>
+            <div className={styles['footageName']}><strong title={upload.name}>{upload.name}</strong><span className="small muted">{upload.failed ? t.uploadFailed : upload.queued ? t.queued : t.uploading(upload.percent)}</span></div>
           </div>
         ))}
         {props.footage.length === 0 && pending.length === 0 ? <p className="muted mt16">{t.empty}</p> : null}

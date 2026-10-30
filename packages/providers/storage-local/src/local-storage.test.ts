@@ -117,12 +117,45 @@ describe('本地对象存储适配器', () => {
   it('按顺序流式合并分片并原子暴露最终对象', async () => {
     await storage.putObject('multipart/upi_1/part-00001', new TextEncoder().encode('alpha'));
     await storage.putObject('multipart/upi_1/part-00002', new TextEncoder().encode('-beta'));
-    await storage.composeObjects({
+    const composed = await storage.composeObjects({
       sourceKeys: ['multipart/upi_1/part-00001', 'multipart/upi_1/part-00002'],
       destinationKey: 'workspaces/ws_1/uploads/combined.bin',
     });
     expect(new TextDecoder().decode(await storage.getObject('workspaces/ws_1/uploads/combined.bin') ?? new Uint8Array())).toBe('alpha-beta');
     expect((await storage.probeObject('workspaces/ws_1/uploads/combined.bin')).sizeBytes).toBe(10);
+    // 合并途中算出的整文件校验和，与事后重读整个文件算的一致（确认上传据此省去一遍读取）
+    expect(composed.checksumSha256).toBe(await storage.computeObjectSha256('workspaces/ws_1/uploads/combined.bin'));
+  });
+
+  it('合并几十个分片时校验和仍与整文件一致，且不累积流监听器', async () => {
+    const keys: string[] = [];
+    for (let index = 1; index <= 24; index += 1) {
+      const key = `multipart/upi_many/part-${String(index).padStart(5, '0')}`;
+      await storage.putObject(key, new Uint8Array(70_000).fill(index));
+      keys.push(key);
+    }
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error): void => { warnings.push(warning); };
+    process.on('warning', onWarning);
+    try {
+      const composed = await storage.composeObjects({ sourceKeys: keys, destinationKey: 'workspaces/ws_1/uploads/many.bin' });
+      expect((await storage.probeObject('workspaces/ws_1/uploads/many.bin')).sizeBytes).toBe(24 * 70_000);
+      expect(composed.checksumSha256).toBe(await storage.computeObjectSha256('workspaces/ws_1/uploads/many.bin'));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(warnings.filter((warning) => warning.name === 'MaxListenersExceededWarning')).toEqual([]);
+    } finally {
+      process.off('warning', onWarning);
+    }
+  });
+
+  it('合并途中缺分片时失败，且不留下半成品或 .partial', async () => {
+    await storage.putObject('multipart/upi_gap/part-00001', new TextEncoder().encode('first'));
+    await expect(storage.composeObjects({
+      sourceKeys: ['multipart/upi_gap/part-00001', 'multipart/upi_gap/part-00002'],
+      destinationKey: 'workspaces/ws_1/uploads/gap.bin',
+    })).rejects.toThrow();
+    expect((await storage.probeObject('workspaces/ws_1/uploads/gap.bin')).exists).toBe(false);
+    expect((await storage.probeObject('workspaces/ws_1/uploads/gap.bin.partial')).exists).toBe(false);
   });
 
   it('在存储内部原子复制对象供缺失原件恢复', async () => {

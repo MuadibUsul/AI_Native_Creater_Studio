@@ -2,10 +2,11 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
-import { finished, pipeline } from 'node:stream/promises';
+import { pipeline } from 'node:stream/promises';
 import {
   DOWNLOAD_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
+  type ComposedObject,
   type DownloadTarget,
   type ObjectProbe,
   type ObjectStorageAdapter,
@@ -262,21 +263,28 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     }
   }
 
-  async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<void> {
+  /** 顺序复制各分片并同时算整文件 SHA-256：确认上传时不必再把整文件读一遍。 */
+  async composeObjects(input: { sourceKeys: string[]; destinationKey: string }): Promise<ComposedObject> {
     if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
     const destination = this.resolveKeyPath(input.destinationKey);
+    const sources = input.sourceKeys.map((key) => this.resolveKeyPath(key));
     const partial = `${destination}.partial`;
     await mkdir(dirname(destination), { recursive: true });
-    const output = createWriteStream(partial, { flags: 'w' });
-    try {
-      for (const key of input.sourceKeys) {
-        await pipeline(createReadStream(this.resolveKeyPath(key)), output, { end: false });
+    const hash = createHash('sha256');
+    async function* concatenated(): AsyncGenerator<Buffer> {
+      for (const source of sources) {
+        for await (const chunk of createReadStream(source)) {
+          hash.update(chunk as Buffer);
+          yield chunk as Buffer;
+        }
       }
-      output.end();
-      await finished(output);
+    }
+    try {
+      // 一条 pipeline 写到底：背压、写盘出错（如磁盘满）与清理都由它处理
+      await pipeline(concatenated, createWriteStream(partial, { flags: 'w' }));
       await rename(partial, destination);
+      return { checksumSha256: hash.digest('hex') };
     } catch (error) {
-      output.destroy();
       await rm(partial, { force: true });
       throw error;
     }

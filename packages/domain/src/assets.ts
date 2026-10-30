@@ -564,8 +564,9 @@ export async function cancelUploadIntent(deps: DomainDeps, input: { workspaceId:
   return getUploadIntentStatus(deps, { workspaceId: input.workspaceId, intentId: intent.id });
 }
 
-async function composeMultipartUpload(deps: DomainDeps, intent: typeof uploadIntents.$inferSelect): Promise<void> {
-  if (intent.uploadMode !== 'MULTIPART') return;
+/** 合成分片；返回存储驱动在复制途中算出的整文件 SHA-256（没有则 null，确认时另读一遍计算）。 */
+async function composeMultipartUpload(deps: DomainDeps, intent: typeof uploadIntents.$inferSelect): Promise<string | null> {
+  if (intent.uploadMode !== 'MULTIPART') return null;
   if (intent.partCount === null) throw new ApiFailure(ERROR_CODES.INTERNAL, '分片上传缺少 partCount', 500);
   const parts = await deps.db
     .select()
@@ -583,7 +584,8 @@ async function composeMultipartUpload(deps: DomainDeps, intent: typeof uploadInt
   if (storage.composeObjects === undefined) {
     throw new ApiFailure(ERROR_CODES.CAPABILITY_UNAVAILABLE, '当前存储驱动不支持分片合并', 501, { storageKind: storage.kind });
   }
-  await storage.composeObjects({ sourceKeys: parts.map((part) => part.storageKey), destinationKey: intent.storageKey });
+  const composed = await storage.composeObjects({ sourceKeys: parts.map((part) => part.storageKey), destinationKey: intent.storageKey });
+  return composed.checksumSha256;
 }
 
 /** 上传失败的状态收敛（伪造 MIME / 校验和不符：版本 FAILED、意图 FAILED、对象删除）。 */
@@ -648,7 +650,7 @@ export async function confirmUpload(
   }
 
   // 分片全部确认后由存储驱动流式合并为最终对象；不把整文件读入 API 内存。
-  await composeMultipartUpload(deps, intent);
+  const composedSha = await composeMultipartUpload(deps, intent);
 
   // 真实探测：存在性与大小
   const probe = await storage.probeObject(intent.storageKey);
@@ -682,7 +684,7 @@ export async function confirmUpload(
   }
 
   // 校验和（客户端在意图或确认阶段声明的 SHA-256 必须与服务端计算结果一致）
-  const actualSha = await storage.computeObjectSha256(intent.storageKey);
+  const actualSha = composedSha ?? await storage.computeObjectSha256(intent.storageKey);
   if (actualSha === null) {
     throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '上传未完成：对象不可读', 409, { reason: 'OBJECT_UNREADABLE' });
   }

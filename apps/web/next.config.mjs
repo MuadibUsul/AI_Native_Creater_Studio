@@ -20,6 +20,11 @@ const nextConfig = {
     return [{ source: '/api/v1/:path*', destination: `${apiOrigin}/api/v1/:path*` }];
   },
   transpilePackages: ['@ancs/sdk', '@ancs/contracts', '@ancs/time', '@ancs/scene-components'],
+  experimental: {
+    // 上面的 /api/v1 转发默认 30 秒没有响应就断开（浏览器收到 500）。大文件确认上传要合并并校验整个文件，
+    // 共享机器上几 GB 的素材会超过 30 秒：服务端其实已经完成，界面却显示上传失败。放宽到 10 分钟。
+    proxyTimeout: 10 * 60 * 1000,
+  },
 };
 
 export default nextConfig;
