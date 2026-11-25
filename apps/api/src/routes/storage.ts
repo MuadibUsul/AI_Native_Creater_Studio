@@ -101,15 +101,38 @@ export function registerStorageRoutes(app: FastifyInstance, storage: StorageDeps
     if (payload === null) {
       return reply.status(403).send(errorEnvelope('FORBIDDEN', '签名无效、用途不符或已过期', request.id));
     }
-    const data = await local.readObject(payload.key);
-    if (data === null) {
-      return reply.status(404).send(errorEnvelope('NOT_FOUND', '对象不存在', request.id));
-    }
     const filename = payload.downloadFilename ?? 'download';
     reply
       .header('content-type', 'application/octet-stream')
       .header('content-disposition', `attachment; filename="${filename.replace(/[^A-Za-z0-9._-]/g, '_')}"`)
       .header('accept-ranges', 'bytes');
+    if (local.probeObject !== undefined && local.openReadStream !== undefined) {
+      const probe = await local.probeObject(payload.key);
+      if (!probe.exists) {
+        return reply.status(404).send(errorEnvelope('NOT_FOUND', '对象不存在', request.id));
+      }
+      const size = probe.sizeBytes;
+      const range = parseByteRange(typeof request.headers.range === 'string' ? request.headers.range : undefined, size);
+      if (range === 'unsatisfiable') {
+        return reply.status(416).header('content-range', `bytes */${String(size)}`).send();
+      }
+      if (range !== null) {
+        const chunkLength = range.end - range.start + 1;
+        return reply
+          .status(206)
+          .header('content-range', `bytes ${String(range.start)}-${String(range.end)}/${String(size)}`)
+          .header('content-length', String(chunkLength))
+          .send(local.openReadStream(payload.key, range));
+      }
+      return reply
+        .status(200)
+        .header('content-length', String(size))
+        .send(local.openReadStream(payload.key));
+    }
+    const data = await local.readObject(payload.key);
+    if (data === null) {
+      return reply.status(404).send(errorEnvelope('NOT_FOUND', '对象不存在', request.id));
+    }
     const range = parseByteRange(typeof request.headers.range === 'string' ? request.headers.range : undefined, data.byteLength);
     if (range === 'unsatisfiable') {
       return reply.status(416).header('content-range', `bytes */${String(data.byteLength)}`).send();

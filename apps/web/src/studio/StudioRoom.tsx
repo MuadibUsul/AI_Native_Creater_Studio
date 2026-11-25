@@ -7,6 +7,7 @@ import { AGENT_ERROR_REASONS, BUDGET_REJECTION_REASONS, GENERATION_ERROR_REASONS
 import { useAncsClient } from '@/lib/client';
 import { describeError } from '@/lib/errors';
 import { applyAppearance, saveDeviceAppearance } from '@/lib/appearance';
+import { getDesktopBridge, type DesktopEngineInfo } from '@/lib/desktop-bridge';
 import { useSession, useWorkspace } from '@/lib/queries';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
@@ -101,6 +102,14 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
   // 首页带来的一句想法：进入后预填在对话框里（读一次即删）
   const [brief, setBrief] = useState<string | null>(null);
   useEffect(() => { setBrief(takeStudioBrief(projectId)); }, [projectId]);
+  const [desktopEngine, setDesktopEngine] = useState<DesktopEngineInfo | null>(null);
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (bridge === null) return;
+    let active = true;
+    void bridge.getEngineInfo().then((info) => { if (active) setDesktopEngine(info); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   const state = stateQuery.data;
   const { timeline } = useStudioTimeline(projectId, state?.sequenceId, state?.project.revision);
   const turnsQuery = useStudioTurns(workspaceId, state?.session?.id ?? null);
@@ -799,6 +808,7 @@ export function StudioRoom({ workspaceId, projectId }: { workspaceId: string; pr
         <div className={styles['titleGroup']}>
           <h1 className={styles['title']} title={state.project.title}>{state.project.title}</h1>
           <span className={styles['meta']} title={t.revision(state.project.revision)} data-revision={state.project.revision}><QuietIcon name="check" className={styles['metaIcon']} />{t.saved}</span>
+          {desktopEngine !== null ? <span className={styles['meta']} data-local-gpu={desktopEngine.gpu.codec}><QuietIcon name="spark" className={styles['metaIcon']} />{t.export.localGpuBadge(desktopEngine.gpu.codec)}</span> : null}
         </div>
         <span className={styles['spacer']} />
         <div className={styles['topActions']}>

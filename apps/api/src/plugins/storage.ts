@@ -1,4 +1,5 @@
-import type { MalwareScanner, ObjectStorageAdapter } from '@ancs/contracts';
+import type { Readable } from 'node:stream';
+import type { MalwareScanner, ObjectProbe, ObjectStorageAdapter } from '@ancs/contracts';
 
 /**
  * 存储依赖注入（P02-04；P09-05 增补上传扫描 seam）。
@@ -22,6 +23,8 @@ export interface LocalStorageEndpointCapability {
   } | null;
   writeObject(key: string, data: Uint8Array): Promise<void>;
   readObject(key: string): Promise<Uint8Array | null>;
+  probeObject?(key: string): Promise<ObjectProbe>;
+  openReadStream?(key: string, range?: { start: number; end: number }): Readable;
   readonly maxLocalUploadBytes: number;
 }
 

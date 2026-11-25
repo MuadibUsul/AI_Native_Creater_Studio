@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { AGENT_ERROR_REASONS, type AgentTurn, type Proposal, type StrategyPackSummary } from '@ancs/contracts';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { Messages } from '@/i18n/messages';
@@ -20,7 +20,11 @@ export function turnFailureText(turn: AgentTurn, t: Messages['studio']['chat']):
   const raw = JSON.stringify(turn.error ?? {});
   if (raw.includes(AGENT_ERROR_REASONS.MODEL_NOT_CONFIGURED)) return t.errors.modelNotConfigured;
   if (raw.includes(AGENT_ERROR_REASONS.MODEL_REFUSED)) return t.errors.refused;
+  if (raw.includes(AGENT_ERROR_REASONS.MODEL_UNPRICED)) return t.errors.unpriced;
+  if (raw.includes(AGENT_ERROR_REASONS.ITERATION_LIMIT)) return t.errors.iterationLimit;
   if (raw.includes(AGENT_ERROR_REASONS.BUDGET_EXCEEDED)) return t.errors.budget;
+  if (/no frame decoded|frame extraction/i.test(raw)) return t.errors.frameFailed;
+  if (/timed out|network connection|MODEL_FAILED|TRANSIENT|RATE_LIMITED|OVERLOADED/i.test(raw)) return t.errors.modelConnection;
   return t.errors.generic;
 }
 
@@ -72,6 +76,7 @@ export interface ConversationProps {
 export function StudioConversation(props: ConversationProps) {
   const { messages } = useI18n();
   const t = messages.studio.chat;
+  const composerId = useId();
   const [draft, setDraft] = useState('');
   const [showSteps, setShowSteps] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -214,6 +219,8 @@ export function StudioConversation(props: ConversationProps) {
             ) : null}
           </span>
           <textarea
+            id={composerId}
+            name="studio-chat-message"
             rows={2}
             aria-label={t.inputLabel}
             aria-keyshortcuts="/"

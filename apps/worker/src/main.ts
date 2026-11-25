@@ -28,6 +28,7 @@ import { createGeminiNarrationSynthesizer, createVeoGenerationProvider } from '.
 import { createSeedanceGenerationProvider } from './ark-media.js';
 import { createRunwayRegionProvider } from './runway-media.js';
 import { createFfmpegRenderPlanExecutor } from './render-plan/ffmpeg-executor.js';
+import { probeVideoEncoder } from './render-plan/hwaccel.js';
 import { createFfmpegMediaProxyTranscoder } from './source-media-transcoder-process.js';
 import { createFfmpegMediaIndexer } from './source-media-indexer-process.js';
 import { createProcessSpeechRecognitionAdapter } from './speech-recognition-process.js';
@@ -104,8 +105,22 @@ const ffmpegPaths = {
   ...(config.ANCS_FFPROBE_PATH === undefined ? {} : { ffprobePath: config.ANCS_FFPROBE_PATH }),
 };
 const commandOf = (value: string | undefined): { command?: string[] } => (value === undefined ? {} : { command: value.trim().split(/\s+/) });
+// 启动时探测本机可用 GPU 视频编码器（auto：按平台顺序实测 NVENC/VideoToolbox/QSV/AMF，不可用自动回退 libx264；显式指定不可用则启动失败）
+let resolvedVideoEncoder;
+try {
+  resolvedVideoEncoder = await probeVideoEncoder({
+    ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }),
+    preference: config.ANCS_FFMPEG_HWACCEL,
+  });
+} catch (error) {
+  console.error(`启动失败：${error instanceof Error ? error.message : String(error)}`);
+  await handle.close();
+  process.exit(1);
+}
+console.info(`[worker ${workerId}] 视频编码器 = ${resolvedVideoEncoder.codec}（${resolvedVideoEncoder.hardwareAccelerated ? `GPU 硬件加速，探测 ${String(resolvedVideoEncoder.probeMs)} ms` : 'CPU 软编'}，策略=${config.ANCS_FFMPEG_HWACCEL}）`);
+const ffmpegRenderOptions = { ...ffmpegPaths, videoEncoder: resolvedVideoEncoder.backend };
 const sourceMediaProbe = createFfmpegSourceMediaProbe(ffmpegPaths);
-const sourceMediaTranscoder = createFfmpegMediaProxyTranscoder(ffmpegPaths);
+const sourceMediaTranscoder = createFfmpegMediaProxyTranscoder(ffmpegRenderOptions);
 const sourceMediaIndexer = createFfmpegMediaIndexer(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH });
 /**
  * ASR（V5-M3：Deepgram 进入正式路径）。驱动由 ANCS_ASR_DRIVER 显式选择；deepgram 缺密钥在 env 校验中启动失败。
@@ -300,7 +315,7 @@ const autonomousPorts = {
 };
 const workflowRegistry = new WorkflowRegistry()
   .register(compositionFinalRenderWorkflow({
-    executor: createFfmpegRenderPlanExecutor(ffmpegPaths),
+    executor: createFfmpegRenderPlanExecutor(ffmpegRenderOptions),
     outputProbe: sourceMediaProbe,
     // 成片含 AI 生成合成媒体时加显式标识与 AIGC 元数据；服务提供者编码由运营方配置
     ...(config.ANCS_AIGC_PRODUCER_CODE === undefined ? {} : { aigc: { producerCode: config.ANCS_AIGC_PRODUCER_CODE } }),
@@ -330,7 +345,7 @@ const workflowRegistry = new WorkflowRegistry()
 // V6-7/V6-8：付费生成（用户确认后的一次生成；未配置供应商时没有报价依据，万一有运行到达则明确失败并释放预留）
 workflowRegistry.register(paidGenerationWorkflow({ executor: generationExecutor ?? UNCONFIGURED_GENERATION_EXECUTOR }));
 // V6-1d：低清预览（与终渲染同一 FFmpeg 媒体图后端，按时间窗缓存复用）
-const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegPaths), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
+const previewExecutor = { executor: createFfmpegRenderPlanExecutor(ffmpegRenderOptions), ...(config.ANCS_FFMPEG_PATH === undefined ? {} : { ffmpegPath: config.ANCS_FFMPEG_PATH }) };
 // P07-04：Final 合成任务注册（进程隔离渲染执行器；ANCS_DISABLE_RENDER=1 可显式关闭，
 // 此时 RENDER_FINAL 落入"未知类型 → FAILED_FINAL"——明确失败，不静默吞）
 const registry: JobHandlerRegistry =

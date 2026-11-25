@@ -141,5 +141,36 @@ describe('风格说明撰写', () => {
     expect(result.pack.source?.confidenceNote).toContain('Descriptions written by claude-opus-5-5');
     expect(result.costMicros).toBe(8000);
     await expect(composeStrategyWithModel(model('I cannot do that.'), { stats, base, sources, frames: [], name: null })).rejects.toMatchObject({ details: { reason: 'STRATEGY_COMPOSE_FAILED' } });
+
+    // ISS-01~04：首次输出超长时，把校验错误反馈给模型做一次有界修正，累计两次调用成本
+    let calls = 0;
+    const repairModel: AgentModelAdapter = {
+      providerId: 'scripted',
+      implementation: 'SCRIPTED',
+      model: 'claude-opus-5-5',
+      respond: (req) => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.resolve({
+            model: 'claude-opus-5-5',
+            content: [{ type: 'text', text: JSON.stringify({ ...reply, captionStyle: 'x'.repeat(250) }) }],
+            stopReason: 'end_turn',
+            usage: { inputTokens: 1000, outputTokens: 200, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+          });
+        }
+        const feedback = JSON.stringify(req.messages.at(-1));
+        expect(feedback).toContain('captionStyle');
+        return Promise.resolve({
+          model: 'claude-opus-5-5',
+          content: [{ type: 'text', text: JSON.stringify(reply) }],
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1000, outputTokens: 200, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        });
+      },
+    };
+    const repaired = await composeStrategyWithModel(repairModel, { stats, base, sources, frames: [frame], name: null });
+    expect(calls).toBe(2);
+    expect(repaired.pack.editingDna.captionStyle).toBe('bold white captions with black outline');
+    expect(repaired.costMicros).toBe(16000);
   });
 });

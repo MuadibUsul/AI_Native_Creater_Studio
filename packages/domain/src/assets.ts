@@ -650,7 +650,31 @@ export async function confirmUpload(
   }
 
   // 分片全部确认后由存储驱动流式合并为最终对象；不把整文件读入 API 内存。
-  const composedSha = await composeMultipartUpload(deps, intent);
+  // 并发确认竞态（RT-09）：首个请求合并完成并清理分片后，并发重试的第二个请求读分片可能遇 ENOENT；
+  // 此时重查意图状态——若已完成则幂等返回，已取消/失败/过期则返回 409，绝不抛 500。
+  let composedSha: string | null;
+  try {
+    composedSha = await composeMultipartUpload(deps, intent);
+  } catch (error) {
+    const freshIntent = (await deps.db
+      .select()
+      .from(uploadIntents)
+      .where(and(eq(uploadIntents.id, intent.id), eq(uploadIntents.workspaceId, workspaceId)))
+      .limit(1))[0];
+    if (freshIntent?.status === 'COMPLETED') {
+      return getAsset(deps, { workspaceId, assetId });
+    }
+    if (freshIntent?.status === 'CANCELLED') {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '该上传已取消', 409, { reason: 'UPLOAD_CANCELLED' });
+    }
+    if (freshIntent?.status === 'FAILED') {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '该上传已被标记失败（伪造 MIME 或校验和不符）', 409, { reason: 'UPLOAD_FAILED' });
+    }
+    if (freshIntent?.status === 'EXPIRED') {
+      throw new ApiFailure(ERROR_CODES.PRECONDITION_FAILED, '上传意图已过期（请重新创建上传意图）', 409, { reason: 'INTENT_EXPIRED' });
+    }
+    throw error;
+  }
 
   // 真实探测：存在性与大小
   const probe = await storage.probeObject(intent.storageKey);
@@ -740,6 +764,7 @@ export async function confirmUpload(
   }
 
   const now = new Date();
+  let wonConfirm = false;
   let deletedDuplicateObject = false;
   await deps.db.transaction(async (tx) => {
     await tx.execute(sql`select id from assets where id = ${assetId} for update`);
@@ -750,6 +775,7 @@ export async function confirmUpload(
       .limit(1);
     const fresh = freshIntents[0];
     if (!fresh || fresh.status !== 'PENDING') return; // 并发确认由另一请求完成（幂等）
+    wonConfirm = true;
 
     await tx
       .update(assetVersions)
@@ -817,11 +843,11 @@ export async function confirmUpload(
     deletedDuplicateObject = duplicate !== undefined;
   });
 
-  // 去重时删除本次上传的冗余对象（事务提交后）
-  if (deletedDuplicateObject) {
+  // 去重时删除本次上传的冗余对象（事务提交后；仅赢得确认的请求执行清理）
+  if (wonConfirm && deletedDuplicateObject) {
     await storage.deleteObject(intent.storageKey);
   }
-  if (intent.uploadMode === 'MULTIPART') {
+  if (wonConfirm && intent.uploadMode === 'MULTIPART') {
     const parts = await deps.db.select().from(uploadParts).where(eq(uploadParts.uploadIntentId, intent.id));
     await Promise.all(parts.map((part) => storage.deleteObject(part.storageKey)));
   }

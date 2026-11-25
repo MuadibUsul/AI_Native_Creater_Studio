@@ -59,46 +59,78 @@ export interface StorageFrameSamplerOptions {
 
 export function createStorageFrameSampler(options: StorageFrameSamplerOptions): AgentFrameSampler & { close(): Promise<void> } {
   const cache = new Map<string, Promise<string>>();
+  const inUse = new Map<string, number>();
+  const pendingDelete = new Set<string>();
   const maxCached = Math.max(1, options.maxCachedFiles ?? 4);
   let directory: Promise<string> | null = null;
 
-  async function localPath(storageKey: string): Promise<string> {
+  const scheduleRemove = (file: string): void => {
+    if ((inUse.get(file) ?? 0) > 0) {
+      pendingDelete.add(file);
+      return;
+    }
+    pendingDelete.delete(file);
+    void rm(file, { force: true }).catch(() => undefined);
+  };
+
+  async function acquireLocalPath(storageKey: string): Promise<{ path: string; release: () => void }> {
     const storage = options.storage;
     if (storage?.materializeObject === undefined) throw new Error('object storage cannot materialize source files');
-    const cached = cache.get(storageKey);
-    if (cached !== undefined) {
+    let pending = cache.get(storageKey);
+    if (pending !== undefined) {
       cache.delete(storageKey);
-      cache.set(storageKey, cached);
-      return cached;
+      cache.set(storageKey, pending);
+    } else {
+      directory ??= mkdtemp(join(tmpdir(), 'ancs-frames-'));
+      const path = join(await directory, createHash('sha256').update(storageKey).digest('hex'));
+      pendingDelete.delete(path);
+      pending = storage.materializeObject({ key: storageKey, destinationPath: path }).then(() => path);
+      cache.set(storageKey, pending);
+      while (cache.size > maxCached) {
+        const [oldestKey, oldest] = cache.entries().next().value as [string, Promise<string>];
+        cache.delete(oldestKey);
+        void oldest.then((file) => scheduleRemove(file)).catch(() => undefined);
+      }
     }
-    directory ??= mkdtemp(join(tmpdir(), 'ancs-frames-'));
-    const path = join(await directory, createHash('sha256').update(storageKey).digest('hex'));
-    const pending = storage.materializeObject({ key: storageKey, destinationPath: path }).then(() => path);
-    cache.set(storageKey, pending);
-    while (cache.size > maxCached) {
-      const [oldestKey, oldest] = cache.entries().next().value as [string, Promise<string>];
-      cache.delete(oldestKey);
-      void oldest.then((file) => rm(file, { force: true })).catch(() => undefined);
-    }
+    let resolvedPath: string;
     try {
-      return await pending;
+      resolvedPath = await pending;
     } catch (error) {
-      cache.delete(storageKey);
+      if (cache.get(storageKey) === pending) cache.delete(storageKey);
       throw error;
     }
+    inUse.set(resolvedPath, (inUse.get(resolvedPath) ?? 0) + 1);
+    return {
+      path: resolvedPath,
+      release: () => {
+        const next = (inUse.get(resolvedPath) ?? 1) - 1;
+        if (next <= 0) {
+          inUse.delete(resolvedPath);
+          if (pendingDelete.has(resolvedPath)) scheduleRemove(resolvedPath);
+        } else {
+          inUse.set(resolvedPath, next);
+        }
+      },
+    };
   }
 
   return {
     async sample(input) {
-      const sourcePath = await localPath(input.storageKey);
-      const images: AgentImage[] = [];
-      for (const at of input.times) {
-        images.push(await extractJpegFrame({ ...(options.ffmpegPath === undefined ? {} : { ffmpegPath: options.ffmpegPath }), sourcePath, at, maxWidth: input.maxWidth, ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }) }));
+      const lease = await acquireLocalPath(input.storageKey);
+      try {
+        const images: AgentImage[] = [];
+        for (const at of input.times) {
+          images.push(await extractJpegFrame({ ...(options.ffmpegPath === undefined ? {} : { ffmpegPath: options.ffmpegPath }), sourcePath: lease.path, at, maxWidth: input.maxWidth, ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }) }));
+        }
+        return images;
+      } finally {
+        lease.release();
       }
-      return images;
     },
     async close() {
       cache.clear();
+      inUse.clear();
+      pendingDelete.clear();
       if (directory !== null) await rm(await directory, { recursive: true, force: true });
       directory = null;
     },

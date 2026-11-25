@@ -17,6 +17,7 @@ import {
   type RenderPlanVideoSegment,
 } from '@ancs/contracts';
 import { createHash } from 'node:crypto';
+import { videoEncoderArgs, type VideoEncoderBackend } from './hwaccel.js';
 
 /**
  * V5-M4（§13）：RenderPlan → 受限、参数化的 FFmpeg 媒体图（N09-10 媒体部分）。**纯函数**：同一计划 + 档位 + 输入事实
@@ -195,6 +196,8 @@ export function compileFfmpegMediaGraph(input: {
   sources: readonly FfmpegStagedSource[];
   /** AI 生成合成内容标识（含中文字体文件路径，执行器解析）；null = 不加 */
   label?: { content: ContentLabel; fontFile: string } | null;
+  /** 视频编码器后端（缺省 cpu = libx264，保持纯函数确定性；Worker 注入探测到的 GPU 后端） */
+  videoEncoder?: VideoEncoderBackend;
 }): FfmpegMediaGraph {
   const plan = input.plan;
   const profile = finalRenderProfileSchema.parse(input.profile);
@@ -302,11 +305,12 @@ export function compileFfmpegMediaGraph(input: {
   }
 
   const filterGraph = filters.join(';');
+  const encoderArgs = videoEncoderArgs(input.videoEncoder ?? 'cpu', { preset: profile.encoderPreset, crf: profile.videoCrf });
   args.push(
     '-filter_complex', filterGraph,
     '-map', '[vout]', '-map', '[aout]',
     '-frames:v', frameCount.toString(),
-    '-c:v', 'libx264', '-preset', profile.encoderPreset, '-crf', String(profile.videoCrf), '-pix_fmt', 'yuv420p',
+    ...encoderArgs,
     '-c:a', 'aac', '-b:a', `${String(profile.audioBitrateKbps)}k`, '-ar', String(FINAL_AUDIO_SAMPLE_RATE), '-ac', '2',
     '-map_metadata', '-1',
     // 隐式标识：MP4 默认只写已知键，use_metadata_tags 才会把自定义的 AIGC 键写进 moov/meta

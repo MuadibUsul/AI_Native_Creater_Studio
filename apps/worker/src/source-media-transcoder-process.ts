@@ -8,12 +8,15 @@ import {
   type SourceMediaTranscoder,
 } from '@ancs/contracts';
 import { MEDIA_CHILD_ENV, childProcessEnv } from './child-env.js';
+import { videoEncoderArgs, type VideoEncoderBackend } from './render-plan/hwaccel.js';
 
 export interface FfmpegMediaProxyTranscoderOptions {
   ffmpegPath?: string;
   ffprobePath?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  /** 视频编码器后端（缺省 cpu；Worker 注入探测到的 GPU 后端，硬件转码失败时自动回退 libx264） */
+  videoEncoder?: VideoEncoderBackend;
 }
 
 const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -144,28 +147,35 @@ export function createFfmpegMediaProxyTranscoder(options: FfmpegMediaProxyTransc
   const ffprobePath = options.ffprobePath ?? process.env['ANCS_FFPROBE_PATH'] ?? 'ffprobe';
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_OUTPUT_BYTES;
+  const preferredEncoder: VideoEncoderBackend = options.videoEncoder ?? 'cpu';
   return {
     kind: 'ffmpeg-media-proxy-transcoder',
     async transcode(input) {
       const video = input.sourceProbe.streams.find((stream) => stream.type === 'VIDEO');
       const audio = input.sourceProbe.streams.find((stream) => stream.type === 'AUDIO');
-      const args = ['-nostdin', '-v', 'error', '-y', '-copyts', '-start_at_zero', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath];
-      if (input.profileKey === 'web-edit-video-720p-v1') {
-        if (!video) throw new Error('视频代理 profile 未找到视频流');
-        const dimensions = targetDimensions(video);
-        args.push(
-          '-map', '0:v:0', '-map', '0:a:0?',
-          '-vf', `scale=${String(dimensions.width)}:${String(dimensions.height)}:flags=lanczos,setsar=1`,
-          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-          '-fps_mode', 'passthrough',
-          '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '160k',
-          '-movflags', '+faststart', input.outputPath,
-        );
-      } else {
-        if (!audio) throw new Error('音频代理 profile 未找到音频流');
-        args.push('-map', '0:a:0', '-vn', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '160k', '-movflags', '+faststart', input.outputPath);
+      const buildArgs = (encoder: VideoEncoderBackend): string[] => {
+        const args = ['-nostdin', '-v', 'error', '-y', '-copyts', '-start_at_zero', '-protocol_whitelist', 'file,pipe', '-i', input.sourcePath];
+        if (input.profileKey === 'web-edit-video-720p-v1') {
+          if (!video) throw new Error('视频代理 profile 未找到视频流');
+          const dimensions = targetDimensions(video);
+          args.push(
+            '-map', '0:v:0', '-map', '0:a:0?',
+            '-vf', `scale=${String(dimensions.width)}:${String(dimensions.height)}:flags=lanczos,setsar=1`,
+            ...videoEncoderArgs(encoder, { preset: 'veryfast', crf: 23 }),
+            '-fps_mode', 'passthrough',
+            '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '160k',
+            '-movflags', '+faststart', input.outputPath,
+          );
+        } else {
+          if (!audio) throw new Error('音频代理 profile 未找到音频流');
+          args.push('-map', '0:a:0', '-vn', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '160k', '-movflags', '+faststart', input.outputPath);
+        }
+        return args;
+      };
+      let encoded = await runProcess({ executable: ffmpegPath, args: buildArgs(preferredEncoder), timeoutMs, maxOutputBytes });
+      if (encoded.code !== 0 && preferredEncoder !== 'cpu' && input.profileKey === 'web-edit-video-720p-v1') {
+        encoded = await runProcess({ executable: ffmpegPath, args: buildArgs('cpu'), timeoutMs, maxOutputBytes });
       }
-      const encoded = await runProcess({ executable: ffmpegPath, args, timeoutMs, maxOutputBytes });
       if (encoded.code !== 0) throw new Error('媒体代理转码失败');
       const inspected = await runProcess({
         executable: ffprobePath,

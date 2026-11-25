@@ -1,5 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
 import { mkdir, open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -240,7 +240,7 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
 
   async materializeObject(input: { key: string; destinationPath: string }): Promise<void> {
     await mkdir(dirname(input.destinationPath), { recursive: true });
-    const partial = `${input.destinationPath}.partial`;
+    const partial = `${input.destinationPath}.${randomUUID()}.partial`;
     try {
       await pipeline(createReadStream(this.resolveKeyPath(input.key)), createWriteStream(partial, { flags: 'w' }));
       await rename(partial, input.destinationPath);
@@ -253,7 +253,7 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
   async persistFile(input: { sourcePath: string; destinationKey: string; contentType: string }): Promise<void> {
     const destination = this.resolveKeyPath(input.destinationKey);
     await mkdir(dirname(destination), { recursive: true });
-    const partial = `${destination}.partial`;
+    const partial = `${destination}.${randomUUID()}.partial`;
     try {
       await pipeline(createReadStream(input.sourcePath), createWriteStream(partial, { flags: 'w' }));
       await rename(partial, destination);
@@ -268,7 +268,7 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     if (input.sourceKeys.length === 0) throw new Error('composeObjects 至少需要一个分片');
     const destination = this.resolveKeyPath(input.destinationKey);
     const sources = input.sourceKeys.map((key) => this.resolveKeyPath(key));
-    const partial = `${destination}.partial`;
+    const partial = `${destination}.${randomUUID()}.partial`;
     await mkdir(dirname(destination), { recursive: true });
     const hash = createHash('sha256');
     async function* concatenated(): AsyncGenerator<Buffer> {
@@ -293,7 +293,7 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
   async copyObject(input: { sourceKey: string; destinationKey: string }): Promise<void> {
     const source = this.resolveKeyPath(input.sourceKey);
     const destination = this.resolveKeyPath(input.destinationKey);
-    const partial = `${destination}.partial`;
+    const partial = `${destination}.${randomUUID()}.partial`;
     await mkdir(dirname(destination), { recursive: true });
     try {
       await pipeline(createReadStream(source), createWriteStream(partial, { flags: 'w' }));
@@ -308,13 +308,24 @@ export class LocalObjectStorage implements ObjectStorageAdapter {
     await rm(this.resolveKeyPath(key), { force: true });
   }
 
-  /** 服务端写入（先写 .partial 再原子改名：未完成的写入不会被探测为完整对象）。 */
+  /** 服务端写入（先写唯一 .partial 再原子改名：未完成的写入不会被探测为完整对象，并发写不互相踩踏）。 */
   async putObject(key: string, data: Uint8Array): Promise<void> {
     const path = this.resolveKeyPath(key);
     await mkdir(dirname(path), { recursive: true });
-    const partialPath = `${path}.partial`;
-    await writeFile(partialPath, data);
-    await rename(partialPath, path);
+    const partialPath = `${path}.${randomUUID()}.partial`;
+    try {
+      await writeFile(partialPath, data);
+      await rename(partialPath, path);
+    } catch (error) {
+      await rm(partialPath, { force: true });
+      throw error;
+    }
+  }
+
+  /** 流式读取对象（支持单段字节范围，供 HTTP 下载与视频播放按需流式输出，避免整文件读入内存）。 */
+  openReadStream(key: string, range?: { start: number; end: number }): ReadStream {
+    const path = this.resolveKeyPath(key);
+    return range === undefined ? createReadStream(path) : createReadStream(path, { start: range.start, end: range.end });
   }
 
   /** 端点写入别名（路由层使用；语义同 putObject） */

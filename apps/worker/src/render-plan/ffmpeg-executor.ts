@@ -20,6 +20,7 @@ import {
 import { assertRenderPlanSupported, requirementsForDelivery } from '@ancs/domain';
 import { MEDIA_CHILD_ENV, childProcessEnv } from '../child-env.js';
 import { compileFfmpegMediaGraph, type FfmpegStagedSource } from './ffmpeg-graph.js';
+import { VIDEO_ENCODER_CODECS, type VideoEncoderBackend } from './hwaccel.js';
 
 /**
  * V5-M4：FFmpeg 媒体图终渲染后端（进程隔离）。
@@ -45,6 +46,8 @@ export interface FfmpegRenderPlanExecutorOptions {
   timeoutMs?: number;
   /** AI 生成标识用的中文字体文件；缺省经 fontconfig 找一款支持简体中文的字体 */
   labelFontFile?: string;
+  /** 视频编码器后端（缺省 cpu；Worker 启动探测后注入 GPU 后端，运行出错时自动回退 cpu） */
+  videoEncoder?: VideoEncoderBackend;
 }
 
 const PREFERRED_CJK_FONTS = /NotoSansCJK|Noto Sans CJK|SourceHanSans|wqy|WenQuanYi/i;
@@ -141,6 +144,7 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
   const ffmpegPath = options.ffmpegPath ?? 'ffmpeg';
   const ffprobePath = options.ffprobePath ?? 'ffprobe';
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const preferredEncoder: VideoEncoderBackend = options.videoEncoder ?? 'cpu';
   return {
     kind: 'FFMPEG_MEDIA_GRAPH',
     capabilities: FFMPEG_MEDIA_GRAPH_CAPABILITIES,
@@ -160,10 +164,21 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
       }
       const label: ContentLabel | null = input.label == null ? null : contentLabelSchema.parse(input.label);
       const labelFont = label === null ? null : await resolveLabelFont(options.labelFontFile, input.workDir);
-      const graph = compileFfmpegMediaGraph({ plan: input.plan, profile, sources: staged, label: label === null || labelFont === null ? null : { content: label, fontFile: labelFont } });
+      const labelInput = label === null || labelFont === null ? null : { content: label, fontFile: labelFont };
+      let usedEncoder: VideoEncoderBackend = preferredEncoder;
+      let graph = compileFfmpegMediaGraph({ plan: input.plan, profile, sources: staged, label: labelInput, videoEncoder: usedEncoder });
       await mkdir(join(input.workDir, 'out'), { recursive: true });
-      await writeFile(join(input.workDir, 'graph.json'), `${JSON.stringify({ graphHash: graph.graphHash, args: graph.args }, null, 2)}\n`, 'utf8');
-      const run = await runTool(ffmpegPath, graph.args, { cwd: input.workDir, timeoutMs });
+      await writeFile(join(input.workDir, 'graph.json'), `${JSON.stringify({ graphHash: graph.graphHash, videoEncoder: VIDEO_ENCODER_CODECS[usedEncoder], args: graph.args }, null, 2)}\n`, 'utf8');
+      let run = await runTool(ffmpegPath, graph.args, { cwd: input.workDir, timeoutMs });
+      const warnings = [...input.plan.warnings];
+      if (run.code !== 0 && usedEncoder !== 'cpu') {
+        // GPU 驱动/分辨率边界偶发失败时自动回退 libx264 CPU 兜底，不让用户导出直接失败
+        warnings.push(`hardware encoder ${VIDEO_ENCODER_CODECS[usedEncoder]} failed (exit ${String(run.code)}), fell back to libx264`);
+        usedEncoder = 'cpu';
+        graph = compileFfmpegMediaGraph({ plan: input.plan, profile, sources: staged, label: labelInput, videoEncoder: 'cpu' });
+        await writeFile(join(input.workDir, 'graph.json'), `${JSON.stringify({ graphHash: graph.graphHash, videoEncoder: VIDEO_ENCODER_CODECS.cpu, args: graph.args }, null, 2)}\n`, 'utf8');
+        run = await runTool(ffmpegPath, graph.args, { cwd: input.workDir, timeoutMs });
+      }
       if (run.code !== 0) {
         // 只回传有限的诊断尾部（不含环境；参数来自本地生成）
         throw new Error(`FFmpeg 终渲染失败（exit ${String(run.code)}）：${run.stderr.slice(-2_000)}`);
@@ -175,7 +190,6 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
         files.push({ kind, fileName, sizeBytes: (await stat(join(input.workDir, 'out', fileName))).size, sha256: sha256(bytes) });
       };
       await record('VIDEO', 'final.mp4');
-      const warnings = [...input.plan.warnings];
       if (input.plan.captions.length > 0) {
         await writeFile(join(input.workDir, 'out', 'subtitles.srt'), captionsToSrt(input.plan), 'utf8');
         await writeFile(join(input.workDir, 'out', 'subtitles.vtt'), captionsToVtt(input.plan), 'utf8');
@@ -189,6 +203,7 @@ export function createFfmpegRenderPlanExecutor(options: FfmpegRenderPlanExecutor
         planHash: input.plan.planHash,
         graphHash: graph.graphHash,
         backend: FFMPEG_MEDIA_GRAPH_CAPABILITIES.backend,
+        videoEncoder: VIDEO_ENCODER_CODECS[usedEncoder],
         tool: version.stdout.split('\n')[0] ?? 'ffmpeg',
         profile,
         frameRate: input.plan.frameRate,

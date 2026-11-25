@@ -1,0 +1,23 @@
+{
+  "name": "@ancs/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "engine": "node dist/engine-cli.js",
+    "start": "electron dist/main.js",
+    "pack:win": "pnpm run build && electron-builder --win --x64 --config electron-builder.yml",
+    "pack:mac": "pnpm run build && electron-builder --mac --arm64 --config electron-builder.yml"
+  },
+  "dependencies": {
+    "@ancs/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "typescript": "6.0.3"
+  }
+}

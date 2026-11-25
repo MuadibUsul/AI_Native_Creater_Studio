@@ -145,6 +145,10 @@ describe('compileFfmpegMediaGraph', () => {
     const first = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES });
     expect(compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES })).toEqual(first);
     expect(compileFfmpegMediaGraph({ plan: plan(), profile: { ...PROFILE, videoCrf: 20 }, sources: SOURCES }).graphHash).not.toBe(first.graphHash);
+    const nvenc = compileFfmpegMediaGraph({ plan: plan(), profile: PROFILE, sources: SOURCES, videoEncoder: 'nvenc' });
+    expect(nvenc.args).toContain('h264_nvenc');
+    expect(nvenc.args).not.toContain('libx264');
+    expect(nvenc.graphHash).not.toBe(first.graphHash);
   });
 
   it('音频：可听条目才进图；单声道缺省复制到双声道；增益、等功率淡变、整数采样延迟；无可听条目时为静音', () => {

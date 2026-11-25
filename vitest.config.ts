@@ -61,7 +61,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts', 'apps/realtime/src/**/*.test.ts'],
+          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx', 'apps/api/src/**/*.test.ts', 'apps/worker/src/**/*.test.ts', 'apps/realtime/src/**/*.test.ts', 'apps/desktop/src/**/*.test.ts'],
           exclude: [
             '**/node_modules/**',
             'packages/db/**',

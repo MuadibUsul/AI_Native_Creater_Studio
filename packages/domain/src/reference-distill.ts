@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   AGENT_ERROR_REASONS,
@@ -222,13 +224,27 @@ export function referenceDistillWorkflow(ports: ReferenceDistillPorts): Workflow
                 // 未配置 / 被拦截 / 太大 / 不是视频 → 4xx/501 不重试；网络失败 → 502 重试一次
                 throw error instanceof ReferenceFetchError ? fetchFailure(error) : error;
               }
-              const bytes = await readFile(fetched.filePath);
               const assetId = `ast_${randomUUID()}`;
               const versionId = `av_${randomUUID()}`;
               const host = new URL(fetched.finalUrl).hostname;
               const label = (fetched.title ?? `${host}${new URL(reference.url).pathname}`).slice(0, 200);
               const storageKey = `workspaces/${context.run.workspaceId}/references/${versionId}/reference${fetched.contentType === 'video/webm' ? '.webm' : fetched.contentType === 'video/quicktime' ? '.mov' : '.mp4'}`;
-              await storage.putObject(storageKey, bytes);
+              // 大参考视频（最高 8 GiB）优先流式落盘与流式算哈希，避免整文件读入内存 OOM；仅无流式方法的测试替身回退内存读写
+              let sizeBytes: number;
+              let checksumSha256: string;
+              if (storage.persistFile !== undefined) {
+                const info = await stat(fetched.filePath);
+                sizeBytes = info.size;
+                const hash = createHash('sha256');
+                await pipeline(createReadStream(fetched.filePath), hash);
+                checksumSha256 = hash.digest('hex');
+                await storage.persistFile({ sourcePath: fetched.filePath, destinationKey: storageKey, contentType: fetched.contentType });
+              } else {
+                const bytes = await readFile(fetched.filePath);
+                sizeBytes = bytes.byteLength;
+                checksumSha256 = createHash('sha256').update(bytes).digest('hex');
+                await storage.putObject(storageKey, bytes);
+              }
               await context.deps.db.transaction(async (tx) => {
                 await tx.insert(assets).values({
                   id: assetId, workspaceId: context.run.workspaceId, projectId: null, assetType: 'USER_UPLOAD', origin: 'PUBLIC_SOURCE', status: 'READY', retentionClass: 'DRAFT_RENDER_30D',
@@ -238,8 +254,8 @@ export function referenceDistillWorkflow(ports: ReferenceDistillPorts): Workflow
                   createdBy: null,
                 });
                 await tx.insert(assetVersions).values({
-                  id: versionId, assetId, workspaceId: context.run.workspaceId, versionNumber: 1, storageKey, mimeType: fetched.contentType, sizeBytes: bytes.byteLength,
-                  checksumSha256: createHash('sha256').update(bytes).digest('hex'), status: 'READY', metadata: { sourceUrl: reference.url },
+                  id: versionId, assetId, workspaceId: context.run.workspaceId, versionNumber: 1, storageKey, mimeType: fetched.contentType, sizeBytes,
+                  checksumSha256, status: 'READY', metadata: { sourceUrl: reference.url },
                 });
               });
               resolved.push({ index, label, url: reference.url, assetId, versionId, storageKey });
@@ -262,10 +278,16 @@ export function referenceDistillWorkflow(ports: ReferenceDistillPorts): Workflow
           for (const reference of references) {
             const workDir = await mkdtemp(join(ports.workDirRoot ?? tmpdir(), 'ancs-analyze-'));
             try {
-              const bytes = await storage.getObject(reference.storageKey);
-              if (bytes === null) throw fail(DISTILL_ERROR_REASONS.ANALYSIS_FAILED, 'reference video bytes are missing', 409);
               const filePath = join(workDir, 'reference');
-              await writeFile(filePath, bytes);
+              if (storage.materializeObject !== undefined) {
+                const probe = await storage.probeObject(reference.storageKey);
+                if (!probe.exists) throw fail(DISTILL_ERROR_REASONS.ANALYSIS_FAILED, 'reference video bytes are missing', 409);
+                await storage.materializeObject({ key: reference.storageKey, destinationPath: filePath });
+              } else {
+                const bytes = await storage.getObject(reference.storageKey);
+                if (bytes === null) throw fail(DISTILL_ERROR_REASONS.ANALYSIS_FAILED, 'reference video bytes are missing', 409);
+                await writeFile(filePath, bytes);
+              }
               let measured: ReferenceMeasurement;
               try {
                 measured = await ports.analyzer.analyze({ filePath, label: reference.label, maxSeconds: MAX_REFERENCE_ANALYSIS_SECONDS });

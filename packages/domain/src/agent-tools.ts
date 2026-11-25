@@ -238,6 +238,10 @@ export interface FootageRow {
   assetId: string;
   storageKey: string;
   durationMs: number | null;
+  /** 视频轨时长（毫秒）；容器/音频比视频长时（ISS-19），抽帧上界必须以视频轨为准 */
+  videoDurationMs: number | null;
+  /** 单帧时长（毫秒，用于视频末尾抽帧安全余量） */
+  frameDurationMs: number | null;
   name: string;
   kind: 'video' | 'audio' | 'image';
   duration: string | null;
@@ -268,11 +272,19 @@ export async function listProjectFootage(context: Pick<AgentToolContext, 'deps' 
     const probe = sourceMediaProbeResultSchema.safeParse(version.mediaProbe);
     if (!probe.success || probe.data.status !== 'READY') return [];
     const filename = (asset.metadata as { filename?: unknown } | null)?.filename;
+    const videoStream = probe.data.streams.find((stream) => stream.type === 'VIDEO');
+    const videoDurationMs = videoStream?.durationMs ?? version.durationMs;
+    const rate = videoStream?.nominalFrameRate ?? videoStream?.averageFrameRate ?? null;
+    const frameDurationMs = rate !== null && rate.numerator > 0 && rate.denominator > 0
+      ? Math.max(1, Math.ceil((1000 * rate.denominator) / rate.numerator))
+      : null;
     return [{
       footageId: version.id,
       assetId: asset.id,
       storageKey: version.storageKey,
       durationMs: version.durationMs,
+      videoDurationMs,
+      frameDurationMs,
       name: typeof filename === 'string' && filename.length > 0 ? filename.slice(0, 200) : asset.id,
       kind,
       duration: version.durationMs === null ? null : mediaTimeToDisplaySecondsText(mediaTimeSchema.parse({ ticks: String(version.durationMs), timebase: { num: 1, den: 1000 } }), 3),
@@ -350,7 +362,7 @@ const listFootageTool: AgentToolDefinition<Record<string, never>> = {
     const footage = await listProjectFootage(context);
     const stillProcessing = await countProcessingFootage(context);
     return {
-      content: json({ footage: footage.map(({ assetId: _assetId, storageKey: _storageKey, durationMs: _durationMs, ...rest }) => rest), ...(stillProcessing === 0 ? {} : { stillProcessing }) }),
+      content: json({ footage: footage.map(({ assetId: _assetId, storageKey: _storageKey, durationMs: _durationMs, videoDurationMs: _videoDurationMs, frameDurationMs: _frameDurationMs, ...rest }) => rest), ...(stillProcessing === 0 ? {} : { stillProcessing }) }),
       isError: false,
       summary: `${String(footage.length)} footage items`,
     };
@@ -457,7 +469,10 @@ const lookAtFootageTool: AgentToolDefinition<z.infer<typeof lookAtFootageInput>>
     if (context.frames === undefined) return { content: json({ error: 'frame viewing is not available in this deployment' }), isError: true, summary: 'frames unavailable' };
     const [footage] = await listProjectFootage(context, [input.footageId]);
     if (footage === undefined) return { content: json({ error: 'footage not found in this project', footageId: input.footageId }), isError: true, summary: 'footage not found' };
-    const total = footage.durationMs ?? 0;
+    // 视频轨时长可能短于容器/音频时长（ISS-19）：抽帧上界以视频轨为准，并留出至少 1 帧（≥50ms）的尾部余量，避免落在最后一帧之后解码为空
+    const total = footage.videoDurationMs ?? footage.durationMs ?? 0;
+    const endMarginMs = Math.max(50, (footage.frameDurationMs ?? 34) * 2);
+    const maxSampleMs = total <= 0 ? 0 : Math.max(0, total - Math.min(endMarginMs, Math.floor(total / 2)));
     const toMs = (value: string | number): number => {
       const text = typeof value === 'number' ? value.toFixed(3) : value;
       if (!isDecimalSecondsText(text)) throw new ApiFailure(ERROR_CODES.VALIDATION_FAILED, `invalid seconds value ${JSON.stringify(value)}`, 422, { reason: 'AGENT_EDIT_INVALID' });
@@ -478,10 +493,27 @@ const lookAtFootageTool: AgentToolDefinition<z.infer<typeof lookAtFootageInput>>
     } catch (error) {
       return errorOutcome(error, 'invalid times');
     }
-    // 图片素材（无时长）只有一帧；视频帧时间夹在素材范围内（最后一帧前 1ms）
-    const clamped = positions.map((position) => (total <= 0 ? 0 : Math.max(0, Math.min(total - 1, position))));
+    // 图片素材（无时长）只有一帧；视频帧时间夹在视频轨可解码范围内
+    const clamped = positions.map((position) => (total <= 0 ? 0 : Math.max(0, Math.min(maxSampleMs, position))));
     const times = clamped.map(msText);
-    const images = await context.frames.sample({ storageKey: await frameSourceKey(context, footage), times, maxWidth: FRAME_WIDTH });
+    let images: AgentImage[];
+    try {
+      images = await context.frames.sample({ storageKey: await frameSourceKey(context, footage), times, maxWidth: FRAME_WIDTH });
+    } catch (error) {
+      // ISS-20：抽帧失败作为可恢复工具错误回传给模型，不中断整轮，让模型换有效时间重试
+      const detail = error instanceof Error ? error.message.slice(0, 240) : 'frame extraction failed';
+      return {
+        content: json({
+          error: detail,
+          footageId: footage.footageId,
+          requestedTimes: times,
+          validVideoRangeSeconds: ['0.000', msText(maxSampleMs)],
+          hint: 'Some requested timestamps could not be decoded. Retry with timestamps inside validVideoRangeSeconds.',
+        }),
+        isError: true,
+        summary: `frame extraction failed for ${footage.name}`,
+      };
+    }
     return {
       content: json({ footageId: footage.footageId, name: footage.name, duration: footage.duration, frames: times.map((at, index) => ({ index, at })), contentTreatment: 'REFERENCE_DATA_ONLY' }),
       isError: false,

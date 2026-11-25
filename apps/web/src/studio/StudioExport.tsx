@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { COMPOSITION_FINAL_RENDER_ERROR_REASONS } from '@ancs/contracts';
 import { useAncsClient } from '@/lib/client';
+import { exportLocalWithGpu, getDesktopBridge, type DesktopEngineInfo, type DesktopLocalExportResult } from '@/lib/desktop-bridge';
 import { describeError } from '@/lib/errors';
 import { useI18n } from '@/i18n/I18nProvider';
 import { QuietIcon } from '@/ui/QuietIcon';
@@ -36,9 +37,42 @@ export function StudioExport(props: {
   const actions = useStudioActions(props.workspaceId, props.projectId);
   const [runId, setRunId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [desktopEngine, setDesktopEngine] = useState<DesktopEngineInfo | null>(null);
+  const [localExporting, setLocalExporting] = useState(false);
+  const [localResult, setLocalResult] = useState<DesktopLocalExportResult | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const run = useExportRun(props.workspaceId, runId);
   const size = exportSize(props.aspectRatio);
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (bridge === null) return;
+    let active = true;
+    void bridge.getEngineInfo().then((info) => { if (active) setDesktopEngine(info); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  const runLocalGpuExport = async () => {
+    const bridge = getDesktopBridge();
+    if (bridge === null || desktopEngine === null) return;
+    setLocalError(null);
+    setLocalResult(null);
+    try {
+      const picked = await bridge.pickMediaFiles();
+      const first = picked[0];
+      if (first === undefined) return;
+      const outPath = await bridge.pickExportPath(`${first.fileName.replace(/\.[^.]+$/, '')}-gpu.mp4`);
+      if (outPath === null) return;
+      setLocalExporting(true);
+      const res = await exportLocalWithGpu(desktopEngine, { localId: first.localId, outputPath: outPath, preset: 'medium', crf: 18 });
+      setLocalResult(res);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : t.failed);
+    } finally {
+      setLocalExporting(false);
+    }
+  };
 
   useEffect(() => {
     panelRef.current?.querySelector<HTMLElement>('button')?.focus();
@@ -98,6 +132,26 @@ export function StudioExport(props: {
         <button type="button" className={status === 'SUCCEEDED' ? 'btn' : 'btn primary'} disabled={!props.hasContent || !props.canEdit || actions.startExport.isPending} onClick={start}>
           {status === undefined ? t.start : t.again}
         </button>
+      ) : null}
+      {desktopEngine !== null ? (
+        <div className="col" style={{ gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--ui-border-subtle)' }}>
+          <div className="row between">
+            <strong>{t.localGpuTitle}</strong>
+            <span className="small muted">{t.localGpuBadge(desktopEngine.gpu.codec)}</span>
+          </div>
+          <p className="small muted">{t.localGpuHint}</p>
+          {localExporting ? <div className="row gap8" role="status"><span className={styles['spinner']} style={{ borderColor: 'var(--ui-border-subtle)', borderTopColor: 'var(--ui-fg-primary)' }} aria-hidden="true" />{t.localGpuExporting}</div> : null}
+          {localResult !== null ? (
+            <div className="col" style={{ gap: 6 }} role="status">
+              <div className="row gap8"><QuietIcon name="check" /><span>{t.localGpuDone(localResult.videoEncoder, (localResult.elapsedMs / 1000).toFixed(1))}</span></div>
+              <button type="button" className="btn small" onClick={() => void getDesktopBridge()?.revealInFolder(localResult.outputPath)}>{t.localGpuReveal}</button>
+            </div>
+          ) : null}
+          {localError !== null ? <p className={styles['alert']} role="alert">{localError}</p> : null}
+          <button type="button" className="btn" disabled={localExporting} onClick={() => void runLocalGpuExport()}>
+            <QuietIcon name="spark" />{t.localGpuButton}
+          </button>
+        </div>
       ) : null}
     </div>
   );

@@ -402,6 +402,15 @@ export const workerEnvSchema = z.object({
   ANCS_WORKER_CRASH_AT: z.string().optional(),
   ANCS_FFMPEG_PATH: nonEmpty('ANCS_FFMPEG_PATH').optional(),
   ANCS_FFPROBE_PATH: nonEmpty('ANCS_FFPROBE_PATH').optional(),
+  /**
+   * FFmpeg 视频编码硬件加速（主流显卡与平台）：
+   * - auto（缺省）：启动时实测探测本机可用 GPU 编码器（macOS: videotoolbox；Windows/Linux: nvenc → qsv → amf），均不可用时回退 libx264 CPU；
+   * - cpu：强制 libx264 软编（确定性最高，CI/无卡环境用）；
+   * - nvenc / videotoolbox / qsv / amf：强制指定硬件编码器（探测不可用时启动失败，fail-closed）。
+   */
+  ANCS_FFMPEG_HWACCEL: z.enum(['auto', 'cpu', 'nvenc', 'videotoolbox', 'qsv', 'amf'], {
+    message: 'ANCS_FFMPEG_HWACCEL 仅支持 auto | cpu | nvenc | videotoolbox | qsv | amf',
+  }).default('auto'),
   /** 生产进程装配 MOCK/SCRIPTED 驱动的显式许可（V5-M3） */
   ANCS_ALLOW_MOCK_PROVIDERS: z.enum(['0', '1'], { message: 'ANCS_ALLOW_MOCK_PROVIDERS 仅支持 0 | 1' }).optional(),
   /** 与 API 同一把凭据信封密钥（Worker 解密 BYOK 凭据调用 Provider）；生产必填 */

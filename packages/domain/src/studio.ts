@@ -23,7 +23,7 @@ import {
   type StudioProjectRef,
   type StudioState,
 } from '@ancs/contracts';
-import { agentSessions, assets, assetVersions, mediaIndexRuns, mediaTranscriptRuns, projectSequences, projects } from '@ancs/db';
+import { agentSessions, assets, assetVersions, mediaIndexRuns, mediaTranscriptRuns, projectSequences, projects, uploadIntents } from '@ancs/db';
 import type { DomainDeps } from './deps.js';
 import { workspaceAiSpend } from './ai-spend.js';
 import { createAgentSession, getAgentSession, projectAgentCost } from './agent-runtime.js';
@@ -147,6 +147,19 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     .from(mediaTranscriptRuns).where(and(eq(mediaTranscriptRuns.workspaceId, input.workspaceId), inArray(mediaTranscriptRuns.sourceAssetVersionId, versionIds)));
   const runOf = (versionId: string | undefined, processor: string) =>
     [...indexRuns, ...transcriptRuns].find((run) => run.source === versionId && run.processor === processor);
+  // RT-02：处于 PENDING_UPLOAD 的素材核对最新上传意图——已过期/失败/取消/缺失的归为 FAILED，不再永久卡在"处理中"
+  const pendingUploadAssetIds = footageRows.filter(({ asset }) => asset.status === 'PENDING_UPLOAD').map(({ asset }) => asset.id);
+  const latestIntentByAsset = new Map<string, { status: string; expiresAt: Date }>();
+  if (pendingUploadAssetIds.length > 0) {
+    const intentRows = await deps.db.select({ assetId: uploadIntents.assetId, status: uploadIntents.status, expiresAt: uploadIntents.expiresAt })
+      .from(uploadIntents)
+      .where(and(eq(uploadIntents.workspaceId, input.workspaceId), inArray(uploadIntents.assetId, pendingUploadAssetIds)))
+      .orderBy(desc(uploadIntents.createdAt));
+    for (const intent of intentRows) {
+      if (!latestIntentByAsset.has(intent.assetId)) latestIntentByAsset.set(intent.assetId, intent);
+    }
+  }
+  const nowMs = Date.now();
 
   const footage: StudioFootage[] = footageRows.map(({ asset, version }) => {
     const mime = version?.mimeType ?? String((asset.metadata as { mimeType?: unknown } | null)?.mimeType ?? '');
@@ -154,7 +167,15 @@ export async function getStudioState(deps: DomainDeps, input: { workspaceId: str
     // 上传确认后还要等媒体探测（时长、音视频流）完成，才能放上时间线；图片等不需要探测（NOT_REQUIRED）的确认后即就绪
     const probe = (version?.mediaProbe ?? null) as { status?: unknown } | null;
     const awaitingProbe = probe === null && version?.probeStatus !== 'NOT_REQUIRED';
-    const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED' || (probe !== null && probe.status !== 'READY')
+    const pendingIntent = asset.status === 'PENDING_UPLOAD' ? latestIntentByAsset.get(asset.id) : undefined;
+    const uploadAbandoned = asset.status === 'PENDING_UPLOAD' && (
+      pendingIntent === undefined
+      || pendingIntent.status === 'FAILED'
+      || pendingIntent.status === 'CANCELLED'
+      || pendingIntent.status === 'EXPIRED'
+      || (pendingIntent.status === 'PENDING' && pendingIntent.expiresAt.getTime() <= nowMs)
+    );
+    const status: StudioFootage['status'] = asset.status === 'FAILED' || version?.status === 'FAILED' || uploadAbandoned || (probe !== null && probe.status !== 'READY')
       ? 'FAILED'
       : asset.status === 'READY' && version?.status === 'READY' ? (awaitingProbe ? 'PROCESSING' : 'READY') : asset.status === 'PROCESSING' ? 'PROCESSING' : 'UPLOADING';
     return {

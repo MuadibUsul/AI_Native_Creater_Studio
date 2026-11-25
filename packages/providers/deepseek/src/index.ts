@@ -77,14 +77,15 @@ export class DeepSeekAgentModel implements AgentModelAdapter {
   }
 
   async respond(request: AgentModelRequest): Promise<AgentModelResponse> {
+    const messages = toDeepSeekMessages(request.messages);
+    const hasImages = messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'));
+    // Pro is text-only; Flash supports images. Chosen by what is actually sent; response.model is metered.
+    const model = hasImages ? DEEPSEEK_IMAGE_MODEL : this.model;
+    const timeout = AbortSignal.timeout(120_000);
+    const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal as AbortSignal]);
+    let response: Response;
     try {
-      const messages = toDeepSeekMessages(request.messages);
-      const hasImages = messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'));
-      // Pro is text-only; Flash supports images. Chosen by what is actually sent; response.model is metered.
-      const model = hasImages ? DEEPSEEK_IMAGE_MODEL : this.model;
-      const timeout = AbortSignal.timeout(120_000);
-      const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal as AbortSignal]);
-      const response = await this.request('https://api.deepseek.com/chat/completions', {
+      response = await this.request('https://api.deepseek.com/chat/completions', {
         method: 'POST', redirect: 'error', signal,
         headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,30 +95,58 @@ export class DeepSeekAgentModel implements AgentModelAdapter {
           reasoning_effort: request.effort === 'low' ? 'low' : request.effort === 'max' ? 'max' : 'high',
         }),
       });
-      if (!response.ok) {
-        const status = response.status;
-        // Never reflect upstream bodies or transport errors, which may echo credentials.
-        throw new AgentModelFailure(status === 401 || status === 403 || status === 402 ? 'AUTH' : status === 429 ? 'RATE_LIMITED' : status === 503 ? 'OVERLOADED' : status >= 500 ? 'TRANSIENT' : 'BAD_REQUEST', `DeepSeek request failed (HTTP ${status})`, status);
-      }
-      const raw: unknown = await response.json();
-      const body = completionSchema.parse(raw);
-      const choice = body.choices[0]!;
-      const content: AgentContentBlock[] = [];
-      if (choice.message.reasoning_content) content.push({ type: 'opaque', provider: 'deepseek', payload: choice.message.reasoning_content });
-      if (choice.message.content) content.push({ type: 'text', text: choice.message.content });
-      for (const call of choice.message.tool_calls ?? []) content.push({ type: 'tool_use', id: call.id, name: call.function.name, input: JSON.parse(call.function.arguments) as unknown });
-      if (!content.length) throw new AgentModelFailure('TRANSIENT', 'DeepSeek returned an empty response');
-      const cached = body.usage.prompt_cache_hit_tokens ?? 0;
-      if (cached > body.usage.prompt_tokens) throw new AgentModelFailure('TRANSIENT', 'DeepSeek returned invalid token usage');
-      return {
-        model: body.model, content,
-        stopReason: choice.finish_reason === 'tool_calls' ? 'tool_use' : choice.finish_reason === 'stop' ? 'end_turn' : choice.finish_reason === 'length' ? 'max_tokens' : choice.finish_reason === 'content_filter' ? 'refusal' : 'other',
-        usage: { inputTokens: body.usage.prompt_tokens - cached, outputTokens: body.usage.completion_tokens, cacheReadInputTokens: cached, cacheCreationInputTokens: 0 },
-      };
     } catch (error) {
       if (error instanceof AgentModelFailure) throw error;
-      throw new AgentModelFailure('TRANSIENT', 'DeepSeek connection failed or response was invalid');
+      // ISS-22：区分超时/中止与网络连接异常，仍不反射底层错误信息（防凭据泄露）
+      const name = error instanceof Error ? error.name : '';
+      if (name === 'TimeoutError' || name === 'AbortError' || signal.aborted) {
+        throw new AgentModelFailure('TRANSIENT', 'DeepSeek request timed out or was aborted');
+      }
+      throw new AgentModelFailure('TRANSIENT', 'DeepSeek network connection failed');
     }
+    if (!response.ok) {
+      const status = response.status;
+      // Never reflect upstream bodies or transport errors, which may echo credentials.
+      throw new AgentModelFailure(status === 401 || status === 403 || status === 402 ? 'AUTH' : status === 429 ? 'RATE_LIMITED' : status === 503 ? 'OVERLOADED' : status >= 500 ? 'TRANSIENT' : 'BAD_REQUEST', `DeepSeek request failed (HTTP ${status})`, status);
+    }
+    let raw: unknown;
+    try {
+      raw = await response.json();
+    } catch {
+      throw new AgentModelFailure('TRANSIENT', 'DeepSeek response was not valid JSON');
+    }
+    const parsedBody = completionSchema.safeParse(raw);
+    if (!parsedBody.success) {
+      throw new AgentModelFailure('TRANSIENT', 'DeepSeek response did not match expected schema');
+    }
+    const body = parsedBody.data;
+    const choice = body.choices[0]!;
+    const content: AgentContentBlock[] = [];
+    if (choice.message.reasoning_content) content.push({ type: 'opaque', provider: 'deepseek', payload: choice.message.reasoning_content });
+    if (choice.message.content) content.push({ type: 'text', text: choice.message.content });
+    const truncated = choice.finish_reason === 'length';
+    for (const call of choice.message.tool_calls ?? []) {
+      let parsedArgs: unknown;
+      try {
+        parsedArgs = JSON.parse(call.function.arguments);
+      } catch {
+        // 输出在 max_tokens 处被截断时工具参数 JSON 不完整：交由 agent-runtime 的 stopReason==='max_tokens' 分支温和提示模型分批重发
+        if (truncated) {
+          parsedArgs = {};
+        } else {
+          throw new AgentModelFailure('TRANSIENT', 'DeepSeek returned invalid JSON for tool arguments');
+        }
+      }
+      content.push({ type: 'tool_use', id: call.id, name: call.function.name, input: parsedArgs });
+    }
+    if (!content.length) throw new AgentModelFailure('TRANSIENT', 'DeepSeek returned an empty response');
+    const cached = body.usage.prompt_cache_hit_tokens ?? 0;
+    if (cached > body.usage.prompt_tokens) throw new AgentModelFailure('TRANSIENT', 'DeepSeek returned invalid token usage');
+    return {
+      model: body.model, content,
+      stopReason: choice.finish_reason === 'tool_calls' ? 'tool_use' : choice.finish_reason === 'stop' ? 'end_turn' : choice.finish_reason === 'length' ? 'max_tokens' : choice.finish_reason === 'content_filter' ? 'refusal' : 'other',
+      usage: { inputTokens: body.usage.prompt_tokens - cached, outputTokens: body.usage.completion_tokens, cacheReadInputTokens: cached, cacheCreationInputTokens: 0 },
+    };
   }
 }
 

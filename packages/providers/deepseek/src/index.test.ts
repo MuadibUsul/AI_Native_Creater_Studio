@@ -97,13 +97,22 @@ describe('DeepSeek director adapter', () => {
     expect(calls).toBe(1);
   });
 
-  it('redacts transport/parse errors and rejects malformed tool arguments', async () => {
-    for (const fakeFetch of [
-      async () => { throw new Error('test-only-placeholder'); },
-      async () => Response.json({ ...completion, choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'bad', function: { name: 'list_footage', arguments: '{broken' } }] } }] }),
-    ]) {
-      const model = new DeepSeekAgentModel({ apiKey: TEST_API_KEY, fetch: fakeFetch });
-      await expect(model.respond(request)).rejects.toEqual(new AgentModelFailure('TRANSIENT', 'DeepSeek connection failed or response was invalid'));
-    }
+  it('redacts transport/parse errors distinctly and handles truncated tool arguments on length', async () => {
+    const netModel = new DeepSeekAgentModel({ apiKey: TEST_API_KEY, fetch: async () => { throw new Error('test-only-placeholder'); } });
+    await expect(netModel.respond(request)).rejects.toEqual(new AgentModelFailure('TRANSIENT', 'DeepSeek network connection failed'));
+
+    const badArgsModel = new DeepSeekAgentModel({
+      apiKey: TEST_API_KEY,
+      fetch: async () => Response.json({ ...completion, choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'bad', function: { name: 'list_footage', arguments: '{broken' } }] } }] }),
+    });
+    await expect(badArgsModel.respond(request)).rejects.toEqual(new AgentModelFailure('TRANSIENT', 'DeepSeek returned invalid JSON for tool arguments'));
+
+    const truncatedModel = new DeepSeekAgentModel({
+      apiKey: TEST_API_KEY,
+      fetch: async () => Response.json({ ...completion, choices: [{ finish_reason: 'length', message: { tool_calls: [{ id: 'cut', function: { name: 'list_footage', arguments: '{"page":' } }] } }] }),
+    });
+    const truncatedResult = await truncatedModel.respond(request);
+    expect(truncatedResult.stopReason).toBe('max_tokens');
+    expect(truncatedResult.content).toEqual([{ type: 'tool_use', id: 'cut', name: 'list_footage', input: {} }]);
   });
 });
